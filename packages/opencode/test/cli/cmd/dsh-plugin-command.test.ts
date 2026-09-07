@@ -38,6 +38,28 @@ describe("dsh plugin verbatim args resolution (official order)", () => {
       profiles: ["web"],
       action: "add",
       pkg: "dsh-better-sidebar",
+      local: false,
+    })
+  })
+
+  test("a path-like pkg resolves the official local-directory add spec", () => {
+    // Official pnpm path-spec semantics: `./`, `../`, `/` and `.` operands
+    // install from a local directory (replaces the retired `--dir` flag).
+    for (const pkg of ["./my-plugin", "/abs/path/plugin", "../sibling", "."]) {
+      expect(dshResolvePluginArgs("web", ["add", pkg])).toEqual({
+        mode: "plugin",
+        profiles: ["web"],
+        action: "add",
+        pkg,
+        local: true,
+      })
+    }
+    expect(dshResolvePluginArgs("web", ["add", "registry-pkg"])).toEqual({
+      mode: "plugin",
+      profiles: ["web"],
+      action: "add",
+      pkg: "registry-pkg",
+      local: false,
     })
   })
 
@@ -54,6 +76,7 @@ describe("dsh plugin verbatim args resolution (official order)", () => {
       profiles: ["web"],
       action: "remove",
       pkg: "dsh-better-sidebar",
+      local: false,
     })
   })
 
@@ -63,12 +86,14 @@ describe("dsh plugin verbatim args resolution (official order)", () => {
       profiles: ["web"],
       action: "enable",
       pkg: "pkg",
+      local: false,
     })
     expect(dshResolvePluginArgs("web", ["disable", "pkg"])).toEqual({
       mode: "plugin",
       profiles: ["web"],
       action: "disable",
       pkg: "pkg",
+      local: false,
     })
   })
 
@@ -108,6 +133,7 @@ describe("dsh plugin verbatim args resolution (official order)", () => {
       profiles: ["web", "ellamaka-tools"],
       action: "add",
       pkg: "pkg",
+      local: false,
     })
   })
 

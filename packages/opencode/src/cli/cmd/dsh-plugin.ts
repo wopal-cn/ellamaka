@@ -11,7 +11,7 @@ import {
 import { migratePluginStore } from "@wopal/ellamaka-cordis/plugins/migrate-store"
 import { disableRow, enableRow } from "@wopal/ellamaka-cordis/plugins/patch-layer"
 import { assertNotGithubSource } from "@wopal/ellamaka-cordis/plugins/installer"
-import { parseProfiles, parseRegistrySpec } from "./dsh-plugin-profiles"
+import { parseRegistrySpec } from "./dsh-plugin-profiles"
 import { dshResolvePluginArgs, type DshResolvedPlugin } from "./dsh-cli"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 
@@ -84,10 +84,6 @@ export const DshPluginCommand = effectCmd({
         default: [] as string[],
         describe: "verbatim plugin arguments: add|remove|install|enable|disable|list (+ <package>)",
       })
-      .option("dir", {
-        type: "string",
-        describe: "install from a local directory (add only)",
-      })
       // Official position: the subcommand's own option (works before or after
       // the verb, yargs hoists it into the child parse).
       .option("profile", {
@@ -105,15 +101,12 @@ export const DshPluginCommand = effectCmd({
     const home = dshHome()
 
     // Verbatim-args resolution (official reject semantics: no args, unknown
-    // verb, missing <package>). `--dir` keeps the A2 pkg-free local add.
+    // verb, missing <package>; local path operands resolve via `local`).
     let invocation: DshResolvedPlugin
     try {
       invocation = dshResolvePluginArgs(profileSpec, rawArgs, { json: args.json === true })
     } catch (error) {
-      if (!(args.dir && rawArgs[0] === "add" && rawArgs.length === 1)) {
-        return yield* fail(error instanceof Error ? error.message : String(error))
-      }
-      invocation = { mode: "plugin", profiles: parseProfiles(profileSpec), action: "add" }
+      return yield* fail(error instanceof Error ? error.message : String(error))
     }
 
     yield* Effect.tryPromise({
@@ -149,24 +142,30 @@ export const DshPluginCommand = effectCmd({
 
     if (action === "add") {
       const profiles = invocation.profiles
-      if (pkg && args.dir) return yield* fail("dsh plugin add accepts either <pkg> or --dir, not both")
-      if (pkg) {
-        // Phase-1 transport policy: github sources get a clear error with the
-        // npm alternative before any network activity (D-07).
-        yield* Effect.try({
-          try: () => {
-            const spec = parseRegistrySpec(pkg)
-            assertNotGithubSource(spec.kind === "registry" ? (spec.version ?? spec.name) : spec.name)
-            return RISK_NOTE
-          },
+      if (invocation.local) {
+        // Official pnpm path-spec semantics: the operand IS the directory.
+        const result = yield* Effect.tryPromise({
+          try: () => installPackage({ kind: "dir", path: pkg! }, { home, profiles }),
           catch: toCliError,
         })
+        log.success(`Installed ${result.name}@${result.version} (${result.source})`)
+        log.info(`Enabled in: ${profiles.join(", ")}`)
+        if (result.warning) log.warn(result.warning)
+        log.info("A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.")
+        return
       }
+      // Phase-1 transport policy: github sources get a clear error with the
+      // npm alternative before any network activity (D-07).
+      yield* Effect.try({
+        try: () => {
+          const spec = parseRegistrySpec(pkg!)
+          assertNotGithubSource(spec.kind === "registry" ? (spec.version ?? spec.name) : spec.name)
+          return RISK_NOTE
+        },
+        catch: toCliError,
+      })
       const result = yield* Effect.tryPromise({
-        try: () =>
-          args.dir
-            ? installPackage({ kind: "dir", path: args.dir }, { home, profiles })
-            : installPackage(parseRegistrySpec(pkg!), { home, profiles }),
+        try: () => installPackage(parseRegistrySpec(pkg!), { home, profiles }),
         catch: toCliError,
       })
       log.success(`Installed ${result.name}@${result.version} (${result.source})`)
@@ -188,9 +187,9 @@ export const DshPluginCommand = effectCmd({
 
     if (action === "enable" || action === "disable") {
       const enabled = action === "enable"
-      // enable: the requested profiles (alias-expanded). disable without
-      // --profile: both built-ins; with --profile: exactly those.
-      const targets = enabled || profileSpec ? invocation.profiles : ["web", "ellamaka-tools"]
+      // Both verbs target the requested profiles (alias-expanded); omitted
+      // --profile already falls back to both built-ins via parseProfiles.
+      const targets = invocation.profiles
       yield* Effect.tryPromise({
         try: async () => {
           let touched = false

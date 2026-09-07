@@ -53,6 +53,8 @@ export interface DshPluginInvocation {
   profiles: string[]
   action: string
   pkg?: string
+  /** The add operand is a local directory spec (official pnpm path semantics). */
+  local?: boolean
   json?: boolean
 }
 
@@ -97,12 +99,29 @@ export function dshResolvePluginArgs(
   if (verb === "list") {
     return { mode: "plugin", profiles, action: "list", json: opts.json === true }
   }
-  // add/remove/enable/disable all require the package operand (the `--dir`
-  // local-directory install keeps the A2 CLI shape via the pkg-free add path).
+  // add/remove/enable/disable all require the package operand.
   if (pkg === undefined) {
     throw new Error(`error: plugin ${verb} requires a <package> argument (e.g. \`ellamaka dsh plugin --profile <name> ${verb} <package>\`)`)
   }
-  return { mode: "plugin", profiles, action: verb, pkg }
+  // Official pnpm path-spec semantics: a local directory operand installs
+  // from the filesystem (add only — the other verbs operate on installed
+  // names, a path there is a user error).
+  if (verb === "add") {
+    return { mode: "plugin", profiles, action: "add", pkg, local: isPathSpec(pkg) }
+  }
+  if (isPathSpec(pkg)) {
+    throw new Error(`error: plugin ${verb} takes an installed package name, not a path ("${pkg}"; local directories are only valid for add)`)
+  }
+  return { mode: "plugin", profiles, action: verb, pkg, local: false }
+}
+
+/**
+ * Official pnpm filesystem-spec detection: `add .`, `add ../dir`,
+ * `add ./dir`, and absolute paths install from a local directory. Registry
+ * names never start with these (`.`/`/`-prefixed names are impossible).
+ */
+function isPathSpec(pkg: string): boolean {
+  return pkg === "." || pkg === ".." || pkg.startsWith("./") || pkg.startsWith("../") || pkg.startsWith("/")
 }
 
 /**
