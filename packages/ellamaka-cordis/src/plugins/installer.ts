@@ -240,10 +240,19 @@ function dropBundleRowIfPresent(manifest: Record<string, unknown>, name: string)
  * Copy a staged registry tree into place: the staged entry package becomes
  * the entity; EVERY non-official package of the tree lands under the entry
  * package's `node_modules/` (parent-walk resolvable, rook B-03).
+ *
+ * One staged tree serves EVERY target profile: `copy` places a duplicate
+ * (cpSync) so the staging source survives; only the LAST profile `rename`s
+ * and drains the staging (same source-multiple-place pattern as the
+ * migrate-store `placeEntity` lastUse rule).
  */
-function placeStagedTree(staging: string, entryName: string, tree: ResolvedTree, entityDir: string): void {
+function placeStagedTree(staging: string, entryName: string, tree: ResolvedTree, entityDir: string, copy: boolean): void {
   mkdirSync(dirname(entityDir), { recursive: true })
-  renameSync(join(staging, "node_modules", ...entryName.split("/")), entityDir)
+  const place = (source: string, target: string) => {
+    if (copy) cpSync(source, target, { recursive: true })
+    else renameSync(source, target)
+  }
+  place(join(staging, "node_modules", ...entryName.split("/")), entityDir)
   for (const dep of tree.packages.values()) {
     if (dep.name === entryName || isOfficialPackage(dep.name)) continue
     const stagedDep = join(staging, "node_modules", ...dep.name.split("/"))
@@ -251,7 +260,7 @@ function placeStagedTree(staging: string, entryName: string, tree: ResolvedTree,
     const depTarget = join(entityDir, "node_modules", ...dep.name.split("/"))
     rmSync(depTarget, { recursive: true, force: true })
     mkdirSync(dirname(depTarget), { recursive: true })
-    renameSync(stagedDep, depTarget)
+    place(stagedDep, depTarget)
   }
 }
 
@@ -283,6 +292,12 @@ async function installFromRegistry(
   // resolvable as an install (DESIGN 失败语义).
   const staging = mkdtempSync(join(tmpdir(), "dsh-plugins-stage-"))
   try {
+    // Every tree name becomes a directory path segment (staging + profile
+    // node_modules) — validate the UNTRUSTED registry data before any path
+    // math, same standard as the root identity check (rook W-01, B-08).
+    for (const pkg of tree.packages.values()) {
+      assertSafePackageIdentity(pkg.name, pkg.version)
+    }
     for (const pkg of tree.packages.values()) {
       if (isOfficialPackage(pkg.name)) continue // shared heal resolves them
       const spec2 = `${pkg.name}@${pkg.version}`
@@ -303,7 +318,10 @@ async function installFromRegistry(
     const isBundle = manifestIsBundle(stagedManifest)
 
     let result: InstallResult | undefined
-    for (const profile of profiles) {
+    for (const [index, profile] of profiles.entries()) {
+      // The staging source is only drained (rename) by the LAST profile;
+      // earlier placements copy so the next profile can read it (rook B-01).
+      const last = index === profiles.length - 1
       result = placeIntoProfile(
         profile,
         rootPkg.name,
@@ -311,7 +329,7 @@ async function installFromRegistry(
         "registry",
         isBundle,
         options,
-        (entityDir) => placeStagedTree(staging, rootPkg.name, tree, entityDir),
+        (entityDir) => placeStagedTree(staging, rootPkg.name, tree, entityDir, !last),
       )
     }
     if (!result) throw new Error("dsh plugin installer: no target profiles")

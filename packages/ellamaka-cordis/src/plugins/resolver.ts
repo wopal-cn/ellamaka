@@ -120,7 +120,9 @@ function parseVersion(version: string): { major: number; minor: number; patch: n
  * `latest` BOTH pin dist-tags.latest (falling back to the highest stable
  * when the tag is absent); `*` means any stable version. A prerelease is
  * only selected by naming it — an exact version or a dist-tag pointing at
- * one (e.g. `pkg@nightly`).
+ * one (e.g. `pkg@nightly`). Known narrow npm difference: npm resolves a
+ * bare name to the highest stable too, while this stays pinned to the tag
+ * even when a higher stable exists (visible only when latest ≠ highest).
  */
 export function satisfiesRange(candidateVersion: string, range: string, tags?: Record<string, string>): boolean {
   const spec = range.trim()

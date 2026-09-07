@@ -365,6 +365,34 @@ describe("Bun installer: multi-profile placement", () => {
     }
   })
 
+  test("registry install lands the entry + transitive tree in EVERY profile (the CLI default path)", async () => {
+    // The default CLI add (`--profile` omitted) targets BOTH built-ins. The
+    // staged tree is consumed per profile — the second placement must not
+    // depend on staging surviving the first (rook B-01: rename drained it).
+    const root = tempRoot()
+    const fake = fakeExtract()
+    const result = await installPackage(
+      { kind: "registry", name: "root-pkg", version: "1.0.0" },
+      {
+        home: root,
+        profiles: ["web", "ellamaka-tools"],
+        extract: fake.extract,
+        resolve: fakeResolveTree([
+          ["root-pkg", "1.0.0", ["mid-pkg@2.0.0"]],
+          ["mid-pkg", "2.0.0", []],
+        ]),
+      },
+    )
+    expect(result.name).toBe("root-pkg")
+    for (const profile of ["web", "ellamaka-tools"]) {
+      const entity = join(profileDirOf(root, profile), "node_modules", "root-pkg")
+      expect(existsSync(join(entity, "package.json"))).toBe(true)
+      expect(existsSync(join(entity, "node_modules", "mid-pkg", "package.json"))).toBe(true)
+      const manifest = readProfileManifest(profileDirOf(root, profile))
+      expect(manifest.dependencies["root-pkg"]).toBe("1.0.0")
+    }
+  })
+
   test("removePackage removes from every profile that declares the package", async () => {
     const root = tempRoot()
     const src = fixturePluginDir(mkdtempSync(join(tmpdir(), "dsh-plugin-src-")))
