@@ -275,7 +275,6 @@ const cli = yargs(args)
           profileName: invocation.profile,
           defaultOnly: invocation.defaultOnly,
           overlayPatches: invocation.patches,
-          json: false,
         }),
       )
     },

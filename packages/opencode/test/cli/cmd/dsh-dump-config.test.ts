@@ -15,7 +15,8 @@ describe("dsh dump-config CLI command definition", () => {
 
   test("the compat subcommand keeps the ellamaka extensions", () => {
     // --patch (Plan 223 D-03) joins the official-shaped --profile and the
-    // ellamaka --default-only/--json extensions.
+    // ellamaka --default-only extension. Output is rendered YAML in both
+    // forms (official alignment: the --json envelope was retired).
     expect(String(DshDumpConfigCommand.command).startsWith("dsh ")).toBe(false)
     expect(String(DshPluginCommand.command).startsWith("dsh ")).toBe(false)
   })

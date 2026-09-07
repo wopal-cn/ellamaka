@@ -6,11 +6,7 @@ import {
   resolveInstallAnchor,
 } from "@wopal/ellamaka-cordis/runtime"
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
-import {
-  composeDshDumpProfileLayers,
-  dumpDshConfig,
-  type DshDumpPayload,
-} from "@wopal/ellamaka-cordis/diagnostics/dump-config"
+import { dumpDshConfig } from "@wopal/ellamaka-cordis/diagnostics/dump-config"
 import { CliError, effectCmd } from "../effect-cmd"
 
 /**
@@ -48,18 +44,12 @@ export const DshDumpConfigCommand = effectCmd({
         nargs: 1,
         array: true,
         describe: "extra patch-list overlay applied after the profile layer (repeatable, argv order)",
-      })
-      .option("json", {
-        type: "boolean",
-        default: false,
-        describe: "output JSON schema payload instead of rendered YAML",
       }),
   handler: Effect.fn("Cli.dshDumpConfig")(function* (args) {
     return yield* runDshDump({
       profileName: String(args.profile ?? "web"),
       defaultOnly: args["default-only"] === true,
       overlayPatches: (args.patch as string[] | undefined) ?? [],
-      json: args.json === true,
     })
   }),
 })
@@ -69,7 +59,6 @@ export const runDshDump = (options: {
   profileName: string
   defaultOnly: boolean
   overlayPatches: string[]
-  json: boolean
 }): Effect.Effect<void, CliError> =>
   Effect.fn("Cli.dshDumpRun")(function* () {
     const wopalHome = Global.Path.wopalHome
@@ -96,24 +85,6 @@ export const runDshDump = (options: {
       installAnchor: anchorPath,
       overlayPatches: options.overlayPatches,
     } as const
-
-    if (options.json) {
-      // The JSON envelope and the YAML dump share ONE composition
-      // (composeDshDumpProfileLayers) — the layer list can never drift
-      // between the two output shapes.
-      const { layers } = yield* Effect.tryPromise({
-        try: () => composeDshDumpProfileLayers(dumpOptions),
-        catch: toCliErrorMessage,
-      })
-      const payload: DshDumpPayload = {
-        schema: "ellamaka.dsh-dump-config/v1",
-        profile: options.profileName,
-        defaultOnly: options.defaultOnly,
-        layers,
-      }
-      process.stdout.write(JSON.stringify(payload) + "\n")
-      return
-    }
 
     const dumped = yield* Effect.tryPromise({
       try: () => dumpDshConfig(dumpOptions),

@@ -38,8 +38,9 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<unknown>
 export const DEFAULT_RESOLVER_REGISTRY = "https://registry.npmjs.org/"
 
 /**
- * A registry spec the resolver refuses (DESIGN §9 Out of Scope: git/tarball/
- * file transports). Raised before any network activity.
+ * A registry spec the resolver refuses (DESIGN-dsh-poc「插件供应链」: git/tarball/
+ * file transports are the phase-2 scope; phase 1 errors with npm guidance).
+ * Raised before any network activity.
  */
 export class UnsupportedSpecError extends Error {
   constructor(spec: string) {
@@ -270,7 +271,7 @@ export interface ResolveOptions {
 
 /**
  * Reject the transports the supply chain explicitly does not support
- * (DESIGN §9 Out of Scope). Called on the raw version spec before any fetch.
+ * (DESIGN-dsh-poc「插件供应链」). Called on the raw version spec before any fetch.
  */
 function assertSupportedSpec(spec: string): void {
   if (/^(?:github|git\+|git|file|link|workspace|tarball|https?):/i.test(spec)) {

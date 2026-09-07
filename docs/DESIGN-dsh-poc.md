@@ -636,6 +636,7 @@ $DSH_HOME/profiles/
 ```sh
 # plugin 管理（官方序：--profile 是 plugin 子命令自有 option，可置于动词前后；省略回退默认 web,ellamaka-tools）
 ellamaka dsh plugin --profile web add <pkg>[@version]    # 官方动词，Bun 安装器执行，写官方终态
+ellamaka dsh plugin --profile web add ./my-plugin        # 官方 path spec：./ ../ / . 操作数从本地目录安装（--dir 已退役）
 ellamaka dsh plugin --profile web remove <pkg>           # 官方动词
 ellamaka dsh plugin --profile web install                # 官方动词：按 package.json 全量重装（市场恢复流程依赖）
 ellamaka dsh plugin add <pkg>                            # 省略 --profile：回退默认 web,ellamaka-tools（A2 兼容）
@@ -646,10 +647,10 @@ ellamaka dsh plugin --profile web list [--json]          # ellamaka 扩展动词
 # 配置转储（官方序：根 flags 在 dsh 根解析；--patch repeatable、argv 序、缺失文件 throw）
 ellamaka dsh --dump-config --profile web [--patch a.yml --patch b.yml]
 ellamaka dsh --dump-default-config --profile web         # 仅 bundle 层；拒绝 --patch；与 --dump-config 互斥
-ellamaka dsh dump-config --profile web [--default-only] [--json] [--patch ...]   # ellamaka 兼容扩展子命令（B1.5）
+ellamaka dsh dump-config --profile web [--default-only] [--patch ...]   # ellamaka 兼容扩展子命令（B1.5）；输出为渲染 YAML，与官方形态一致（--json 已退役）
 ```
 
-官方语义对齐要点：根 flags（`--profile`/`--patch`/`--dump-config`/`--dump-default-config`）出现在 `plugin` 子命令之前时报错（官方 rejectParentOptions）；未知 plugin 动词（官方 `why` 等 pnpm 动词）不转发，明确报错；`--patch` overlay 缺失文件即配置错误 throw（官方 loadOverlayPatches 语义）。boot 模式（`dsh --profile <name> "args"`）与 `dsh web` 别名不 shim——`ellamaka serve` 就是宿主，命令面报错提示 serve。安装即时生效由 Bridge 的组合文件监听驱动（并入 B2 bun-hmr 的 `registerConfig` 范围），补足官方“首次安装需重启”的缺口。
+官方语义对齐要点：根 flags（`--profile`/`--patch`/`--dump-config`/`--dump-default-config`）出现在 `plugin` 子命令之前时报错（官方 rejectParentOptions）；未知 plugin 动词（官方 `why` 等 pnpm 动词）不转发，明确报错——`pnpm why` 依赖 pnpm lockfile/持久化依赖图回答「包为何被安装」，ellamaka 真相源只有 profile 直接依赖声明，无对应语义；安装时持久化解析树后可做等价实现。`--patch` overlay 缺失文件即配置错误 throw（官方 loadOverlayPatches 语义）。boot 模式（`dsh --profile <name> "args"`）与 `dsh web` 别名不 shim——`ellamaka serve` 就是宿主，命令面报错提示 serve。安装即时生效由 Bridge 的组合文件监听驱动（并入 B2 bun-hmr 的 `registerConfig` 范围），补足官方“首次安装需重启”的缺口。
 
 ### Bun 安装器流水线
 
@@ -667,7 +668,7 @@ ellamaka dsh dump-config --profile web [--default-only] [--json] [--patch ...]  
 - **失败语义**：解析/下载失败不触碰 profile 目录；半安装状态只存在于 staging 临时目录。
 - **并发**：`locks/plugins.lock` 跨进程锁串行化写操作。
 - **Bun 宿主兼容性预检**（D-06 保留）：静态 Node 私有 loader 扫描 + 隔离挂载，在落盘前执行。
-- **GitHub 源**（`github:owner/repo`）：第二期实现（git clone + bun build）；第一期给明确报错与 npm 替代指引。
+- **GitHub 源**（`github:owner/repo`）：第二期实现（git clone + bun build）；第一期给明确报错与 npm 替代指引。第一期排除理由：(1) 技术面——安装器 resolver 是 registry-only 最小实现，git 源需要 clone + prepare 脚本构建的完整第二条管道（官方 pnpm 在此也要求用户手动 allowBuilds，闭包 `plugin-*.js`）；(2) 供应链面——registry-only 保证每个安装产物有 registry 身份、精确版本与来源可审计，git spec 是任意可变代码 + 安装期执行构建脚本，攻击面不同。同批拒绝的还有 `file:`/`link:`/`tarball:`/`https?:`；本地目录安装走 add 的 path spec 操作数（`add ./dir`，官方 pnpm 语义）这条显式通道。
 
 ### 与 dshmarket 的宿主安装工契约
 
