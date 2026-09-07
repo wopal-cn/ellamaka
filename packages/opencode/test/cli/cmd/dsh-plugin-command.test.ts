@@ -156,6 +156,15 @@ describe("dsh plugin verbatim args resolution (official order)", () => {
       expect(() => dshResolvePluginArgs("web", [verb])).toThrow(new RegExp(verb))
     }
   })
+
+  test("a path operand on a non-add verb is rejected with guidance", () => {
+    // Local directories are an install source (add only); the other verbs
+    // operate on installed package names.
+    for (const verb of ["remove", "enable", "disable"] as const) {
+      expect(() => dshResolvePluginArgs("web", [verb, "./x"])).toThrow(/path/)
+      expect(() => dshResolvePluginArgs("web", [verb, "../y"])).toThrow(/path/)
+    }
+  })
 })
 
 describe("rejectParentOptions semantics (official argv-order check)", () => {

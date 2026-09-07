@@ -215,19 +215,10 @@ export interface DumpDshConfigOptions {
   overlayPatches?: string[]
 }
 
-/** The JSON-envelope payload variant: the layer list without YAML rendering. */
-export interface DshDumpPayload {
-  schema: "ellamaka.dsh-dump-config/v1"
-  profile: string
-  defaultOnly: boolean
-  layers: OfficialConfigDumpLayer[]
-}
-
 /**
  * Load a profile and compose its FULL dump layer list (bundle -> plugin ->
- * user -> extra -> home). The ONE composition both dump outputs share: the
- * YAML path renders it through the official `renderConfigDump`, the JSON
- * path emits it as the `DshDumpPayload.layers` — one composition, no drift.
+ * user -> extra -> home). The ONE composition the single YAML output renders
+ * through the official `renderConfigDump`.
  */
 export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions): Promise<{
   rootConfig: string

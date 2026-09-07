@@ -17,8 +17,7 @@ import { CliError, effectCmd } from "../effect-cmd"
  * and adds the official `--patch` overlay support.
  *
  * Both forms share ONE execution path (runDshDump) and ONE composition
- * (composeDshDumpProfileLayers) — the layer list can never drift between
- * shapes or output formats.
+ * (composeDshDumpProfileLayers) — one composition, one rendered YAML output.
  */
 export const DshDumpConfigCommand = effectCmd({
   command: "dump-config",
