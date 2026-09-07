@@ -156,6 +156,20 @@ describe("dsh web engine", () => {
       // preset is discoverable.
       const presets = await ctx.agentPresets.list()
       expect(presets.map((p) => p.id)).toContain("standard")
+
+      // A3: the install-worker contract services are provided on the web
+      // container before the Loader mounts plugin rows, so dshmarket's
+      // `apply()` probe sees desktopProfiles and takes its Desktop path
+      // (which calls desktopPnpm.runPlugin instead of spawning the CLI).
+      const desktopProfiles = ctx.get("desktopProfiles") as
+        | { current: { name: string; dir: string } }
+        | undefined
+      expect(desktopProfiles).toBeDefined()
+      expect(desktopProfiles!.current.name).toBe("web")
+      expect(desktopProfiles!.current.dir).toBe(join(home, "home", "profiles", "web"))
+      const desktopPnpm = ctx.get("desktopPnpm") as { runPlugin?: unknown } | undefined
+      expect(desktopPnpm).toBeDefined()
+      expect(typeof desktopPnpm!.runPlugin).toBe("function")
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()

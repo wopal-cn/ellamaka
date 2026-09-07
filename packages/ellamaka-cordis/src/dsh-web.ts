@@ -30,6 +30,7 @@ import {
 } from "./runtime/loader.js"
 import { composeFullPatchStack, healPluginsModuleFallback, resolveUserBundleNames, type DshPluginStackContext } from "./plugins/compose.js"
 import { createBunHmr } from "./plugins/bun-hmr.js"
+import { createDesktopWorker } from "./plugins/desktop-worker.js"
 import { wrapInternalWithProfilesFallback } from "./plugins/resolve-specifiers.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
@@ -356,6 +357,15 @@ export interface DshHostOptions {
    * package closure (source/dev mode) — keeping existing callers unchanged.
    */
   runtime?: DshRuntimeApi
+  /**
+   * Absolute path to the ellamaka executable the install worker re-launches
+   * for `dsh plugin` operations (A3 desktopPnpm). When omitted, the worker
+   * falls back to the running process's executable — the compiled binary IS
+   * the ellamaka CLI, and `dsh plugin` is an engine-free shim the worker
+   * spawns in its own process. Explicit only when the caller runs under a
+   * wrapper (bun dev) and knows the real CLI path.
+   */
+  ellamakaBin?: string
 }
 
 /** Internal mount options shared by the web and base entry points. */
@@ -540,6 +550,24 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // A-type); the host sets `DSH_HOME` to this same home dir at launch, so
   // both resolution paths agree.
   ctx.provide("dshHomePath", (...segments: string[]) => join(homeDir, ...segments))
+  // A3 (dshmarket install-worker contract): provide the two services the
+  // market's `apply()` probes before it chooses an install path. dshmarket
+  // runs only in the web profile (its Settings UI needs the webServer), so
+  // the services are provided there alone — the tools container has no market
+  // and no install worker. Providing happens BEFORE the Loader mounts plugin
+  // rows below, so a dshmarket row composed into the profile sees
+  // desktopProfiles present at its `apply()` time and enters the Desktop
+  // branch (calling desktopPnpm.runPlugin) instead of the CLI-spawn path that
+  // does not fit the ellamaka surface.
+  if (profileName === WEB_PROFILE_NAME) {
+    const worker = createDesktopWorker({
+      ellamakaBin: opts.ellamakaBin ?? process.execPath,
+      dshRoot,
+      profile: profileName,
+    })
+    ctx.provide("desktopProfiles", worker.desktopProfiles)
+    ctx.provide("desktopPnpm", worker.desktopPnpm)
+  }
   const loaderFiber = await ctx.registry.plugin(runtime.pluginLoader)
   // B1 拆雷 (DESIGN-dsh-poc 「Bun 下不伪造 loader.internal（拆雷）」): the
   // Bridge no longer injects a fake `loader.internal` when the runtime
