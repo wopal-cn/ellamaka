@@ -116,13 +116,26 @@ function parseVersion(version: string): { major: number; minor: number; patch: n
 /**
  * Whether `candidate` satisfies `range`. Supported grammar (Plan Task 2):
  * exact versions, caret (`^`), tilde (`~`), `x`-ranges (`5.x`, `5.3.x`),
- * `latest`/`*`, and dist-tags. Prereleases are only selected by an exact
- * version match, never by a range (npm-like conservative default).
+ * `latest`/`*`, and dist-tags. npm semantics: a bare name and an explicit
+ * `latest` BOTH pin dist-tags.latest (falling back to the highest stable
+ * when the tag is absent); `*` means any stable version. A prerelease is
+ * only selected by naming it — an exact version or a dist-tag pointing at
+ * one (e.g. `pkg@nightly`).
  */
 export function satisfiesRange(candidateVersion: string, range: string, tags?: Record<string, string>): boolean {
   const spec = range.trim()
 
-  if (spec === "" || spec === "latest" || spec === "*") return true
+  if (spec === "" || spec === "latest") {
+    const latest = tags?.latest
+    if (latest !== undefined) return candidateVersion === latest
+    const candidate = parseVersion(candidateVersion)
+    return !!candidate && candidate.prerelease.length === 0
+  }
+
+  if (spec === "*") {
+    const candidate = parseVersion(candidateVersion)
+    return !!candidate && candidate.prerelease.length === 0
+  }
 
   // Dist-tag reference (`next`, `canary`, ...): resolve via dist-tags.
   if (tags && spec in tags) return candidateVersion === tags[spec]

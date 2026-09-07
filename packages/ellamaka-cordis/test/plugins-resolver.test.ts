@@ -57,6 +57,28 @@ describe("dsh plugin dependency resolver", () => {
     expect(tree.root.version).toBe("6.0.0")
   })
 
+  test("a bare name and '*' resolve to the latest STABLE version, never a prerelease", async () => {
+    // npm semantics: bare name and `latest` pin dist-tags.latest; `*` picks
+    // the highest stable. A newer prerelease (4.0.0-nightly) must never win.
+    const bare = await resolveTree({ kind: "registry", name: "chalk" }, { fetch: offlineFetch() })
+    expect(bare.root.version).toBe("6.0.0")
+    const star = await resolveTree({ kind: "registry", name: "chalk", version: "*" }, { fetch: offlineFetch() })
+    expect(star.root.version).toBe("6.0.0")
+    // Unit level: prerelease candidates fail `latest`/`*`/empty ranges.
+    const tags = { latest: "2.1.3" }
+    expect(satisfiesRange("4.0.0-nightly.202508271359", "", tags)).toBe(false)
+    expect(satisfiesRange("4.0.0-nightly.202508271359", "latest", tags)).toBe(false)
+    expect(satisfiesRange("4.0.0-nightly.202508271359", "*", tags)).toBe(false)
+    expect(satisfiesRange("2.1.3", "", tags)).toBe(true)
+    expect(satisfiesRange("2.1.3", "latest", tags)).toBe(true)
+    expect(satisfiesRange("2.1.3", "*", tags)).toBe(true)
+  })
+
+  test("a dist-tag pointing at a prerelease pins that exact version", async () => {
+    // Explicit opt-in: `pkg@nightly` still selects the nightly dist-tag.
+    expect(satisfiesRange("4.0.0-nightly.202508271359", "nightly", { latest: "2.1.3", nightly: "4.0.0-nightly.202508271359" })).toBe(true)
+  })
+
   test("scoped names split correctly", async () => {
     const tree = await resolveTree(
       { kind: "registry", name: "@sindresorhus/is", version: "7.0.1" },
