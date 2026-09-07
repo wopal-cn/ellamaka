@@ -3,7 +3,7 @@ import { createRequire } from "node:module"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { readProfileManifest } from "./profile-manifest.js"
-import { parseDocument } from "yaml"
+import { parseDocument, Schema } from "yaml"
 import { homeProfilesDirOf } from "../runtime/status.js"
 import { resolveRowSpecifier } from "./resolve-specifiers.js"
 
@@ -24,6 +24,16 @@ import { resolveRowSpecifier } from "./resolve-specifiers.js"
  * official `loader.internal` resolution path does not exist under Bun. Boot
  * and hot reload share the same composition ({@link composeFullPatchStack}).
  */
+
+/**
+ * The entry-list YAML dialect (official `entryListSchema`): the default
+ * schema extended with a `!!js` scalar that round-trips an expression as
+ * `{ __jsExpr: string }` — the exact node the official closure produces, so
+ * parsed user-patch rows match boot's `loadProfile().patches` byte-for-byte.
+ */
+const entryListSchema = new Schema({
+  customTags: [{ tag: "tag:yaml.org,2002:js", resolve: (expression: string) => ({ __jsExpr: expression }) }],
+})
 
 /**
  * The per-container patch-stack context captured at boot: every
@@ -154,6 +164,15 @@ export function composeFullPatchStack(layers: {
  * error propagates (fail loud — the composition layer keeps the last good
  * state on a replay failure).
  *
+ * The parse uses the same entry-list dialect as the official closure — the
+ * default YAML schema extended with a `!!js` scalar that round-trips an
+ * expression as `{ __jsExpr: string }` (the exact node the official
+ * `entryListSchema` produces). A user patch row may therefore carry `!!js`
+ * expressions (e.g. a `config` value resolved at load), and boot
+ * (`loadProfile().patches`) and replay ({@link readUserPatchLayer}) stay
+ * representation-identical. Default schema fields still flow as plain
+ * scalars/sequences/maps.
+ *
  * The replay path MUST call this per replay instead of reusing the boot-time
  * snapshot: the user patch layer is the enable/disable surface, and a stale
  * snapshot races the official `watchUserPatches` (which reads fresh bytes)
@@ -168,7 +187,7 @@ export function readUserPatchLayer(dshRoot: string, profile: string): unknown[] 
     if ((error as { code?: string }).code === "ENOENT") return []
     throw error
   }
-  const document = parseDocument(content)
+  const document = parseDocument(content, { schema: entryListSchema })
   if (document.errors.length > 0) {
     throw new Error(`dsh plugin compose: failed to parse user patch layer ${file}: ${document.errors.map((error) => error.message).join("; ")}`)
   }

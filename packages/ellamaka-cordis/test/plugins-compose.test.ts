@@ -107,6 +107,24 @@ describe("readUserPatchLayer (fresh user patch replay)", () => {
 
     expect(() => readUserPatchLayer(root, "web")).toThrow(/failed to parse/)
   })
+
+  test("a !!js expression in the user patch layer round-trips as { __jsExpr } (official entryListSchema)", () => {
+    // The user patch layer is parsed with the same !!js dialect the official
+    // loadProfile uses, so boot (.patches) and hot replay stay
+    // representation-identical (W-02 alignment).
+    const root = tempRoot()
+    const profileDir = profileDirOf(root)
+    mkdirSync(profileDir, { recursive: true })
+    writeFileSync(
+      join(profileDir, "cordis.patch.yml"),
+      "- { id: settings, config: { mode: !!js process.env.MODE ?? 'a' } }\n",
+    )
+
+    const rows = readUserPatchLayer(root, "web") as { id: string; config: { mode: { __jsExpr: string } } }[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0].id).toBe("settings")
+    expect(rows[0].config.mode).toEqual({ __jsExpr: "process.env.MODE ?? 'a'" })
+  })
 })
 
 describe("healPluginsModuleFallback (profile manifest source)", () => {
