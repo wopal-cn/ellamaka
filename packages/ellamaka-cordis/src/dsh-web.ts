@@ -28,7 +28,7 @@ import {
   createPackageDshRuntimeApi,
   type DshRuntimeApi,
 } from "./runtime/loader.js"
-import { composeFullPatchStack, composePluginLayers, healPluginsModuleFallback, isOfficialBundleRow, type DshPluginStackContext, type PluginLayerPatch } from "./plugins/compose.js"
+import { composeFullPatchStack, healPluginsModuleFallback, resolveUserBundleNames, type DshPluginStackContext } from "./plugins/compose.js"
 import { createBunHmr } from "./plugins/bun-hmr.js"
 import { wrapInternalWithProfilesFallback } from "./plugins/resolve-specifiers.js"
 import { dshHomeDirOf } from "./runtime/status.js"
@@ -505,18 +505,23 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // is layer order; profiles never carry a bundles manifest for plugins.
   // Bare names resolve at this composition point (B1 拆雷): Bridge-owned rows
   // reach the Loader as absolute file:// URLs (closure -> profiles order).
-  const pluginLayers: PluginLayerPatch[] = composePluginLayers(dshRoot, profileName, {
-    installAnchor,
-  })
-  // The full patch stack (bundle -> plugin -> user -> extras -> home), composed
-  // by the ONE function the hot replay also calls (rook B-01): boot and hot
-  // reload are the same composition, so a replay never drops official layers.
-  // The stack's bundle layer carries ONLY official rows: the manifest's user
-  // bundles are the Bridge-owned plugin layer (composed above) — keeping both
-  // would duplicate every user entry id (loader id diff throws).
+  // The full patch stack (official bundle layers -> user -> extras -> home),
+  // composed by the ONE function the hot replay also calls (rook B-01): boot
+  // and hot reload are the same composition. EVERY manifest bundle — official
+  // or user plugin — is an official loadProfile layer (full official parse);
+  // bare names inside the layers resolve to file:// URLs here (B1 拆雷).
   const stackContext: DshPluginStackContext = {
-    profileLayers: profile.layers.filter((layer) => isOfficialBundleRow(layer.packageName)),
-    pluginLayers,
+    // A closure over the official loader: a hot replay recomposes FRESH so a
+    // plugin installed after boot mounts on the next replay (official
+    // reconcilePlugins semantics); bare names resolve per composition (B1 拆雷).
+    profileLayers: (): { packageName: string; patches: unknown[] }[] =>
+      resolveUserBundleNames(
+        loadProfile("ellamaka", profileName, installAnchor, homeDir).layers.map((layer) => ({
+          packageName: layer.packageName,
+          patches: layer.patches,
+        })),
+        { installAnchor, dshRoot, profile: profileName },
+      ) as { packageName: string; patches: unknown[] }[],
     userPatches: profile.patches,
     extraPatches,
     homePatches,
@@ -543,7 +548,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // breeding ground. Under bun `ModuleLoader.fromInternal()` returns
   // undefined, official bare-name imports fall back to native `import()`
   // (Path 1, spike record), and Bridge-composed rows arrive as absolute
-  // file:// URLs resolved at the composition point (composePluginLayers).
+  // file:// URLs resolved at the composition point (resolveUserBundleNames).
   // Intrinsic host setup: the launch environment snapshot and the cmdline
   // service (--port) that the web-startup plugin reads to bind the webserver.
   const { DSH_LAUNCH_ENVIRONMENT_KEY, createLaunchEnvironmentSnapshot } = runtime.launchEnv
@@ -642,14 +647,12 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
             binName: "ellamaka",
             filename: patchFile,
             compose: (userRows): typeof userRows => {
-              // The candidate composition: official bundle rows are carried by
-              // the boot-time stack context; the plugin layer is recomposed
-              // fresh from the profile manifest; the refreshed user rows
-              // replace the snapshot captured at boot.
-              const pluginLayers = composePluginLayers(dshRoot, profileName, { installAnchor })
+              // The candidate composition: official bundle layers (every
+              // bundle, official or user plugin) are carried by the boot-time
+              // stack context; the refreshed user rows replace the snapshot
+              // captured at boot.
               return composeFullPatchStack({
                 profileLayers: stackContext.profileLayers,
-                pluginLayers,
                 userPatches: [...userRows],
                 extraPatches: stackContext.extraPatches,
                 homePatches: stackContext.homePatches,

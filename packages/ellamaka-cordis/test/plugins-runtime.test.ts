@@ -122,7 +122,8 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     const web = await bootDshWeb({ home, port: 4097, disableCodeRuntime: true })
     const tools = await bootDshTools({ home, port: 0 })
     let updates = 0
-    const service = startDshPluginService({ home, containers: [webContainer(web), toolsContainer(tools)], onReplay: () => updates++ })
+    const replayErrors: string[] = []
+    const service = startDshPluginService({ home, containers: [webContainer(web), toolsContainer(tools)], onReplay: () => updates++, onReplayError: (profile, error) => replayErrors.push(`${profile}: ${error}`) })
     try {
       // CLI-side semantics: a pure disk operation on the composition files.
       await installFixture(home)

@@ -1,4 +1,6 @@
-# Fixture bundle patch: inserts the fixture plugin entry (bare name resolves
-# through profiles/node_modules after the plugin heal).
-- id: dsh-plugin:fixture-dsh-plugin
-  name: fixture-dsh-plugin
+# Fixture bundle patch: inserts the fixture plugin entry into the root list
+# (official insert syntax — bare name resolves through profiles/node_modules
+# after the plugin heal).
+- insert:
+    - id: dsh-plugin:fixture-dsh-plugin
+      name: fixture-dsh-plugin

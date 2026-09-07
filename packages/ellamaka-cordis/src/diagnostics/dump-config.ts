@@ -7,11 +7,6 @@ import {
   createPackageDshRuntimeApi,
   type DshRuntimeApi,
 } from "../runtime/loader.js"
-import {
-  composePluginLayers,
-  isOfficialBundleRow,
-  type PluginLayerPatch,
-} from "../plugins/compose.js"
 import { dshHomeDirOf } from "../runtime/status.js"
 
 const require = createRequire(import.meta.url)
@@ -42,7 +37,6 @@ export interface DshOverlayPatches {
 
 export interface ComposeDshDumpLayersInput {
   profile: ProfileDumpInput
-  pluginLayers: PluginLayerPatch[]
   /** Loader patch rows passed verbatim (the Bridge's builders emit them). */
   extraPatches: Record<string, unknown>[]
   /** Loader patch rows for the official home (the Bridge's builders emit them). */
@@ -57,8 +51,7 @@ export interface ComposeDshDumpLayersInput {
 
 /**
  * Pure builder that assembles the config dump layers in the exact boot order:
- * bundle layers (label = packageName)
- * -> plugin layers (when non-empty, label = "ellamaka plugin layers (profile)", patches = [{ insert: pluginLayers }])
+ * bundle layers (label = packageName; EVERY bundle, official or user plugin)
  * -> user patch layer (when non-empty, label = profile.patchPath, patches = profile.patches)
  * -> extra layers (when non-empty, label = "ellamaka bridge extra patches", patches = extraPatches)
  * -> home layers (when non-empty, label = "ellamaka home patches", patches = homePatches)
@@ -75,15 +68,7 @@ export function composeDshDumpLayers(input: ComposeDshDumpLayersInput): ConfigDu
     })
   }
 
-  // 2. Plugin layers (only when non-empty)
-  if (input.pluginLayers.length > 0) {
-    layers.push({
-      label: "ellamaka plugin layers (profile)",
-      patches: [{ insert: input.pluginLayers }],
-    })
-  }
-
-  // 3. User patch layer (only when non-empty)
+  // 2. User patch layer (only when non-empty)
   if (input.profile.patches.length > 0) {
     layers.push({
       label: input.profile.patchPath,
@@ -91,7 +76,7 @@ export function composeDshDumpLayers(input: ComposeDshDumpLayersInput): ConfigDu
     })
   }
 
-  // 4. Bridge extra layer (when non-empty)
+  // 3. Bridge extra layer (when non-empty)
   if (input.extraPatches.length > 0) {
     layers.push({
       label: "ellamaka bridge extra patches",
@@ -107,7 +92,7 @@ export function composeDshDumpLayers(input: ComposeDshDumpLayersInput): ConfigDu
     })
   }
 
-  // 6. --patch overlay layers (official argv order: applied last, later wins)
+  // 5. --patch overlay layers (official argv order: applied last, later wins)
   for (const overlay of input.overlayPatches ?? []) {
     layers.push({
       label: overlay.file,
@@ -253,11 +238,6 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
     writeFileSync(rootConfig, "[]\n")
   }
 
-  const pluginLayers: PluginLayerPatch[] =
-    options.defaultOnly === true
-      ? []
-      : composePluginLayers(dshRoot, options.profileName, { installAnchor })
-
   let extra: Record<string, unknown>[] = []
   if (options.defaultOnly !== true) {
     if (options.profileName === "web") {
@@ -283,13 +263,11 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
     profile: {
       dir: profile.dir,
       patchPath: profile.patchPath,
-      // Bundle layers carry ONLY official rows: the manifest's user bundles
-      // are the Bridge-owned plugin layer (composed above) — keeping both
-      // would duplicate every user entry id (loader id diff throws).
-      layers: profile.layers.filter((layer) => isOfficialBundleRow(layer.packageName)),
+      // EVERY manifest bundle is an official loadProfile layer (official or
+      // user plugin) — the official dump semantics, verbatim.
+      layers: profile.layers,
       patches: profile.patches,
     },
-    pluginLayers,
     extraPatches: extra,
     homePatches: options.defaultOnly === true ? [] : homePatches(homeDir),
     overlayPatches: overlays,

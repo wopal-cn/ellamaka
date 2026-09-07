@@ -10,7 +10,7 @@ import {
   webExtraPatches,
   toolsExtraPatches,
 } from "../src/diagnostics/dump-config"
-import { healPluginsModuleFallback, profileDirOf, type PluginLayerPatch } from "../src/plugins/compose"
+import { healPluginsModuleFallback, profileDirOf } from "../src/plugins/compose"
 import { appendBundle, withProfileManifestWrite } from "../src/plugins/profile-manifest"
 
 function tempHome(): string {
@@ -41,64 +41,55 @@ async function installedPlugin(home: string, name: string, version = "1.0.0"): P
 }
 
 describe("composeDshDumpLayers", () => {
-  test("assembles layers in boot order: bundle -> plugin -> user -> extra -> home", () => {
+  test("assembles layers in boot order: bundle (official + user) -> user -> extra -> home", () => {
     const mockProfile = {
       dir: "/mock/profile/dir",
       patchPath: "/mock/profile/dir/cordis.patch.yml",
       layers: [
         { packageName: "@deepseek-ai/dsh-base", patches: [{ id: "base-entry" }] },
-        { packageName: "@deepseek-ai/dsh-web-app", patches: [{ id: "web-entry" }] },
+        { packageName: "my-user-plugin", patches: [{ id: "plugin-entry", name: "file:///mock/my-plugin/index.js" }] },
       ],
       patches: [{ id: "user-patch-row" }],
     }
-    const pluginLayers: PluginLayerPatch[] = [
-      { id: "dsh-plugin:my-plugin", name: "file:///mock/my-plugin/index.js" },
-    ]
     const extraPatches = [{ id: "webserver", disabled: true }]
     const homePatches = [{ id: "settings", config: { dshHome: "/home/dir" } }]
 
     const layers = composeDshDumpLayers({
       profile: mockProfile,
-      pluginLayers,
       extraPatches,
       homePatches,
     })
 
     // Expect 5 layers:
     // 1. bundle @deepseek-ai/dsh-base
-    // 2. bundle @deepseek-ai/dsh-web-app
-    // 3. ellamaka plugin layers (profile) -> [{ insert: pluginLayers }]
-    // 4. user layer (/mock/profile/dir/cordis.patch.yml) -> profile.patches
-    // 5. bridge extra patches -> extraPatches
-    // 6. home patches -> homePatches
-    expect(layers).toHaveLength(6)
+    // 2. bundle my-user-plugin (official track — no Bridge-owned layer)
+    // 3. user layer (/mock/profile/dir/cordis.patch.yml) -> profile.patches
+    // 4. bridge extra patches -> extraPatches
+    // 5. home patches -> homePatches
+    expect(layers).toHaveLength(5)
     expect(layers[0]).toEqual({
       label: "@deepseek-ai/dsh-base",
       patches: [{ id: "base-entry" }],
     })
     expect(layers[1]).toEqual({
-      label: "@deepseek-ai/dsh-web-app",
-      patches: [{ id: "web-entry" }],
+      label: "my-user-plugin",
+      patches: [{ id: "plugin-entry", name: "file:///mock/my-plugin/index.js" }],
     })
     expect(layers[2]).toEqual({
-      label: "ellamaka plugin layers (profile)",
-      patches: [{ insert: pluginLayers }],
-    })
-    expect(layers[3]).toEqual({
       label: "/mock/profile/dir/cordis.patch.yml",
       patches: [{ id: "user-patch-row" }],
     })
-    expect(layers[4]).toEqual({
+    expect(layers[3]).toEqual({
       label: "ellamaka bridge extra patches",
       patches: extraPatches,
     })
-    expect(layers[5]).toEqual({
+    expect(layers[4]).toEqual({
       label: "ellamaka home patches",
       patches: homePatches,
     })
   })
 
-  test("omits plugin layer when pluginLayers is empty", () => {
+  test("single bundle layer passes through", () => {
     const mockProfile = {
       dir: "/mock/dir",
       patchPath: "/mock/dir/cordis.patch.yml",
@@ -108,12 +99,10 @@ describe("composeDshDumpLayers", () => {
 
     const layers = composeDshDumpLayers({
       profile: mockProfile,
-      pluginLayers: [],
       extraPatches: [],
       homePatches: [],
     })
 
-    // pluginLayers is empty -> no plugin layer
     // profile.patches is empty -> no user layer
     // extraPatches is empty -> no extra layer
     // homePatches is empty -> no home layer
@@ -131,14 +120,12 @@ describe("composeDshDumpLayers", () => {
 
     const layers = composeDshDumpLayers({
       profile: mockProfile,
-      pluginLayers: [{ id: "dsh-plugin:p", name: "file:///p.js" }],
       extraPatches: [],
       homePatches: [],
     })
 
     expect(layers.map((l) => l.label)).toEqual([
       "@deepseek-ai/dsh-base",
-      "ellamaka plugin layers (profile)",
     ])
   })
 })
@@ -157,7 +144,13 @@ describe("dumpDshConfig", () => {
     // Output is YAML containing # == grouping comments
     expect(output).toContain("# ==")
     // Contains resolved plugin file:// URL
-    expect(output).toContain("file://")
+    // Official single-track semantics: the user plugin lands as its own
+    // bundle layer (`# == demo-plugin`) with its OWN declared row shape —
+    // the fixture's `dsh-plugin:` id and bare name, no Bridge rewrite and no
+    // separate plugin layer (B1 file:// rewriting is mount-only, it never
+    // pollutes the dump view).
+    expect(output).toContain("# == demo-plugin")
+    expect(output).toContain("- id: dsh-plugin:demo-plugin")
     expect(output).toContain("demo-plugin")
     // Contains home patch injection
     expect(output).toContain("settings")
@@ -282,7 +275,6 @@ describe("composeDshDumpLayers overlay patches (--patch, official argv order)", 
 
     const layers = composeDshDumpLayers({
       profile: mockProfile,
-      pluginLayers: [],
       extraPatches: [],
       homePatches: [{ id: "settings", config: { dshHome: "/home/dir" } }],
       overlayPatches: [
@@ -310,7 +302,6 @@ describe("composeDshDumpLayers overlay patches (--patch, official argv order)", 
     }
     const layers = composeDshDumpLayers({
       profile: mockProfile,
-      pluginLayers: [],
       extraPatches: [],
       homePatches: [],
       overlayPatches: [],
@@ -327,7 +318,6 @@ describe("composeDshDumpLayers overlay patches (--patch, official argv order)", 
     }
     const layers = composeDshDumpLayers({
       profile: mockProfile,
-      pluginLayers: [],
       extraPatches: [],
       homePatches: [],
     })

@@ -1,6 +1,6 @@
 import { watch, type FSWatcher } from "chokidar"
 import { isAbsolute, join, resolve } from "node:path"
-import { composeFullPatchStack, composePluginLayers, profileDirOf, type DshPluginStackContext } from "./compose.js"
+import { composeFullPatchStack, profileDirOf, type DshPluginStackContext } from "./compose.js"
 import type { DshPluginContainer, DshPluginServiceLogger } from "./runtime.js"
 
 /**
@@ -176,19 +176,14 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         // Heal BEFORE composing (fresh installs need their links).
         const { healPluginsModuleFallback } = await import("./compose.js")
         healPluginsModuleFallback(options.dshRoot)
-        const pluginLayers = composePluginLayers(options.dshRoot, container.profile, {
-          installAnchor: options.installAnchor,
-        })
         const stack = (container as { stackContext?: DshPluginStackContext }).stackContext
-        const patches = stack
-          ? composeFullPatchStack({
-              profileLayers: stack.profileLayers,
-              pluginLayers,
-              userPatches: stack.userPatches,
-              extraPatches: stack.extraPatches,
-              homePatches: stack.homePatches,
-            })
-          : [{ insert: pluginLayers }]
+        if (!stack) return Promise.reject(new Error(`dsh bun-hmr: no boot stack context for profile ${JSON.stringify(container.profile)}`))
+        const patches = composeFullPatchStack({
+          profileLayers: stack.profileLayers,
+          userPatches: stack.userPatches,
+          extraPatches: stack.extraPatches,
+          homePatches: stack.homePatches,
+        })
         const previousConfig = (container.includeEntry as unknown as {
           options?: { config?: Record<string, unknown> }
         }).options?.config

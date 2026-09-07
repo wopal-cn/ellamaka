@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from "chokidar"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { composeFullPatchStack, composePluginLayers, healPluginsModuleFallback, profileDirOf, readUserPatchLayer } from "./compose.js"
+import { composeFullPatchStack, healPluginsModuleFallback, profileDirOf, readUserPatchLayer } from "./compose.js"
 
 /**
  * Plugin Runtime Service: watches the profile composition files and replays
@@ -159,28 +159,21 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   }
 
   const replayContainer = async (container: DshPluginContainer): Promise<void> => {
-    // Compose with the container's boot anchor: bare names resolve at the
-    // composition point (B1 拆雷), identical to the boot-time composition.
-    const pluginLayers = composePluginLayers(options.home, container.profile, {
-      installAnchor: options.installAnchor,
-    })
     // Rebuild the FULL patch stack (B-01): the include re-applies
     // config.patches over the raw config on every update, so replacing the
-    // list with plugin rows only would drop the bundle/user/home layers.
-    // Boot captured this container's stack context on its handle; the USER
-    // patch layer is re-read FRESH here — it is the enable/disable surface,
-    // and a boot-time snapshot would race the official watchUserPatches
-    // (fresh bytes) and re-apply rows the user just removed.
+    // list would drop the bundle/user/home layers. Boot captured this
+    // container's stack context on its handle; the USER patch layer is
+    // re-read FRESH here — it is the enable/disable surface, and a boot-time
+    // snapshot would race the official watchUserPatches (fresh bytes) and
+    // re-apply rows the user just removed.
     const stack = (container as { stackContext?: DshPluginStackContext }).stackContext
-    const patches = stack
-      ? composeFullPatchStack({
-          profileLayers: stack.profileLayers,
-          pluginLayers,
-          userPatches: readUserPatchLayer(options.home, container.profile),
-          extraPatches: stack.extraPatches,
-          homePatches: stack.homePatches,
-        })
-      : [{ insert: pluginLayers }]
+    if (!stack) throw new Error(`dsh plugin runtime: container for profile ${JSON.stringify(container.profile)} has no boot stack context`)
+    const patches = composeFullPatchStack({
+      profileLayers: stack.profileLayers,
+      userPatches: readUserPatchLayer(options.home, container.profile),
+      extraPatches: stack.extraPatches,
+      homePatches: stack.homePatches,
+    })
     // Shallow-merge contract (spike 2): spread the previous config, replace
     // only `patches`.
     const previousConfig = (container.includeEntry as unknown as {
