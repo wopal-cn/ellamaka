@@ -1,7 +1,13 @@
 import { watch, type FSWatcher } from "chokidar"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { composeFullPatchStack, healPluginsModuleFallback, profileDirOf, readUserPatchLayer } from "./compose.js"
+import {
+  composeFullPatchStack,
+  healPluginsModuleFallback,
+  profileDirOf,
+  readUserPatchLayer,
+  type DshPluginStackContext,
+} from "./compose.js"
 
 /**
  * Plugin Runtime Service: watches the profile composition files and replays
@@ -22,10 +28,10 @@ import { composeFullPatchStack, healPluginsModuleFallback, profileDirOf, readUse
  * Replay contract (D-03, spike 2 path B): the include `entry.update` is a
  * SHALLOW merge, so each replay spreads the previous config back and REPLACES
  * `patches` with the FULL composition rebuilt by
- * {@link composeFullPatchStack}: bundle layers -> plugin layers -> user patch
- * layer -> extra patches -> home patches. The loader diffs entries by
- * explicit id, so mount/unmount of individual plugins is transactional —
- * add/remove/enable/disable all share this one path.
+ * {@link composeFullPatchStack}: official bundle layers -> user patch layer ->
+ * extra patches -> home patches. The loader diffs entries by explicit id, so
+ * mount/unmount of individual plugins is transactional — add/remove/enable/
+ * disable all share this one path.
  */
 
 /** The structured logger seam the service logs through (W-02). */
@@ -98,25 +104,6 @@ function defaultLogger(): DshPluginServiceLogger {
     warn: (message, extra) => console.warn(`[dsh-plugins] ${message}`, extra ?? ""),
     error: (message, extra) => console.error(`[dsh-plugins] ${message}`, extra ?? ""),
   }
-}
-
-/**
- * The patch stack a hot replay must restore: the FULL boot composition
- * (bundle -> plugin -> user -> extra -> home) with freshly composed plugin
- * rows. `profilePatches` carries the per-profile boot context (bundle layer
- * patches, user patch list, extras, home patches) captured at mount time —
- * these layers are manifest-independent and stay byte-identical across
- * replays.
- */
-export interface DshPluginStackContext {
-  /** The profile's bundle layers (from `loadProfile(...).layers`). */
-  profileLayers: { patches: unknown[] }[]
-  /** The profile's user patch layer (`loadProfile(...).patches`). */
-  userPatches: unknown[]
-  /** The Bridge's extraPatches for this mount. */
-  extraPatches: unknown[]
-  /** The home patches for this mount. */
-  homePatches: unknown[]
 }
 
 /**

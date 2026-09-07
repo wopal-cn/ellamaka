@@ -1,6 +1,6 @@
 import { watch, type FSWatcher } from "chokidar"
 import { isAbsolute, join, resolve } from "node:path"
-import { composeFullPatchStack, profileDirOf, type DshPluginStackContext } from "./compose.js"
+import { composeFullPatchStack, profileDirOf, readUserPatchLayer, type DshPluginStackContext } from "./compose.js"
 import type { DshPluginContainer, DshPluginServiceLogger } from "./runtime.js"
 
 /**
@@ -178,9 +178,12 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         healPluginsModuleFallback(options.dshRoot)
         const stack = (container as { stackContext?: DshPluginStackContext }).stackContext
         if (!stack) return Promise.reject(new Error(`dsh bun-hmr: no boot stack context for profile ${JSON.stringify(container.profile)}`))
+        // The user patch layer is the enable/disable surface: re-read FRESH so
+        // a replay never re-applies rows the user just removed (same contract
+        // as the Plugin Runtime Service, runtime.ts).
         const patches = composeFullPatchStack({
           profileLayers: stack.profileLayers,
-          userPatches: stack.userPatches,
+          userPatches: readUserPatchLayer(options.dshRoot, profile),
           extraPatches: stack.extraPatches,
           homePatches: stack.homePatches,
         })

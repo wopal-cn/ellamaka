@@ -80,7 +80,7 @@ describe("full patch stack: official bundle semantics (no Bridge-owned plugin tr
 })
 
 describe("user bundle name resolution (B1 拆雷, official layers)", () => {
-  test("bare package names inside official layers resolve to file:// URLs", async () => {
+  test("bare names inside official insert blocks resolve to file:// URLs; official layers and file:// names stay untouched", async () => {
     const { resolveUserBundleNames } = await import("../src/plugins/compose")
     const home = mkdtempSync(join(tmpdir(), "dsh-compose-resolve-"))
     // A fake profile with an installed entity the bare name can resolve to.
@@ -89,14 +89,29 @@ describe("user bundle name resolution (B1 拆雷, official layers)", () => {
     writeFileSync(join(profileDir, "package.json"), JSON.stringify({ name: "my-plugin", version: "1.0.0", main: "index.js" }))
     writeFileSync(join(profileDir, "index.js"), "export default {}\n")
 
-    const rows = [{ id: "entry", name: "my-plugin" }]
+    // Official insert shape (the form real bundles ship): the bare `name`
+    // nested inside the insert block must resolve, mirroring applyEntryPatches.
+    const userLayer = [
+      {
+        insert: [{ id: "entry", name: "my-plugin" }],
+      },
+    ]
     const resolved = resolveUserBundleNames(
-      [{ packageName: "my-plugin", patches: rows }],
+      [{ packageName: "my-plugin", patches: userLayer }],
       { dshRoot: home, profile: "web" },
     )
-    expect(resolved[0].patches[0]).toMatchObject({ id: "entry" })
-    expect((resolved[0].patches[0] as { name: string }).name).toMatch(/^file:\/\//)
+    const insertRow = (resolved[0].patches[0] as { insert: { id: string; name: string }[] }).insert[0]
+    expect(insertRow.id).toBe("entry")
+    expect(insertRow.name).toMatch(/^file:\/\//)
     // Original layer objects are not mutated.
-    expect(rows[0].name).toBe("my-plugin")
+    expect((userLayer[0] as { insert: { name: string }[] }).insert[0].name).toBe("my-plugin")
+
+    // Official @deepseek-ai/* layers stay UNTOUCHED: their bare names resolve
+    // natively inside the closure, never rewritten.
+    const officialResolved = resolveUserBundleNames(
+      [{ packageName: "@deepseek-ai/dsh-base", patches: [{ insert: [{ id: "timer", name: "@deepseek-ai/cordis-plugin-timer" }] }] }],
+      { dshRoot: home, profile: "web" },
+    )
+    expect((officialResolved[0].patches[0] as { insert: { name: string }[] }).insert[0].name).toBe("@deepseek-ai/cordis-plugin-timer")
   })
 })
