@@ -86,7 +86,11 @@ function dir(options: Options) {
   if (process.env.WOPAL_DEBUG_LOG_DIR) return process.env.WOPAL_DEBUG_LOG_DIR
   const spaceRoot = process.env.WOPAL_SPACE_ROOT
   if (spaceRoot) return path.join(spaceRoot, ".wopal-space", "logs")
-  throw new Error("local Ellamaka logging requires WOPAL_DEBUG_LOG_DIR or WOPAL_SPACE_ROOT")
+  // Outside any WopalSpace (e.g. `ellamaka dsh` from an arbitrary cwd) the
+  // machine command still runs: fall back to the global log directory
+  // instead of throwing — space-scoped logs are an optimization, not a
+  // precondition.
+  return Global.Path.log
 }
 
 export async function init(next: Options) {
