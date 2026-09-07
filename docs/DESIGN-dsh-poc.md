@@ -652,6 +652,12 @@ ellamaka dsh dump-config --profile web [--default-only] [--patch ...]   # ellama
 
 官方语义对齐要点：根 flags（`--profile`/`--patch`/`--dump-config`/`--dump-default-config`）出现在 `plugin` 子命令之前时报错（官方 rejectParentOptions）；未知 plugin 动词（官方 `why` 等 pnpm 动词）不转发，明确报错——`pnpm why` 依赖 pnpm lockfile/持久化依赖图回答「包为何被安装」，ellamaka 真相源只有 profile 直接依赖声明，无对应语义；安装时持久化解析树后可做等价实现。`--patch` overlay 缺失文件即配置错误 throw（官方 loadOverlayPatches 语义）。boot 模式（`dsh --profile <name> "args"`）与 `dsh web` 别名不 shim——`ellamaka serve` 就是宿主，命令面报错提示 serve。安装即时生效由 Bridge 的组合文件监听驱动（并入 B2 bun-hmr 的 `registerConfig` 范围），补足官方“首次安装需重启”的缺口。
 
+`ellamaka dsh init` 是 ellamaka 自己的 dsh home 准备命令（官方 `dsh` 无此命令，靠首次 run 隐式物化）。它提前把 build-time 闭包物化 + seed profile 模板到指定 home，是为隔离 home 端到端验证（A3 前置）服务的独立物化入口，engine-free——只调统一 Runtime Manager 的物化阶段，不 mount。home 默认 `$WOPAL_HOME`/`~/.wopal`，`--home` 显式覆盖。
+
+```sh
+ellamaka dsh init [--home <dir>]        # 物化闭包 + seed profile 模板到目标 home，报 ready/disabled/degraded
+```
+
 ### Bun 安装器流水线
 
 ```text

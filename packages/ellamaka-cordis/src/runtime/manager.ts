@@ -93,7 +93,7 @@ export interface ManagerDeps {
 export interface InitializeDshOptions {
   readonly wopalHome: string
   readonly logFile: string
-  readonly entry: "serve" | "web" | "tui"
+  readonly entry: "serve" | "web" | "tui" | "init"
   readonly manifest: DshRuntimeManifestV1
   /** The embedded lock to materialise from; defaults to the build-time lock. */
   readonly lock?: DshRuntimeLockV1

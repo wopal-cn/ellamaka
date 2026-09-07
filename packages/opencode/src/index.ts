@@ -39,6 +39,7 @@ import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
+import { DshInitCommand } from "./cli/cmd/dsh-init"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
 import { Effect } from "effect"
@@ -256,6 +257,7 @@ const cli = yargs(args)
         })
         .command(DshPluginCommand)
         .command(DshDumpConfigCommand)
+        .command(DshInitCommand)
         .epilogue(DSH_HELP_EXAMPLES),
     handler: async (argv) => {
       // Official resolveBoot semantics (Plan 223 D-01/D-03): the root flags
