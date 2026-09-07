@@ -5,14 +5,22 @@
  * A small BFS resolver over abridged registry packuments replaces Arborist
  * for third-party plugin trees (Arborist busy-loops inside a compiled binary;
  * the BFS resolver was spike-verified at ~1s for a typical plugin, spike
- * report §Spike 1). Semver matching is self-contained: exact, caret, tilde,
- * dist-tag, and prerelease exclusion — zero new dependencies are published
- * with this package (Plan Task 2 decision).
+ * report §Spike 1). Registry-version RANGE matching (caret/tilde/x-ranges,
+ * `||` OR groups, hyphen/`>=` comparisons, prerelease ranges) delegates to the
+ * `semver` package (npm-complete grammar); the package-manager-level tag
+ * semantics (`latest`, dist-tags, `*` stable-only) stay in this file because
+ * `semver` has no dist-tag concept. The earlier zero-dependency hand-rolled
+ * matcher covered only exact/caret/tilde/x and mis-matched real heavy trees
+ * (e.g. dsh-better-sidebar's mermaid dependency graph uses OR ranges); the
+ * `semver` package is already a dependency of the wider monorepo and verified
+ * in a bun --compile binary.
  *
  * The fetch boundary is injectable: production uses the global fetch against
  * `registry.npmjs.org` (abridged accept header); tests inject recorded
  * packuments so the suite is fully offline.
  */
+
+import semver from "semver"
 
 /** The version metadata the resolver consumes from a packument. */
 export interface PackumentVersion {
@@ -143,70 +151,15 @@ export function satisfiesRange(candidateVersion: string, range: string, tags?: R
   // Dist-tag reference (`next`, `canary`, ...): resolve via dist-tags.
   if (tags && spec in tags) return candidateVersion === tags[spec]
 
-  // Exact version (prerelease included) always matches itself.
-  const candidate = parseVersion(candidateVersion)
-  if (!candidate) return false
-  const exact = parseVersion(spec)
-  if (exact) {
-    return (
-      candidate.major === exact.major &&
-      candidate.minor === exact.minor &&
-      candidate.patch === exact.patch &&
-      candidate.prerelease.join(".") === exact.prerelease.join(".")
-    )
-  }
-
-  // Range forms below never select prereleases.
-  if (candidate.prerelease.length > 0) return false
-
-  const caret = spec.startsWith("^")
-  const tilde = spec.startsWith("~")
-  const cleaned = caret || tilde ? spec.slice(1).trim() : spec
-  const parts = cleaned.split(".")
-  if (parts.length === 0 || parts.length > 3) return false
-  const nums: (number | "x")[] = []
-  for (const part of parts) {
-    if (part === "x" || part === "X" || part === "*") nums.push("x")
-    else {
-      const n = Number(part)
-      if (!Number.isInteger(n) || n < 0) return false
-      nums.push(n)
-    }
-  }
-  const [major, minor = "x", patch = "x"] = nums
-  if (major === "x") return true
-  if (candidate.major !== major) return false
-  if (tilde) {
-    const minMinor = minor === "x" ? 0 : minor
-    const minPatch = patch === "x" ? 0 : patch
-    if (candidate.minor !== minMinor) return false
-    if (candidate.patch < minPatch) return false
-    return true
-  }
-  // Caret: "up to the next leftmost non-zero digit" (npm semver semantics).
-  if (caret) {
-    const minMinor = minor === "x" ? 0 : minor
-    const minPatch = patch === "x" ? 0 : patch
-    if (candidate.minor < minMinor) return false
-    // ^0.0.x: only that exact patch (and its siblings via x) — the leftmost
-    // non-zero may be the PATCH, so the upper bound is the next patch.
-    if (major === 0 && minMinor === 0 && patch !== "x") {
-      return candidate.minor === 0 && candidate.patch >= minPatch
-    }
-    // ^0.y.z: the leftmost non-zero is the MINOR, so the upper bound is 0.(y+1).0.
-    if (major === 0 && minor !== "x") {
-      return candidate.minor === minMinor && candidate.patch >= minPatch
-    }
-    // ^major.y.z: the upper bound is (major+1).0.0.
-    return (
-      candidate.minor > minMinor ||
-      (candidate.minor === minMinor && candidate.patch >= minPatch)
-    )
-  }
-  // Plain x-range: `5` == `5.x.x`, `5.3` == `5.3.x`, `5.3.2` exact (handled above).
-  if (minor !== "x" && candidate.minor !== minor) return false
-  if (patch !== "x" && candidate.patch !== patch) return false
-  return true
+  // Everything below is a concrete version range: an exact version, a caret /
+  // tilde / x-range, or any npm composition of them (`||` OR groups, hyphen /
+  // `>=` comparisons). node-semver implements the complete npm grammar and
+  // applies npm's prerelease rule (a prerelease candidate only satisfies a
+  // range that itself names that prerelease base, e.g. `^0.1.2-rc.1`). The
+  // hand-rolled matcher this replaces rejected every prerelease under a caret
+  // and lacked `||`, which broke real heavy trees. `spec` here is never empty,
+  // `*`, or a dist-tag (handled above).
+  return semver.satisfies(candidateVersion, spec)
 }
 
 /**
@@ -308,6 +261,15 @@ export async function resolveTree(spec: ResolveSpec, options: ResolveOptions = {
       for (const [depName, depRange] of Object.entries(section ?? {})) {
         // npm v7+ auto-installs peers; `*` peers stay optional (spike report).
         if (section === pkg.peerDependencies && depRange.trim() === "*") continue
+        // Official dsh platform components (`@deepseek-ai/*`) are provided by
+        // the closure heal (DESIGN line 614/673, D-05), never installed from
+        // the registry. Skipping them here keeps a user plugin's official
+        // peers out of registry resolution — their caret-prerelease ranges
+        // (e.g. `^0.1.2-rc.1`) have no stable satisfier and would otherwise
+        // throw NoVersionError. This mirrors the installer's isOfficialPackage
+        // skip on the extract side (installer.ts). Peer satisfaction is left to
+        // the runtime parent-walk against the healed shared layer.
+        if (depName.startsWith("@deepseek-ai/")) continue
         const key = `${depName}@${depRange}`
         if (seen.has(key)) continue
         seen.add(key)

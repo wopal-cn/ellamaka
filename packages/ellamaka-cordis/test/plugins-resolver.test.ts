@@ -102,9 +102,13 @@ describe("dsh plugin dependency resolver", () => {
     expect(satisfiesRange("0.2.9", "^0.2.3")).toBe(true)
     expect(satisfiesRange("0.3.0", "^0.2.3")).toBe(false)
     expect(satisfiesRange("0.1.9", "^0.2.3")).toBe(false)
-    // ^0.0.3: only 0.0.x from the pinned patch on — PATCH is leftmost non-zero.
+    // ^0.0.3: major AND minor are zero, so the PATCH is the leftmost non-zero
+    // and the caret upper bound is the next patch — ^0.0.3 == >=0.0.3 <0.0.4,
+    // matching 0.0.3 only. (The hand-rolled matcher this test originally pinned
+    // accepted every 0.0.x >= 0.0.3; node-semver's npm-correct bound exposed
+    // that as a bug and the assertions were corrected to the npm semantics.)
     expect(satisfiesRange("0.0.3", "^0.0.3")).toBe(true)
-    expect(satisfiesRange("0.0.4", "^0.0.3")).toBe(true)
+    expect(satisfiesRange("0.0.4", "^0.0.3")).toBe(false)
     expect(satisfiesRange("0.0.2", "^0.0.3")).toBe(false)
     expect(satisfiesRange("0.1.0", "^0.0.3")).toBe(false)
     // ^0.2 (x patch): within 0.2.x.
@@ -116,6 +120,26 @@ describe("dsh plugin dependency resolver", () => {
     // regular caret unchanged.
     expect(satisfiesRange("5.6.2", "^5.3.0")).toBe(true)
     expect(satisfiesRange("6.0.0", "^5.3.0")).toBe(false)
+  })
+
+  test("complex npm ranges match via node-semver (OR groups, prerelease caret, hyphen)", () => {
+    // Real ranges from a heavy plugin tree (dsh-better-sidebar -> mermaid ->
+    // uuid) that the hand-rolled matcher mis-handled: OR groups, hyphen /
+    // comparison conjunctions, and caret ranges that name a prerelease.
+    expect(satisfiesRange("14.0.2", "^11.1.0 || ^12 || ^13 || ^14.0.0")).toBe(true)
+    expect(satisfiesRange("13.5.0", "^11.1.0 || ^12 || ^13 || ^14.0.0")).toBe(true)
+    expect(satisfiesRange("11.1.1", "^11.1.0 || ^12 || ^13 || ^14.0.0")).toBe(true)
+    expect(satisfiesRange("10.0.0", "^11.1.0 || ^12 || ^13 || ^14.0.0")).toBe(false)
+    // A caret range naming a prerelease widens to that minor line (npm: ^0.1.2-rc.1
+    // == >=0.1.2-rc.1 <0.2.0-0), so later rc.2 and the release 0.1.2 all satisfy,
+    // but an out-of-range rc (0.1.3) does not. The closure pins 0.1.2-rc.1, which hits.
+    expect(satisfiesRange("0.1.2-rc.1", "^0.1.2-rc.1")).toBe(true)
+    expect(satisfiesRange("0.1.2-rc.2", "^0.1.2-rc.1")).toBe(true)
+    expect(satisfiesRange("0.1.2", "^0.1.2-rc.1")).toBe(true)
+    expect(satisfiesRange("0.1.3-rc.1", "^0.1.2-rc.1")).toBe(false)
+    // Hyphen / comparison conjunction.
+    expect(satisfiesRange("4.3.4", ">=4.0.0 <5")).toBe(true)
+    expect(satisfiesRange("5.0.1", ">=1.2.7 <1.3.0 || >=1.3.0")).toBe(true)
   })
 
   test("a range with no satisfying version throws NoVersionError naming the parent chain", async () => {
@@ -149,5 +173,49 @@ describe("dsh plugin dependency resolver", () => {
       expect((error as Error).message).toContain("registry.npmjs.org")
       expect((error as Error).message).toContain("network down")
     }
+  })
+
+  test("official @deepseek-ai/* peers are skipped, never fetched from the registry", async () => {
+    // A third-party plugin (e.g. dsh-better-sidebar) declares official dsh
+    // platform components as peers (`@deepseek-ai/dsh-agent@^0.1.2-rc.1`) plus
+    // real third-party peers (react). The official set is provided by the
+    // closure heal (DESIGN line 673 / D-05), so the resolver must NOT fetch or
+    // resolve them against the registry — otherwise the caret-prerelease range
+    // throws NoVersionError. The offline fetch only knows react; a fetch of any
+    // @deepseek-ai/* name would 404 and surface as a failure.
+    const plugin: unknown = {
+      name: "dsh-better-sidebar",
+      "dist-tags": { latest: "0.18.0" },
+      versions: {
+        "0.18.0": {
+          name: "dsh-better-sidebar",
+          version: "0.18.0",
+          peerDependencies: {
+            "@deepseek-ai/dsh-agent": "^0.1.2-rc.1",
+            "@deepseek-ai/cordis": "^4.0.2",
+            react: "^18.2.0",
+          },
+          dist: { tarball: "https://registry.npmjs.org/dsh-better-sidebar/-/dsh-better-sidebar-0.18.0.tgz" },
+        },
+      },
+    }
+    const reactDoc: unknown = {
+      name: "react",
+      "dist-tags": { latest: "18.3.1" },
+      versions: {
+        "18.3.1": { name: "react", version: "18.3.1", dist: { tarball: "https://registry.npmjs.org/react/-/react-18.3.1.tgz" } },
+      },
+    }
+    const fetch: FetchLike = async (url) => {
+      const name = decodeURIComponent(new URL(url).pathname.slice(1))
+      if (name === "dsh-better-sidebar") return { ok: true, status: 200, json: async () => plugin }
+      if (name === "react") return { ok: true, status: 200, json: async () => reactDoc }
+      throw new Error(`404 for @deepseek-ai/* peer ${name} — must not be fetched`)
+    }
+    const tree = await resolveTree({ kind: "registry", name: "dsh-better-sidebar", version: "0.18.0" }, { fetch })
+    const keys = [...tree.packages.keys()]
+    // The official peers never enter the resolved tree; the third-party peer does.
+    expect(keys.some((k) => k.startsWith("@deepseek-ai/"))).toBe(false)
+    expect(keys).toContain("react@18.3.1")
   })
 })

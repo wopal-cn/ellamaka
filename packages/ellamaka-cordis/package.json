@@ -61,6 +61,7 @@
     "@npmcli/arborist": "9.4.0",
     "chokidar": "4.0.3",
     "pacote": "22.0.0",
+    "semver": "7.7.4",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {
@@ -72,6 +73,7 @@
     "@types/node": "catalog:",
     "@types/npmcli__arborist": "6.3.3",
     "@types/pacote": "11.1.8",
+    "@types/semver": "catalog:",
     "@typescript/native-preview": "catalog:",
     "typescript": "catalog:"
   }
