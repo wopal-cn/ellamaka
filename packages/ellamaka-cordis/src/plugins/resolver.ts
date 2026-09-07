@@ -256,19 +256,24 @@ export async function resolveTree(spec: ResolveSpec, options: ResolveOptions = {
   const seen = new Set<string>()
 
   const enqueueDeps = (pkg: PackumentVersion, chain: string[]) => {
-    const sections = [pkg.dependencies, pkg.peerDependencies, pkg.optionalDependencies]
+    // Only `dependencies` and `optionalDependencies` become install-tree nodes.
+    // `peerDependencies` are NOT downloaded (DESIGN line 673, D-05): they
+    // express a runtime contract satisfied by the host's shared closure layer,
+    // and the runtime resolves them by parent-walk against
+    // `profiles/node_modules` (healed symlinks), never by the installer. Auto-
+    // installing a non-official peer here pulled a plugin's peers' whole
+    // dependency ecosystem into the profile (e.g. dsh-codex-connect's
+    // `@earendil-works/pi-ai` peer dragged openai/anthropic/aws-sdk ~191
+    // packages) — both slow and semantically wrong.
+    const sections: Array<Record<string, string> | undefined> = [
+      pkg.dependencies,
+      pkg.optionalDependencies,
+    ]
     for (const section of sections) {
       for (const [depName, depRange] of Object.entries(section ?? {})) {
-        // npm v7+ auto-installs peers; `*` peers stay optional (spike report).
-        if (section === pkg.peerDependencies && depRange.trim() === "*") continue
         // Official dsh platform components (`@deepseek-ai/*`) are provided by
-        // the closure heal (DESIGN line 614/673, D-05), never installed from
-        // the registry. Skipping them here keeps a user plugin's official
-        // peers out of registry resolution — their caret-prerelease ranges
-        // (e.g. `^0.1.2-rc.1`) have no stable satisfier and would otherwise
-        // throw NoVersionError. This mirrors the installer's isOfficialPackage
-        // skip on the extract side (installer.ts). Peer satisfaction is left to
-        // the runtime parent-walk against the healed shared layer.
+        // the closure heal, never installed from the registry. This guards the
+        // rare case an official package leaks into a dependencies section.
         if (depName.startsWith("@deepseek-ai/")) continue
         const key = `${depName}@${depRange}`
         if (seen.has(key)) continue

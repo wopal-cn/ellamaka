@@ -175,14 +175,14 @@ describe("dsh plugin dependency resolver", () => {
     }
   })
 
-  test("official @deepseek-ai/* peers are skipped, never fetched from the registry", async () => {
-    // A third-party plugin (e.g. dsh-better-sidebar) declares official dsh
-    // platform components as peers (`@deepseek-ai/dsh-agent@^0.1.2-rc.1`) plus
-    // real third-party peers (react). The official set is provided by the
-    // closure heal (DESIGN line 673 / D-05), so the resolver must NOT fetch or
-    // resolve them against the registry — otherwise the caret-prerelease range
-    // throws NoVersionError. The offline fetch only knows react; a fetch of any
-    // @deepseek-ai/* name would 404 and surface as a failure.
+  test("peerDependencies are never downloaded — only dependencies enter the tree", async () => {
+    // DESIGN line 673 / D-05: peer deps are a runtime contract satisfied by
+    // the host closure layer (parent-walk against the healed profiles/node_modules),
+    // NOT downloaded by the installer. A plugin declares BOTH official
+    // (`@deepseek-ai/*`) and third-party (`react`) peers plus a real dependency
+    // (`mermaid`). None of the peers (official or not) may be fetched or
+    // resolved; the real dependency must enter the tree. The offline fetch only
+    // knows the root and mermaid — any peer fetch would 404 and fail the test.
     const plugin: unknown = {
       name: "dsh-better-sidebar",
       "dist-tags": { latest: "0.18.0" },
@@ -190,6 +190,7 @@ describe("dsh plugin dependency resolver", () => {
         "0.18.0": {
           name: "dsh-better-sidebar",
           version: "0.18.0",
+          dependencies: { mermaid: "^11.0.0" },
           peerDependencies: {
             "@deepseek-ai/dsh-agent": "^0.1.2-rc.1",
             "@deepseek-ai/cordis": "^4.0.2",
@@ -199,23 +200,25 @@ describe("dsh plugin dependency resolver", () => {
         },
       },
     }
-    const reactDoc: unknown = {
-      name: "react",
-      "dist-tags": { latest: "18.3.1" },
+    const mermaidDoc: unknown = {
+      name: "mermaid",
+      "dist-tags": { latest: "11.17.2" },
       versions: {
-        "18.3.1": { name: "react", version: "18.3.1", dist: { tarball: "https://registry.npmjs.org/react/-/react-18.3.1.tgz" } },
+        "11.17.2": { name: "mermaid", version: "11.17.2", dist: { tarball: "https://registry.npmjs.org/pkg/-/mermaid-11.17.2.tgz" } },
       },
     }
     const fetch: FetchLike = async (url) => {
       const name = decodeURIComponent(new URL(url).pathname.slice(1))
       if (name === "dsh-better-sidebar") return { ok: true, status: 200, json: async () => plugin }
-      if (name === "react") return { ok: true, status: 200, json: async () => reactDoc }
-      throw new Error(`404 for @deepseek-ai/* peer ${name} — must not be fetched`)
+      if (name === "mermaid") return { ok: true, status: 200, json: async () => mermaidDoc }
+      throw new Error(`404 for peer ${name} — must not be fetched`)
     }
     const tree = await resolveTree({ kind: "registry", name: "dsh-better-sidebar", version: "0.18.0" }, { fetch })
     const keys = [...tree.packages.keys()]
-    // The official peers never enter the resolved tree; the third-party peer does.
+    // No peer — official or third-party — enters the resolved tree.
     expect(keys.some((k) => k.startsWith("@deepseek-ai/"))).toBe(false)
-    expect(keys).toContain("react@18.3.1")
+    expect(keys.some((k) => k.startsWith("react@"))).toBe(false)
+    // The real dependency does.
+    expect(keys).toContain("mermaid@11.17.2")
   })
 })
