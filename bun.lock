@@ -36,7 +36,7 @@
     },
     "packages/effect-drizzle-sqlite": {
       "name": "@wopal/effect-drizzle-sqlite",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
@@ -50,7 +50,7 @@
     },
     "packages/ellamaka-app": {
       "name": "@wopal/ellamaka-app",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -120,7 +120,7 @@
     },
     "packages/ellamaka-brand": {
       "name": "@wopal/ellamaka-brand",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "devDependencies": {
         "@opentui/solid": "catalog:",
         "bun-types": "latest",
@@ -128,7 +128,7 @@
     },
     "packages/ellamaka-cli": {
       "name": "@wopal/ellamaka-cli",
-      "version": "2.0.4-rc.1",
+      "version": "2.0.5-rc.1",
       "bin": {
         "opencode": "./src/index.ts",
       },
@@ -145,7 +145,7 @@
     },
     "packages/ellamaka-cordis": {
       "name": "@wopal/ellamaka-cordis",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@deepseek-ai/cordis": "4.0.2",
         "@deepseek-ai/cordis-plugin-include": "1.0.7",
@@ -199,7 +199,7 @@
     },
     "packages/ellamaka-core": {
       "name": "@wopal/ellamaka-core",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/amazon-bedrock": "4.0.107",
@@ -258,7 +258,7 @@
     },
     "packages/ellamaka-desktop": {
       "name": "@wopal/ellamaka-desktop",
-      "version": "2.0.3",
+      "version": "2.0.4",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "drizzle-orm": "catalog:",
@@ -315,7 +315,7 @@
     },
     "packages/ellamaka-release": {
       "name": "@wopal/ellamaka-release",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "semver": "^7.6.3",
       },
@@ -328,7 +328,7 @@
     },
     "packages/http-recorder": {
       "name": "@wopal/http-recorder",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "effect": "catalog:",
@@ -341,7 +341,7 @@
     },
     "packages/llm": {
       "name": "@wopal/llm",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
@@ -359,7 +359,7 @@
     },
     "packages/opencode": {
       "name": "@wopal/ellamaka",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@actions/core": "1.11.1",
         "@actions/github": "6.0.1",
@@ -499,7 +499,7 @@
     },
     "packages/plugin": {
       "name": "@opencode-ai/plugin",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
@@ -527,7 +527,7 @@
     },
     "packages/sdk/js": {
       "name": "@opencode-ai/sdk",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "cross-spawn": "catalog:",
       },
@@ -542,7 +542,7 @@
     },
     "packages/ui": {
       "name": "@wopal/ui",
-      "version": "2.0.4",
+      "version": "2.0.5",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@opencode-ai/sdk": "workspace:*",
@@ -2748,7 +2748,7 @@
 
     "bun-pty": ["bun-pty@0.4.8", "https://registry.npmmirror.com/bun-pty/-/bun-pty-0.4.8.tgz", {}, "sha512-rO70Mrbr13+jxHHHu2YBkk2pNqrJE5cJn29WE++PUr+GFA0hq/VgtQPZANJ8dJo6d7XImvBk37Innt8GM7O28w=="],
 
-    "bun-types": ["bun-types@1.4.1", "https://registry.npmmirror.com/bun-types/-/bun-types-1.4.1.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-loKuVrAFZKfEv+JvWkHRS9GW5IqLuLRjVXN9p+vZvBN86O5hf/pBZQ5hSoyipsrMmWObZBDvWnlmKvjKTM0PdA=="],
+    "bun-types": ["bun-types@1.4.2", "https://registry.npmmirror.com/bun-types/-/bun-types-1.4.2.tgz", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 
     "bundle-name": ["bundle-name@4.1.0", "https://registry.npmmirror.com/bundle-name/-/bundle-name-4.1.0.tgz", { "dependencies": { "run-applescript": "^7.0.0" } }, "sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q=="],
 
