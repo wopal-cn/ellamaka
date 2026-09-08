@@ -211,9 +211,10 @@ export class VirtualWebServer {
    */
   rewriteIndex(html: string): string {
     const prefix = DSH_MOUNT_PREFIX
+    const hasMountPrefix = (p: string): boolean => p === prefix || p.startsWith(`${prefix}/`)
     const rewrite = (url: string): string => {
       if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("//")) return url
-      if (url.startsWith(prefix)) return url
+      if (hasMountPrefix(url)) return url
       return prefix + url.replace(/^\.\//, "/")
     }
     // Drop the PWA manifest link.
@@ -305,7 +306,9 @@ export class VirtualWebServer {
    * locations pass through unchanged.
    */
   rewriteLocation(value: string): string {
-    if (!value.startsWith("/") || value.startsWith(DSH_MOUNT_PREFIX)) return value
+    if (!value.startsWith("/") || value === DSH_MOUNT_PREFIX || value.startsWith(`${DSH_MOUNT_PREFIX}/`)) {
+      return value
+    }
     return DSH_MOUNT_PREFIX + value
   }
 
