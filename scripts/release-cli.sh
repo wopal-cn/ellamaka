@@ -17,27 +17,28 @@ DRY_RUN=false
 NO_PUSH=false
 NO_WATCH=false
 NO_CLEANUP=""
+ASSUME_YES=false
 VERSION=""
 REMOTE="origin"
 
 usage() {
   cat <<EOF
-$SCRIPT — 发布 CLI版本：版本线推断 → bump → 提交 → tag → push（tag 触发 workflow）→ watch
+$SCRIPT — 发布 CLI 版本：版本推断 → bump → 提交 → tag → push（tag 触发 workflow）→ watch
 
-版本线模型（docs/DISTRIBUTION.md §3.2/§4.1）：
-  根 package.json = 产品版本线 base（唯一真相源）；CLI 锚点承载通道状态。
-  目标 base 永远等于版本线 base，两个产品共享同一条版本线：
-    CLI     → packages/ellamaka-cli/package.json      (X.Y.Z / X.Y.Z-rc.N)
-    Desktop → packages/ellamaka-desktop/package.json  (X.Y.Z / X.Y.Z-beta.N)
+发布模型（docs/DISTRIBUTION.md §3.2/§4.1）：cli 与 desktop 各自独立序列，
+以已成功发布的 git tag 记录为版本推进唯一依据（无版本线/锚点）。本产品
+package.json 发布时写目标版本，根 + 依赖包统一镜像两产品较高 base。
 
 用法:
   $SCRIPT [选项] [--] [version]
 
 Bump 类型:
-  --patch      稳定发布：版本线 base 本身（2.0.4-rc.2 → 2.0.4）
-  --minor      开新版本线：minor +1（2.0.4 → 2.1.0），通道重置
-  --major      开新版本线：major +1（2.0.4 → 3.0.0），通道重置
-  --rc         继续 CLI -rc.N 序列（同 base 时 N+1），否则新 base 的 -rc.1
+  --patch     正式版发布：无已发正式版时转正现行 rc 候选，否则已发正式版 +1
+              直接发新正式版（2.0.4 → 2.0.5）
+  --minor     现行 base minor +1（2.0.4 → 2.1.0），开新线
+  --major     现行 base major +1（2.0.4 → 3.0.0），开新线
+  --rc        候选发布：同 base 已有 -rc.N 则 N+1，否则已发正式版下一 patch
+              的 -rc.1（2.0.4 已发 → 2.0.5-rc.1）
   （默认 --patch）
 
 选项:
@@ -45,6 +46,7 @@ Bump 类型:
   --no-push    bump 并提交 + 本地 tag，但不 push（留待人工检查）
   --no-watch   不 watch workflow 运行结果
   --no-cleanup 发布成功后跳过历史清理 workflow（默认自动触发）
+  -y, --yes    工作区有未提交变更时不征询，直接继续（非交互场景需显式给出）
   -h, --help   显示本帮助
 
 分支渠道约束（branch-channel policy）：
@@ -56,9 +58,10 @@ re-release（幂等）：目标 tag 已在远端存在时——
   tag 无 manifest（failed attempt）→ 以该 tag 重新 dispatch workflow，不重复 bump。
 
 示例:
-  $SCRIPT --rc            # 2.0.4-rc.1 → 2.0.4-rc.2（续发候选）
-  $SCRIPT --patch         # 版本线 2.0.4 → stable 2.0.4（候选转正）
-  $SCRIPT --minor         # 开新版本线 2.1.0（根 + 依赖包镜像同步）
+  $SCRIPT --rc            # 2.0.4 已发 → 2.0.5-rc.1；已有 2.0.5-rc.1 → 2.0.5-rc.2
+  $SCRIPT --patch         # 无 stable 时转正 rc（2.0.5-rc.1 → 2.0.5）；
+                          # 已发 2.0.4 → 2.0.5（semver patch+1 直接发正式版）
+  $SCRIPT --minor         # 现行 base 2.0.5 → 2.1.0
   $SCRIPT --dry-run       # 预览
 EOF
   exit 0
@@ -71,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --no-push) NO_PUSH=true; shift ;;
     --no-watch) NO_WATCH=true; shift ;;
     --no-cleanup) NO_CLEANUP="true"; shift ;;
+    -y|--yes) ASSUME_YES=true; shift ;;
     --patch) AUTO_BUMP="stable"; shift ;;
     --minor) AUTO_BUMP="minor"; shift ;;
     --major) AUTO_BUMP="major"; shift ;;

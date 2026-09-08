@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # scripts/lib/release.sh — release-cli.sh / release-desktop.sh 共享发布引擎。
 #
-# 统一版本线模型（docs/DISTRIBUTION.md §3.2/§4.1）：
-#   根 package.json version        = 产品版本线 base（唯一真相源）
-#   packages/ellamaka-cli/…        = CLI 通道状态（X.Y.Z-rc.N 或 X.Y.Z）
-#   packages/ellamaka-desktop/…    = Desktop 通道状态（X.Y.Z-beta.N 或 X.Y.Z）
+# 每产品独立发布模型（docs/DISTRIBUTION.md §3.2/§4.1）：
+#   cli 与 desktop 各自独立的版本序列，互不牵制。版本推进唯一依据是**该产品已
+#   成功发布的 git tag 记录**（最高 stable + 该产品通道最高 -rc.N/-beta.N），
+#   不读取 package.json 作"版本线/锚点"候选状态。
+#
+# 写入（发布动作内）：本产品 package.json 写目标 VERSION（带 rc/beta 后缀或纯
+#   X.Y.Z，成功即成为记录）；根 + 其余 workspace 依赖包统一镜像纯 base，且单调
+#   不减——仅当本次 BASE 高于根当前版本时抬升（依赖包 base = 两产品较高者）。
+#   失败/中断发布不构成记录，可同版本重发。
 #
 # 版本推断（packages/ellamaka-release/src/version-line.ts）：
-#   目标 base 永远 = 版本线 base；rc/beta 在锚点有序列时续 N+1，否则 .1 起步；
-#   stable 取 base 本身；锚点领先版本线直接拒绝。
+#   rc/beta → 该产品通道：候选 base 未转正则续 N+1，否则已发 stable patch+1 的
+#             .1 起步；stable → 候选未转正则转正其 base，否则已发 stable patch+1
+#             直接发新正式版；minor/major → 现行 base 升位。
+#   分支策略：非 main 只许 prerelease（通道级预检在版本推断前执行）。
 
 set -euo pipefail
 
@@ -27,6 +34,8 @@ die() {
 
 # ── 检查函数──────────────────
 
+# 返回值：0=干净；1=工作区/暂存区有未提交变更。
+# 只报告、不阻断 —— 是否继续由 confirm_dirty_release 征询用户。
 check_workspace_clean() {
   local dirty=0
   if ! git -C "$REPO_ROOT" diff --quiet HEAD -- . 2>/dev/null; then
@@ -39,7 +48,32 @@ check_workspace_clean() {
     git -C "$REPO_ROOT" diff --cached --stat
     dirty=1
   fi
-  [ "$dirty" -eq 0 ] || die "请先提交或暂存现有变更，再执行发布"
+  return "$dirty"
+}
+
+# confirm_dirty_release — 工作区不干净时征询用户是否继续发布
+#   --yes/-y       : 跳过征询（调用方已知晓风险）
+#   非交互（无 TTY）: 保持阻断，避免 CI/自动化静默带着脏工作区发布
+confirm_dirty_release() {
+  : "${ASSUME_YES:=false}"
+  if $ASSUME_YES; then
+    echo "→ --yes 已指定：忽略工作区未提交变更，继续发布"
+    return 0
+  fi
+  echo ""
+  echo "说明：本次发布以 bump commit（HEAD）为 ref 触发 ${WORKFLOW}，"
+  echo "      上述未提交变更不会进入发布产物；bump commit 只提交版本文件，"
+  echo "      暂存区里的其他改动会原样保留。"
+  if [ ! -t 0 ]; then
+    die "工作区不干净且当前不是交互终端（无法征询）。确认要继续请显式加 --yes。"
+  fi
+  local reply=""
+  printf '是否继续发布 %s %s？[y/N] ' "$PRODUCT" "$VERSION"
+  read -r reply || true
+  case "$reply" in
+    y|Y|yes|YES) echo "→ 已确认，继续发布" ;;
+    *) die "已取消发布（工作区有未提交变更）" ;;
+  esac
 }
 
 check_remote_branch() {
@@ -58,6 +92,35 @@ check_remote_branch() {
   fi
 }
 
+# target_is_prerelease — resolve 前判定本次 bump 目标是否为 prerelease 通道
+# （不依赖版本号，只看调用意图）：
+#   cli:     仅 --rc 是 prerelease；--patch/--minor/--major 是 stable 通道
+#   desktop: CHANNEL=beta（--beta）是 prerelease；CHANNEL=prod 是 stable 通道
+target_is_prerelease() {
+  if [ "$SUBCOMMAND" = "cli" ]; then
+    [ "$AUTO_BUMP" = "rc" ]
+  else
+    [ "$CHANNEL" = "beta" ]
+  fi
+}
+
+# check_branch_allows_channel — 通道级预检（在版本推断之前执行，dry-run 同样
+# 触发）：非 main 分支只许发布 prerelease（rc/beta）。stable/prod 目标
+# （--patch/--minor/--major：候选转正或开新正式版本线）在非 main 上直接拒绝，
+# 让分支渠道约束在进入版本推断前就显式体现，而不是淹没在版本推断错误里。
+check_branch_allows_channel() {
+  local branch
+  branch=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
+  [ "$branch" = "main" ] && return 0
+  if target_is_prerelease; then
+    return 0
+  fi
+  die "分支 $branch 不是 main：只允许发布 prerelease（CLI --rc / Desktop --beta），禁止 stable/prod（--patch/--minor/--major）。要发正式版或把候选转正，请切到 main 分支。"
+}
+
+# check_branch_channel_policy — 版本级校验（resolve 后）：prerelease 时 base
+# 必须高于该产品已发布的最高 stable。通道级拦截已由 check_branch_allows_channel
+# 在推断前完成，此函数只兜底 prerelease base 的版本约束。
 check_branch_channel_policy() {
   local branch
   branch=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
@@ -263,18 +326,33 @@ trigger_cleanup() {
   fi
 }
 
-# ── 版本推断（统一版本线模型）────────────────────────────
+# ── 版本推断（以该产品已发布 tag 记录为唯一依据，产品独立）────────────
+
+# product_released_stable — 该产品已发布最高 stable (X.Y.Z)，无则空串
+product_released_stable() {
+  highest_release_tag "$PRODUCT" "stable" "$REPO_ROOT"
+}
+
+# product_released_candidate — 该产品通道最高 prerelease（cli=-rc.N /
+# desktop=-beta.N），无则空串
+product_released_candidate() {
+  if [ "$SUBCOMMAND" = "cli" ]; then
+    highest_release_tag "$PRODUCT" "rc" "$REPO_ROOT"
+  else
+    highest_release_tag "$PRODUCT" "beta" "$REPO_ROOT"
+  fi
+}
 
 # resolve_target_version <stable|rc|beta|minor|major>
 #
-# 通过 version-line CLI 从版本线推断目标版本。minor/major 返回的是新 base，
-# 会先写回根 package.json（开新版本线）。
+# 通过 version-line CLI 从该产品已发布记录推断目标版本。推断不读 package.json
+# （无版本线/锚点概念），只依赖 git tag：cli/desktop 各自独立序列，互不牵制。
+# 显式版本（${VERSION_OVERRIDE}）时只做单调校验后原样返回。
 resolve_target_version() {
-  local channel="$1"
-  local line anchor result
-  line=$(node -p "require('$REPO_ROOT/package.json').version")
-  anchor=$(current_version "$SUBCOMMAND" "$REPO_ROOT")
-  result=$(bun packages/ellamaka-release/src/cli/version-line.ts "$line" "$anchor" "$channel" "${VERSION_OVERRIDE:-}" 2>&1) \
+  local bump="$1" stable candidate result
+  stable="$(product_released_stable)"
+  candidate="$(product_released_candidate)"
+  result=$(bun packages/ellamaka-release/src/cli/version-line.ts "$bump" "$stable" "$candidate" "${VERSION_OVERRIDE:-}" 2>&1) \
     || die "$result"
   echo "$result"
 }
@@ -286,8 +364,12 @@ resolve_target_version() {
 #   CHANNEL (desktop: beta|prod)  CHANNEL_LABEL  PRERELEASE_KIND (rc|beta|"")
 #   ALLOWED_BUMPS (空格分隔的合法 bump 开关)
 run_release() {
-  echo "→ 检查工作区..."
-  check_workspace_clean
+  # dry-run 不做任何写入，永不检查工作区状态
+  WORKSPACE_DIRTY=false
+  if ! $DRY_RUN; then
+    echo "→ 检查工作区..."
+    check_workspace_clean || WORKSPACE_DIRTY=true
+  fi
 
   if command -v jq >/dev/null 2>&1 && [ -f "$REPO_ROOT/.ci/versions.json" ]; then
     export MIN_WOPAL_CLI_VERSION=$(jq -r .minWopalCli "$REPO_ROOT/.ci/versions.json")
@@ -295,8 +377,17 @@ run_release() {
   check_min_wopal_cli_released
   check_dep_floor_synced
 
-  # ── 版本推断（在分支策略校验前：推断失败即退出）────────
-  CURRENT="$(current_version "$SUBCOMMAND" "$REPO_ROOT")"
+  # ── 通道级分支预检（resolve 之前）：非 main 只许 prerelease ──
+  # 显式版本参数（$VERSION）可能带 rc/beta 后缀，会覆盖 AUTO_BUMP 的通道意图，
+  # 这里据实标记 prerelease 属性，避免误拦 poc 分支上的 rc/beta 显式版本。
+  if [ -n "$VERSION" ] && [[ "$VERSION" =~ (-rc|-beta)\.[0-9]+$ ]]; then
+    AUTO_BUMP="$([ "$SUBCOMMAND" = "cli" ] && echo rc || echo beta)"
+  fi
+  check_branch_allows_channel
+
+  # ── 版本推断（以该产品已发布 tag 记录为唯一依据）────────
+  RELEASED_STABLE="$(product_released_stable)"
+  RELEASED_CAND="$(product_released_candidate)"
   if [ -n "$VERSION" ]; then
     VERSION_OVERRIDE="$VERSION"
     TARGET="$(resolve_target_version stable)"
@@ -306,7 +397,7 @@ run_release() {
     TARGET="$(resolve_target_version "$AUTO_BUMP")"
     VERSION="$TARGET"
   fi
-  echo "→ 版本线推断: 版本线 $(node -p "require('$REPO_ROOT/package.json').version") + 锚点 $CURRENT → $VERSION ($AUTO_BUMP)"
+  echo "→ 版本推断: 该产品已发布 stable=${RELEASED_STABLE:-无} 候选=${RELEASED_CAND:-无} → $VERSION ($AUTO_BUMP)"
 
   BASE="${VERSION%%-*}"
   TAG="${PRODUCT}-v${VERSION}"
@@ -326,6 +417,11 @@ run_release() {
   check_withdrawn
   check_migration_floor
 
+  # ── 工作区变更：征询而非阻断（版本号已确定，提示更有信息量）──
+  if [ "$WORKSPACE_DIRTY" = true ]; then
+    confirm_dirty_release
+  fi
+
   # ── re-release 判定（幂等）────────────────────────────
   RE_RELEASE=false
   if git ls-remote --tags "$REMOTE" "$TAG" 2>/dev/null | grep -q "refs/tags/${TAG}$"; then
@@ -337,8 +433,8 @@ run_release() {
   fi
 
   if $RE_RELEASE; then
-    ANCHOR_CURRENT="$(current_version "$SUBCOMMAND" "$REPO_ROOT")"
-    [ "$ANCHOR_CURRENT" = "$VERSION" ] || die "重发版本 $VERSION 与锚点文件版本 $ANCHOR_CURRENT 不一致；首次尝试的 bump commit 不在此分支？"
+    # 中断重发：无"锚点"概念，直接以失败 tag 重新 dispatch（发布不可变只约束
+    # 成功提交的 release；failed attempt 无有效 manifest，可同版本重发）。
     check_remote_branch
     if $DRY_RUN; then
       echo ""
@@ -360,53 +456,59 @@ run_release() {
     exit 0
   fi
 
-  # ── 写入计划计算 ─────────────────────────────────────
-  # fresh 路径：版本 == 锚点 → 跳过 bump；否则需要写入。
-  SKIP_BUMP=false
-  [ "$VERSION" = "$CURRENT" ] && SKIP_BUMP=true
-  # stable/promote 发布：目标 base == 版本线 base 且锚点带 prerelease 后缀
-  # 或锚点落后 → 只写锚点对齐版本线，根不动。
-  SKIP_ROOT=false
-  if [ "$AUTO_BUMP" != "minor" ] && [ "$AUTO_BUMP" != "major" ]; then
-    SKIP_ROOT=true
+  # ── 写入计划计算（无版本线/锚点）────────────────────────
+  # 本产品 package.json 恒写目标 VERSION（发布成功即成为记录）。
+  # 根 + 依赖包镜像纯 base，且单调不减：仅当本次 BASE 高于根当前版本时才同步
+  # 抬升（如 cli 发 2.0.6-rc.1 → 依赖包升 2.0.6；随后 desktop 发 2.0.5-beta.2
+  # 时 BASE 2.0.5 < 根 2.0.6，依赖包不动）。根当前版本 = 两产品已发布 base 较高者
+  # 的记录产物。
+  ROOT_VERSION="$(node -p "require('$REPO_ROOT/package.json').version")"
+  RAISE_ROOT=false
+  # ROOT_VERSION < BASE → 依赖包需抬升。node 退出码：1=需要抬升，0=不需要。
+  if node -e "
+    const a = process.argv[1].split('.').map(Number)
+    const b = process.argv[2].split('.').map(Number)
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) process.exit(a[i] < b[i] ? 1 : 0)
+    process.exit(0)
+  " "$ROOT_VERSION" "$BASE"; then
+    # ROOT_VERSION >= BASE：依赖包不抬升
+    :
+  else
+    RAISE_ROOT=true
   fi
+  # 本产品当前 package.json 版本（用于判定是否产生文件改动、需否 bump commit）
+  PROD_VERSION="$(current_version "$SUBCOMMAND" "$REPO_ROOT")"
 
   # ── dry-run 发布计划 ─────────────────────────────────
   if $DRY_RUN; then
-    if $SKIP_BUMP; then
-      VERSION_LINE="锚点已就位，跳过 bump"
-    else
-      VERSION_LINE="$CURRENT → $VERSION"
-    fi
+    PROD_WRITE=false
+    [ "$PROD_VERSION" = "$VERSION" ] || PROD_WRITE=true
     echo ""
     echo "── dry-run 发布计划 ──"
     echo "  product:   $PRODUCT ($CHANNEL_LABEL)"
-    echo "  version:   $VERSION_LINE"
-    echo "  tag:       $TAG (打在 HEAD bump commit 上)"
-    if $SKIP_BUMP; then
-      echo "  写入:      无（锚点已就位）"
-    elif $SKIP_ROOT; then
-      echo "  写入:      仅产品锚点（对齐版本线）"
-    else
-      echo "  写入:      根 package.json（新版本线）+ 产品锚点"
-    fi
+    echo "  version:   $VERSION"
+    echo "  tag:       $TAG (打在 bump commit 上)"
+    echo "  写入:      产品 package.json → $VERSION$([ "$RAISE_ROOT" = true ] && echo "；根 + 依赖包 → $BASE")
+$([ "$PROD_WRITE" = false ] && [ "$RAISE_ROOT" = false ] && echo "  （产品与依赖均已到位，无版本文件改动，直接以当前 HEAD 打 tag）")"
     echo "  push:      $REMOTE 分支 + ${TAG}（tag 触发 ${WORKFLOW}）"
     echo "  watch:     $([ "$NO_WATCH" = "true" ] && echo 跳过 || echo 自动)"
     echo "  cleanup:   $([ "$NO_CLEANUP" = "true" ] && echo 跳过 || echo 自动触发)"
     exit 0
   fi
 
-  # ── bump 写入 ────────────────────────────────────────
-  if ! $SKIP_BUMP; then
+  # ── bump 写入（产品写目标 VERSION；根+依赖包仅当 BASE 更高时抬升）────
+  if [ "$PROD_VERSION" = "$VERSION" ] && [ "$RAISE_ROOT" = false ]; then
+    echo "→ 产品已是 ${VERSION} 且依赖包不需抬升，跳过 bump 与提交（直接以当前 HEAD 打 tag）"
+  else
     echo "→ 写入版本 $VERSION..."
     node -e "
 const fs = require('fs')
 const path = require('path')
 const root = process.argv[1]
 const version = process.argv[2]
-const base = process.argv[3]
+const depBase = process.argv[3]
 const sub = process.argv[4]
-const skipRoot = process.argv[5] === 'true'
+const raiseRoot = process.argv[5] === 'true'
 
 const write = (p, v) => {
   const pkg = JSON.parse(fs.readFileSync(p, 'utf8'))
@@ -417,39 +519,39 @@ const write = (p, v) => {
 }
 
 let changed = 0
+// 本产品 package.json 写完整目标版本（发布成功即成为记录）
 if (sub === 'cli') {
-  // CLI 锚点写完整版本；根在 minor/major 开新版本线时写新 base，
-  // 其余依赖包随新版本线镜像纯 base。
   if (write(path.join(root, 'packages/ellamaka-cli/package.json'), version)) changed++
-  if (!skipRoot) {
-    for (const d of fs.readdirSync(path.join(root, 'packages'))) {
-      const p = path.join(root, 'packages', d, 'package.json')
-      if (!fs.existsSync(p)) continue
-      if (d === 'ellamaka-cli' || d === 'ellamaka-desktop') continue
-      if (write(p, base)) changed++
-    }
-    const sdk = path.join(root, 'packages', 'sdk', 'js', 'package.json')
-    if (fs.existsSync(sdk) && write(sdk, base)) changed++
-    if (write(path.join(root, 'package.json'), base)) changed++
-  }
 } else {
-  // Desktop 锚点写完整版本；根仅在开新版本线时写新 base。
   if (write(path.join(root, 'packages/ellamaka-desktop/package.json'), version)) changed++
-  if (!skipRoot) {
-    if (write(path.join(root, 'package.json'), base)) changed++
+}
+// 根 + 其余 workspace 依赖包统一镜像纯 base，仅当本次 BASE 更高时抬升
+if (raiseRoot) {
+  for (const d of fs.readdirSync(path.join(root, 'packages'))) {
+    const p = path.join(root, 'packages', d, 'package.json')
+    if (!fs.existsSync(p)) continue
+    if (d === 'ellamaka-cli' || d === 'ellamaka-desktop') continue
+    if (write(p, depBase)) changed++
   }
+  const sdk = path.join(root, 'packages', 'sdk', 'js', 'package.json')
+  if (fs.existsSync(sdk) && write(sdk, depBase)) changed++
+  if (write(path.join(root, 'package.json'), depBase)) changed++
 }
 console.log('  bumped ' + changed + ' package.json files')
-" "$REPO_ROOT" "$VERSION" "$BASE" "$SUBCOMMAND" "$SKIP_ROOT"
+" "$REPO_ROOT" "$VERSION" "$BASE" "$SUBCOMMAND" "$RAISE_ROOT"
 
     echo "→ 刷新 bun.lock..."
     (cd "$REPO_ROOT" && bun install --lockfile-only 2>/dev/null) || die "bun install --lockfile-only 失败"
 
     echo "→ 提交版本 bump"
-    git -C "$REPO_ROOT" add package.json packages/*/package.json packages/sdk/js/package.json bun.lock
-    git -C "$REPO_ROOT" commit -m "chore: bump $PRODUCT version to $VERSION"
-  else
-    echo "→ 锚点已是 ${VERSION}，跳过 bump 与提交（直接以当前 HEAD 打 tag）"
+    local -a bump_paths=(package.json)
+    local p
+    for p in packages/*/package.json packages/sdk/js/package.json bun.lock; do
+      if [ -e "$REPO_ROOT/$p" ]; then bump_paths+=("$p"); fi
+    done
+    git -C "$REPO_ROOT" add -- "${bump_paths[@]}"
+    # --only + pathspec：只提交版本文件，暂存区里其他改动原样保留（脏工作区发布时尤其重要）
+    git -C "$REPO_ROOT" commit --only -m "chore: bump $PRODUCT version to $VERSION" -- "${bump_paths[@]}"
   fi
 
   # ── tag、push ────────────────────────────────────────

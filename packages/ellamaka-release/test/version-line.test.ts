@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  parseVersion,
-  compareBase,
-  inferNextVersion,
-} from "../src/version-line"
+import { parseVersion, inferNextVersion } from "../src/version-line"
 
 describe("parseVersion", () => {
   test("parses base versions", () => {
@@ -11,7 +7,7 @@ describe("parseVersion", () => {
   })
   test("parses prerelease versions", () => {
     expect(parseVersion("2.0.4-rc.1")).toEqual({ base: [2, 0, 4], kind: "rc", n: 1 })
-    expect(parseVersion("2.0.4-beta.3")).toEqual({ base: [2, 0, 4], kind: "beta", n: 3 })
+    expect(parseVersion("2.0.5-beta.3")).toEqual({ base: [2, 0, 5], kind: "beta", n: 3 })
   })
   test("throws on non-semantic versions", () => {
     expect(() => parseVersion("abc")).toThrow()
@@ -19,59 +15,76 @@ describe("parseVersion", () => {
   })
 })
 
-describe("compareBase", () => {
-  test("compares numerically per component", () => {
-    expect(compareBase([2, 0, 4], [2, 0, 3])).toBe(1)
-    expect(compareBase([2, 0, 4], [2, 0, 4])).toBe(0)
-    expect(compareBase([2, 0, 10], [2, 0, 9])).toBe(1)
-    expect(compareBase([2, 1, 0], [2, 0, 4])).toBe(1)
+// 每产品独立、以已发布记录推断。产品历史 = { stable: 最高已发 X.Y.Z,
+// candidate: 该产品通道最高已发 -rc.N / -beta.N }。
+
+describe("inferNextVersion — candidate (rc/beta)", () => {
+  test("cli: stable 已到 2.0.4 且无 rc → --rc 给 2.0.5-rc.1", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "rc")).toBe("2.0.5-rc.1")
+  })
+
+  test("desktop: stable 2.0.4、beta 最高 2.0.4-beta.1（base 已转正）→ 2.0.5-beta.1", () => {
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.4-beta.1" }, "beta")).toBe(
+      "2.0.5-beta.1",
+    )
+  })
+
+  test("候选 base 未转正（高于已发 stable）→ 续 N+1；base 已转正则开下一 patch", () => {
+    // cli 已发 2.0.5-rc.1（stable 仍 2.0.4）→ 续 .2
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.1" }, "rc")).toBe("2.0.5-rc.2")
+    // desktop：beta 2.0.5-beta.1 的 base 2.0.5 已被 stable 转正（stable 2.0.5）
+    // → 该 base 的 beta 线终结，升下一 patch 开 2.0.6-beta.1
+    expect(
+      inferNextVersion({ stable: "2.0.5", candidate: "2.0.5-beta.1" }, "beta"),
+    ).toBe("2.0.6-beta.1")
+  })
+
+  test("产品独立非同步：cli 在 2.0.6 序列，desktop 仍在 2.0.5 序列，各自续发", () => {
+    // cli 已发 stable 2.0.5 + rc 2.0.6-rc.1 → 续 2.0.6-rc.2
+    expect(inferNextVersion({ stable: "2.0.5", candidate: "2.0.6-rc.1" }, "rc")).toBe("2.0.6-rc.2")
+    // desktop 独立最高 stable 2.0.4 + beta 2.0.5-beta.1 → 续 2.0.5-beta.2
+    expect(
+      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-beta.1" }, "beta"),
+    ).toBe("2.0.5-beta.2")
+  })
+
+  test("从未发布任何版本 → 从种子 base 起 -rc.1", () => {
+    expect(inferNextVersion({}, "rc")).toBe("0.1.0-rc.1")
+    expect(inferNextVersion({}, "beta")).toBe("0.1.0-beta.1")
   })
 })
 
-describe("inferNextVersion — unified version-line model", () => {
-  // Version line (root package.json) is the single source of truth for the
-  // base; product anchors (cli/desktop package.json) carry the channel state.
-  test("stable release takes the version-line base itself", () => {
-    // cli anchor 2.0.4-rc.1, line 2.0.4, no desktop prerelease → 2.0.4
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.4-rc.1" }, "stable")).toBe("2.0.4")
+describe("inferNextVersion — stable (--patch)", () => {
+  test("候选 base 未转正 → 转正该 base", () => {
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.1" }, "stable")).toBe("2.0.5")
+    expect(
+      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-beta.3" }, "stable"),
+    ).toBe("2.0.5")
   })
 
-  test("rc continues N+1 on the anchor base when it equals the line", () => {
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.4-rc.1" }, "rc")).toBe("2.0.4-rc.2")
+  test("已发 stable R 且无未转正候选 → semver patch+1 直接发新正式版", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "stable")).toBe("2.0.5")
   })
 
-  test("rc starts fresh on the line when anchor is behind", () => {
-    // desktop anchor 2.0.3, line already 2.0.4 → next patch of the line
-    expect(inferNextVersion({ line: "2.0.5", anchor: "2.0.3" }, "rc")).toBe("2.0.5-rc.1")
+  test("从未发 stable、有候选 → 转正候选 base 发首个正式版", () => {
+    expect(inferNextVersion({ candidate: "2.0.5-rc.1" }, "stable")).toBe("2.0.5")
+  })
+})
+
+describe("inferNextVersion — minor / major", () => {
+  test("从现行 base 升位", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "minor")).toBe("2.1.0")
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.6-rc.1" }, "minor")).toBe("2.1.0")
+    expect(inferNextVersion({ stable: "2.0.4" }, "major")).toBe("3.0.0")
+  })
+})
+
+describe("inferNextVersion — explicit", () => {
+  test("原样返回合法显式版本", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "rc", "2.0.6-rc.1")).toBe("2.0.6-rc.1")
   })
 
-  test("beta starts fresh on the line when desktop anchor is behind", () => {
-    // the live case: line 2.0.4, desktop anchor 2.0.3 → 2.0.4-beta.1
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.3" }, "beta")).toBe("2.0.4-beta.1")
-  })
-
-  test("beta continues N+1 when anchor is already on the line base", () => {
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.4-beta.1" }, "beta")).toBe("2.0.4-beta.2")
-  })
-
-  test("rc/beta promote to the line base when anchor is behind (desktop catch-up)", () => {
-    // desktop anchor 2.0.3 stable, line 2.0.4 → prod release infers 2.0.4
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.3" }, "stable")).toBe("2.0.4")
-  })
-
-  test("minor/major bumps the line base and resets the channel", () => {
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.4-rc.1" }, "minor")).toBe("2.1.0")
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.3" }, "major")).toBe("3.0.0")
-  })
-
-  test("anchor ahead of line is rejected (drift guard)", () => {
-    // anchor 2.0.5 ahead of line 2.0.4 means someone bumped out of band
-    expect(() => inferNextVersion({ line: "2.0.4", anchor: "2.0.5" }, "stable")).toThrow(/版本线/)
-    expect(() => inferNextVersion({ line: "2.0.4", anchor: "2.0.5-rc.1" }, "rc")).toThrow(/版本线/)
-  })
-
-  test("explicit version must sit on the version line", () => {
-    expect(() => inferNextVersion({ line: "2.0.4", anchor: "2.0.3" }, "rc", "2.1.0-rc.1")).toThrow(/版本线/)
-    expect(inferNextVersion({ line: "2.0.4", anchor: "2.0.3" }, "stable", "2.0.4")).toBe("2.0.4")
+  test("低于已发布 stable 的显式版本被拒绝", () => {
+    expect(() => inferNextVersion({ stable: "2.0.4" }, "rc", "2.0.3-rc.1")).toThrow(/单调/)
   })
 })

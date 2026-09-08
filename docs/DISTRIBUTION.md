@@ -107,9 +107,9 @@ CLI rc 与 stable 发布完全同构——同一 tag namespace、同一 R2 versi
 
 ### 3.2 设计原则
 
-1. **产品版本独立**：CLI 与 Desktop 是两个独立发布单元，各自使用标准 SemVer 2.0、tag、workflow、latest feed 和 changelog。
-2. **产品锚点是版本真相源**：CLI 的版本唯一写入源是 `packages/ellamaka-cli/package.json`，Desktop 的是 `packages/ellamaka-desktop/package.json`。git tag 是发布产物记录，由锚点派生（bump 脚本写锚点 → 提交 → 打 tag）。CI 在任何发布构建前验证 tag 版本与锚点文件一致（anchor match gate），不一致即失败。
-3. **依赖包只做 base 镜像**：除两个产品锚点外的全部 workspace 包 version 字段只跟随 CLI 的 prerelease base（纯 `X.Y.Z`，从不出 `-rc.N`/`-beta.N`）。依赖包不发布、内部依赖走 `workspace:*`，其 version 只是版本演进的记录记号。
+1. **产品版本独立**：CLI 与 Desktop 是两个独立发布单元，各自使用标准 SemVer 2.0、tag、workflow、latest feed 和 changelog，版本序列互不牵制（cli 可发 `2.0.6-rc.1` 而 desktop 仍停在 `2.0.5-beta.N`）。
+2. **已成功发布的 tag 记录是版本推进依据**：每产品的下一个版本由该产品已发布的最高记录按 semver 推断，不读仓库 package.json 里"上次写了什么"。发布成功即打 tag 记录、不可变；失败/中断不构成记录，可同版本重发。cli/desktop 的 package.json 平时不承载 rc/beta"候选状态"，只在发布动作内写入本次版本。
+3. **依赖包统一镜像纯 base**：除 cli/desktop 两个产品外，全部 workspace 包 version 字段统一为纯 `X.Y.Z`，取两产品现行 base 的**较高者**（cli 发 `2.0.6-rc.1` 时依赖包为 `2.0.6`）。依赖包不发布、内部依赖走 `workspace:*`，其 version 只是版本演进的记录记号。
 4. **上游不是产品版本**：OpenCode version/commit 是 provenance 与 v1 兼容基线，不参与 Ellamaka 产品版本排序。
 5. **兼容性不是版本相等**：Desktop 不锁定外部 CLI 的精确产品版本；安装器读取 CLI `latest` 并验证其满足 Desktop 兼容约束。
 6. **一个排序真相源**：发布顺序只比较 `releaseIdentity.version`。upstream、build date、Git hash 和 artifact hash 都不参与排序。
@@ -186,10 +186,13 @@ channel 规则：
 
 发布是一步制（脚本 `scripts/release-cli.sh` / `scripts/release-desktop.sh`）：版本准备与发布触发在同一脚本内完成，`--dry-run` 承担预演职责。
 
-版本推断采用统一版本线模型（`packages/ellamaka-release/src/version-line.ts`）：根 `package.json` 是产品版本线 base 的唯一真相源，两个产品锚点只承载通道状态（`-rc.N` / `-beta.N`）。任何发布动作的目标 base 永远等于版本线 base：
+版本推断（`packages/ellamaka-release/src/version-line.ts`）以**已成功发布的 tag 记录**为版本推进唯一依据，两个产品独立计数。package.json 不承载"候选锚点"状态——发布的版本在发布动作内才写入，发布成功即成为记录：
 
-1. 计算目标版本：读版本线（根 package.json）与产品锚点，按 `--patch`/`--minor`/`--major`/`--rc`/`--beta` 或显式版本推断。stable 发布取版本线 base 本身（候选转正，`2.0.4-rc.2 → 2.0.4`）；rc/beta 在锚点同 base 有序列时续 N+1，否则从新 base 的 `.1` 起步（自动追平另一产品推进的版本线）；minor/major 开新版本线。锚点领先版本线直接拒绝。
-2. 写入：rc/beta/patch 续发只写产品锚点；minor/major 开新版本线时根 + 全部 workspace 依赖包（除两个产品锚点外）同步镜像新 base。
+1. 计算目标版本：读**该产品**已发布的最高记录（stable 最高版 + rc/beta 序列），按 `--patch`/`--minor`/`--major`/`--rc`/`--beta` 或显式版本推断，展示给用户确认：
+   - rc/beta：该 base 已有同 kind 序列 → 续 N+1。该 base 已发 stable → 升下一 patch 的 `.1`（如 2.0.4 已发布 → `--rc` 给 `2.0.5-rc.1`）。
+   - `--patch`（stable）：该产品无 stable 记录 → 取现行 rc/beta base 转正（`2.0.5-rc.2 → 2.0.5`）；已有 stable R → semver patch+1 直接发新正式版（`2.0.4 → 2.0.5`）。
+   - minor/major：从该产品现行 base 升位开新线（`2.0.5 → 2.1.0` / `3.0.0`），通道重置。
+2. 写入：把确认的目标版本写入该产品 package.json（带 `-rc.N`/`-beta.N` 或纯 `X.Y.Z`），其余依赖包模块统一镜像纯 base `X.Y.Z` = **两个产品现行 base 的较高者**；cli 先发 `2.0.6-rc.1` 时依赖包升 `2.0.6`，随后 desktop 仍可发 `2.0.5-beta.2`（只写 desktop，依赖包不动）。
 3. 提交 bump、创建 namespaced tag（`ellamaka-cli-vX.Y.Z[-rc.N]` / `ellamaka-desktop-vX.Y.Z[-beta.N]`）、推送当前分支与 tag。tag push 触发目标 workflow（`push: tags`），不再手工 dispatch。
 4. 监听 workflow 至完成，成功后自动触发历史清理。
 
@@ -200,7 +203,7 @@ failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时—�
 分支渠道约束（branch-channel policy）：
 
 - `main`：CLI stable/rc 与 Desktop prod/beta 均可发布。
-- 非 `main` 分支（`poc-*` 等）：只允许 prerelease —— CLI `X.Y.Z-rc.N`、Desktop `X.Y.Z-beta.N`；禁止发布裸 `X.Y.Z`。
+- 非 `main` 分支（`poc-*` 等）：只允许 prerelease —— CLI `X.Y.Z-rc.N`、Desktop `X.Y.Z-beta.N`；禁止发布裸 `X.Y.Z`。该约束以**通道级预检**在版本推断之前执行：非 main 分支上 `--patch`/`--minor`/`--major`（stable/prod 目标：候选转正或开新正式版）直接拒绝并提示切回 main；`--rc`/`--beta` 进入推断。dry-run 同样触发，让分支策略在发布计划第一屏显式可见。
 - prerelease 的 base `X.Y.Z` 必须高于该产品已发布 prod/stable 的最高版本：已发布 `2.0.3` 时，prerelease 从 `2.0.4-rc.1` / `2.0.4-beta.1` 开始，`2.0.3-rc.1` / `2.0.3-beta.1` 被拒绝。
 - 版本单调：同类产品的全部发布（stable、rc、beta）处于同一单调递增序列。rc 占用 base slot 后，后续修复只能发更高版本（`2.0.5-rc.2`、`2.1.0`……），不能回退到已发 rc 的 base 之下。
 
