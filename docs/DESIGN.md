@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **状态**: Active
-> **更新时间**: 2026-09-01
+> **更新时间**: 2026-09-08
 > **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
 
 ## 1. Role
@@ -144,13 +144,40 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 `WOPAL_HOME` 是 sidecar 的进程级安装根。它拥有全局配置、全局能力和运行时存储。`WOPAL_SPACE` 与 `WOPAL_SPACE_ROOT` 只服务单目录 CLI 兼容边界，不承担 server request routing 或 plugin context 所有权。
 
-## 8. Web UI 与 ellamaka-app
 
-### 8.1 背景
+## 8. Unified Reload & Lifecycle
+
+后端把运行时单元的可重载能力统一为一个模型：一个 `ReloadController` 管理若干 `ReloadUnit`，每个单元独立用同一套生命周期协议重载。单元是进程内的可重载边界：
+
+| 单元 | 状态源 | 重载含义 |
+| --- | --- | --- |
+| `global` | 全局 config 与 provider | dispose 全部 instance 并重新 bootstrap，发出 `global.disposed` |
+| `instance:<directory>` | 单目录 instance | `InstanceStore.reload`（dispose + bootstrap） |
+| `dsh:web` | web profile manifest / closure | 重建 DSH web 容器 |
+| `dsh:tools` | ellamaka-tools profile manifest / closure | 重建 DSH 工具容器 |
+
+**两级重载**：
+
+- **Hot replay** —— config-only 与 patch 变更，原地回放配置，不产生新代际。DSH 由 profile watcher 承载；opencode 配置 watch 同属此类。
+- **Cold reload** —— 版本与代码变更。统一协议 `drain → dispose → build → verify → publish(generation) → notify`，产生新 generation。
+
+**隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器、宿主经 node:http 代理转发 `/dsh`。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
+
+**触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`；共享 dsh-base/closure 变 → web+tools；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明依赖边；当前 global 不依赖任何 dsh 单元，未来做集中配置管理只需增补一条边。
+
+**发布与事件**：每个单元原子发布 entry/route 与 generation，事件携带 `unit` 与 `generation`。保留 `global.disposed` 的兼容语义；DSH 单元重载只重建 Workbench 的 DSH iframe，不触发整个 sidecar 的 generation。
+
+**一致性**：materialize/install 与 cold reload 在 shared home 锁上串行；先停旧代、确认终止，再启新代；重载超时或失败只降级该单元，不升级为整进程重启。
+
+DSH 容器装配与融合细则见 [DESIGN-dsh-poc.md](./DESIGN-dsh-poc.md)。
+
+## 9. Web UI 与 ellamaka-app
+
+### 9.1 背景
 
 WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 验证(`poc/web`)——确认 Web TUI 可行、多空间并行可行、TUI+Chat 融合可行——需要以正式技术栈承载产品形态。
 
-### 8.2 设计决策
+### 9.2 设计决策
 
 **不在 PoC 基础上迭代,而是 fork 上游 `packages/app` 为 `packages/ellamaka-app`**:
 
@@ -160,7 +187,7 @@ WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 
 | 在 `poc/web` 基础上迭代                           | ❌ 否决 | PoC 代码质量和架构无法承接产品化(单文件 1025 行、裸 JSON 协议、CDN 外部依赖)      |
 | **Fork `packages/app` → `packages/ellamaka-app`** | ✅ 采纳 | 复用现有基础设施(core/sdk/ui/i18n/terminal/theme);定制与上游解耦                 |
 
-### 8.3 详细规约
+### 9.3 详细规约
 
 关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、PoC 能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
 
@@ -170,13 +197,14 @@ WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 
 
 ---
 
-## 9. Related Documents
+## 10. Related Documents
 
 | 文档                              | 引用目的                                                       |
 | --------------------------------- | -------------------------------------------------------------- |
 | `./BRANDING.md`                   | 品牌化定制唯一真相源—                                          |
 | `./API-CONTRACT.md`               | Runtime API、OpenAPI、生成 SDK 与 Wopal CLI adapter 契约       |
 | `./WORKBENCH.md`                  | ellamaka 自定义工作台 app 设计                                 |
+| `./DESIGN-dsh-poc.md`            | ellamaka 与 dsh 融合架构（DSH 容器装配、插件供应链、Bun 宿主 HMR） |
 | `./DISTRIBUTION.md`               | 产品 SemVer、OpenCode upstream、构建身份、兼容选择、release、artifact、安装契约 |
 | `../../wopal-cli/docs/DESIGN.md`  | wopal-cli 如何消费 ellamaka release                            |
 | `UPSTREAM-MERGE-LOG.md`           | 裁剪边界、合并策略、验证经验                                   |
