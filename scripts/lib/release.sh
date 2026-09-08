@@ -210,18 +210,36 @@ has_effective_manifest() {
   [ "$code" = "200" ]
 }
 
+# check_min_wopal_cli_released — 发布门禁：wopal-cli 协议地板必须可用。
+#
+# minWopalCli（.ci/versions.json）是 ellamaka 运行时对 wopal-cli 的**最低协议
+# 版本**（>= 语义，与 packages/ellamaka-desktop/src/main/version-check.ts 的
+# checkWopalCliVersion 一致）。因此只需确认远端 wopal-cli **已发布最高版本 >=
+# minWopalCli** 即可——更高的版本必然包含地板版本的全部协议能力；反过来，
+# 精确检查旧版 tag 存在与否是错的：旧版本被 release 清理后，哪怕更高版本在，
+# 版本越新反而永远无法发布（死锁）。
 check_min_wopal_cli_released() {
   local req_ver="${MIN_WOPAL_CLI_VERSION:-}"
   [ -n "$req_ver" ] || return 0
-  echo "→ 检查 minWopalCli (v${req_ver}) 是否已在 wopal-cli 仓库发布..."
-  local tag_found=""
-  if git ls-remote --tags "https://github.com/wopal-cn/wopal-cli.git" "refs/tags/v${req_ver}" 2>/dev/null | grep -q "refs/tags/v${req_ver}$"; then
-    tag_found="yes"
-  elif command -v gh &>/dev/null && gh release view "v${req_ver}" -R wopal-cn/wopal-cli &>/dev/null; then
-    tag_found="yes"
-  fi
-  [ "$tag_found" = "yes" ] || die "终止发布: .ci/versions.json 要求的 minWopalCli (v${req_ver}) 尚未在 wopal-cli 仓库发布！"
-  echo "  ✓ 已确认 wopal-cli v${req_ver} 存在于远端"
+  echo "→ 检查 minWopalCli (v${req_ver}) 是否已满足：wopal-cli 远端最高已发布版本..."
+  local wopal_repo="https://github.com/wopal-cn/wopal-cli.git"
+  local ok=""
+  ok=$(git ls-remote --tags "$wopal_repo" 2>/dev/null | node -e "
+const req = process.argv[1].split('.').map(Number)
+let best = null
+const cmp3 = (a, b) => a[0]-b[0] || a[1]-b[1] || a[2]-b[2]
+for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
+  const m = line.match(/refs\/tags\/v(\d+)\.(\d+)\.(\d+)\$/)
+  if (!m) continue // 只统计稳定 tag，忽略 -rc/-beta/dev 候选
+  const v = [Number(m[1]), Number(m[2]), Number(m[3])]
+  if (!best || cmp3(v, best) > 0) best = v
+}
+if (!best) { console.log(''); process.exit(0) }
+// best >= req 才通过
+process.stdout.write(cmp3(best, req) >= 0 ? 'yes' : 'no')
+" "$req_ver")
+  [ "$ok" = "yes" ] || die "终止发布: wopal-cli 仓库无满足 minWopalCli v${req_ver} 的已发布版本（远端最高稳定版本不可用）。请确认 wopal-cli 已发布 ≥ v${req_ver} 的 stable，或同步 .ci/versions.json。"
+  echo "  ✓ 已确认 wopal-cli 已发布版本满足 ≥ v${req_ver}"
 }
 
 check_dep_floor_synced() {
