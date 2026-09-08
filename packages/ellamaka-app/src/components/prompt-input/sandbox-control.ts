@@ -140,3 +140,20 @@ export function shouldShowSandboxControl(input: {
   if (input.dshStatus !== "ready") return false
   return hasDshAdapterPlugin(input.plugins)
 }
+
+// "Allow always" on a sandbox-escalation approval card writes a standing
+// allow rule for the escalated mode, so the session effectively runs under
+// that mode from then on. The composer's tri-state selector must reflect
+// that — it is the only visible sandbox state. The approval dock publishes
+// the escalated mode here and the composer (which owns the persisted choice)
+// subscribes and applies it as if the user had picked it by hand.
+const escalationListeners = new Set<(preset: SandboxPreset) => void>()
+
+export function publishEscalatedSandboxPreset(preset: SandboxPreset) {
+  for (const listener of escalationListeners) listener(preset)
+}
+
+export function subscribeEscalatedSandboxPreset(listener: (preset: SandboxPreset) => void): () => void {
+  escalationListeners.add(listener)
+  return () => escalationListeners.delete(listener)
+}

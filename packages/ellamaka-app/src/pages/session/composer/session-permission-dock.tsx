@@ -4,6 +4,24 @@ import { Button } from "@wopal/ui/button"
 import { DockPrompt } from "@wopal/ui/dock-prompt"
 import { Icon } from "@wopal/ui/icon"
 import { useLanguage } from "@/context/language"
+import { publishEscalatedSandboxPreset, type SandboxPreset } from "@/components/prompt-input/sandbox-control"
+
+const ESCALATION_REASON_PREFIX = /^escalate sandbox to [a-z-]+:\s*/
+
+function metadataString(metadata: PermissionRequest["metadata"], key: string): string {
+  const value = metadata[key]
+  return typeof value === "string" ? value : ""
+}
+
+// The escalation target mode doubles as the composer preset value, except the
+// one-shot dsh vocabulary `danger-full-access` which the composer spells
+// `full-access` (the composer never persists a one-shot mode; the preset is
+// the standing "sandbox off" selection).
+function escalationPreset(targetMode: string): SandboxPreset | undefined {
+  if (targetMode === "read-only" || targetMode === "workspace-write") return targetMode
+  if (targetMode === "danger-full-access") return "full-access"
+  return undefined
+}
 
 export function SessionPermissionDock(props: {
   request: PermissionRequest
@@ -17,6 +35,25 @@ export function SessionPermissionDock(props: {
     const value = language.t(key as Parameters<typeof language.t>[0])
     if (value === key) return ""
     return value
+  }
+
+  const justification = () => {
+    const reason = metadataString(props.request.metadata, "justification")
+    return reason.replace(ESCALATION_REASON_PREFIX, "")
+  }
+
+  const detail = () => {
+    const filepath = metadataString(props.request.metadata, "filepath")
+    if (filepath) return filepath
+    return ""
+  }
+
+  const decide = (response: "once" | "always" | "reject") => {
+    if (response === "always" && props.request.permission === "sandbox_escalation") {
+      const preset = escalationPreset(metadataString(props.request.metadata, "targetMode"))
+      if (preset) publishEscalatedSandboxPreset(preset)
+    }
+    props.onDecide(response)
   }
 
   return (
@@ -34,18 +71,18 @@ export function SessionPermissionDock(props: {
         <>
           <div />
           <div data-slot="permission-footer-actions">
-            <Button variant="ghost" size="normal" onClick={() => props.onDecide("reject")} disabled={props.responding}>
+            <Button variant="ghost" size="normal" onClick={() => decide("reject")} disabled={props.responding}>
               {language.t("ui.permission.deny")}
             </Button>
             <Button
               variant="secondary"
               size="normal"
-              onClick={() => props.onDecide("always")}
+              onClick={() => decide("always")}
               disabled={props.responding}
             >
               {language.t("ui.permission.allowAlways")}
             </Button>
-            <Button variant="primary" size="normal" onClick={() => props.onDecide("once")} disabled={props.responding}>
+            <Button variant="primary" size="normal" onClick={() => decide("once")} disabled={props.responding}>
               {language.t("ui.permission.allowOnce")}
             </Button>
           </div>
@@ -56,6 +93,20 @@ export function SessionPermissionDock(props: {
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
           <div data-slot="permission-hint">{toolDescription()}</div>
+        </div>
+      </Show>
+
+      <Show when={detail()}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-hint">{detail()}</div>
+        </div>
+      </Show>
+
+      <Show when={justification()}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-hint">{justification()}</div>
         </div>
       </Show>
 

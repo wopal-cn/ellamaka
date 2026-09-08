@@ -87,6 +87,7 @@ import {
   shouldShowSandboxControl,
   setPendingSessionSandbox,
   drainPendingSessionSandbox,
+  subscribeEscalatedSandboxPreset,
   NEW_SESSION_SANDBOX_KEY,
   type SandboxPreset,
 } from "./prompt-input/sandbox-control"
@@ -372,14 +373,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!id) return sandboxDefaultPreset()
     return sandboxSaved.session[id] ?? sandboxDefaultPreset()
   })
-  const sandboxSelect = (preset: SandboxPreset) => {
+  const sandboxSelect = (preset: SandboxPreset, options?: { fromEscalation?: boolean }) => {
     const id = sandboxSessionID()
     if (!id) {
       setPendingSessionSandbox(NEW_SESSION_SANDBOX_KEY, preset)
       return
     }
     setSandboxSaved("session", id, preset)
+    // A MANUAL mode choice restates the session's trust level, so standing
+    // escalation grants accumulated through earlier "always" approvals are
+    // dropped — otherwise the selector would show the narrower mode while
+    // the engine kept silently applying the previously granted wider one.
+    // The escalation-linkage path (fromEscalation) must NOT clear: it runs
+    // right after the user granted that very mode on an approval card.
+    if (options?.fromEscalation) return
+    sdk.client.permission.clearEscalation({ sessionID: id, directory: sdk.directory }).catch(() => undefined)
   }
+
+  // "Allow always" on a sandbox-escalation approval applies the escalated
+  // mode as the session's standing choice: the engine keeps silently allowing
+  // that mode from then on, so the selector must show it.
+  createEffect(() => {
+    const unsubscribe = subscribeEscalatedSandboxPreset((preset) => sandboxSelect(preset, { fromEscalation: true }))
+    onCleanup(unsubscribe)
+  })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
