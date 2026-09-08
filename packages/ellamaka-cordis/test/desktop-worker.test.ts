@@ -35,19 +35,19 @@ function fakeEllamaka(script = ""): string {
   return file
 }
 
-function makeWorker(overrides: { ellamakaBin?: string; dshRoot?: string; profile?: string } = {}): {
+function makeWorker(overrides: { ellamakaCommand?: string[]; dshRoot?: string; profile?: string } = {}): {
   worker: DesktopWorkerServices
   dshRoot: string
   fakeOutput: string
 } {
-  const bin = overrides.ellamakaBin ?? fakeEllamaka()
+  const command = overrides.ellamakaCommand ?? [fakeEllamaka()]
   const dshRoot = overrides.dshRoot ?? tempRoot()
   mkdirSync(join(dshRoot, "home", "profiles", overrides.profile ?? "web"), { recursive: true })
   const fakeOutput = join(tempRoot(), "argv.json")
   // The fake records its argv where FAKE_OUTPUT points; the worker forwards
   // process.env to the child, so the test wires the path through the env.
   process.env.FAKE_OUTPUT = fakeOutput
-  const worker = createDesktopWorker({ ellamakaBin: bin, dshRoot, profile: overrides.profile })
+  const worker = createDesktopWorker({ ellamakaCommand: command, dshRoot, profile: overrides.profile })
   return { worker, dshRoot, fakeOutput }
 }
 
@@ -177,7 +177,7 @@ describe("pnpm flag stripping", () => {
 describe("failure and isolation semantics", () => {
   test("unknown verbs pass through and surface a non-zero exitCode", async () => {
     const bin = fakeEllamaka()
-    const { worker, fakeOutput } = makeWorker({ ellamakaBin: bin })
+    const { worker, fakeOutput } = makeWorker({ ellamakaCommand: [bin] })
     process.env.FAKE_EXIT = "1"
     try {
       const handle = worker.desktopPnpm.runPlugin(["unknown-verb"], ".")
@@ -197,7 +197,7 @@ describe("failure and isolation semantics", () => {
 
   test("a missing ellamaka binary resolves exitCode 127 with a locating stderr", async () => {
     const missing = join(tempRoot(), "no-such-ellamaka")
-    const { worker } = makeWorker({ ellamakaBin: missing })
+    const { worker } = makeWorker({ ellamakaCommand: [missing] })
     const handle = worker.desktopPnpm.runPlugin(["add", "dshmarket"], ".")
     const chunks: string[] = []
     handle.stderr.on("data", (chunk: Buffer | string) => chunks.push(chunk.toString()))
@@ -208,7 +208,7 @@ describe("failure and isolation semantics", () => {
 
   test("a crashing child resolves its non-zero exitCode without disturbing the host", async () => {
     const bin = fakeEllamaka("process.stderr.write('BOOM\\n')\n")
-    const { worker } = makeWorker({ ellamakaBin: bin })
+    const { worker } = makeWorker({ ellamakaCommand: [bin] })
     process.env.FAKE_EXIT = "42"
     try {
       const handle = worker.desktopPnpm.runPlugin(["add", "dshmarket"], ".")
@@ -235,7 +235,7 @@ describe("failure and isolation semantics", () => {
 describe("cancellation", () => {
   test("aborting the signal kills the process group and resolves { exitCode: null, signal: 'SIGTERM' }", async () => {
     const bin = fakeEllamaka("setTimeout(() => {}, 30000)")
-    const { worker } = makeWorker({ ellamakaBin: bin })
+    const { worker } = makeWorker({ ellamakaCommand: [bin] })
     const ac = new AbortController()
     const handle = worker.desktopPnpm.runPlugin(["install"], ".", ac.signal)
     await once(handle.stdout, "data")
@@ -247,7 +247,7 @@ describe("cancellation", () => {
 
   test("cancel() kills the process group and resolves { exitCode: null, signal: 'SIGTERM' }", async () => {
     const bin = fakeEllamaka("setTimeout(() => {}, 30000)")
-    const { worker } = makeWorker({ ellamakaBin: bin })
+    const { worker } = makeWorker({ ellamakaCommand: [bin] })
     const handle = worker.desktopPnpm.runPlugin(["install"], ".")
     await once(handle.stdout, "data")
     handle.cancel()

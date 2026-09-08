@@ -16,13 +16,14 @@
  *   `dsh`.
  *
  * This module supplies both services. `desktopPnpm.runPlugin` spawns a fresh
- * `ellamaka dsh plugin --profile <p> <verb> <args>` child process and returns
- * the streaming handle the market's `createDesktopPluginRuntime` consumes
- * (`dsh-cli.ts` upstream): `{ stdout, stderr, done, cancel }`. Process-level
- * isolation means a crash or cancel of the install child never disturbs the
- * running engine. `ellamaka dsh plugin` owns the official end state (profile
- * manifest + `node_modules/` entity) and the running server hot-replays it
- * (A2) — this worker never touches containers directly.
+ * `ellamaka dsh plugin --profile <p> <verb> <args>` child process (via the
+ * mount-assembler-supplied {@link CreateDesktopWorkerOptions.ellamakaCommand})
+ * and returns the streaming handle the market's `createDesktopPluginRuntime`
+ * consumes (`dsh-cli.ts` upstream): `{ stdout, stderr, done, cancel }`.
+ * Process-level isolation means a crash or cancel of the install child never
+ * disturbs the running engine. `ellamaka dsh plugin` owns the official end
+ * state (profile manifest + `node_modules/` entity) and the running server
+ * hot-replays it (A2) — this worker never touches containers directly.
  *
  * The market mutates the arg shape for its own pnpm expectations before the
  * call arrives (`preparePluginArgs`, pnpm-compat): mutating commands gain a
@@ -86,8 +87,14 @@ export interface DesktopWorkerServices {
 }
 
 export interface CreateDesktopWorkerOptions {
-  /** Absolute path to the ellamaka executable to re-launch. */
-  ellamakaBin: string
+  /**
+   * Full launch command for the ellamaka `dsh plugin` surface: the executable
+   * followed by any prefix args needed to reach the CLI entry. Production
+   * passes `[process.execPath]` (the compiled binary IS the CLI); bun dev
+   * passes `[bun, <opencode src/index.ts>]`. Composed by the mount assembler
+   * (dsh-mount.ts), which alone knows the runtime mode.
+   */
+  ellamakaCommand: readonly string[]
   /** The territory root whose `home/profiles/<profile>` owns the install. */
   dshRoot: string
   /** Profile name the installs target (default `web`). */
@@ -96,21 +103,23 @@ export interface CreateDesktopWorkerOptions {
 
 /**
  * Build the market's two install-worker services. The worker spawns
- * `ellamakaBin dsh plugin --profile <profile> <verb> <cleanArgs>` under the
+ * `<command> dsh plugin --profile <profile> <verb> <cleanArgs>` under the
  * profile directory, owns the child's process group (so cancel kills the whole
  * spawn tree), and streams its stdio back as the market's expected handle.
  */
 export function createDesktopWorker(options: CreateDesktopWorkerOptions): DesktopWorkerServices {
   const profileName = options.profile ?? "web"
   const profileDir = join(options.dshRoot, "home", "profiles", profileName)
-  const bin = options.ellamakaBin
+  const command = options.ellamakaCommand
 
   const runPlugin: DesktopPnpmService["runPlugin"] = (rawArgs, invokingDir, signal) => {
     // Strip the pnpm-only flags the market injects at any position; the rest
     // (verb + operands) is forwarded verbatim to the ellamaka surface.
     const args = rawArgs.filter((arg) => !isPnpmOnlyArg(arg))
 
-    const cleanArgs = [DSH_GROUP, "plugin", "--profile", profileName, ...args]
+    const bin = command[0]
+    const prefixArgs = command.slice(1)
+    const cleanArgs = [...prefixArgs, DSH_GROUP, "plugin", "--profile", profileName, ...args]
     const child = spawn(bin, cleanArgs, {
       cwd: invokingDir,
       // Own process group so cancel/timeout can signal the whole tree.
@@ -149,7 +158,8 @@ export function createDesktopWorker(options: CreateDesktopWorkerOptions): Deskto
           // market's exit-127 contract and carry the locating detail on stderr.
           settled = true
           signal?.removeEventListener("abort", onAbort)
-          stderr.write(`ellamaka binary failed to start: ${error.message}\n`)
+          stderr.write(`ellamaka binary failed to start: ${error.message}
+`)
           stderr.end()
           stdout.end()
           resolve({ exitCode: 127, signal: null })

@@ -107,7 +107,12 @@ describe("dsh web engine", () => {
   test("mountDshWeb activates the web profile without creating a listening socket", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, {
+      home,
+      port: 4097,
+      disableCodeRuntime: true,
+      ellamakaCommand: [process.execPath],
+    })
 
     try {
       // The virtual host reports the Ellamaka public address and mount path.

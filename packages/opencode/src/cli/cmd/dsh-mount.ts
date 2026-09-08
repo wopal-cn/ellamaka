@@ -26,6 +26,25 @@ export interface DshEngineHandle {
 }
 
 /**
+ * The launch command the dsh install worker re-launches for `dsh plugin`
+ * operations — [executable, ...prefix-args-to-reach-the-CLI-entry]. This is
+ * the ONE place that knows the runtime mode:
+ * - compiled binary (CLI serve/web, Desktop sidecar): `execPath` IS the
+ *   ellamaka CLI, so the command is `[process.execPath]`;
+ * - bun dev (`dev.sh` runs `bun --preload <preload> <opencode_entry> serve`):
+ *   `execPath` is bun, not ellamaka, so the command is
+ *   `[bun, <opencode_entry>]` — `process.argv[1]` is the CLI source entry
+ *   (`dsh plugin` is an engine-free shim, no `--preload` needed).
+ */
+function resolveEllamakaCommand(): string[] {
+  if (process.versions.bun === undefined) {
+    return [process.execPath]
+  }
+  const entry = process.argv[1]
+  return entry && entry.length > 0 ? [process.execPath, entry] : [process.execPath]
+}
+
+/**
  * Mount the full dsh engine (web + tool containers) on a running Ellamaka
  * server under `/dsh` (single-port scheme, DESIGN-dsh-poc §2.1). Shared by
  * the `serve` and `web` commands; the TUI uses its tools-only variant in
@@ -101,6 +120,7 @@ export async function mountDshEngine(
       installAnchor: anchor.path,
       runtime,
       disableCodeRuntime: true,
+      ellamakaCommand: resolveEllamakaCommand(),
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,

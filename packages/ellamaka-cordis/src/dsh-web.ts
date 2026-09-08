@@ -358,14 +358,15 @@ export interface DshHostOptions {
    */
   runtime?: DshRuntimeApi
   /**
-   * Absolute path to the ellamaka executable the install worker re-launches
-   * for `dsh plugin` operations (A3 desktopPnpm). When omitted, the worker
-   * falls back to the running process's executable — the compiled binary IS
-   * the ellamaka CLI, and `dsh plugin` is an engine-free shim the worker
-   * spawns in its own process. Explicit only when the caller runs under a
-   * wrapper (bun dev) and knows the real CLI path.
+   * Full launch command the install worker re-launches for `dsh plugin`
+   * operations (A3 desktopPnpm): the executable plus any prefix args that
+   * reach the ellamaka CLI entry. The CLI serve/web assembler (dsh-mount.ts)
+   * supplies this per runtime mode — `[process.execPath]` under the compiled
+   * binary, `[bun, <opencode src/index.ts>]` under bun dev. Required for the
+   * web profile (the market lives there); the tools container never starts a
+   * worker and ignores it.
    */
-  ellamakaBin?: string
+  ellamakaCommand?: readonly string[]
 }
 
 /** Internal mount options shared by the web and base entry points. */
@@ -560,13 +561,25 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // branch (calling desktopPnpm.runPlugin) instead of the CLI-spawn path that
   // does not fit the ellamaka surface.
   if (profileName === WEB_PROFILE_NAME) {
-    const worker = createDesktopWorker({
-      ellamakaBin: opts.ellamakaBin ?? process.execPath,
-      dshRoot,
-      profile: profileName,
-    })
-    ctx.provide("desktopProfiles", worker.desktopProfiles)
-    ctx.provide("desktopPnpm", worker.desktopPnpm)
+    const command = opts.ellamakaCommand
+    if (command !== undefined && command.length > 0) {
+      const worker = createDesktopWorker({
+        ellamakaCommand: command,
+        dshRoot,
+        profile: profileName,
+      })
+      ctx.provide("desktopProfiles", worker.desktopProfiles)
+      ctx.provide("desktopPnpm", worker.desktopPnpm)
+    } else {
+      // The install worker needs a re-launch command that only the runtime-mode
+      // assembler (dsh-mount.ts) knows. A caller that omits it (library-level
+      // mount, tests) simply gets no desktopProfiles/desktopPnpm — the market
+      // then probes nothing and its CLI-spawn path applies, which is the
+      // library default. Production mounts always supply the command.
+      ctx.logger.warn(
+        new Error("[dsh] web profile mounted without ellamakaCommand; dshmarket install worker is unavailable"),
+      )
+    }
   }
   const loaderFiber = await ctx.registry.plugin(runtime.pluginLoader)
   // B1 拆雷 (DESIGN-dsh-poc 「Bun 下不伪造 loader.internal（拆雷）」): the
