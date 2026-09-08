@@ -275,6 +275,12 @@ export interface DshHost {
    * instead of replacing it with plugin rows only (rook B-01).
    */
   readonly stackContext?: DshPluginStackContext
+  /**
+   * Host-owned activation bridge for dshmarket. The Plugin Runtime Service
+   * binds its composition replay after boot; the market calls `activate()`
+   * after an install instead of creating a competing temporary loader entry.
+   */
+  readonly pluginActivation?: DshPluginActivation
   /** Unmount the dsh plugin tree; the host context stays alive. */
   dispose(): Promise<void>
 }
@@ -291,6 +297,8 @@ export interface DshWebHost {
   readonly includeEntry: Entry
   /** The full boot patch-stack context (hot replay input, rook B-01). */
   readonly stackContext: DshPluginStackContext
+  /** Host-owned activation bridge used by the web profile's market. */
+  readonly pluginActivation?: DshPluginActivation
   /**
    * The iframe entry path under the Ellamaka origin carrying the official
    * browser-auth launch token (`/dsh/?token=...`): the first visit exchanges
@@ -302,6 +310,28 @@ export interface DshWebHost {
   readonly authenticatedPath: string
   /** Unmount the dsh plugin tree; the host context stays alive. */
   dispose(): Promise<void>
+}
+
+/** Result returned to the market after a host-owned composition replay. */
+export type DshPluginActivationResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Deferred bridge between the web profile (which mounts dshmarket) and the
+ * runtime watcher (which is created after both web and tools containers boot).
+ */
+export interface DshPluginActivation {
+  activate(): Promise<DshPluginActivationResult>
+  bind(replay: () => Promise<DshPluginActivationResult>): void
+}
+
+function createPluginActivation(): DshPluginActivation {
+  let replay: (() => Promise<DshPluginActivationResult>) | undefined
+  return {
+    activate: () => replay?.() ?? Promise.resolve({ ok: false, error: "ellamaka plugin watcher is unavailable" }),
+    bind: (next) => {
+      replay = next
+    },
+  }
 }
 
 export interface DshHostOptions {
@@ -413,6 +443,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // official resolution paths (A-class config injection and B-class env reads)
   // converge there.
   const homeDir = dshHomeDirOf(dshRoot)
+  const pluginActivation = profileName === WEB_PROFILE_NAME ? createPluginActivation() : undefined
   // Profile patch rows that give the dsh plugins that read `config.dshHome`
   // (via `resolveDshHome(config.dshHome)`) an explicit home rooted at the
   // DSH home. These rows REPLACE each plugin's whole config, so any non-home
@@ -568,7 +599,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
         dshRoot,
         profile: profileName,
       })
-      ctx.provide("desktopProfiles", worker.desktopProfiles)
+      ctx.provide("desktopProfiles", { ...worker.desktopProfiles, pluginActivation })
       ctx.provide("desktopPnpm", worker.desktopPnpm)
     } else {
       // The install worker needs a re-launch command that only the runtime-mode
@@ -720,7 +751,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   }
 
   if (!requireWebServer) {
-    return { ctx, includeEntry, stackContext, dispose }
+    return { ctx, includeEntry, stackContext, pluginActivation, dispose }
   }
 
   const webServer = ctx.get("webServer")
@@ -734,6 +765,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     ctx,
     includeEntry,
     stackContext,
+    pluginActivation,
     dispose,
   }
 }
@@ -785,6 +817,7 @@ export async function mountDshWeb(ctx: Context, opts: DshHostOptions): Promise<D
     ctx: host.ctx!,
     includeEntry: host.includeEntry!,
     stackContext: host.stackContext!,
+    pluginActivation: host.pluginActivation,
     get authenticatedPath(): string {
       // The official HostConnectionService mints the process launch token and
       // carries `authenticatedUrl`; the web profile always mounts it. A
@@ -849,6 +882,7 @@ export async function bootDshWeb(opts: DshHostOptions): Promise<DshWebHost> {
     ctx: host.ctx!,
     includeEntry: host.includeEntry!,
     stackContext: host.stackContext!,
+    pluginActivation: host.pluginActivation,
     get authenticatedPath() {
       return host.authenticatedPath
     },

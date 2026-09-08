@@ -155,7 +155,7 @@ export async function mountDshEngine(
     // installs change it. A degraded watcher never breaks the engine. The
     // container logger is injected so store/replay failures land in the
     // dsh-plugins log with structure (rook W-02).
-    let pluginService: { stop(): Promise<void> } | undefined
+    let pluginService: { replay(): Promise<{ ok: true } | { ok: false; error: string }>; stop(): Promise<void> } | undefined
     try {
       const { startDshPluginService } = await import("@wopal/ellamaka-cordis/plugins/runtime")
       const watcherLog = webHub.ctx.logger("dsh-plugins")
@@ -171,6 +171,7 @@ export async function mountDshEngine(
           error: (message, extra) => watcherLog.error(message, extra),
         },
       })
+      dsh.pluginActivation?.bind(() => pluginService!.replay())
     } catch (error) {
       webHub.ctx.logger("dsh-plugins").warn("plugin runtime service failed to start", {
         error: (error as Error).message,

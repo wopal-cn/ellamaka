@@ -136,6 +136,34 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     }
   }, 90_000)
 
+  test("the host activation request replays once and absorbs the watcher event", async () => {
+    const home = tempRoot()
+    const web = await bootDshWeb({ home, port: 4097, disableCodeRuntime: true })
+    const tools = await bootDshTools({ home, port: 0 })
+    let updates = 0
+    const service = startDshPluginService({
+      home,
+      containers: [webContainer(web), toolsContainer(tools)],
+      onReplay: () => updates++,
+    })
+    try {
+      await installFixture(home)
+      const result = await service.replay()
+      expect(result).toEqual({ ok: true })
+      expect(marker(webCtxOf(web))).toBe("mounted")
+      expect(marker(tools.ctx)).toBe("mounted")
+
+      // The composition-file watcher receives the same write after the
+      // explicit market acknowledgement. It observes the adopted hash and
+      // must not activate either container a second time.
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      expect(updates).toBe(2)
+    } finally {
+      await service.stop()
+      await teardown([web, tools], home)
+    }
+  }, 90_000)
+
   test("a compose failure keeps the last good state and the NEXT real change recovers (no retry storm)", async () => {
     const home = tempRoot()
     const web = await bootDshWeb({ home, port: 4097, disableCodeRuntime: true })

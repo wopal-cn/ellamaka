@@ -82,6 +82,12 @@ declare module "virtual:opencode-server" {
     logFile?: string
     runtime?: DshRuntimeApi
     disableCodeRuntime?: boolean
+    /**
+     * Launch command the dshmarket install worker re-spawns for `dsh plugin`
+     * operations (A3 desktopPnpm). Omitting it leaves the market on its
+     * CLI-spawn fallback (official `dsh` CLI, pnpm installer).
+     */
+    ellamakaCommand?: readonly string[]
   }
 
   export interface DshWebHost {
@@ -95,6 +101,9 @@ declare module "virtual:opencode-server" {
     ctx: unknown
     includeEntry: DshPluginIncludeEntry
     stackContext: unknown
+    pluginActivation?: {
+      bind(replay: () => Promise<{ ok: true } | { ok: false; error: string }>): void
+    }
     dispose(): Promise<void>
   }
 
@@ -125,6 +134,7 @@ declare module "virtual:opencode-server" {
   export const bootDshWeb: (opts: DshWebHostOptions) => Promise<DshWebHost>
   export const bootDshTools: (opts: DshWebHostOptions) => Promise<DshToolsHost>
   export const startDshPluginService: (options: DshPluginServiceOptions) => {
+    replay(): Promise<{ ok: true } | { ok: false; error: string }>
     stop(): Promise<void>
   }
   /** Publish the DSH runtime terminal status for `/global/health`. */

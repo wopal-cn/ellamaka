@@ -1067,6 +1067,13 @@ cmd_desktop() {
   mkdir -p "$DEV_DIR"
   local plugin_modules=""
   local -a desktop_env=(ELAMAKA_DESKTOP_DEV=1 ELAMAKA_DESKTOP_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" OPENCODE_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
+  # The sidecar's dshmarket install worker re-launches this command for
+  # `dsh plugin` installs (Bun installer). Point it at the worktree CLI
+  # entry run via bun — no engine build required; the sidecar falls back to
+  # <WOPAL_HOME>/bin/ellamaka when unset.
+  if [ -f "$root/packages/opencode/src/index.ts" ]; then
+    desktop_env+=(ELLAMAKA_DSH_INSTALL_COMMAND="bun $root/packages/opencode/src/index.ts")
+  fi
   if $cdp_debug; then
     desktop_env+=(ELAMAKA_DESKTOP_CDP=1)
   fi

@@ -65,6 +65,44 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
     expect(source).toMatch(/dshLaunchState/)
   })
 
+  // dshmarket install-worker contract: `bootDshWeb` must receive an
+  // `ellamakaCommand` on the Desktop sidecar, otherwise the market's
+  // `apply()` probes no `desktopProfiles` service and falls back to the
+  // CLI-spawn path — spawning the OFFICIAL `dsh` CLI, whose installer is
+  // pnpm. That path is incompatible with this workspace (private
+  // `@wopal/*` packages in the profile manifest are unresolvable from a
+  // public registry; the failed pnpm run quarantines every previously
+  // installed plugin into `node_modules/.ignored/`). Passing
+  // `ellamakaCommand` provides the desktopProfiles/desktopPnpm install
+  // worker and the market routes installs through the ellamaka Bun
+  // installer instead (DESIGN-dsh-poc 「Bun 安装器流水线」).
+  test("desktop sidecar bootDshWeb supplies the market install worker (ellamakaCommand)", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "..", "packages", "ellamaka-desktop", "src", "main", "sidecar.ts"),
+      "utf-8",
+    )
+    expect(source).toMatch(/bootDshWeb\(\{[\s\S]*?ellamakaCommand,/)
+    // The command resolves through the dedicated env var the launcher sets
+    // (dev points it at the worktree source entry run via bun); a plain
+    // `process.execPath` fallback would resolve to Electron's helper
+    // executable under utilityProcess.fork and spawn a non-CLI process.
+    expect(source).toMatch(/ELLAMAKA_DSH_INSTALL_COMMAND/)
+  })
+
+  test("serve and desktop bind dshmarket activation to the one host watcher", () => {
+    const root = join(import.meta.dir, "..", "..", "..")
+    const serve = readFileSync(join(root, "packages", "opencode", "src", "cli", "cmd", "dsh-mount.ts"), "utf-8")
+    const desktop = readFileSync(join(root, "packages", "ellamaka-desktop", "src", "main", "sidecar.ts"), "utf-8")
+
+    // Market install calls the web host bridge. Both production mount paths
+    // must bind that bridge to the SAME Plugin Runtime Service replay: a
+    // missing binding falls back to market hotMount and reintroduces a second
+    // .dsh-market loader source for each newly installed plugin.
+    expect(serve).toMatch(/dsh\.pluginActivation\?\.bind\(\(\) => pluginService!\.replay\(\)\)/)
+    expect(desktop).toMatch(/dshHost\.pluginActivation\?\.bind\(\(\) => dshPluginService!\.replay\(\)\)/)
+    expect(desktop).toMatch(/dshHost = \{[\s\S]*?pluginActivation: host\.pluginActivation,/)
+  })
+
   for (const entry of entries) {
     test(`mount site ${entry.path} injects the closure runtime (no bare-hub fallback)`, () => {
       // test/ -> ellamaka-cordis (..) -> packages (..) -> worktree root (..).

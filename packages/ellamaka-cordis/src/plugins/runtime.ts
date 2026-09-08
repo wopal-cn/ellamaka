@@ -83,8 +83,19 @@ export interface DshPluginServiceOptions {
   onReplayError?: (profile: string, error: unknown) => void
 }
 
+/** The result of one host-owned composition replay. */
+export type DshPluginReplayResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
 /** A running service handle. */
 export interface DshPluginServiceHandle {
+  /**
+   * Replay the current profile composition and wait for its result. Market
+   * installs use this acknowledgement instead of mounting the package a
+   * second time through their own temporary loader tree.
+   */
+  replay(): Promise<DshPluginReplayResult>
   /**
    * Close the watcher and settle in-flight replays. Idempotent: further
    * calls are no-ops.
@@ -118,6 +129,7 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   /** Serialization: change events spotted mid-replay coalesce into one rerun. */
   let replaying = false
   let pendingReplay = false
+  let activeReplay: Promise<DshPluginReplayResult> | undefined
 
   /** The watched composition files, one pair per container profile. */
   const watchedFiles = new Map<string, { manifest: string; patch: string }>()
@@ -174,20 +186,21 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   }
 
   /** One observation: hash -> replay changed containers -> keep old hash on failure. */
-  const runReplay = async (): Promise<void> => {
-    if (stopped) return
+  const runReplay = (queueWhenBusy = false): Promise<DshPluginReplayResult> => {
+    if (stopped) return Promise.resolve({ ok: false, error: "dsh plugin runtime is stopped" })
     const hash = currentHash()
-    if (hash === lastHash) return // short-circuit: nothing changed
+    if (hash === lastHash) return Promise.resolve({ ok: true }) // short-circuit: nothing changed
     if (replaying) {
-      pendingReplay = true
-      return
+      if (queueWhenBusy) pendingReplay = true
+      return activeReplay ?? Promise.resolve({ ok: false, error: "dsh plugin replay lost its active task" })
     }
     replaying = true
-    try {
+    activeReplay = (async (): Promise<DshPluginReplayResult> => {
       // Heal BEFORE composing: a newly installed plugin needs its
       // profiles/node_modules symlink to exist for the loader's import.
       healPluginsModuleFallback(options.home)
       let failed = false
+      let firstError: string | undefined
       for (const container of containers) {
         try {
           await replayContainer(container)
@@ -195,6 +208,7 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
           // Keep the last good state for this container; the service and
           // the other containers are unaffected (DESIGN §9.6 #5).
           failed = true
+          firstError ??= (error as Error).message
           logger.error("plugin include replay failed; keeping last good state", {
             profile: container.profile,
             error: (error as Error).message,
@@ -207,10 +221,14 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
       // change arrives. Only a fully successful run adopts the new hash.
       if (!failed) {
         lastHash = hash
+        return { ok: true }
       }
-    } finally {
+      return { ok: false, error: firstError ?? "dsh plugin composition replay failed" }
+    })()
+    return activeReplay.finally(() => {
       replaying = false
-    }
+      activeReplay = undefined
+    })
   }
 
   /** Drain a pending change observed while a replay was in flight. */
@@ -228,10 +246,11 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   })
   watcher.on("all", () => {
     if (stopped) return
-    void runReplay().then(drainPending)
+    void runReplay(true).then(drainPending)
   })
 
   return {
+    replay: () => runReplay(),
     stop: async () => {
       if (stopped) return
       stopped = true

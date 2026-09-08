@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
 import { register } from "node:module"
+import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { listenThenClearCredentials } from "./sidecar-credentials"
@@ -62,6 +63,7 @@ let dshHost:
       ctx?: unknown
       includeEntry?: { id: string; update(options: unknown): Promise<void> }
       stackContext?: unknown
+      pluginActivation?: { bind(replay: () => Promise<{ ok: true } | { ok: false; error: string }>): void }
     }
   | undefined
 let dshToolsHost:
@@ -72,7 +74,12 @@ let dshToolsHost:
       stackContext?: unknown
     }
   | undefined
-let dshPluginService: { stop(): Promise<void> } | undefined
+let dshPluginService:
+  | {
+      stop(): Promise<void>
+      replay(): Promise<{ ok: true } | { ok: false; error: string }>
+    }
+  | undefined
 
 /**
  * The dsh runtime initialised once per launch (W-02). The manager's
@@ -179,6 +186,46 @@ function dshLaunch(command: StartCommand) {
 }
 
 /**
+ * Resolve the launch command for the dshmarket install worker (A3
+ * desktopPnpm): the executable plus prefix args that reach the ellamaka CLI
+ * entry, so the worker spawns `<command> dsh plugin --profile web ...` and
+ * installs run through the ellamaka Bun installer. Without it the market
+ * probes no `desktopProfiles` service and falls back to spawning the
+ * OFFICIAL `dsh` CLI — whose installer is pnpm — and any install then fails
+ * against private `@wopal/*` profile dependencies while pnpm quarantines
+ * every previously installed plugin into `node_modules/.ignored/`.
+ *
+ * `process.execPath` is unusable here: under `utilityProcess.fork` it
+ * resolves to Electron's helper executable, not a CLI. Resolution order:
+ * 1. `ELLAMAKA_DSH_INSTALL_COMMAND` — an authoritative whitespace-separated
+ *    command string. dev.sh sets `bun <root>/packages/opencode/src/index.ts`
+ *    so installs work without building the engine binary. The executable may
+ *    be a PATH command such as `bun`, so this branch intentionally does not
+ *    use existsSync: spawn resolves it using the sidecar PATH. An explicit
+ *    invalid value must fail visibly instead of silently falling through to
+ *    an older installed engine binary with a different CLI surface.
+ * 2. `<wopalHome>/bin/ellamaka` — the engine binary the engine installer
+ *    lays down under the WOPAL_HOME bin directory (resolveEngineBinaryPath
+ *    in wopal-cli). `wopalHome` comes from the start command / sidecar env
+ *    (the same value dshLaunch resolves), NOT from `~` directly — packaged
+ *    desktop users with a custom WOPAL_HOME must resolve against their own
+ *    home, and the env may be absent in the utility process.
+ * Returns undefined when neither yields a usable command; the web mount
+ * then logs `dsh.desktop.web.no-install-worker` and the market keeps its
+ * CLI-spawn fallback (install attempts surface the mismatch explicitly).
+ */
+export function resolveEllamakaInstallCommand(wopalHomeOverride?: string): string[] | undefined {
+  const override = process.env.ELLAMAKA_DSH_INSTALL_COMMAND
+  if (override && override.trim().length > 0) {
+    return override.trim().split(/\s+/)
+  }
+  const wopalHome = wopalHomeOverride ?? process.env.WOPAL_HOME ?? join(homedir(), ".wopal")
+  const engine = join(wopalHome, "bin", process.platform === "win32" ? "ellamaka.exe" : "ellamaka")
+  if (existsSync(engine)) return [engine]
+  return undefined
+}
+
+/**
  * Mount the dsh web engine via the unified Runtime Manager.
  *
  * Initialises the dsh runtime exactly once per launch (W-02) and reuses the
@@ -202,12 +249,19 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
     }
     sidecarLog.info("dsh.desktop.web.boot", { anchor: launch.anchor.path })
     const runtime = launch.runtime
+    const ellamakaCommand = resolveEllamakaInstallCommand(wopalHome)
+    if (!ellamakaCommand) {
+      sidecarLog.warn("dsh.desktop.web.no-install-worker", {
+        reason: "no ELLAMAKA_DSH_INSTALL_COMMAND and no engine binary under WOPAL_HOME/bin",
+      })
+    }
     const host = await bootDshWeb({
       home,
       port: listener?.port ?? 0,
       installAnchor: launch.anchor.path,
       logFile,
       runtime,
+      ellamakaCommand,
     })
     // Mount the VirtualWebServer under /dsh on the Ellamaka listener.
     const unmount = listener?.mountNodeRoute({
@@ -219,6 +273,7 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
       ctx: host.ctx,
       includeEntry: host.includeEntry,
       stackContext: host.stackContext,
+      pluginActivation: host.pluginActivation,
       dispose: async () => {
         setDshUrlGetter(() => undefined)
         unmount?.()
@@ -346,6 +401,7 @@ async function startDshPluginWatcher(command: StartCommand): Promise<void> {
         },
       ],
     })
+    dshHost.pluginActivation?.bind(() => dshPluginService!.replay())
     sidecarLog.info("dsh.desktop.watcher.started")
   } catch (error) {
     // A failed watcher must never exit the sidecar (B-06); installs simply
