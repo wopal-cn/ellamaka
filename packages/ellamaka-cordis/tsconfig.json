@@ -9,7 +9,7 @@
     "moduleResolution": "nodenext",
     "resolveJsonModule": true,
     "lib": ["es2022", "dom", "dom.iterable"],
-    "types": ["bun-types", "node"]
+    "types": ["node"]
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]
