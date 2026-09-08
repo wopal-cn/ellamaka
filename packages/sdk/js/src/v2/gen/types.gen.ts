@@ -7216,6 +7216,41 @@ export type PermissionRespondResponses = {
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
 
+export type PermissionClearEscalationData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/permissions/escalation"
+}
+
+export type PermissionClearEscalationErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type PermissionClearEscalationError = PermissionClearEscalationErrors[keyof PermissionClearEscalationErrors]
+
+export type PermissionClearEscalationResponses = {
+  /**
+   * Escalation grants cleared
+   */
+  200: boolean
+}
+
+export type PermissionClearEscalationResponse =
+  PermissionClearEscalationResponses[keyof PermissionClearEscalationResponses]
+
 export type PartDeleteData = {
   body?: never
   path: {

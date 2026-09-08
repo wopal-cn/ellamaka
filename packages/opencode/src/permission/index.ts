@@ -52,6 +52,10 @@ export type Request = Schema.Schema.Type<typeof Request>
 export const Reply = Schema.Literals(["once", "always", "reject"])
 export type Reply = Schema.Schema.Type<typeof Reply>
 
+// The permission id the dsh adapter uses for sandbox-mode escalation asks.
+// Its "always" grants are session-scoped (see `State.escalated`).
+export const ESCALATION_PERMISSION = "sandbox_escalation"
+
 const reply = {
   reply: Reply,
   message: Schema.optional(Schema.String),
@@ -123,6 +127,7 @@ export interface Interface {
   readonly ask: (input: AskInput) => Effect.Effect<void, Error>
   readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
+  readonly clearEscalation: (input: { sessionID: string }) => Effect.Effect<void>
 }
 
 interface PendingEntry {
@@ -133,6 +138,12 @@ interface PendingEntry {
 interface State {
   pending: Map<PermissionID, PendingEntry>
   approved: Rule[]
+  // Sandbox-escalation "always" grants are session-scoped by design: they
+  // live in this in-process table, never enter the project-persistent
+  // `approved` pool, and die with the engine process. A project-level or
+  // cross-session escalation grant would turn one approval into a standing
+  // full-access bypass for every future session.
+  escalated: Map<string, Set<string>>
 }
 
 export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
@@ -153,6 +164,7 @@ export const layer = Layer.effect(
         const state = {
           pending: new Map<PermissionID, PendingEntry>(),
           approved: [...(row?.data ?? [])],
+          escalated: new Map<string, Set<string>>(),
         }
 
         yield* Effect.addFinalizer(() =>
@@ -169,12 +181,20 @@ export const layer = Layer.effect(
     )
 
     const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { approved, pending, escalated } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
       let needsAsk = false
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
+        // Session-scoped escalation grants are checked first: an "always"
+        // reply on a sandbox_escalation ask lands in `escalated`, not in the
+        // project-persistent pool, so the evaluation must consult it here.
+        const sessionGrants = escalated.get(request.sessionID)
+        const escalatedRule =
+          request.permission === ESCALATION_PERMISSION && sessionGrants?.has(pattern)
+            ? ({ permission: request.permission, pattern, action: "allow" } as Rule)
+            : undefined
+        const rule = escalatedRule ?? evaluate(request.permission, pattern, ruleset, approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new DeniedError({
@@ -211,7 +231,7 @@ export const layer = Layer.effect(
     })
 
     const reply = Effect.fn("Permission.reply")(function* (input: ReplyInput) {
-      const { approved, pending } = yield* InstanceState.get(state)
+      const { approved, pending, escalated } = yield* InstanceState.get(state)
       const existing = pending.get(input.requestID)
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
@@ -244,19 +264,31 @@ export const layer = Layer.effect(
       yield* Deferred.succeed(existing.deferred, undefined)
       if (input.reply === "once") return
 
-      for (const pattern of existing.info.always) {
-        approved.push({
-          permission: existing.info.permission,
-          pattern,
-          action: "allow",
-        })
+      if (existing.info.permission === ESCALATION_PERMISSION) {
+        // Escalation grants stay session-scoped: recorded in the in-process
+        // table under the asking session's id, never persisted to the
+        // project pool. Other pending asks in the SAME session for an
+        // already-granted mode resolve immediately; other sessions still ask.
+        const grants = escalated.get(existing.info.sessionID) ?? new Set<string>()
+        for (const pattern of existing.info.always) grants.add(pattern)
+        escalated.set(existing.info.sessionID, grants)
+      } else {
+        for (const pattern of existing.info.always) {
+          approved.push({
+            permission: existing.info.permission,
+            pattern,
+            action: "allow",
+          })
+        }
       }
 
       for (const [id, item] of pending.entries()) {
         if (item.info.sessionID !== existing.info.sessionID) continue
-        const ok = item.info.patterns.every(
-          (pattern) => evaluate(item.info.permission, pattern, approved).action === "allow",
-        )
+        const sessionGrants = escalated.get(item.info.sessionID)
+        const ok = item.info.patterns.every((pattern) => {
+          if (item.info.permission === ESCALATION_PERMISSION && sessionGrants?.has(pattern)) return true
+          return evaluate(item.info.permission, pattern, approved).action === "allow"
+        })
         if (!ok) continue
         pending.delete(id)
         yield* bus.publish(Event.Replied, {
@@ -273,7 +305,16 @@ export const layer = Layer.effect(
       return Array.from(pending.values(), (item) => item.info)
     })
 
-    return Service.of({ ask, reply, list })
+    // Session-scoped escalation grants reset when the user picks a new
+    // sandbox mode in the composer: the choice expresses "this is the trust
+    // level I want now", so previously granted wider modes must not keep
+    // silently applying. Other permission types are untouched.
+    const clearEscalation = Effect.fn("Permission.clearEscalation")(function* (input: { sessionID: string }) {
+      const { escalated } = yield* InstanceState.get(state)
+      escalated.delete(input.sessionID)
+    })
+
+    return Service.of({ ask, reply, list, clearEscalation })
   }),
 )
 

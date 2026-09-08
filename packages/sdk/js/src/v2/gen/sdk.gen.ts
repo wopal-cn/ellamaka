@@ -112,6 +112,8 @@ import type {
   PartUpdateResponses,
   PathGetErrors,
   PathGetResponses,
+  PermissionClearEscalationErrors,
+  PermissionClearEscalationResponses,
   PermissionListErrors,
   PermissionListResponses,
   PermissionReplyErrors,
@@ -3090,6 +3092,42 @@ export class Permission extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Clear session escalation grants
+   *
+   * Drop every sandbox-escalation 'always' grant the session has accumulated. Session-scoped by design; other permission types are untouched.
+   */
+  public clearEscalation<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      PermissionClearEscalationResponses,
+      PermissionClearEscalationErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/permissions/escalation",
+      ...options,
+      ...params,
     })
   }
 }
