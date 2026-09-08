@@ -179,6 +179,25 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
     expect(calls.es[0][0]).toBe("/dsh/plugins/events")
   })
 
+  test("prefix matching is boundary-exact: /dsh-market/* and /dshm/* are NOT treated as already-prefixed", () => {
+    const ctx = makeCtx()
+    const vws = new VirtualWebServer(ctx, { host: "127.0.0.1", port: 0 })
+    const calls = { fetch: [], ws: [], es: [] }
+    const script = vws.iframeAdapterScript()
+    runInIsolatedVm(
+      script +
+        `;fetch("/dsh-market/registry"); fetch("/dshm-webdav"); fetch("/dsh"); fetch("/dsh/exact");`,
+      calls,
+    )
+    // Sibling paths sharing the "/dsh" character prefix must be prefixed too —
+    // a bare startsWith("/dsh") swallowed the market catalog (HTTP 404 in the
+    // iframe) by treating /dsh-market/* as already mounted.
+    expect(calls.fetch[0][0]).toBe("/dsh/dsh-market/registry")
+    expect(calls.fetch[1][0]).toBe("/dsh/dshm-webdav")
+    expect(calls.fetch[2][0]).toBe("/dsh")
+    expect(calls.fetch[3][0]).toBe("/dsh/exact")
+  })
+
   test("same-origin absolute URLs (RPC + WebSocket) are adapted to the /dsh prefix", () => {
     const ctx = makeCtx()
     const vws = new VirtualWebServer(ctx, { host: "127.0.0.1", port: 0 })

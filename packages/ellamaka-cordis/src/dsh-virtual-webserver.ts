@@ -239,13 +239,14 @@ export class VirtualWebServer {
     return `(() => {
   const prefix = ${JSON.stringify(prefix)};
   const ownOrigin = typeof location !== "undefined" ? location.origin : null;
+  const hasMountPrefix = (p) => p === prefix || p.startsWith(prefix + "/");
   const adaptAbsolute = (url) => {
     try {
       const target = new URL(url);
       if (!ownOrigin) return url;
       const origin = new URL(ownOrigin);
       if (target.host !== origin.host) return url;
-      if (target.pathname.startsWith(prefix)) return url;
+      if (hasMountPrefix(target.pathname)) return url;
       return target.protocol + "//" + target.host + prefix + target.pathname + target.search;
     } catch (e) { return url; }
   };
@@ -256,7 +257,7 @@ export class VirtualWebServer {
     if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("ws://") || url.startsWith("wss://")) {
       return adaptAbsolute(url);
     }
-    if (url.startsWith(prefix)) return url;
+    if (hasMountPrefix(url)) return url;
     return prefix + url;
   };
   const origFetch = globalThis.fetch;
