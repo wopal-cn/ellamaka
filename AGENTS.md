@@ -152,6 +152,7 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 
 - Code changes follow TDD: write a failing test first, then implement code to make it pass.
 - 在修改任何 TypeScript 代码或添加新文件后，必须自动运行 `bun run typecheck`（或对应 package 的 typecheck），确保零 TypeScript 类型错误。
+- Run `bun run lint` before committing and leave zero lint errors. Oxlint errors fail the command, so keep the tree at `Found N warnings and 0 errors`; pre-existing config-level failures (e.g. a package tsconfig referencing a type package that is never installed) must be fixed, not worked around in individual files.
 - Avoid mocks as much as possible; test real implementations, do not duplicate logic into tests.
 - Tests must run from the corresponding package directory, never from repo root.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.
