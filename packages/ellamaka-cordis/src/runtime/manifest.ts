@@ -52,6 +52,26 @@ export function canonicalSerialize(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalSerialize(v)}`).join(",")}}`
 }
 
+/**
+ * Normalise line endings to LF and trim trailing whitespace so a committed
+ * manifest file can be compared byte-exactly against the canonical output
+ * regardless of how git checked it out.
+ */
+export function normalizeManifestText(text: string): string {
+  return text.replace(/\r\n?/g, "\n").trimEnd()
+}
+
+/**
+ * Compare a committed manifest file's text to freshly generated output,
+ * tolerating CRLF/LF checkout differences. windows-latest runners enable
+ * `core.autocrlf`, which rewrites a committed trailing LF into CRLF on
+ * checkout while the freshly generated output stays LF; a byte-exact compare
+ * therefore false-positives as drift on Windows CI.
+ */
+export function manifestsTextEqual(committed: string, generated: string): boolean {
+  return normalizeManifestText(committed) === normalizeManifestText(generated)
+}
+
 // ---------------------------------------------------------------------------
 // Fingerprint
 // ---------------------------------------------------------------------------

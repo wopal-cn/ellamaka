@@ -4,6 +4,7 @@ import {
   buildDshRuntimeManifest,
   canonicalSerialize,
   computeManifestFingerprint,
+  manifestsTextEqual,
   parseDshRuntimeManifest,
   type DshRuntimeManifestV1,
 } from "./manifest"
@@ -136,5 +137,30 @@ describe("canonicalSerialize", () => {
     const expected = createHash("sha256").update(text).digest("hex")
     // recompute here rather than hardcoding, asserting consistency of the digest pipeline
     expect(expected).toMatch(/^[0-9a-f]{64}$/)
+  })
+})
+
+// --- CRLF-tolerant --check comparison (Windows git autocrlf gate fix) --------
+
+describe("manifestsTextEqual", () => {
+  const generated = `${canonicalSerialize({ schema: "ellamaka.dsh-runtime/v1", bridgeAbi: 1 })}\n`
+
+  test("matches byte-identical committed content", () => {
+    expect(manifestsTextEqual(generated, generated)).toBe(true)
+  })
+
+  test("tolerates CRLF line endings in the committed file (Windows checkout)", () => {
+    // windows-latest runners enable core.autocrlf, which rewrites the committed
+    // trailing LF into CRLF on checkout; the freshly generated output stays LF.
+    const crlfCommitted = generated.replace(/\n/g, "\r\n")
+    expect(manifestsTextEqual(crlfCommitted, generated)).toBe(true)
+  })
+
+  test("still rejects genuinely different content", () => {
+    const different = canonicalSerialize({
+      schema: "ellamaka.dsh-runtime/v1",
+      bridgeAbi: 2,
+    })
+    expect(manifestsTextEqual(`${different}\n`, generated)).toBe(false)
   })
 })

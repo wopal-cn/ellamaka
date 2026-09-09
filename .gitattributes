@@ -14,3 +14,10 @@
 
 # Do NOT re-add merge=ours rules. If fork-specific files ever need protection
 # again, handle it per-merge with explicit checkout/verify steps instead.
+
+# ── Line-ending policy ──────────────────────────────────────────────────────
+# The generated DSH runtime manifest is a machine artifact whose --check gate
+# compares bytes against freshly generated output. Pin it to LF so windows-latest
+# runners (core.autocrlf=true) cannot rewrite it to CRLF and false-positively
+# fail the freshness gate. The comparison also tolerates CRLF defensively.
+packages/ellamaka-cordis/generated/dsh-runtime-manifest.json text eol=lf

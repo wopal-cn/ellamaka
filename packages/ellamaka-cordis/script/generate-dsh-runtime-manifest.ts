@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url"
 import {
   buildDshRuntimeManifest,
   canonicalSerialize,
+  manifestsTextEqual,
   type DshRuntimeManifestV1,
 } from "../src/runtime/manifest.ts"
 
@@ -68,7 +69,7 @@ if (checkOnly) {
     fatal(`--check: generated manifest missing at ${manifestPath}`)
   }
   const existing = readFileSync(manifestPath, "utf8")
-  if (existing !== output) {
+  if (!manifestsTextEqual(existing, output)) {
     fatal(
       `--check: generated manifest at ${manifestPath} is out of date; re-run the generator`,
     )
