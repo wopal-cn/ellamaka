@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join, resolve, sep } from "node:path"
+import { dirname, join, relative, resolve, sep } from "node:path"
 import { withPluginsLock, writeProfileManifestLocked, readProfileManifest, setDependency, dropPlugin, appendBundle } from "./profile-manifest.js"
 import { profileDirOf, healPluginsModuleFallback, removePluginSymlink } from "./compose.js"
 import { resolveTree, type ResolveSpec, type ResolvedTree } from "./resolver.js"
@@ -360,16 +360,163 @@ function installFromDir(path: string, options: InstallOptions): InstallResult {
     assertSafeProfileName(profile)
   }
   const isBundle = manifestIsBundle(manifest)
+  // A local directory may carry a full `npm install` tree (dev tooling, test
+  // runners, official @deepseek-ai/* peers). Only the transitive closure of
+  // the package's OWN `dependencies` (+ optionalDependencies) is runtime —
+  // everything else is pruned during the copy so the profile state matches
+  // the registry pipeline's end state (DESIGN 「Bun 安装器流水线」, resolver
+  // enqueueDeps semantics). Official peers resolve via the shared heal.
+  const closure = collectRuntimeClosure(path)
+  const filter = makePruneFilter(path, closure)
 
   let result: InstallResult | undefined
   for (const profile of profiles) {
     result = placeIntoProfile(profile, name, version, "dir", isBundle, options, (entityDir) => {
-      cpSync(path, entityDir, { recursive: true })
+      cpSync(path, entityDir, { recursive: true, filter })
+      removeEmptyModulesDirs(join(entityDir, "node_modules"))
     })
   }
   if (!result) throw new Error("dsh plugin installer: no target profiles")
   healPluginsModuleFallback(options.home)
   return result
+}
+
+/** Index every `name → directory` in a source `node_modules/` tree. */
+function indexSourceTree(src: string): Map<string, string> {
+  const index = new Map<string, string>()
+  const modulesDir = join(src, "node_modules")
+  const stack: string[] = [modulesDir]
+  while (stack.length > 0) {
+    const dir = stack.pop()!
+    let entries
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const full = join(dir, entry.name)
+      const pkgJson = join(full, "package.json")
+      if (existsSync(pkgJson)) {
+        try {
+          const manifest = JSON.parse(readFileSync(pkgJson, "utf-8")) as { name?: unknown }
+          if (typeof manifest.name === "string") index.set(manifest.name, full)
+        } catch {
+          // A corrupt package.json is unusable either way; skip it.
+        }
+      }
+      stack.push(full)
+    }
+  }
+  return index
+}
+
+/**
+ * Resolve a runtime dep's directory: the top-level `node_modules/<name>`
+ * slot wins (npm hoisting), falling back to the tree index (nested copy).
+ */
+function resolveDepDir(src: string, name: string, index: Map<string, string>): string | undefined {
+  const top = join(src, "node_modules", ...name.split("/"))
+  if (existsSync(join(top, "package.json"))) return top
+  return index.get(name)
+}
+
+/**
+ * The transitive runtime closure of a local directory's `dependencies` +
+ * `optionalDependencies` — the only nested entries that may ship with a
+ * dir install. Walk follows npm layout: top-level slot first, then the
+ * tree index; official `@deepseek-ai/*` packages are never part of the
+ * closure (the shared heal satisfies them).
+ */
+export function collectRuntimeClosure(src: string): Set<string> {
+  const rootManifest = readManifest(src) as Record<string, unknown>
+  const index = indexSourceTree(src)
+  const closure = new Set<string>()
+  const seen = new Set<string>()
+  const queue: string[] = []
+  const enqueue = (depName: string) => {
+    if (isOfficialPackage(depName) || seen.has(depName)) return
+    seen.add(depName)
+    queue.push(depName)
+  }
+  for (const depName of Object.keys(readDependencySections(rootManifest))) enqueue(depName)
+  while (queue.length > 0) {
+    const name = queue.shift()!
+    closure.add(name)
+    const dir = resolveDepDir(src, name, index)
+    if (dir === undefined) continue
+    let manifest: Record<string, unknown>
+    try {
+      manifest = readManifest(dir)
+    } catch {
+      continue
+    }
+    for (const depName of Object.keys(readDependencySections(manifest))) enqueue(depName)
+  }
+  return closure
+}
+
+/** The merged `dependencies` + `optionalDependencies` object of a manifest. */
+function readDependencySections(manifest: Record<string, unknown>): Record<string, string> {
+  const merged: Record<string, string> = {}
+  for (const field of ["dependencies", "optionalDependencies"] as const) {
+    const value = manifest[field]
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      for (const [name, range] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof range === "string") merged[name] = range
+      }
+    }
+  }
+  return merged
+}
+
+/**
+ * A `cpSync` filter that prunes nested entries outside the runtime closure.
+ * Top-level `node_modules/<name>` slots are decided by closure membership;
+ * scoped scope dirs are descended into and their packages decided at depth 3;
+ * everything deeper (a kept package's own subtree) passes through.
+ */
+function makePruneFilter(src: string, closure: Set<string>): (srcPath: string) => boolean {
+  return (srcPath) => {
+    const rel = relative(src, srcPath)
+    if (rel === "node_modules") return true
+    const segs = rel.split(sep)
+    if (segs[0] !== "node_modules" || segs.length < 2) return true
+    if (segs.length === 2) {
+      const topName = segs[1]
+      if (topName.startsWith("@")) return true
+      return closure.has(topName)
+    }
+    // Depth 3 is a scoped slot (`node_modules/@scope/name`), decided by the
+    // full scoped name. For an UNscoped package, depth ≥3 is inside a kept
+    // package's own subtree (`node_modules/pkg/...`) — pass through. Without
+    // this guard a package's own `package.json`/files were pruned as if they
+    // were a scoped name (`pkg/package.json` is not in the closure).
+    if (segs.length === 3 && segs[1].startsWith("@")) return closure.has(`${segs[1]}/${segs[2]}`)
+    return true
+  }
+}
+
+/** Remove empty directories left under a pruned node_modules (e.g. a scope dir whose members were all pruned). */
+function removeEmptyModulesDirs(modulesDir: string): void {
+  if (!existsSync(modulesDir)) return
+  let entries
+  try {
+    entries = readdirSync(modulesDir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const full = join(modulesDir, entry.name)
+    removeEmptyModulesDirs(full)
+    try {
+      if (readdirSync(full).length === 0) rmSync(full, { recursive: true, force: true })
+    } catch {
+      // The dir was removed concurrently / is a symlink target; leave it.
+    }
+  }
 }
 
 /**

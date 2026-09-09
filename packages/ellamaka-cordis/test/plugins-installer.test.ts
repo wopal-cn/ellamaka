@@ -24,6 +24,14 @@ function fixturePluginDir(root: string, name = "fixture-greeter", version = "1.0
   return dir
 }
 
+/** Add a `dependencies` field to a fixture plugin's manifest. */
+function writeManifestDeps(dir: string, deps: Record<string, string>): void {
+  const manifestPath = join(dir, "package.json")
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>
+  manifest.dependencies = deps
+  writeFileSync(manifestPath, JSON.stringify(manifest))
+}
+
 /**
  * A fake extract mirroring the REAL pacote contract: the tarball content
  * lands DIRECTLY in `dest` (the tarball's `package/` root is stripped), so
@@ -198,15 +206,82 @@ describe("Bun installer: dir pipeline", () => {
     expect(manifest.bundles).toContain("fixture-greeter")
   })
 
-  test("dir install keeps a pre-bundled nested node_modules", async () => {
+  test("dir install keeps a pre-bundled nested node_modules when declared in dependencies", async () => {
     const root = tempRoot()
     const srcRoot = mkdtempSync(join(tmpdir(), "dsh-plugin-src-"))
     const src = fixturePluginDir(srcRoot)
+    // Declare the pre-bundled dep so it belongs to the runtime closure.
+    writeManifestDeps(src, { "tiny-dep": "0.0.1" })
     const nested = join(src, "node_modules", "tiny-dep")
     mkdirSync(nested, { recursive: true })
     writeFileSync(join(nested, "package.json"), JSON.stringify({ name: "tiny-dep", version: "0.0.1" }))
     await installPackage({ kind: "dir", path: src }, { home: root })
     expect(existsSync(join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules", "tiny-dep", "package.json"))).toBe(true)
+  })
+
+  test("dir install prunes nested node_modules entries not reachable from dependencies (devDeps/build tools)", async () => {
+    const root = tempRoot()
+    const srcRoot = mkdtempSync(join(tmpdir(), "dsh-plugin-src-"))
+    const src = fixturePluginDir(srcRoot)
+    writeManifestDeps(src, { "js-yaml": "^4.1.0", "undici": "^7.0.0" })
+    // Runtime deps (declared) — must survive.
+    for (const name of ["js-yaml", "undici"]) {
+      const dep = join(src, "node_modules", name)
+      mkdirSync(dep, { recursive: true })
+      writeFileSync(join(dep, "package.json"), JSON.stringify({ name, version: "1.0.0" }))
+    }
+    // Build-time devDeps (NOT declared) — must be pruned.
+    for (const name of ["typescript", "rolldown", "vitest"]) {
+      const dev = join(src, "node_modules", name)
+      mkdirSync(dev, { recursive: true })
+      writeFileSync(join(dev, "package.json"), JSON.stringify({ name, version: "1.0.0" }))
+    }
+    await installPackage({ kind: "dir", path: src }, { home: root })
+    const entityModules = join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules")
+    expect(existsSync(join(entityModules, "js-yaml", "package.json"))).toBe(true)
+    expect(existsSync(join(entityModules, "undici", "package.json"))).toBe(true)
+    expect(existsSync(join(entityModules, "typescript"))).toBe(false)
+    expect(existsSync(join(entityModules, "rolldown"))).toBe(false)
+    expect(existsSync(join(entityModules, "vitest"))).toBe(false)
+  })
+
+  test("dir install prunes @deepseek-ai/* nested entries (official peers resolve via shared heal)", async () => {
+    const root = tempRoot()
+    const srcRoot = mkdtempSync(join(tmpdir(), "dsh-plugin-src-"))
+    const src = fixturePluginDir(srcRoot)
+    writeManifestDeps(src, { "js-yaml": "^4.1.0" })
+    const jsyaml = join(src, "node_modules", "js-yaml")
+    mkdirSync(jsyaml, { recursive: true })
+    writeFileSync(join(jsyaml, "package.json"), JSON.stringify({ name: "js-yaml", version: "4.1.0" }))
+    // Official peers present in the source tree (npm install pulled them as devDeps) — must NOT ship.
+    const official = join(src, "node_modules", "@deepseek-ai", "dsh-settings")
+    mkdirSync(official, { recursive: true })
+    writeFileSync(join(official, "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh-settings", version: "0.1.2-rc.1" }))
+    await installPackage({ kind: "dir", path: src }, { home: root })
+    const entityModules = join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules")
+    expect(existsSync(join(entityModules, "js-yaml", "package.json"))).toBe(true)
+    expect(existsSync(join(entityModules, "@deepseek-ai"))).toBe(false)
+  })
+
+  test("dir install keeps the transitive runtime closure (child of a declared dependency is hoisted)", async () => {
+    const root = tempRoot()
+    const srcRoot = mkdtempSync(join(tmpdir(), "dsh-plugin-src-"))
+    const src = fixturePluginDir(srcRoot)
+    writeManifestDeps(src, { "js-yaml": "^4.1.0" })
+    const jsyaml = join(src, "node_modules", "js-yaml")
+    mkdirSync(jsyaml, { recursive: true })
+    writeFileSync(
+      join(jsyaml, "package.json"),
+      JSON.stringify({ name: "js-yaml", version: "4.1.0", dependencies: { argparse: "^2.0.1" } }),
+    )
+    // argparse is a transitive dep of js-yaml, hoisted to top-level by npm — must survive.
+    const argparse = join(src, "node_modules", "argparse")
+    mkdirSync(argparse, { recursive: true })
+    writeFileSync(join(argparse, "package.json"), JSON.stringify({ name: "argparse", version: "2.0.1" }))
+    await installPackage({ kind: "dir", path: src }, { home: root })
+    const entityModules = join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules")
+    expect(existsSync(join(entityModules, "js-yaml", "package.json"))).toBe(true)
+    expect(existsSync(join(entityModules, "argparse", "package.json"))).toBe(true)
   })
 })
 
