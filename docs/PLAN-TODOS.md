@@ -33,10 +33,9 @@
 |---|------|---------|---------|---------|------|
 | **A1** | home 布局迁移 | `state/`→`home/`、`profiles/`→`home/profiles/`、`.agent-presets`→`home/.agent-presets`；dev.sh + Desktop sidecar env 改指 `home/`；state README 退役 | preset 发现正常；dsh 会话 bash 的 DSH_HOME 指向 home；官方包 env 直读落 home | 迁移脚本 + 代码 retarget + TDD | **已完成**（`20260905-feature-dsh-a1-home-layout-migration` 归档，用户验证通过） |
 | **A2** | 安装器 retarget + bun-hmr | 一个 Plan 完成：① Bun 安装器写官方终态（profile node_modules + package.json 声明），`installed.json`/`composePluginLayers`/旧 store 轮询退役（风暴缺陷随之消灭）；② bun-hmr 适配器（`registerConfig` 配置监听 + generation 候选校验 + 空闲窗口原子替换），watch 对象直接指向 profile 组合文件，Node 路径保持官方插件 | add/remove/install 产出官方语义终态；引擎加载新装插件；编辑 profile 补丁层运行中容器热应用；候选校验失败保留旧栈；失败不触碰 profile | dev-flow Plan（TDD + rook 审查） | **已完成**（`20260906-feature-dsh-installer-retarget-bun-hmr` 归档，用户验证通过） |
-| **A3** | 宿主安装工契约 + 市场端到端验收 | `desktopProfiles` + `desktopPnpm` 注入 web 容器；dshmarket 以官方声明形态安装进 profile；通过 dshmarket 安装 dsh-better-sidebar | ① dshmarket 安装后 Settings → Plugin Market 页面可见可用；② 通过 market 一键安装 dsh-better-sidebar，引擎加载成功，右侧 sidebar UI 可见（含 explorer/git/terminal tab）；③ 已装列表与 profile package.json 声明一致；④ 禁用/启用 better-sidebar 后引擎热应用生效 | dev-flow Plan（依赖 A2） | **Task 1-2 已完成**（desktop-worker 服务 + web 容器注入，`3879b2f6`/`f54dae16`，14+1 测试绿）；desktop-worker 真 bin 端到端实证成立（见 plan finding 9）；`ellamaka dsh init` 落地（物化前置）；待 **Task 3**（live 安装 dshmarket + 引擎重启 + UV 三场景，需用户） |
-| **A4** | 生态互操作回归 | 官方 CLI（同一 home）↔ 引擎互操作验证；已有历史插件迁移官方声明形态 | 官方 CLI 装的插件引擎直接加载；已有插件迁移后热挂载正常 | 运营 + 回归清单 | 待排期 |
+| **A3** | 宿主安装工契约 + 市场端到端验收 | `desktopProfiles` + `desktopPnpm` 注入 web 容器；dshmarket 以官方声明形态安装进 profile；通过 dshmarket 安装 dsh-better-sidebar | ① dshmarket 安装后 Settings → Plugin Market 页面可见可用；② 通过 market 一键安装 dsh-better-sidebar，引擎加载成功，右侧 sidebar UI 可见（含 explorer/git/terminal tab）；③ 已装列表与 profile package.json 声明一致；④ 禁用/启用 better-sidebar 后引擎热应用生效 | dev-flow Plan（依赖 A2） | **已完成**（Task 1-2 落地；PoC 分支合并 main，A 线收官） |
 
-**执行顺序**：A1 → A2 → A3 → A4（严格顺序，每步落地后引擎可运行）。原 B2（bun-hmr）并入 A2，其设计主体不变、watch 对象一步到位（设计依据：`DESIGN-ellamaka-dsh.md`「Bun 宿主 HMR 适配器（bun-hmr）」+「插件供应链 · 实现决策 D-02」）。
+**执行顺序**：A1 → A2 → A3（A 线主体落地）。原 B2（bun-hmr）并入 A2，已完成。A 线收官，原 A4 独立 Plan 退役（互操作在日常演进中按需验证，不建专卡）。
 
 **已交付**：A2 实施过程中 Plan 223（enhance）完成了 `ellamaka dsh` 命令面与官方 `dsh` CLI 的对齐——plugin 官方序（`plugin --profile <name> add/remove/install` + 扩展 enable/disable/list，verbatim args）、dump-config 根 flags（`--dump-config`/`--dump-default-config` + repeatable `--patch` overlay，缺失文件 throw）、rejectParentOptions 与 boot 报错提示 serve。命令面形状见 `DESIGN-ellamaka-dsh.md`「ellamaka dsh shim 命令面」。
 

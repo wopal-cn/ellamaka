@@ -794,6 +794,23 @@ wopal 配置单引用的一个能力件（包内 `lib/weapon-rack.js`），按�
 - **协作纪律**：消息往来、任务分派、完成上报是引擎内建能力；协作规范（如 wopal 的 agents-collab 约定）写入主 Agent 人格。
 - **per-角色武器装备**（不同队员带不同工具集）：官方招人接口不含 preset 字段，需自定义招人 provider（引擎 `registerProvider` 扩展点）按角色挂载不同配置单。这是条件触发项——第一阶段任务书 + 目录规则已覆盖角色分化的主要诉求，只有当"队员必须带不同武器"成为真实需求时才立项（见「设计决策 · 组队用官方机制」）。
 
+### Agent 配置单与 Profiles 的分发、物化与初始化机制
+
+Agent 配置单（`agent-presets`）与 Profile 容器（`profiles`）在 WopalSpace 体系下遵循分层分发与运行时装配规范：
+
+1. **分发源头（Ontology 基准源）**：
+   - **`agents-presets`**：作为基础能力随本体仓库（`ontologies/wopal-space-ontology/dsh/agents-presets/`）分发。
+   - **`profiles`**：由本体统一维护 `web` 与 `ellamaka-tools` 的基准配置文件对——即 `package.json`（声明 bundles 与插件依赖）和 `cordis.patch.yml`（配置规则与沙箱策略）。本体仓库不跟踪运行态生成的 `cordis.yml` 锚点和本地 `node_modules/`。
+2. **物化生成（wopal setup / space init 确定性物化）**：
+   - **`agents-presets`**：通过 `wopal setup` 整体链接/物化至 `$WOPAL_HOME/dsh/agents-presets/`，通过官方 `config.roots` 通道注册为 system 根，供引擎 discoverPresets 自动扫描。
+   - **`profiles`**：`package.json` 与 `cordis.patch.yml` 物理复制（Copy）至 `$WOPAL_HOME/dsh/home/profiles/<profile>/`。更新时采用声明合并策略（bundles 去重联合，保护本地自定义修改），保持本地目录物理独立，规避跨目录软链接带来的锁失效、ESM 寻址逃逸及 HMR 穿透故障。
+3. **运行时初始化闭环（ellamaka dsh init / Boot）**：
+   - 物化完成后，由 `ellamaka dsh init`（或 `RuntimeManager`）统一承接环境闭包：
+     - 校验并物化不可变运行时闭包（`closures/<fingerprint>`）；
+     - 依照 profile `package.json` 声明在本地还原缺失的插件依赖包；
+     - 运行 `healProfilesModuleFallback` 在 `profiles/node_modules/` 自动建立符号链接池；
+     - 引擎启动时动态覆写 `cordis.yml` 为 `[]` 锚点并完成组合挂载。
+
 ### 设计决策
 
 | 决策 | 内容 | 理由 |
