@@ -137,7 +137,7 @@ check_branch_channel_policy() {
   fi
 
   local highest_stable
-  highest_stable=$(highest_release_tag "$PRODUCT" "stable" "$REPO_ROOT")
+  highest_stable=$(highest_released_tag "$PRODUCT" "stable")
   if [ -n "$highest_stable" ]; then
     node -e "
       const cmp = (a, b) => {
@@ -198,16 +198,57 @@ if (cmp(vkey, floor) < 0) {
 }
 }
 
+# manifest_url <version> — R2 manifest URL for the given version (used by
+# has_effective_manifest / highest_released_tag).
 manifest_url() {
-  echo "https://download.coursedao.com/ellamaka/v${VERSION}/manifest.json"
+  echo "https://download.coursedao.com/ellamaka/v${1}/manifest.json"
 }
 
+# has_effective_manifest [version]
+# 判定某版本是否有有效 R2 manifest（即真正提交的发布）。默认检查 $VERSION。
 has_effective_manifest() {
   command -v curl >/dev/null 2>&1 || die "curl 不可用，无法判定远端 tag 是否为 failed attempt"
+  local ver="${1:-$VERSION}"
   local url code
-  url="$(manifest_url)"
+  url="$(manifest_url "$ver")"
   code=$(curl -s -o /dev/null -w "%{http_code}" --noproxy '*' --max-time 15 "$url" 2>/dev/null || echo "000")
   [ "$code" = "200" ]
+}
+
+# highest_released_tag <product> <stable|rc|beta> — 该产品通道中**真正已提交发布**
+# （有有效 R2 manifest）的最高 tag。failed-attempt tag（打 tag 但无 manifest）不计
+# 入"已发布记录"，因此失败版本会被再次推断出来（同版本重发），而不是把版本线
+# 推高跳过它。按本地 tag 降序逐个检查 manifest，直到命中一个已发布版本。
+highest_released_tag() {
+  local product="$1" channel="$2"
+  local version
+  # 用 node 从本地 tag 按 SemVer 对该通道降序列出所有版本。
+  while IFS= read -r version; do
+    [ -n "$version" ] || continue
+    if has_effective_manifest "$version"; then
+      echo "$version"
+      return 0
+    fi
+  done < <(git -C "$REPO_ROOT" tag -l "${product}-v*" 2>/dev/null | node -e "
+    const stable = [], beta = [], rc = []
+    for (const raw of require('fs').readFileSync(0, 'utf8').split('\n')) {
+      const m = raw.trim().match(/(\d+)\.(\d+)\.(\d+)(?:-(beta|rc)\.(\d+))?\$/)
+      if (!m) continue
+      const key = [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? null : Number(m[5])]
+      if (m[4] === undefined) stable.push(key)
+      else if (m[4] === 'beta') beta.push(key)
+      else rc.push(key)
+    }
+    const cmp = (a, b) => a[0]-b[0] || a[1]-b[1] || a[2]-b[2] || (a[3] ?? 0) - (b[3] ?? 0)
+    const list = '$channel' === 'beta' ? beta : ('$channel' === 'rc' ? rc : stable)
+    list.sort((a, b) => cmp(b, a))
+    for (const k of list) {
+      const suffix = k[3] !== null ? ('$channel' === 'rc' ? '-rc.' : '-beta.') + k[3] : ''
+      console.log(k[0] + '.' + k[1] + '.' + k[2] + suffix)
+    }
+  ")
+  # 全部 failed attempt / 无 tag：无已发布记录
+  return 0
 }
 
 # check_min_wopal_cli_released — 发布门禁：wopal-cli 协议地板必须可用。
@@ -344,20 +385,22 @@ trigger_cleanup() {
   fi
 }
 
-# ── 版本推断（以该产品已发布 tag 记录为唯一依据，产品独立）────────────
+# ── 版本推断（以该产品已发布记录为唯一依据，产品独立）────────────────────
+# "已发布记录" = 有有效 R2 manifest 的 tag（highest_released_tag）。failed-attempt
+# tag（打 tag 但无 manifest）不计入，因此失败版本会被再次推断出（同版本重发）。
 
 # product_released_stable — 该产品已发布最高 stable (X.Y.Z)，无则空串
 product_released_stable() {
-  highest_release_tag "$PRODUCT" "stable" "$REPO_ROOT"
+  highest_released_tag "$PRODUCT" "stable"
 }
 
 # product_released_candidate — 该产品通道最高 prerelease（cli=-rc.N /
 # desktop=-beta.N），无则空串
 product_released_candidate() {
   if [ "$SUBCOMMAND" = "cli" ]; then
-    highest_release_tag "$PRODUCT" "rc" "$REPO_ROOT"
+    highest_released_tag "$PRODUCT" "rc"
   else
-    highest_release_tag "$PRODUCT" "beta" "$REPO_ROOT"
+    highest_released_tag "$PRODUCT" "beta"
   fi
 }
 
@@ -442,17 +485,42 @@ run_release() {
 
   # ── re-release 判定（幂等）────────────────────────────
   RE_RELEASE=false
+  RE_POINT_TO_HEAD=false   # failed attempt 的 tag 需重指到修复后的 HEAD
   if git ls-remote --tags "$REMOTE" "$TAG" 2>/dev/null | grep -q "refs/tags/${TAG}$"; then
     if has_effective_manifest; then
       die "版本 $VERSION 已发布（tag $TAG 存在且有有效 manifest）—— 已发布 release 不可变，请使用更高版本号。"
     fi
-    echo "→ 远端 tag $TAG 存在但无 manifest（failed attempt），以该 tag 重新发布。"
+    echo "→ 远端 tag $TAG 存在但无 manifest（failed attempt），可同版本重发。"
     RE_RELEASE=true
   fi
 
   if $RE_RELEASE; then
-    # 中断重发：无"锚点"概念，直接以失败 tag 重新 dispatch（发布不可变只约束
-    # 成功提交的 release；failed attempt 无有效 manifest，可同版本重发）。
+    # 中断重发：无"锚点"概念。发布不可变只约束成功提交的 release；failed
+    # attempt 无有效 manifest，可同版本重发。
+    #
+    # 但失败若是 **source bug**（如本次 web UI 构建失败）导致的，失败 tag 指向
+    # 的是坏 commit —— 盲目以该 tag 重新 dispatch 会再次构建坏代码。当代码已
+    # 修复（当前分支 HEAD 的产品版本文件已等于目标 VERSION，即 bump 已提交、
+    # 修复是其后的 commit），应把失败 tag 重指到修复后的 HEAD 再 push，让
+    # tag push 触发 workflow 构建修复代码，而不是复用坏 commit。
+    local head_has_version=false
+    [ "$(current_version "$SUBCOMMAND" "$REPO_ROOT")" = "$VERSION" ] && head_has_version=true
+
+    # 解析远端失败 tag 实际指向的 commit（annotated tag 需 peel 到 ^{}）。
+    local failed_commit="" head_commit head_branch
+    head_commit="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+    head_branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+    git -C "$REPO_ROOT" fetch "$REMOTE" "refs/tags/${TAG}:refs/tags/${TAG}" 2>/dev/null || true
+    failed_commit="$(git -C "$REPO_ROOT" rev-parse "${TAG}^{commit}" 2>/dev/null || echo "")"
+
+    # 自愈迁移判定：HEAD 版本已到位 且 失败 tag 指向的并非 HEAD（修复已产生新
+    # commit）。两者都满足 → tag 应重指 HEAD；否则（HEAD==失败 commit 或版本未
+    # 到位）维持原 dispatch 语义（纯流程重试 / 或让正常 bump 路径接管）。
+    if $head_has_version && [ -n "$failed_commit" ] && [ "$failed_commit" != "$head_commit" ]; then
+      RE_POINT_TO_HEAD=true
+      echo "→ 检测到代码已修复（HEAD ${head_commit} 已不同于失败 tag 所指 commit ${failed_commit}）。tag 将重指到修复后的 HEAD 再发布。"
+    fi
+
     check_remote_branch
     if $DRY_RUN; then
       echo ""
@@ -460,18 +528,62 @@ run_release() {
       echo "  product:  $PRODUCT"
       echo "  version:  $VERSION (tag 已存在，failed attempt)"
       echo "  channel:  $CHANNEL_LABEL"
-      echo "  action:   workflow_dispatch (ref=$TAG)"
+      if $RE_POINT_TO_HEAD; then
+        echo "  action:   将 tag ${TAG} 重指到修复后的 HEAD（${head_commit}）并 push，触发 ${WORKFLOW}"
+      else
+        echo "  action:   workflow_dispatch (ref=$TAG)"
+      fi
       exit 0
     fi
-    if [ "$HAVE_GH" = false ]; then
-      echo "ℹ️  gh CLI 不可用或未认证，跳过 dispatch + watch。"
-      echo "    手动重发: gh workflow run $WORKFLOW -R wopal-cn/ellamaka --ref $TAG -f version=$VERSION -f publish=true$([ "$SUBCOMMAND" = "desktop" ] && echo " -f channel=$CHANNEL")"
+
+    if $RE_POINT_TO_HEAD; then
+      # 重指失败 tag 到修复 HEAD 并推送：tag push（push: tags）触发 publish
+      # workflow 构建当前修复代码。无需重复 bump / dispatch。
+      echo "→ 重打本地 tag ${TAG} 到 HEAD（${head_commit}）..."
+      git -C "$REPO_ROOT" tag -f -a "$TAG" -m "Release $TAG (self-heal retry after source fix)" "$head_commit"
+      if $NO_PUSH; then
+        echo "ℹ️  已重打本地 tag ${TAG}（--no-push，未推送）。"
+        echo "    推送发布: git push $REMOTE $TAG --force"
+        exit 0
+      fi
+      echo "→ 推送 ${head_branch} 和 tag ${TAG}（--force，tag push 触发 ${WORKFLOW}）"
+      git -C "$REPO_ROOT" push "$REMOTE" "$head_branch" 2>/dev/null || true
+      git -C "$REPO_ROOT" push "$REMOTE" "$TAG" --force
+
+      # tag push 触发 publish workflow；与正常发布路径一致地 watch 至完成。
+      if [ "$NO_WATCH" = "true" ] || [ "$HAVE_GH" = false ]; then
+        if [ "$HAVE_GH" = false ]; then
+          echo "ℹ️  gh CLI 不可用或未认证，跳过 watch。tag 已推送，workflow 应已触发。"
+        fi
+      else
+        echo "→ 等待 workflow 启动..."
+        RUN_ID=""
+        for i in $(seq 1 12); do
+          RUN_ID=$(gh run list -R wopal-cn/ellamaka --workflow "$WORKFLOW" --commit "$head_commit" --status in_progress,queued --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
+          [ -n "$RUN_ID" ] && break
+          RUN_ID=$(gh run list -R wopal-cn/ellamaka --workflow "$WORKFLOW" --commit "$head_commit" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
+          [ -n "$RUN_ID" ] && break
+          sleep 5
+        done
+        if [ -z "$RUN_ID" ]; then
+          echo "⚠️  60s 内未找到 workflow run（可能需要手动检查 actions 页）。"
+        else
+          watch_run "$RUN_ID"
+        fi
+      fi
+      trigger_cleanup
+      exit 0
+    else
+      if [ "$HAVE_GH" = false ]; then
+        echo "ℹ️  gh CLI 不可用或未认证，跳过 dispatch + watch。"
+        echo "    手动重发: gh workflow run $WORKFLOW -R wopal-cn/ellamaka --ref $TAG -f version=$VERSION -f publish=true$([ "$SUBCOMMAND" = "desktop" ] && echo " -f channel=$CHANNEL")"
+        exit 0
+      fi
+      RUN_ID="$(dispatch_workflow)" || die "无法确定本次 workflow run"
+      [ "$NO_WATCH" = "true" ] || watch_run "$RUN_ID"
+      trigger_cleanup
       exit 0
     fi
-    RUN_ID="$(dispatch_workflow)" || die "无法确定本次 workflow run"
-    [ "$NO_WATCH" = "true" ] || watch_run "$RUN_ID"
-    trigger_cleanup
-    exit 0
   fi
 
   # ── 写入计划计算（无版本线/锚点）────────────────────────

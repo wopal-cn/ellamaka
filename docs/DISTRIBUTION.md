@@ -198,7 +198,10 @@ channel 规则：
 
 Desktop 渠道为单开关模型：`--beta` 即 beta 渠道（版本必然为 `X.Y.Z-beta.N`，发布到 `ellamaka-desktop/beta/`），缺席即 prod（版本必然为纯 `X.Y.Z`）；不存在独立 `--channel` 参数。
 
-failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时——有有效 R2 manifest 则拒绝（发布不可变，请用更高版本）；无 manifest 则以该 tag 为 `--ref` 重新 `workflow_dispatch`，不重复 bump。
+failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时——有有效 R2 manifest 则拒绝（发布不可变，请用更高版本）；无 manifest 则按两种情况重发，均不重复 bump：
+
+- **纯流程重试**（失败 tag 指向的 commit 仍是当前分支 HEAD）：以该 tag 为 `--ref` 重新 `workflow_dispatch`，tag 不移动。
+- **source bug 自愈重试**（失败源于代码缺陷，已在其后提交修复，当前分支 HEAD 的产品版本文件已等于目标 VERSION）：脚本将失败 tag 重指到修复后的 HEAD 并 force-push（tag push 触发 `push: tags` workflow），构建修复代码。因失败 tag 从未写入有效 manifest，仍属 failed attempt，重指 tag 不违反不可变原则。
 
 分支渠道约束（branch-channel policy）：
 
@@ -226,7 +229,7 @@ CLI 发布流程（release job）：
 
 Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest 产 NSIS、ubuntu-latest 产 AppImage+deb）。R2 上传、manifest 校验与 CDN purge 复用 CLI 的既有机制。
 
-**重试状态**：tag 存在但没有有效 versioned manifest（failed attempt）时，release 脚本以该 tag 为 `--ref` 重新 `workflow_dispatch`（tag 不移动、版本文件不重复 bump）；有效 immutable manifest 已提交时只能重试 release page 或 latest promotion，不能重新 build。已提交 release 出现 identity/hash mismatch 或重大运行问题时执行 §7.3 整版 withdrawal，版本号永久作废，后续使用更高版本。
+**重试状态**：tag 存在但没有有效 versioned manifest（failed attempt）时，release 脚本自动重发。当该失败 tag 指向的 commit 就是当前分支 HEAD（纯流程重试）时以该 tag 为 `--ref` 重新 `workflow_dispatch`（tag 不移动、版本文件不重复 bump）；当失败源于 source bug、当前分支 HEAD 已含修复且产品版本文件已等于目标版本时，脚本把失败 tag 重指到 HEAD 并 force-push（tag push 触发 workflow，tag 移动但从未产生有效 manifest，不违反不可变）。有效 immutable manifest 已提交时只能重试 release page 或 latest promotion，不能重新 build。已提交 release 出现 identity/hash mismatch 或重大运行问题时执行 §7.3 整版 withdrawal，版本号永久作废，后续使用更高版本。
 
 ---
 
