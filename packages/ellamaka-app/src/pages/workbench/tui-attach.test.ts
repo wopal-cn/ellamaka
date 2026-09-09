@@ -17,8 +17,8 @@ describe("createTuiAttachRequest", () => {
       cwd: "/workspace",
       title: "ellamaka tui (panel_1)",
       env: {
-        OPENCODE_SERVER_USERNAME: "ellamaka",
-        OPENCODE_SERVER_PASSWORD: "secret",
+        ELLAMAKA_SERVER_USERNAME: "ellamaka",
+        ELLAMAKA_SERVER_PASSWORD: "secret",
       },
     })
   })

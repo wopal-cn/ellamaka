@@ -268,8 +268,8 @@ export function createSidecarEnv(password: string): Record<string, string> {
   // switches captured by preferAppEnv are overlaid so explicit user intent wins
   // (e.g. OPENCODE_EXPERIMENTAL_LSP_TY set in the shell reaches the sidecar).
   return Object.assign(env, {
-    OPENCODE_SERVER_USERNAME: "ellamaka",
-    OPENCODE_SERVER_PASSWORD: password,
+    ELLAMAKA_SERVER_USERNAME: "ellamaka",
+    ELLAMAKA_SERVER_PASSWORD: password,
     OPENCODE_CLIENT: "ellamaka-desktop",
     OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
