@@ -1,7 +1,7 @@
 import { join } from "node:path"
 
 export type Layer = "unit" | "integration" | "e2e"
-export type PackageName = "opencode" | "ellamaka-app" | "ellamaka-desktop" | "all"
+export type PackageName = "opencode" | "ellamaka-app" | "ellamaka-desktop" | "ellamaka-cordis" | "all"
 export type ConcretePackage = Exclude<PackageName, "all">
 
 // Layer -> package -> script name mapping. A package that has no entry for a
@@ -12,9 +12,11 @@ const LAYER_SCRIPTS: Record<Layer, Partial<Record<ConcretePackage, string>>> = {
     opencode: "test:unit",
     "ellamaka-app": "test:unit",
     "ellamaka-desktop": "test",
+    "ellamaka-cordis": "test:unit",
   },
   integration: {
     opencode: "test:integration",
+    "ellamaka-cordis": "test:integration",
   },
   e2e: {
     opencode: "test:e2e",
@@ -23,7 +25,7 @@ const LAYER_SCRIPTS: Record<Layer, Partial<Record<ConcretePackage, string>>> = {
   },
 }
 
-const PACKAGES: ConcretePackage[] = ["opencode", "ellamaka-app", "ellamaka-desktop"]
+const PACKAGES: ConcretePackage[] = ["opencode", "ellamaka-app", "ellamaka-desktop", "ellamaka-cordis"]
 
 export interface PlannedCommand {
   pkg: ConcretePackage
@@ -42,7 +44,9 @@ export function planLayer(layer: Layer, pkg: PackageName): PlannedCommand[] {
   const commands: PlannedCommand[] = []
   for (const target of targets) {
     if (!PACKAGES.includes(target)) {
-      throw new Error(`Unknown package: ${String(target)}. Expected one of opencode, ellamaka-app, ellamaka-desktop.`)
+      throw new Error(
+        `Unknown package: ${String(target)}. Expected one of opencode, ellamaka-app, ellamaka-desktop, ellamaka-cordis.`,
+      )
     }
     const script = LAYER_SCRIPTS[layer][target]
     if (!script) {
@@ -74,10 +78,10 @@ async function main() {
       }
     } else if (arg === "--package") {
       const value = args[++index]
-      if (value === "opencode" || value === "ellamaka-app" || value === "ellamaka-desktop" || value === "all") {
+      if (value === "opencode" || value === "ellamaka-app" || value === "ellamaka-desktop" || value === "ellamaka-cordis" || value === "all") {
         pkg = value
       } else {
-        console.error(`Unknown package: ${value}. Expected one of opencode, ellamaka-app, ellamaka-desktop, all.`)
+        console.error(`Unknown package: ${value}. Expected one of opencode, ellamaka-app, ellamaka-desktop, ellamaka-cordis, all.`)
         process.exit(1)
       }
     } else {
