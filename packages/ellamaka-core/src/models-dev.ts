@@ -241,6 +241,10 @@ export const layer = Layer.effect(
           }),
         ),
       )
+      yield* Effect.logInfo("Loaded provider catalog from network").pipe(
+        Effect.annotateLogs("source", source),
+        Effect.annotateLogs("providerCount", Object.keys(catalog).length),
+      )
       return catalog
     })
 
@@ -269,6 +273,7 @@ export const layer = Layer.effect(
               yield* Effect.logWarning("Failed to fetch provider catalog; using local fallback").pipe(
                 Effect.annotateLogs("source", source),
                 Effect.annotateLogs("error", String(error)),
+                Effect.annotateLogs("providerCount", Object.keys(fallback).length),
               )
               return fallback
             }
