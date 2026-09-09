@@ -120,14 +120,14 @@ rc.1 为 dsh web 面引入官方 `browser-auth`（`dsh-client-connection`）：�
 
 #### 认证联盟的架构定位（2026-09-06 定稿）
 
-ellamaka Basic 认证与 dsh browser-auth 是**两个信任域各守各的门**，不是重复建设：Basic 守外层（token 的分发面），cookie 守内层（dsh 自己的 `/api` 通道与 index）。iframe 内部跑的是 dsh 自己的 JS，其请求不携带 ellamaka 前端的 Basic 凭证——内层必须有一张 dsh 自认的凭证，官方形态即 cookie。**不做 Basic-only 统一**：认证机制不是 connection 插件的配置项，覆盖只有修改官方闭包一条路，违反「approval 原生边界」与生态对齐原则。用户感知上的统一（一次 Basic 登录，token/cookie 后台无感流转）已经成立，token 只经 Basic 保护的 `/workbench/dsh-url` 下发。
+ellamaka Basic 认证与 dsh browser-auth 是**两个信任域各守各的门**：Basic 守外层（token 的分发面），cookie 守内层（dsh 自己的 `/api` 通道与 index）。iframe 内部跑的是 dsh 自己的 JS，其请求不携带 ellamaka 前端的 Basic 凭证——内层必须有一张 dsh 自认的凭证，官方形态即 cookie。**不做 Basic-only 统一**：认证机制不是 connection 插件的配置项，覆盖只有修改官方闭包一条路，违反「approval 原生边界」与生态对齐原则。用户感知上的统一（一次 Basic 登录，token/cookie 后台无感流转）成立，token 只经 Basic 保护的 `/workbench/dsh-url` 下发。
 
-该联盟当前存在四个缺口，修复项如下（与「运行时机制 · 单端口分发」的挂载边界直接相关）：
+联盟的安全边界由四项机制固化（对应挂载边界，见「运行时机制 · 单端口分发」）：
 
-1. **`trustedHosts` 配置化（auth-fix-1）**：dsh connection 的 fence 对非 loopback Host 强制匹配 `trustedHosts`，而挂载层硬编码空数组——LAN 部署（配了 `OPENCODE_SERVER_PASSWORD` 的场景）下 Basic 认证的 ellamaka API 远程可用，DSH iframe 却静默 403。修复：把 `trustedHosts` 暴露为 ellamaka 配置项（`ellamaka.dsh.trustedHosts`，默认值层进 `settings.jsonc`），经 profile 补丁层注入 connection 插件配置。官方 fence 本为此设计，零官方改动、零自造会话。
-2. **iframe 401 自愈（auth-fix-2）**：cookie 过期（30 天）或引擎重启（新进程 = 新 token + 新签名密钥）后，dsh 返回裸 401 文本，iframe 停在死页。修复：`DshSurface` 增加 401 探测，命中即重取 `/workbench/dsh-url` 并重载 iframe src——token URL 重载即重新 303 铸 cookie，无感恢复。
-3. **挂载认证策略显式化（auth-fix-3）**：`NodeRouteMount` 只有 `prefix/request/upgrade`，挂载即绕过 ellamaka 认证栈；今天安全成立靠 dsh 自身 fence 的隐式巧合。E 线实验 profile 是新的 self-auth 挂载前缀，必须防踩空。修复：`NodeRouteMount` 增加强制 `auth` 声明（`"self" | "public"`），dispatcher 固化不变量——新 mount 不允许默认无认证。
-4. **WS upgrade 认证探针（auth-fix-4）**：`/dsh/api` HTTP 通道过 fence + cookie，但 WebSocket downlink 握手的认证路径未经实证。修复：探针测试未带 cookie 的 upgrade 请求；若不被拒，在宿主挂载层补 upgrade 前置 cookie 检查。
+- **trustedHosts 配置化**：connection fence 的 `trustedHosts` 由 ellamaka 配置项 `ellamaka.dsh.trustedHosts`（默认 `[]`，默认值层进 `settings.jsonc`）经 profile 补丁层注入。非 loopback Host 必须命中该列表——LAN 部署经配置显式放行，认证机制本身仍归官方实现，零官方改动、零自造会话。
+- **iframe 401 自愈**：`DshSurface` 探测 iframe 内文档的 401 响应，命中即重取 `/workbench/dsh-url` 并重载 src——token URL 重载即重新 303 铸 cookie，无感恢复。单次失效只重试一轮，不引入新会话机制。
+- **挂载认证策略显式声明**：`NodeRouteMount` 强制声明 `auth`（`"self" | "public"`），dispatcher 校验该不变量——挂载要么自带完整认证（如 dsh browser-auth，声明 `self`），要么明确公开（如纯静态资源），不允许默认无认证。E 线实验 profile 是新的 self-auth 挂载前缀，遵循同一契约。
+- **WS upgrade 与 HTTP 共享认证路径**：WS downlink 握手与 `/api` HTTP 通道经同一道认证——connection 的 `requestRejection`（fence + cookie）守卫两条通道，官方实现，宿主不设独立 upgrade 认证。
 
 ### iframe 地址派生
 
@@ -1044,7 +1044,7 @@ DSH 相关配置采用两层模型（与「配置与隔离 · 进程级共享、
 ## 壳单端口化与 workbench 精简（独立主线，S 线）
 
 > **状态**：S 线立项（2026-09-06），设计方向已定，暂不排期。本节描述目标形态与阶段边界；实现细节留待 S 线 dev-flow Plan。
-> **关联**：本节是「运行时机制 · 单端口分发」「iframe 地址派生」的壳侧演进；与 E 线（空间模型）正交，与 B5（认证联盟）互不冲突。
+> **关联**：本节是「运行时机制 · 单端口分发」「iframe 地址派生」的壳侧演进；与 E 线（空间模型）正交，与认证联盟互不冲突。
 
 ### 定位与动机
 
@@ -1065,12 +1065,12 @@ ellamaka 的终局形态是「**一个 runtime，N 个壳**」：server 是唯�
 | `/` | **设备协商前门**：302 移动 UA → `/dsh/`，桌面 UA → `/workbench` | Effect 栈显式路由（`GET /` 一条，静态 UA 判断，无配置项） |
 | `/workbench` | 桌面工作台，canonical 深链 | SPA 客户端路由（保留） |
 | `/workbench/*` | workbench API | Effect 显式路由（不变） |
-| `/dsh/*` | 助手表面，canonical | VirtualWebServer 挂载（不变，B5 领地） |
+| `/dsh/*` | 助手表面，canonical | VirtualWebServer 挂载（不变，认证联盟领地） |
 | `/doc`、`/event` 等 | 引擎 API | Effect 栈（不变） |
 | `/:dir`、`/:dir/session/:id` | 删除（官方会话页随官方 app 移除） | — |
 | 其余路径 | SPA fallback → workbench | uiRoute catch-all（不变） |
 
-**`/` 选择重定向而非直挂 workbench**：保留唯一 canonical URL，避免 `/` 与 `/workbench` 双地址分裂 deep link、存储键与 e2e fixture。**`/dsh` 不升根**：适配层三块改写逻辑（index 资源绝对化、303 Location 前缀改写、base 锚定）已完成且有测试，维护成本趋零；升根则破坏「一个前缀一个自治表面」的挂载不变量（dsh 内部硬编码 `/api` 将与引擎 API 共享根命名空间）、desktop `isDshPath` 代理判据与 B5 认证联盟的信任域边界（Basic 守外层、cookie 守内层，边界就是前缀）。设备协商前门让 mobile 设计（`DESIGN-mobile.md`）的「手机浏览器直连即全屏助手」在人肉入口层面成立，移动 App 仍硬编码 `/dsh/` 直连（零跳转）。
+**`/` 选择重定向而非直挂 workbench**：保留唯一 canonical URL，避免 `/` 与 `/workbench` 双地址分裂 deep link、存储键与 e2e fixture。**`/dsh` 不升根**：适配层三块改写逻辑（index 资源绝对化、303 Location 前缀改写、base 锚定）已完成且有测试，维护成本趋零；升根则破坏「一个前缀一个自治表面」的挂载不变量（dsh 内部硬编码 `/api` 将与引擎 API 共享根命名空间）、desktop `isDshPath` 代理判据与认证联盟的信任域边界（Basic 守外层、cookie 守内层，边界就是前缀）。设备协商前门让 mobile 设计（`DESIGN-mobile.md`）的「手机浏览器直连即全屏助手」在人肉入口层面成立，移动 App 仍硬编码 `/dsh/` 直连（零跳转）。
 
 **DESIGN-mobile 的启示**：DSH 不是 workbench 的一个功能，而是横跨双端的独立产品表面（桌面内嵌 tab + 移动端全屏）。desktop 单端口化正是把 desktop 拉回「一个 listener 服务所有表面」的三端统一原则——web serve、desktop、mobile 各自只有一个端口。
 
@@ -1107,7 +1107,7 @@ ellamaka 的终局形态是「**一个 runtime，N 个壳**」：server 是唯�
 
 ### 与既有设计的衔接
 
-- **与 B5**：正交且互护。B5 的信任域边界（Basic 外层 / cookie 内层）在单端口后依然成立——同源只是让 cookie 回到浏览器原生管理，fence、WS 探针、`/workbench/dsh-url` 分发面全部不动。B5c 的 mount 认证声明契约是 E 线前置，与 S 线共享「前缀自治」不变量。
+- **与认证联盟**：正交且互护。信任域边界（Basic 外层 / cookie 内层）在单端口后依然成立——同源只是让 cookie 回到浏览器原生管理，fence、WS 认证路径、`/workbench/dsh-url` 分发面全部不动。mount 认证声明契约是 E 线前置，与 S 线共享「前缀自治」不变量。
 - **与 E 线**：正交。E 线解决空间模型（tab 语义），S 线解决壳与端口（加载方式）；E 线的独立 profile 进程挂载继续走 `Listener.mountNodeRoute` 前缀挂载，不受影响。
 - **与移动端（DESIGN-mobile）**：S 线落地后三端统一「一个 listener，所有表面」；`/` 设备路由是 Tailcat 二维码只编码根 URL 的前提——设备自选表面，未来移动表面演进二维码不变。
 - **设计约束**：新增约束「壳单端口不变量」（见「设计约束 · 壳单端口不变量」）；其余约束（单进程、单端口分发、DSH home 唯一、Bun 宿主兼容性门禁）保持不变。
