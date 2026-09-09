@@ -35,6 +35,12 @@ export interface CordisLogExporterDeps {
   /** Minimum log level; messages below this are dropped. */
   readonly minLevel: EllamakaLogLevel
   /**
+   * Profile tag rendered into every line. Two containers (web, ellamaka-tools)
+   * are independent cordis fibers that may share one dsh-plugins log file;
+   * without the tag their entries are indistinguishable.
+   */
+  readonly profile?: string
+  /**
    * Sink for a fully formatted log line (including trailing newline).
    * The caller owns file I/O (appendFileSync, rotation, etc.).
    */
@@ -74,7 +80,8 @@ export function createCordisLogExporter(deps: CordisLogExporterDeps): Exporter {
       const { Logger } = runtime.cordis
       const body = Logger.format(exporter, message)
       const ts = new Date(message.ts).toLocaleString("sv-SE", { timeZone: "Asia/Shanghai" }).replace(" ", "T")
-      const line = `${ts} [${levelName}] [${message.name}] ${body}\n`
+      const profileTag = deps.profile ? ` [${deps.profile}]` : ""
+      const line = `${ts} [${levelName}]${profileTag} [${message.name}] ${body}\n`
       deps.write(line)
     },
   }

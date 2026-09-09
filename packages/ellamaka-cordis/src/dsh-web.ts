@@ -168,7 +168,6 @@ const TOOLS_PROFILE_PATCH = `# Patch layer for the ellamaka tool-container profi
 - { id: tool-subagent, disabled: true }
 - { id: tool-subagent-fork, disabled: true }
 - { id: tool-subagent-control, disabled: true }
-- { id: tool-subagent-report, disabled: true }
 - { id: tool-subagent-list-agents, disabled: true }
 - { id: workflow-worker-thread, disabled: true }
 - { id: tool-workflow, disabled: true }
@@ -486,6 +485,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     const exporter = createCordisLogExporter({
       logFile,
       minLevel: logLevel ?? "DEBUG",
+      profile: profileName,
       runtime,
       write: (line) => {
         try {
@@ -695,6 +695,14 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       dshRoot,
       ctx,
       installAnchor,
+      // Structured logging (W-02): replay/reload failures land in the
+      // dsh-plugins log (with the profile tag from the log exporter) instead
+      // of the console fallback, whose raw output corrupts the TUI surface.
+      logger: {
+        info: (message, extra) => ctx.logger.info(message, extra),
+        warn: (message, extra) => ctx.logger.warn(message, extra),
+        error: (message, extra) => ctx.logger.error(message, extra),
+      },
     })
     await bunHmr.mount()
     hmrStop = () => bunHmr.stop()
