@@ -95,6 +95,7 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
   })
   const unmount = listener.mountNodeRoute({
     prefix: dsh.mountPath,
+    auth: "self",
     request: (req, res) => dsh.webServer.request(req, res),
     upgrade: (req, socket, head) => dsh.webServer.upgrade(req, socket, head),
   })

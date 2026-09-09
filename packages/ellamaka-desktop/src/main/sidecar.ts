@@ -49,6 +49,8 @@ type Listener = {
   stop(close?: boolean): void | Promise<void>
   mountNodeRoute(mount: {
     prefix: string
+    /** Mirrors NodeRouteMount.auth: every mount bypasses the host auth stack. */
+    auth: "self" | "public"
     request(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): void
     upgrade?(req: import("node:http").IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): void
   }): () => void
@@ -271,9 +273,12 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
       runtime,
       ellamakaCommand,
     })
-    // Mount the VirtualWebServer under /dsh on the Ellamaka listener.
+    // Mount the VirtualWebServer under /dsh on the Ellamaka listener. The dsh
+    // mount brings its own complete browser-auth (launch-token → signed
+    // cookie fence), so it declares "self" on the host auth stack it bypasses.
     const unmount = listener?.mountNodeRoute({
       prefix: host.mountPath,
+      auth: "self",
       request: (req, res) => host.webServer.request(req, res),
       upgrade: (req, socket, head) => host.webServer.upgrade(req, socket, head),
     })

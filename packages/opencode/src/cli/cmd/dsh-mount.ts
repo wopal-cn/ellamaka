@@ -128,6 +128,10 @@ export async function mountDshEngine(
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,
+      // auth-fix-3: the dsh mount brings its own complete browser-auth
+      // (launch-token → signed cookie fence), so it declares "self" on the
+      // host auth stack it bypasses.
+      auth: "self",
       request: (req, res) => dsh.webServer.request(req, res),
       upgrade: (req, socket, head) => dsh.webServer.upgrade(req, socket, head),
     })
