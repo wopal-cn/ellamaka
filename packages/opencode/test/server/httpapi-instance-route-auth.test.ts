@@ -59,7 +59,7 @@ describe("HttpApi instance route authorization", () => {
     expect(missing.status).toBe(401)
 
     const authed = await server.request(EventPaths.event, {
-      headers: { ...headers, authorization: basic("opencode", "secret") },
+      headers: { ...headers, authorization: basic("ellamaka", "secret") },
     })
     await cancelBody(authed)
     expect(authed.status).toBe(200)
@@ -76,7 +76,7 @@ describe("HttpApi instance route authorization", () => {
     expect(missing.status).toBe(401)
 
     const authed = await server.request(route, {
-      headers: { ...headers, authorization: basic("opencode", "secret") },
+      headers: { ...headers, authorization: basic("ellamaka", "secret") },
     })
     await cancelBody(authed)
     expect(authed.status).toBe(404)
