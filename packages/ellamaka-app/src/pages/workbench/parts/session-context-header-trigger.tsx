@@ -1,5 +1,5 @@
 import { Show, createMemo } from "solid-js"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Tooltip } from "@wopal/ui/tooltip"
 import { useServerSync } from "@/context/server-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
