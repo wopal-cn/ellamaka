@@ -2,31 +2,64 @@ import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
 import { Effect, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
-import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { Global } from "@wopal/ellamaka-core/global"
 import { ModelsDev } from "@wopal/ellamaka-core/models-dev"
 import { EventV2 } from "@wopal/ellamaka-core/event"
+import { Flock } from "@wopal/ellamaka-core/util/flock"
 import { it } from "./lib/effect"
-import { rm, writeFile, utimes, mkdir } from "fs/promises"
+import { mkdtemp, readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
+import os from "os"
 import path from "path"
 
-// test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
-// resolve providers without network. These tests need to drive the on-disk
-// cache themselves and silence the eager refresh fork. Save/restore around
-// the suite — never leak the mutation to subsequent test files in the same
-// bun process.
-const ORIGINAL_MODELS_PATH = Flag.OPENCODE_MODELS_PATH
-const ORIGINAL_DISABLE_FETCH = Flag.OPENCODE_DISABLE_MODELS_FETCH
+// The service deliberately skips network access for shell completion. Keep the
+// suite in that mode except in the individual tests that exercise network
+// recovery, so the scheduled refresh cannot race their assertions.
+const COMPLETION_ARG = "--get-yargs-completions"
+const originalUrl = process.env.ELLAMAKA_MODELS_URL
+const originalPath = process.env.ELLAMAKA_MODELS_PATH
+const originalFallbackPath = process.env.ELLAMAKA_MODELS_FALLBACK_PATH
+const bundled = globalThis as typeof globalThis & { ELLAMAKA_MODELS_DEV?: unknown }
+const originalSnapshot = bundled.ELLAMAKA_MODELS_DEV
+const hadCompletionArg = process.argv.includes(COMPLETION_ARG)
+const originalCachePath = Global.Path.cache
+const originalStatePath = Global.Path.state
+const testRoot = await mkdtemp(path.join(os.tmpdir(), "ellamaka-models-test-"))
+const testCachePath = path.join(testRoot, "cache")
+const testStatePath = path.join(testRoot, "state")
+
+function restoreEnv(
+  key: "ELLAMAKA_MODELS_URL" | "ELLAMAKA_MODELS_PATH" | "ELLAMAKA_MODELS_FALLBACK_PATH",
+  value: string | undefined,
+) {
+  if (value === undefined) delete process.env[key]
+  else process.env[key] = value
+}
+
 beforeAll(() => {
-  Flag.OPENCODE_MODELS_PATH = undefined
-  Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+  Global.Path.cache = testCachePath
+  Flock.setGlobal({ state: testStatePath })
+  delete process.env.ELLAMAKA_MODELS_URL
+  delete process.env.ELLAMAKA_MODELS_PATH
+  delete process.env.ELLAMAKA_MODELS_FALLBACK_PATH
+  delete bundled.ELLAMAKA_MODELS_DEV
+  if (!hadCompletionArg) process.argv.push(COMPLETION_ARG)
 })
 afterAll(() => {
-  Flag.OPENCODE_MODELS_PATH = ORIGINAL_MODELS_PATH
-  Flag.OPENCODE_DISABLE_MODELS_FETCH = ORIGINAL_DISABLE_FETCH
+  Global.Path.cache = originalCachePath
+  Flock.setGlobal({ state: originalStatePath })
+  restoreEnv("ELLAMAKA_MODELS_URL", originalUrl)
+  restoreEnv("ELLAMAKA_MODELS_PATH", originalPath)
+  restoreEnv("ELLAMAKA_MODELS_FALLBACK_PATH", originalFallbackPath)
+  if (originalSnapshot === undefined) delete bundled.ELLAMAKA_MODELS_DEV
+  else bundled.ELLAMAKA_MODELS_DEV = originalSnapshot
+  if (!hadCompletionArg) {
+    const index = process.argv.lastIndexOf(COMPLETION_ARG)
+    if (index >= 0) process.argv.splice(index, 1)
+  }
 })
 
-const cacheFile = path.join(Global.Path.cache, "models.json")
+const cacheFile = path.join(testCachePath, "models.json")
+const explicitCacheFile = path.join(testCachePath, "models-explicit-test.json")
 
 const fixture: Record<string, ModelsDev.Provider> = {
   acme: {
@@ -98,7 +131,7 @@ const buildLayer = (state: Ref.Ref<MockState>) =>
 
 const writeCache = (data: object, mtimeMs?: number) =>
   Effect.promise(async () => {
-    await mkdir(Global.Path.cache, { recursive: true })
+    await mkdir(testCachePath, { recursive: true })
     await writeFile(cacheFile, JSON.stringify(data))
     if (mtimeMs !== undefined) {
       const t = mtimeMs / 1000
@@ -106,15 +139,45 @@ const writeCache = (data: object, mtimeMs?: number) =>
     }
   })
 
+const writeCacheText = (text: string, filepath = cacheFile) =>
+  Effect.promise(async () => {
+    await mkdir(path.dirname(filepath), { recursive: true })
+    await writeFile(filepath, text)
+  })
+
+const readCacheText = (filepath = cacheFile) => Effect.promise(() => readFile(filepath, "utf8"))
+
+const enableFetch = <A, E>(effect: Effect.Effect<A, E>) =>
+  Effect.sync(() => {
+    const index = process.argv.lastIndexOf(COMPLETION_ARG)
+    if (index >= 0) process.argv.splice(index, 1)
+    return index
+  }).pipe(
+    Effect.flatMap((index) =>
+      effect.pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (index >= 0) process.argv.splice(index, 0, COMPLETION_ARG)
+          }),
+        ),
+      ),
+    ),
+  )
+
 const provided = <A, E>(state: Ref.Ref<MockState>, eff: Effect.Effect<A, E, ModelsDev.Service>) =>
   eff.pipe(Effect.provide(buildLayer(state)))
 
 beforeEach(async () => {
   await rm(cacheFile, { force: true })
+  await rm(explicitCacheFile, { force: true })
+  delete process.env.ELLAMAKA_MODELS_URL
+  delete process.env.ELLAMAKA_MODELS_PATH
+  delete process.env.ELLAMAKA_MODELS_FALLBACK_PATH
+  delete bundled.ELLAMAKA_MODELS_DEV
 })
 
 afterAll(async () => {
-  await rm(cacheFile, { force: true })
+  await rm(testRoot, { recursive: true, force: true })
 })
 
 const initialState: MockState = {
@@ -149,6 +212,160 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
+  )
+
+  it.live("get() replaces a malformed default cache with a valid network catalog", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        yield* writeCacheText('{"acme":')
+        const state = yield* Ref.make(initialState)
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        expect(yield* readCacheText()).toBe(JSON.stringify(fixture))
+        const final = yield* Ref.get(state)
+        // Layer startup also schedules a refresh once fetch is enabled, so it
+        // may race the first get(). Both calls must use the recovered catalog.
+        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+      }),
+    ),
+  )
+
+  it.live("get() replaces an empty default cache with a valid network catalog", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        yield* writeCache({})
+        const state = yield* Ref.make(initialState)
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        expect(yield* readCacheText()).toBe(JSON.stringify(fixture))
+      }),
+    ),
+  )
+
+  it.live("get() replaces a structurally invalid default cache with a valid network catalog", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        yield* writeCache({ acme: {} })
+        const state = yield* Ref.make(initialState)
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        expect(yield* readCacheText()).toBe(JSON.stringify(fixture))
+      }),
+    ),
+  )
+
+  it.live("get() preserves an invalid explicit snapshot while recovering from the network", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        process.env.ELLAMAKA_MODELS_PATH = explicitCacheFile
+        const invalid = '{"acme":'
+        yield* writeCacheText(invalid, explicitCacheFile)
+        const state = yield* Ref.make(initialState)
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        expect(yield* readCacheText(explicitCacheFile)).toBe(invalid)
+        expect(yield* readCacheText(cacheFile)).toBe(JSON.stringify(fixture))
+      }),
+    ),
+  )
+
+  it.live("get() uses a valid ELLAMAKA_MODELS_DEV snapshot without fetching", () =>
+    Effect.gen(function* () {
+      bundled.ELLAMAKA_MODELS_DEV = fixture
+      const state = yield* Ref.make(initialState)
+      const result = yield* provided(
+        state,
+        ModelsDev.Service.use((s) => s.get()),
+      )
+      expect(result).toEqual(fixture)
+      const final = yield* Ref.get(state)
+      expect(final.calls).toEqual([])
+    }),
+  )
+
+  it.live("get() ignores an empty ELLAMAKA_MODELS_DEV snapshot and fetches a valid catalog", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        bundled.ELLAMAKA_MODELS_DEV = {}
+        const state = yield* Ref.make(initialState)
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        const final = yield* Ref.get(state)
+        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+      }),
+    ),
+  )
+
+  it.live("get() falls back to the developer snapshot when a live catalog request is invalid", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        process.env.ELLAMAKA_MODELS_URL = "https://catalog.example.test"
+        process.env.ELLAMAKA_MODELS_FALLBACK_PATH = explicitCacheFile
+        const fallback = JSON.stringify(fixture)
+        yield* writeCacheText(fallback, explicitCacheFile)
+        const state = yield* Ref.make({ ...initialState, body: "{}" })
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        expect(yield* readCacheText(explicitCacheFile)).toBe(fallback)
+        const final = yield* Ref.get(state)
+        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+        expect(final.calls[0]?.url).toBe("https://catalog.example.test/api.json")
+      }),
+    ),
+  )
+
+  it.live("get() prefers a live catalog over stale cache and the developer snapshot", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        process.env.ELLAMAKA_MODELS_FALLBACK_PATH = explicitCacheFile
+        const fallback = JSON.stringify(fixture)
+        yield* writeCache(fixture)
+        yield* writeCacheText(fallback, explicitCacheFile)
+        const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture2)
+        expect(yield* readCacheText()).toBe(JSON.stringify(fixture2))
+        expect(yield* readCacheText(explicitCacheFile)).toBe(fallback)
+        const final = yield* Ref.get(state)
+        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+        expect(final.calls[0]?.url).toBe("https://models.opencode.ai/api.json")
+      }),
+    ),
+  )
+
+  it.live("refresh() never persists an invalid network catalog", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        yield* writeCache(fixture)
+        const state = yield* Ref.make({ ...initialState, body: "{}" })
+        yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.refresh(true)),
+        )
+        expect(yield* readCacheText()).toBe(JSON.stringify(fixture))
+      }),
+    ),
   )
 
   it.live("get() is single-flight under concurrent calls", () =>

@@ -106,6 +106,36 @@ export const Provider = Schema.Struct({
 
 export type Provider = Schema.Schema.Type<typeof Provider>
 
+function isRecord(input: unknown): input is Record<string, unknown> {
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+}
+
+function catalogFromUnknown(input: unknown): Record<string, Provider> | undefined {
+  if (!isRecord(input)) return
+  const entries = Object.entries(input)
+  if (entries.length === 0) return
+
+  for (const [id, provider] of entries) {
+    if (
+      !isRecord(provider) ||
+      provider.id !== id ||
+      typeof provider.name !== "string" ||
+      !Array.isArray(provider.env) ||
+      !provider.env.every((item) => typeof item === "string") ||
+      !isRecord(provider.models) ||
+      Object.keys(provider.models).length === 0 ||
+      !Object.values(provider.models).every(isRecord)
+    ) {
+      return
+    }
+  }
+
+  // The upstream catalog evolves faster than the runtime's complete Model
+  // schema. Validate the provider-record boundary without rejecting a valid
+  // new model field that this runtime can safely ignore.
+  return input as Record<string, Provider>
+}
+
 export const Event = {
   Refreshed: EventV2.define({
     type: "models-dev.refreshed",
@@ -113,7 +143,7 @@ export const Event = {
   }),
 }
 
-declare const OPENCODE_MODELS_DEV: Record<string, Provider> | undefined
+declare const ELLAMAKA_MODELS_DEV: Record<string, Provider> | undefined
 
 export interface Interface {
   readonly get: () => Effect.Effect<Record<string, Provider>>
@@ -137,20 +167,17 @@ export const layer = Layer.effect(
       ),
     )
 
-    const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
+    const source = Flag.ELLAMAKA_MODELS_URL || "https://models.opencode.ai"
     const filepath = path.join(
       Global.Path.cache,
-      source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+      source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
     )
     const ttl = Duration.minutes(5)
     const lockKey = `models-dev:${filepath}`
-
-    const fresh = Effect.fnUntraced(function* () {
-      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-      if (!stat) return false
-      const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
-      return Date.now() - mtime < Duration.toMillis(ttl)
-    })
+    const explicitPath = Flag.ELLAMAKA_MODELS_PATH
+    const fallbackPath = Flag.ELLAMAKA_MODELS_FALLBACK_PATH
+    const diskPath = explicitPath ?? filepath
+    const fetchEnabled = !process.argv.includes("--get-yargs-completions")
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
       return yield* HttpClientRequest.get(`${source}/api.json`).pipe(
@@ -161,35 +188,117 @@ export const layer = Layer.effect(
       )
     })
 
-    const loadFromDisk = fs.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).pipe(
-      Effect.catch(() => Effect.succeed(undefined)),
-      Effect.map((v) => v as Record<string, Provider> | undefined),
-    )
+    const parseCatalog = (text: string) =>
+      Effect.try({
+        try: () => catalogFromUnknown(JSON.parse(text)),
+        catch: () => undefined,
+      }).pipe(Effect.orElseSucceed(() => undefined))
+
+    const loadFromFile = Effect.fn("ModelsDev.loadFromFile")(function* (candidate: string, managed = false) {
+      // AppFileSystem.readJson delegates to JSON.parse, which can defect rather
+      // than fail. Catalog input failures must remain recoverable.
+      const text = yield* fs.readFileString(candidate).pipe(Effect.orElseSucceed(() => undefined))
+      const catalog = text === undefined ? undefined : yield* parseCatalog(text)
+      if (catalog) return catalog
+
+      // A caller-owned snapshot is strictly read-only. Only the cache under
+      // Global.Path.cache is managed by this runtime and safe to self-heal.
+      if (managed && text !== undefined) {
+        yield* fs.remove(candidate, { force: true }).pipe(Effect.ignore)
+      }
+      return undefined
+    })
+
+    const loadFromDisk = () => loadFromFile(diskPath, explicitPath === undefined)
+    const loadDefaultCache = () => loadFromFile(filepath, true)
+    const loadFallback = () =>
+      fallbackPath === undefined ? Effect.succeed(undefined) : loadFromFile(fallbackPath)
 
     const loadSnapshot = Effect.sync(() =>
-      typeof OPENCODE_MODELS_DEV === "undefined" ? undefined : OPENCODE_MODELS_DEV,
+      typeof ELLAMAKA_MODELS_DEV === "undefined" ? undefined : catalogFromUnknown(ELLAMAKA_MODELS_DEV),
     )
+
+    const fresh = Effect.fnUntraced(function* () {
+      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      if (!stat) return false
+      const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
+      if (Date.now() - mtime >= Duration.toMillis(ttl)) return false
+      return Boolean(yield* loadDefaultCache())
+    })
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
       const text = yield* fetchApi()
-      yield* fs.writeWithDirs(filepath, text)
-      return text
+      const catalog = yield* parseCatalog(text)
+      if (!catalog) return yield* Effect.fail(new Error("Invalid provider catalog response"))
+
+      const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
+      yield* fs.writeWithDirs(tempfile, text).pipe(
+        Effect.andThen(fs.rename(tempfile, filepath)),
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
+            return yield* Effect.fail(error)
+          }),
+        ),
+      )
+      yield* Effect.logInfo("Loaded provider catalog from network").pipe(
+        Effect.annotateLogs("source", source),
+        Effect.annotateLogs("providerCount", Object.keys(catalog).length),
+      )
+      return catalog
     })
 
-    const populate = Effect.gen(function* () {
-      const fromDisk = yield* loadFromDisk
-      if (fromDisk) return fromDisk
-      const snapshot = yield* loadSnapshot
-      if (snapshot) return snapshot
-      if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-      // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-      const text = yield* Effect.scoped(
+    const fetchWithLock = () =>
+      Effect.scoped(
         Effect.gen(function* () {
           yield* Flock.effect(lockKey)
           return yield* fetchAndWrite()
         }),
       )
-      return JSON.parse(text) as Record<string, Provider>
+
+    const loadLiveFallback = Effect.fn("ModelsDev.loadLiveFallback")(function* () {
+      const fromCache = yield* loadDefaultCache()
+      if (fromCache) return fromCache
+      const fallback = yield* loadFallback()
+      if (fallback) return fallback
+      return yield* loadSnapshot
+    })
+
+    const fetchLiveCatalog = Effect.fn("ModelsDev.fetchLiveCatalog")(function* () {
+      return yield* fetchWithLock().pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            const fallback = yield* loadLiveFallback()
+            if (fallback) {
+              yield* Effect.logWarning("Failed to fetch provider catalog; using local fallback").pipe(
+                Effect.annotateLogs("source", source),
+                Effect.annotateLogs("error", String(error)),
+                Effect.annotateLogs("providerCount", Object.keys(fallback).length),
+              )
+              return fallback
+            }
+            return yield* Effect.fail(error)
+          }),
+        ),
+      )
+    })
+
+    const populate = Effect.gen(function* () {
+      // The development launcher supplies a fallback snapshot explicitly. In
+      // that mode the network is authoritative: a successful request exposes
+      // new providers immediately, while a failure still has local recovery.
+      if (fallbackPath !== undefined && explicitPath === undefined) {
+        if (!fetchEnabled) return (yield* loadLiveFallback()) ?? {}
+        return yield* fetchLiveCatalog()
+      }
+
+      const fromDisk = yield* loadFromDisk()
+      if (fromDisk) return fromDisk
+      const snapshot = yield* loadSnapshot
+      if (snapshot) return snapshot
+      if (!fetchEnabled) return {}
+      // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
+      return yield* fetchWithLock()
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
@@ -210,13 +319,16 @@ export const layer = Layer.effect(
         }),
       ).pipe(
         Effect.tapCause((cause) =>
-          Effect.logError("Failed to fetch models.dev").pipe(Effect.annotateLogs("cause", cause)),
+          Effect.logError("Failed to fetch provider catalog").pipe(
+            Effect.annotateLogs("source", source),
+            Effect.annotateLogs("cause", cause),
+          ),
         ),
         Effect.ignore,
       )
     })
 
-    if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+    if (fetchEnabled) {
       // Schedule.spaced runs the effect once, then waits between completions.
       yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
     }

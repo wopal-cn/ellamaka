@@ -63,7 +63,7 @@ await Bun.build({
   external: ["jsonc-parser", "@lydell/node-pty"],
   define: {
     OPENCODE_MIGRATIONS: JSON.stringify(migrations),
-    OPENCODE_MODELS_DEV: generated.modelsData,
+    ELLAMAKA_MODELS_DEV: generated.modelsData,
     // Inline both channel and version so the sidecar matches the CLI build
     // (build.ts). Without OPENCODE_VERSION, InstallationVersion falls back to
     // the literal "local" at runtime; in non-local channels that string is

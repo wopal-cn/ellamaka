@@ -5,7 +5,7 @@ import { Schema } from "effect"
 import { TuiInfo } from "../src/cli/cmd/tui/config/tui-schema"
 
 type JsonSchema = Record<string, unknown>
-const MODEL_REF = "https://models.dev/model-schema.json#/$defs/Model"
+const MODEL_REF = "https://models.opencode.ai/model-schema.json#/$defs/Model"
 
 function generateEffect(schema: Schema.Top) {
   const document = Schema.toJsonSchemaDocument(schema)

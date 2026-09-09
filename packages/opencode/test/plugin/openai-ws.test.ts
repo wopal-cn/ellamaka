@@ -210,6 +210,54 @@ describe("plugin.openai.ws-pool", () => {
     fetch.close()
   })
 
+  test("removes HTTP fallback when its session is deleted", async () => {
+    let websocketAttempts = 0
+    await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+      connectTimeout: 100,
+      streamRetries: 0,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    expect(await first.text()).toBe("http")
+    fetch.remove("session-1")
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toBe("http")
+    expect(websocketAttempts).toBe(2)
+    expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
+  test("terminates active websocket connections when their session is deleted", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => {
+        if (connections === 1) {
+          socket.send(JSON.stringify({ type: "response.output_text.delta", delta: "started" }))
+          return
+        }
+        socket.send(JSON.stringify({ type: "response.completed", response: { id: "resp_after_remove" } }))
+      })
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    const firstText = first.text()
+    fetch.remove("session-1")
+    expect((await readTextError(firstText)).message).toContain("WebSocket closed before response.completed")
+
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await second.text()).toContain("data: [DONE]")
+    expect(connections).toBe(2)
+    fetch.close()
+  })
+
   test("prunes HTTP fallback after its idle timeout", async () => {
     let websocketAttempts = 0
     await using server = await createRejectingWebSocketServer(() => websocketAttempts++)
