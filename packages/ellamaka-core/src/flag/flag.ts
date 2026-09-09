@@ -26,7 +26,6 @@ export const Flag = {
   OPENCODE_DISABLE_TERMINAL_TITLE: truthy("OPENCODE_DISABLE_TERMINAL_TITLE"),
   OPENCODE_SHOW_TTFD: truthy("OPENCODE_SHOW_TTFD"),
   OPENCODE_DISABLE_AUTOCOMPACT: truthy("OPENCODE_DISABLE_AUTOCOMPACT"),
-  OPENCODE_DISABLE_MODELS_FETCH: truthy("OPENCODE_DISABLE_MODELS_FETCH"),
   OPENCODE_DISABLE_MOUSE: truthy("OPENCODE_DISABLE_MOUSE"),
   OPENCODE_FAKE_VCS: process.env["OPENCODE_FAKE_VCS"],
   OPENCODE_SERVER_PASSWORD: process.env["OPENCODE_SERVER_PASSWORD"],
@@ -41,8 +40,6 @@ export const Flag = {
   ),
   OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT:
     copy === undefined ? process.platform === "win32" : truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"),
-  OPENCODE_MODELS_URL: process.env["OPENCODE_MODELS_URL"],
-  OPENCODE_MODELS_PATH: process.env["OPENCODE_MODELS_PATH"],
   OPENCODE_DB: process.env["OPENCODE_DB"],
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
@@ -74,6 +71,15 @@ export const Flag = {
   },
   get WOPAL_SPACE() {
     return truthy("WOPAL_SPACE")
+  },
+  // Runtime provider catalogs are an Ellamaka-owned contract. Keep these
+  // getters dynamic so the CLI and focused tests can set their environment
+  // before a service layer is constructed.
+  get ELLAMAKA_MODELS_URL() {
+    return process.env["ELLAMAKA_MODELS_URL"]
+  },
+  get ELLAMAKA_MODELS_PATH() {
+    return process.env["ELLAMAKA_MODELS_PATH"]
   },
   // Disable switch (kill switch), default ON. `ELLAMAKA_DSH=0` disables dsh;
   // unset or any non-"0" value enables. Unified across CLI (serve/web/tui) and
