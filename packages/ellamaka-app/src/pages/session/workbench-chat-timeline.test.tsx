@@ -20,11 +20,23 @@ mock.module("./workbench-markdown-renderer", () => ({
   },
 }))
 
-mock.module("@opencode-ai/ui/icon", () => ({
+mock.module("@wopal/ui/icon", () => ({
   Icon: (props: { name: string }) => <span data-slot="chat-icon" data-icon={props.name} />,
 }))
 
-mock.module("@opencode-ai/ui/collapsible", () => ({
+// UserMessageBlock reads useDialog at setup for image previews. The timeline
+// test provides no DialogProvider, so stub the dialog context.
+mock.module("@wopal/ui/context/dialog", () => ({
+  useDialog: () => ({ show: () => undefined }),
+}))
+
+// ReasoningBlock, ContextInjectionBlock and the compaction/retry outcomes read
+// the language context at setup; the timeline test mounts user rows directly.
+mock.module("@/context/language", () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}))
+
+mock.module("@wopal/ui/collapsible", () => ({
   Collapsible: Object.assign(
     (props: { open?: boolean; onOpenChange?: (open: boolean) => void; children: JSX.Element }) => (
       <div data-component="collapsible" data-open={props.open}>
@@ -244,6 +256,126 @@ describe("WorkbenchChatTimeline", () => {
     expect(trigger?.getAttribute("aria-expanded")).toBe("false")
     expect(host.querySelector("[data-component='chat-reasoning']")).not.toBeNull()
     expect(host.querySelector("[data-component='chat-narrative']")).not.toBeNull()
+    host.remove()
+  })
+
+  test("renders synthetic parts as injection blocks outside the user bubble", () => {
+    const u1 = userMessage("u-inject")
+    const a1 = assistantMessage("a-inject", "u-inject") // completed
+    const messages: Message[] = [u1, a1]
+    const parts: Part[] = [
+      textPart("p-u", "u-inject", "prompt"),
+      { id: "p-u-inj", sessionID: "ses_1", messageID: "u-inject", type: "text", text: "<rules-context>rule body</rules-context>", synthetic: true },
+      { id: "p-a-inj", sessionID: "ses_1", messageID: "a-inject", type: "text", text: "<system-reminder>task note</system-reminder>", synthetic: true },
+      textPart("p-a", "a-inject", "answer"),
+    ]
+    withSync(messages, parts, { type: "idle" })
+
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          virtualize: false,
+        })}
+      />
+    ))
+
+    const injections = host.querySelectorAll("[data-component='chat-injection']")
+    expect(injections.length).toBe(2)
+    expect(injections[0]?.getAttribute("data-injection-tag")).toBe("rules")
+    expect(injections[1]?.getAttribute("data-injection-tag")).toBe("reminder")
+    // Injections render in the row-level left-aligned channel, never inside
+    // the user bubble.
+    const turnInjections = host.querySelectorAll("[data-slot='chat-turn-injections']")
+    expect(turnInjections.length).toBe(1)
+    expect(turnInjections[0]?.querySelector("[data-component='chat-injection']")).not.toBeNull()
+    const userBubble = host.querySelector("[data-component='chat-user-message']")
+    expect(userBubble?.querySelector("[data-component='chat-injection']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-user-text']")?.textContent).toBe("prompt")
+    const narratives = host.querySelectorAll("[data-component='chat-narrative']")
+    expect(narratives.length).toBe(1)
+    expect(host.textContent).toContain("rule body")
+    expect(host.textContent).toContain("task note")
+    host.remove()
+  })
+
+  test("renders a shell-wrapped user part without the synthetic flag as an injection outside the bubble", () => {
+    const u1 = userMessage("u-flagless")
+    const a1 = assistantMessage("a-flagless", "u-flagless")
+    const messages: Message[] = [u1, a1]
+    const parts: Part[] = [
+      textPart("p-u-real", "u-flagless", "real prompt"),
+      textPart("p-u-flagless", "u-flagless", "<system-reminder>[WOPAL TASK PROGRESS] 3 messages</system-reminder>"),
+      textPart("p-a", "a-flagless", "answer"),
+    ]
+    withSync(messages, parts, { type: "idle" })
+
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          virtualize: false,
+        })}
+      />
+    ))
+
+    expect(host.querySelector("[data-component='chat-injection']")).not.toBeNull()
+    expect(host.querySelector("[data-slot='chat-user-text']")?.textContent).toBe("real prompt")
+    // The raw shell text never leaks into the user bubble.
+    expect(host.querySelector("[data-component='chat-user-message']")?.textContent ?? "").not.toContain("system-reminder")
+    host.remove()
+  })
+
+  test("renders an injection-only user row without a bubble or empty-reply placeholder", () => {
+    const u1 = userMessage("u-notify")
+    const a1 = assistantMessage("a-notify", "u-notify")
+    const messages: Message[] = [u1, a1]
+    const parts: Part[] = [
+      { id: "p-u-notify", sessionID: "ses_1", messageID: "u-notify", type: "text", text: "<system-reminder>sandbox mode changed</system-reminder>", synthetic: true },
+      textPart("p-a", "a-notify", "answer"),
+    ]
+    withSync(messages, parts, { type: "idle" })
+
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          virtualize: false,
+        })}
+      />
+    ))
+
+    // Only the injection container renders; no user bubble, no placeholder.
+    expect(host.querySelector("[data-component='chat-injection']")).not.toBeNull()
+    expect(host.querySelector("[data-component='chat-user-message']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-user-text']")).toBeNull()
+    expect(host.textContent).not.toContain("空回复")
+    expect(host.textContent).not.toContain("（无回复）")
+    host.remove()
+  })
+
+  test("renders a flagless shell-only user row as injections only, with no bubble", () => {
+    const u1 = userMessage("u-shell-notify")
+    const a1 = assistantMessage("a-shell-notify", "u-shell-notify")
+    const messages: Message[] = [u1, a1]
+    const parts: Part[] = [
+      textPart("p-u-shell", "u-shell-notify", "<system-reminder>[WOPAL TASK IDLE]\nTask finished.\n</system-reminder>"),
+      textPart("p-a", "a-shell-notify", "answer"),
+    ]
+    withSync(messages, parts, { type: "idle" })
+
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          virtualize: false,
+        })}
+      />
+    ))
+
+    expect(host.querySelector("[data-component='chat-injection']")).not.toBeNull()
+    expect(host.querySelector("[data-component='chat-user-message']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-user-text']")).toBeNull()
     host.remove()
   })
 

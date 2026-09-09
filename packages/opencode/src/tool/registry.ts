@@ -25,17 +25,17 @@ import { WebSearchTool } from "./websearch"
 import { RepoCloneTool } from "./repo_clone"
 import { RepoOverviewTool } from "./repo_overview"
 import { RepositoryCache } from "@/reference/repository-cache"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
-import { Glob } from "@opencode-ai/core/util/glob"
+import { Glob } from "@wopal/ellamaka-core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Ripgrep } from "../file/ripgrep"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
@@ -44,7 +44,7 @@ import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Git } from "@/git"
@@ -134,67 +134,71 @@ export const layer: Layer.Layer<
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
 
+    // Shared projection path for plugin tool definitions (static `Hooks.tool`
+    // at instance init AND dynamic `tool.provider` per request). Directory and
+    // worktree are supplied by the caller so the dynamic path can read them
+    // from InstanceState at build time.
+    function fromPlugin(id: string, def: ToolDefinition, opts: { directory: string; worktree: string }): Tool.Def {
+      // Plugin tools still expose Zod args publicly; keep that compatibility
+      // boxed at the registry boundary and give the LLM the original JSON Schema.
+      // Normalize missing args to `{}` once — pre-1.14.49 the code was
+      // `z.object(def.args)` and Zod silently tolerated undefined (#27451, #27630).
+      const args = def.args ?? {}
+      const entries = Object.entries(args)
+      const allZod = entries.every((entry) => isZodType(entry[1]))
+      const zodParams = allZod ? z.object(args) : undefined
+      const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
+      const parameters = zodParams
+        ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
+        : Schema.Unknown
+      return {
+        id,
+        parameters,
+        jsonSchema,
+        description: def.description,
+        execute: (args, toolCtx) =>
+          Effect.gen(function* () {
+            // Bridge the host's Effect-based `ask` into a Promise-returning
+            // function for the plugin to make sure context persists
+            const bridge = yield* EffectBridge.make()
+            const pluginCtx: PluginToolContext = {
+              ...toolCtx,
+              ask: (req) => bridge.promise(toolCtx.ask(req)),
+              directory: opts.directory,
+              worktree: opts.worktree,
+            }
+            const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+            const output = typeof result === "string" ? result : result.output
+            const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
+            const attachments = typeof result === "string" ? undefined : result.attachments
+            const info = yield* agent.get(toolCtx.agent)
+            const out = yield* truncate.output(output, {}, info)
+            return {
+              title: typeof result === "string" ? "" : (result.title ?? ""),
+              output: out.truncated ? out.content : output,
+              attachments,
+              metadata: {
+                ...metadata,
+                truncated: out.truncated,
+                ...(out.truncated && { outputPath: out.outputPath }),
+              },
+            }
+          }).pipe(
+            Effect.withSpan("Tool.execute", {
+              attributes: {
+                "tool.name": id,
+                "session.id": toolCtx.sessionID,
+                "message.id": toolCtx.messageID,
+                ...(toolCtx.callID ? { "tool.call_id": toolCtx.callID } : {}),
+              },
+            }),
+          ),
+      }
+    }
+
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
         const custom: Tool.Def[] = []
-
-        function fromPlugin(id: string, def: ToolDefinition): Tool.Def {
-          // Plugin tools still expose Zod args publicly; keep that compatibility
-          // boxed at the registry boundary and give the LLM the original JSON Schema.
-          // Normalize missing args to `{}` once — pre-1.14.49 the code was
-          // `z.object(def.args)` and Zod silently tolerated undefined (#27451, #27630).
-          const args = def.args ?? {}
-          const entries = Object.entries(args)
-          const allZod = entries.every((entry) => isZodType(entry[1]))
-          const zodParams = allZod ? z.object(args) : undefined
-          const jsonSchema = zodParams ? zodJsonSchema(zodParams) : legacyJsonSchema(entries)
-          const parameters = zodParams
-            ? Schema.declare<unknown>((u): u is unknown => zodParams.safeParse(u).success)
-            : Schema.Unknown
-          return {
-            id,
-            parameters,
-            jsonSchema,
-            description: def.description,
-            execute: (args, toolCtx) =>
-              Effect.gen(function* () {
-                // Bridge the host's Effect-based `ask` into a Promise-returning
-                // function for the plugin to make sure context persists
-                const bridge = yield* EffectBridge.make()
-                const pluginCtx: PluginToolContext = {
-                  ...toolCtx,
-                  ask: (req) => bridge.promise(toolCtx.ask(req)),
-                  directory: ctx.directory,
-                  worktree: ctx.worktree,
-                }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
-                const output = typeof result === "string" ? result : result.output
-                const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
-                const attachments = typeof result === "string" ? undefined : result.attachments
-                const info = yield* agent.get(toolCtx.agent)
-                const out = yield* truncate.output(output, {}, info)
-                return {
-                  title: typeof result === "string" ? "" : (result.title ?? ""),
-                  output: out.truncated ? out.content : output,
-                  attachments,
-                  metadata: {
-                    ...metadata,
-                    truncated: out.truncated,
-                    ...(out.truncated && { outputPath: out.outputPath }),
-                  },
-                }
-              }).pipe(
-                Effect.withSpan("Tool.execute", {
-                  attributes: {
-                    "tool.name": id,
-                    "session.id": toolCtx.sessionID,
-                    "message.id": toolCtx.messageID,
-                    ...(toolCtx.callID ? { "tool.call_id": toolCtx.callID } : {}),
-                  },
-                }),
-              ),
-          }
-        }
 
         const dirs = yield* config.directories()
         const matches = dirs.flatMap((dir) =>
@@ -208,14 +212,14 @@ export const layer: Layer.Layer<
           const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
           for (const [id, def] of Object.entries(mod)) {
             if (!isPluginTool(def)) continue
-            custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+            custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def, ctx))
           }
         }
 
         const plugins = yield* plugin.list()
         for (const p of plugins) {
           for (const [id, def] of Object.entries(p.tool ?? {})) {
-            custom.push(fromPlugin(id, def))
+            custom.push(fromPlugin(id, def, ctx))
           }
         }
 
@@ -314,7 +318,40 @@ export const layer: Layer.Layer<
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
-      const filtered = (yield* all()).filter((tool) => {
+      // Static base (builtin + custom) is frozen at instance init. Dynamic
+      // `tool.provider` hooks are consulted on every request so plugins (e.g.
+      // dsh mounts/unmounts) can change the tool set in real time. Dynamic
+      // definitions win on id collision; new ids are appended in stable order.
+      const ctx = yield* InstanceState.context
+      // Error boundary: a throwing `tool.provider` hook must never break the
+      // model request. `Plugin.trigger` runs hooks via `Effect.promise`, so a
+      // throw surfaces as a defect that `Effect.catch` cannot recover; catch
+      // the defect and fall back to the static tool set.
+      const provided = yield* plugin
+        .trigger("tool.provider", { providerID: input.providerID, modelID: String(input.modelID) }, { tools: {} })
+        .pipe(
+          Effect.catchDefect((defect) => {
+            log.warn("tool.provider failed; falling back to static tool set", { error: defect })
+            return Effect.succeed({ tools: {} })
+          }),
+        )
+      const dynamic = new Map<string, Tool.Def>()
+      for (const [id, def] of Object.entries(provided.tools)) {
+        if (!isPluginTool(def)) continue
+        dynamic.set(id, fromPlugin(id, def, { directory: ctx.directory, worktree: ctx.worktree }))
+      }
+      // Static base keeps its position; dynamic same-name overrides keep the
+      // original position; brand-new ids are appended in stable sorted order.
+      const base = yield* all()
+      const merged = base.map((tool) => dynamic.get(tool.id) ?? tool)
+      const seen = new Set(base.map((tool) => tool.id))
+      const additions = [...dynamic.entries()]
+        .filter(([id]) => !seen.has(id))
+        .map(([, tool]) => tool)
+        .sort((a, b) => a.id.localeCompare(b.id))
+      merged.push(...additions)
+
+      const filtered = merged.filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }

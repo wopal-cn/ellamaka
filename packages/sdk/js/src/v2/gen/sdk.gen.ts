@@ -112,6 +112,8 @@ import type {
   PartUpdateResponses,
   PathGetErrors,
   PathGetResponses,
+  PermissionClearEscalationErrors,
+  PermissionClearEscalationResponses,
   PermissionListErrors,
   PermissionListResponses,
   PermissionReplyErrors,
@@ -282,6 +284,8 @@ import type {
   WopalSpaceSpacesResponses,
   WorkbenchCreateSessionErrors,
   WorkbenchCreateSessionResponses,
+  WorkbenchDshUrlErrors,
+  WorkbenchDshUrlResponses,
   WorkbenchLocationsErrors,
   WorkbenchLocationsResponses,
   WorkbenchSessionGroupsErrors,
@@ -687,6 +691,18 @@ export class Workbench extends HeyApiClient {
       WorkbenchSessionGroupsErrors,
       ThrowOnError
     >({ url: "/workbench/session-groups", ...options })
+  }
+
+  /**
+   * Resolve the authenticated DSH iframe entry
+   *
+   * Returns the launch-token iframe URL for the mounted dsh web engine, or url: undefined when the engine is disabled or not yet mounted.
+   */
+  public dshUrl<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<WorkbenchDshUrlResponses, WorkbenchDshUrlErrors, ThrowOnError>({
+      url: "/workbench/dsh-url",
+      ...options,
+    })
   }
 
   /**
@@ -3078,6 +3094,42 @@ export class Permission extends HeyApiClient {
       },
     })
   }
+
+  /**
+   * Clear session escalation grants
+   *
+   * Drop every sandbox-escalation 'always' grant the session has accumulated. Session-scoped by design; other permission types are untouched.
+   */
+  public clearEscalation<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      PermissionClearEscalationResponses,
+      PermissionClearEscalationErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/permissions/escalation",
+      ...options,
+      ...params,
+    })
+  }
 }
 
 export class Oauth extends HeyApiClient {
@@ -3639,6 +3691,7 @@ export class Session2 extends HeyApiClient {
       format?: OutputFormat
       system?: string
       variant?: string
+      sandboxMode?: "read-only" | "workspace-write" | "full-access"
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -3659,6 +3712,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "format" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "sandboxMode" },
             { in: "body", key: "parts" },
           ],
         },
@@ -3992,6 +4046,7 @@ export class Session2 extends HeyApiClient {
       format?: OutputFormat
       system?: string
       variant?: string
+      sandboxMode?: "read-only" | "workspace-write" | "full-access"
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -4012,6 +4067,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "format" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "sandboxMode" },
             { in: "body", key: "parts" },
           ],
         },

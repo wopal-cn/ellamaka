@@ -1,4 +1,4 @@
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@wopal/ui/toast"
 
 export const WORKBENCH_ERROR_EVENT = "ellamaka:workbench-error"
 

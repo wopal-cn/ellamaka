@@ -2,33 +2,12 @@ import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
 import { register } from "node:module"
+import { existsSync } from "node:fs"
+import { join } from "node:path"
+import { homedir } from "node:os"
 import { listenThenClearCredentials } from "./sidecar-credentials"
 
-if (typeof register === "function") {
-  const loaderCode = `
-import { existsSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-
-export async function resolve(specifier, context, nextResolve) {
-  if (specifier.endsWith(".js") && (specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("file://"))) {
-    const parentURL = context.parentURL;
-    if (parentURL && (parentURL.includes("/plugins/") || parentURL.includes("/skills/"))) {
-      let candidateURL = specifier.startsWith("file://") ? specifier : new URL(specifier, parentURL).href;
-      const candidatePath = fileURLToPath(candidateURL);
-      if (!existsSync(candidatePath)) {
-        const tsPath = candidatePath.slice(0, -3) + ".ts";
-        if (existsSync(tsPath)) {
-          // Pass the .ts URL to nextResolve so Node.js native --experimental-strip-types applies correctly!
-          return nextResolve(pathToFileURL(tsPath).href, context);
-        }
-      }
-    }
-  }
-  return nextResolve(specifier, context);
-}
-`;
-  register(`data:text/javascript;base64,${Buffer.from(loaderCode).toString("base64")}`, import.meta.url)
-}
+register(new URL("./source-ts-loader.js", import.meta.url), import.meta.url)
 
 type NodeHttpWithEnvProxy = typeof http & {
   setGlobalProxyFromEnv: () => void
@@ -45,6 +24,10 @@ type StartCommand = {
   port: number
   password: string
   needsMigration: boolean
+  /** The wopal home the dsh runtime manager resolves closures under. */
+  wopalHome?: string
+  /** Path to the dedicated dsh-plugins log file. */
+  logFile?: string
 }
 
 type StopCommand = { type: "stop" }
@@ -63,11 +46,54 @@ type ParentPort = {
 }
 
 type Listener = {
+  port: number
   stop(close?: boolean): void | Promise<void>
+  mountNodeRoute(mount: {
+    prefix: string
+    request(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): void
+    upgrade?(req: import("node:http").IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): void
+  }): () => void
 }
 
 const parentPort = getParentPort()
 let listener: Listener | undefined
+let dshHost:
+  | {
+      dispose(): Promise<void>
+      ctx?: unknown
+      includeEntry?: { id: string; update(options: unknown): Promise<void> }
+      stackContext?: unknown
+      pluginActivation?: { bind(replay: () => Promise<{ ok: true } | { ok: false; error: string }>): void }
+    }
+  | undefined
+let dshToolsHost:
+  | {
+      dispose(): Promise<void>
+      ctx?: unknown
+      includeEntry?: { id: string; update(options: unknown): Promise<void> }
+      stackContext?: unknown
+    }
+  | undefined
+let dshPluginService:
+  | {
+      stop(): Promise<void>
+      replay(): Promise<{ ok: true } | { ok: false; error: string }>
+    }
+  | undefined
+
+/**
+ * The dsh runtime initialised once per launch (W-02). The manager's
+ * per-process in-flight cache alone is not enough: two sequential manager
+ * calls can each start a fresh run when the first FAILED (in-flight is
+ * removed on settle), so reusing the first run's outcome here guarantees the
+ * sidecar initialises the dsh runtime exactly once and both the web and tool
+ * mounts share the same status/anchor/runtime.
+ */
+let dshLaunchState: {
+  status: import("virtual:opencode-server").DshRuntimeStatus
+  anchor?: import("virtual:opencode-server").DshInstallAnchor
+  runtime?: import("virtual:opencode-server").DshRuntimeApi
+} | undefined
 
 parentPort.on("message", (event) => {
   const command = parseCommand(event.data)
@@ -131,6 +157,20 @@ async function start(command: StartCommand) {
         cors: ["oc://renderer"],
       }),
     )
+    // Optional dsh engine (single-process, DESIGN-dsh-poc §2.1/§3.4). The
+    // unified Runtime Manager (consumed via `virtual:opencode-server`, which
+    // the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
+    // (`=0` → disabled with zero file access) and materialises the closure on
+    // demand; `disabled`/`degraded` never block the sidecar — the server runs
+    // untouched. The web VirtualWebServer mounts onto the Ellamaka listener
+    // under /dsh; the tool container (ellamaka-tools profile) feeds the
+    // dsh-adapter so Workbench sessions can adopt container tools. A single
+    // initialisation per launch is shared by both mounts (W-02); each mount is
+    // wrapped in a degrade boundary so a broken closure never exits the
+    // sidecar (B-06).
+    await mountDshIfPresent(command)
+    await mountDshToolsIfPresent(command)
+    await startDshPluginWatcher(command)
     parentPort.postMessage({ type: "ready" })
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
@@ -138,8 +178,252 @@ async function start(command: StartCommand) {
   }
 }
 
+/** Resolve the wopal home and dsh-plugins log file for this launch. */
+function dshLaunch(command: StartCommand) {
+  const wopalHome = command.wopalHome ?? process.env.WOPAL_HOME ?? join(homedir(), ".wopal")
+  const logFile = command.logFile ?? join(wopalHome, "logs", "dsh-plugins.log")
+  return { wopalHome, logFile, home: join(wopalHome, "dsh") }
+}
+
+/**
+ * Resolve the launch command for the dshmarket install worker (A3
+ * desktopPnpm): the executable plus prefix args that reach the ellamaka CLI
+ * entry, so the worker spawns `<command> dsh plugin --profile web ...` and
+ * installs run through the ellamaka Bun installer. Without it the market
+ * probes no `desktopProfiles` service and falls back to spawning the
+ * OFFICIAL `dsh` CLI — whose installer is pnpm — and any install then fails
+ * against private `@wopal/*` profile dependencies while pnpm quarantines
+ * every previously installed plugin into `node_modules/.ignored/`.
+ *
+ * `process.execPath` is unusable here: under `utilityProcess.fork` it
+ * resolves to Electron's helper executable, not a CLI. Resolution order:
+ * 1. `ELLAMAKA_DSH_INSTALL_COMMAND` — an authoritative whitespace-separated
+ *    command string. dev.sh sets `bun <root>/packages/opencode/src/index.ts`
+ *    so installs work without building the engine binary. The executable may
+ *    be a PATH command such as `bun`, so this branch intentionally does not
+ *    use existsSync: spawn resolves it using the sidecar PATH. An explicit
+ *    invalid value must fail visibly instead of silently falling through to
+ *    an older installed engine binary with a different CLI surface.
+ * 2. `<wopalHome>/bin/ellamaka` — the engine binary the engine installer
+ *    lays down under the WOPAL_HOME bin directory (resolveEngineBinaryPath
+ *    in wopal-cli). `wopalHome` comes from the start command / sidecar env
+ *    (the same value dshLaunch resolves), NOT from `~` directly — packaged
+ *    desktop users with a custom WOPAL_HOME must resolve against their own
+ *    home, and the env may be absent in the utility process.
+ * Returns undefined when neither yields a usable command; the web mount
+ * then logs `dsh.desktop.web.no-install-worker` and the market keeps its
+ * CLI-spawn fallback (install attempts surface the mismatch explicitly).
+ */
+export function resolveEllamakaInstallCommand(wopalHomeOverride?: string): string[] | undefined {
+  const override = process.env.ELLAMAKA_DSH_INSTALL_COMMAND
+  if (override && override.trim().length > 0) {
+    return override.trim().split(/\s+/)
+  }
+  const wopalHome = wopalHomeOverride ?? process.env.WOPAL_HOME ?? join(homedir(), ".wopal")
+  const engine = join(wopalHome, "bin", process.platform === "win32" ? "ellamaka.exe" : "ellamaka")
+  if (existsSync(engine)) return [engine]
+  return undefined
+}
+
+/**
+ * Mount the dsh web engine via the unified Runtime Manager.
+ *
+ * Initialises the dsh runtime exactly once per launch (W-02) and reuses the
+ * outcome for both the web and tool mounts. Only on `ready` does it resolve
+ * the install anchor, load the closure runtime and mount the VirtualWebServer
+ * onto the Ellamaka listener under `/dsh`. `disabled`/`degraded` return
+ * without mounting (no warn: the manager already logged the structured
+ * diagnosis). A broken closure degrades instead of crashing the sidecar
+ * (B-06).
+ */
+async function mountDshIfPresent(command: StartCommand): Promise<void> {
+  const { wopalHome, logFile, home } = dshLaunch(command)
+  const { bootDshWeb, setDshUrlGetter, Log } = await import("virtual:opencode-server")
+  const sidecarLog = Log.create({ service: "dsh-desktop" })
+  try {
+    sidecarLog.info("dsh.desktop.web.start", { home, logFile })
+    const launch = await initDshLaunch(command)
+    if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
+      sidecarLog.warn("dsh.desktop.web.skip", { status: launch.status })
+      return
+    }
+    sidecarLog.info("dsh.desktop.web.boot", { anchor: launch.anchor.path })
+    const runtime = launch.runtime
+    const ellamakaCommand = resolveEllamakaInstallCommand(wopalHome)
+    if (!ellamakaCommand) {
+      sidecarLog.warn("dsh.desktop.web.no-install-worker", {
+        reason: "no ELLAMAKA_DSH_INSTALL_COMMAND and no engine binary under WOPAL_HOME/bin",
+      })
+    }
+    const host = await bootDshWeb({
+      home,
+      port: listener?.port ?? 0,
+      installAnchor: launch.anchor.path,
+      logFile,
+      runtime,
+      ellamakaCommand,
+    })
+    // Mount the VirtualWebServer under /dsh on the Ellamaka listener.
+    const unmount = listener?.mountNodeRoute({
+      prefix: host.mountPath,
+      request: (req, res) => host.webServer.request(req, res),
+      upgrade: (req, socket, head) => host.webServer.upgrade(req, socket, head),
+    })
+    dshHost = {
+      ctx: host.ctx,
+      includeEntry: host.includeEntry,
+      stackContext: host.stackContext,
+      pluginActivation: host.pluginActivation,
+      dispose: async () => {
+        setDshUrlGetter(() => undefined)
+        unmount?.()
+        await host.dispose()
+      },
+    }
+    // rc.1 browser-auth: publish the launch-token entry on the same
+    // process-singleton holder the CLI mount uses, so the `/workbench/dsh-url`
+    // endpoint answers with it and the Workbench iframe enters through the
+    // authenticated flow instead of the unauthenticated `/dsh/` fallback.
+    setDshUrlGetter(() => {
+      try {
+        return new URL(host.authenticatedPath, `http://${command.hostname}:${listener?.port ?? command.port}`).toString()
+      } catch {
+        return undefined
+      }
+    })
+    sidecarLog.info("dsh.desktop.web.mounted", { mountPath: host.mountPath })
+  } catch (error) {
+    // A broken closure must never exit the sidecar (B-06).
+    sidecarLog.error("dsh.desktop.web.failed", { error: error instanceof Error ? error.stack ?? error.message : String(error) })
+  }
+}
+
+/**
+ * Mount the dsh tool container (ellamaka-tools profile) via the unified
+ * Runtime Manager, and expose it via `globalThis.__ellamakaDshContainer` so
+ * the dsh-adapter plugin can project container tools into ellamaka's
+ * ToolRegistry. Same manager call as the web engine (single-flight, and this
+ * launch's shared init result), only mounting on `ready`. `disabled`/`degraded`
+ * skip silently; the adapter degrades to no projected tools and ellamaka
+ * builtins keep serving.
+ */
+async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
+  const { logFile, home } = dshLaunch(command)
+  const { bootDshTools, Log } = await import("virtual:opencode-server")
+  const sidecarLog = Log.create({ service: "dsh-desktop" })
+  try {
+    const launch = await initDshLaunch(command)
+    if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
+      sidecarLog.warn("dsh.desktop.tools.skip", { status: launch.status })
+      return
+    }
+    const runtime = launch.runtime
+    sidecarLog.info("dsh.desktop.tools.boot", { anchor: launch.anchor.path })
+    const host = await bootDshTools({
+      home,
+      port: 0,
+      installAnchor: launch.anchor.path,
+      logFile,
+      runtime,
+    })
+    dshToolsHost = {
+      ctx: host.ctx,
+      includeEntry: host.includeEntry,
+      stackContext: host.stackContext,
+      dispose: () => host.dispose(),
+    }
+    ;(globalThis as Record<string, unknown>).__ellamakaDshContainer = host.ctx
+    sidecarLog.info("dsh.desktop.tools.mounted")
+  } catch (error) {
+    // A broken closure must never exit the sidecar (B-06).
+    sidecarLog.error("dsh.desktop.tools.failed", { error: error instanceof Error ? error.stack ?? error.message : String(error) })
+  }
+}
+
+/**
+ * Initialise the dsh runtime exactly once per launch and cache the outcome
+ * (W-02). The manager's per-process in-flight cache covers concurrent calls in
+ * one process, but after a FAILED run the in-flight entry is removed, so two
+ * sequential manager calls from the web + tool mounts would each re-run the
+ * state machine. Caching here makes the web and tool mounts share one status /
+ * anchor / runtime.
+ */
+async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof dshLaunchState>> {
+  if (dshLaunchState) return dshLaunchState
+  const { wopalHome, logFile } = dshLaunch(command)
+  const { DEFAULT_DSH_RUNTIME_MANIFEST, initializeDshRuntime, resolveInstallAnchor, createDshRuntimeApi, setDshStatus, Log } =
+    await import("virtual:opencode-server")
+  const sidecarLog = Log.create({ service: "dsh-desktop" })
+  const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
+  sidecarLog.info("dsh.desktop.init.start", { wopalHome, logFile })
+  const status = await initializeDshRuntime({ wopalHome, logFile, entry: "tui", manifest })
+  setDshStatus(status)
+  sidecarLog.info("dsh.desktop.init.status", { status })
+  if (status !== "ready") {
+    dshLaunchState = { status }
+    return dshLaunchState
+  }
+  const anchor = resolveInstallAnchor(wopalHome, manifest)
+  const runtime = createDshRuntimeApi(anchor.path)
+  sidecarLog.info("dsh.desktop.init.ready", { anchor: anchor.path, genId: anchor.genId })
+  dshLaunchState = { status, anchor, runtime }
+  return dshLaunchState
+}
+
+/**
+ * Start the Plugin Runtime Service (D-02, rook B-07): watch the plugin store
+ * and hot-replay include patches into BOTH running containers, so dsh plugin
+ * add/remove/enable/disable executed while the Desktop app runs take effect
+ * without a restart. Only mounts when both containers are up; a failed start
+ * degrades without crashing the sidecar (B-06).
+ */
+async function startDshPluginWatcher(command: StartCommand): Promise<void> {
+  if (!dshHost?.includeEntry || !dshToolsHost?.includeEntry) {
+    const { Log } = await import("virtual:opencode-server")
+    Log.create({ service: "dsh-desktop" }).warn("dsh.desktop.watcher.skip", {
+      reason: "one or both containers missing",
+    })
+    return
+  }
+  const { home } = dshLaunch(command)
+  try {
+    const { startDshPluginService, Log } = await import("virtual:opencode-server")
+    const sidecarLog = Log.create({ service: "dsh-desktop" })
+    dshPluginService = startDshPluginService({
+      home,
+      containers: [
+        { profile: "web", ctx: dshHost.ctx, includeEntry: dshHost.includeEntry, stackContext: dshHost.stackContext },
+        {
+          profile: "ellamaka-tools",
+          ctx: dshToolsHost.ctx,
+          includeEntry: dshToolsHost.includeEntry,
+          stackContext: dshToolsHost.stackContext,
+        },
+      ],
+    })
+    dshHost.pluginActivation?.bind(() => dshPluginService!.replay())
+    sidecarLog.info("dsh.desktop.watcher.started")
+  } catch (error) {
+    // A failed watcher must never exit the sidecar (B-06); installs simply
+    // apply at next launch.
+    const { Log } = await import("virtual:opencode-server")
+    Log.create({ service: "dsh-desktop" }).error("dsh.desktop.watcher.failed", {
+      error: error instanceof Error ? error.stack ?? error.message : String(error),
+    })
+  }
+}
+
 async function stop() {
   try {
+    delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+    // Stop the store watcher FIRST so it cannot replay into containers that
+    // are mid-dispose (rook B-07).
+    await dshPluginService?.stop()
+    dshPluginService = undefined
+    await dshToolsHost?.dispose()
+    dshToolsHost = undefined
+    await dshHost?.dispose()
+    dshHost = undefined
     await listener?.stop()
   } finally {
     listener = undefined
@@ -213,6 +497,8 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
     port: command.port,
     password: command.password,
     needsMigration: command.needsMigration,
+    wopalHome: typeof command.wopalHome === "string" ? command.wopalHome : undefined,
+    logFile: typeof command.logFile === "string" ? command.logFile : undefined,
   }
 }
 

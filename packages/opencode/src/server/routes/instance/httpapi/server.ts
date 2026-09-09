@@ -9,14 +9,14 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
 import { Bus } from "@/bus"
 import { Config } from "@/config/config"
 import { Command } from "@/command"
-import * as Observability from "@opencode-ai/core/effect/observability"
+import * as Observability from "@wopal/ellamaka-core/effect/observability"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
 import { Ripgrep } from "@/file/ripgrep"
@@ -30,7 +30,7 @@ import { InstanceLayer } from "@/project/instance-layer"
 import { Plugin } from "@/plugin"
 import { Project } from "@/project/project"
 import { ProviderAuth } from "@/provider/auth"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { ModelsDev } from "@wopal/ellamaka-core/models-dev"
 import { Provider } from "@/provider/provider"
 import { Pty } from "@/pty"
 import { PtyTicket } from "@/pty/ticket"
@@ -92,10 +92,11 @@ import { CliContract } from "@/wopal/cli-contract"
 import { SessionProvisioner } from "@/workbench/session-provisioner"
 import { SessionProjection } from "@/workbench/session-projection"
 import { SessionDirectoryHealth } from "@/workbench/session-directory-health"
+import { WorkbenchDshUrl, layer as workbenchDshUrlLayer } from "@/workbench/dsh-url"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import { memoMap } from "@wopal/ellamaka-core/effect/memo-map"
 import { compressionLayer } from "./middleware/compression"
 import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
@@ -131,6 +132,7 @@ const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide(SessionProvisioner.defaultLayer),
   Layer.provide(SessionProjection.defaultLayer),
   Layer.provide(SessionDirectoryHealth.defaultLayer),
+  Layer.provide(workbenchDshUrlLayer),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
 )

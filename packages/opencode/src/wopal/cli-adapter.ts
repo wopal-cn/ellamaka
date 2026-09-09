@@ -2,7 +2,7 @@ import { Context, Effect, Layer, Schema, Stream } from "effect"
 import { Value } from "@sinclair/typebox/value"
 import type { TSchema } from "@sinclair/typebox"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import {
   CliEnvelope,
   CapabilityContractError,

@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@wopal/ellamaka-core/util/encode"
 
 /**
  * Pure helpers for the Workbench file inspector, kept in a standalone module so
@@ -116,7 +116,7 @@ export function clampInspectorWidth(width: number, viewportWidth: number): numbe
 
 /**
  * Local URL-safe base64 (RFC 4648 §5) that does not depend on
- * `@opencode-ai/core/util/encode`. Test suites elsewhere mock that module
+ * `@wopal/ellamaka-core/util/encode`. Test suites elsewhere mock that module
  * globally with a pass-through `base64Encode`, and Bun's `mock.module` leaks
  * across test files in a full-suite run — a selector-safe key must never
  * regress to the raw path under such a mock.

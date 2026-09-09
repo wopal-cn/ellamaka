@@ -1,6 +1,6 @@
 import { Component, For, Show } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Icon } from "@wopal/ui/icon"
+import { Tooltip } from "@wopal/ui/tooltip"
 import type { ImageAttachmentPart } from "@/context/prompt"
 
 type PromptImageAttachmentsProps = {

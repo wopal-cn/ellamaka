@@ -2,8 +2,9 @@ import { Effect } from "effect"
 import { Server } from "../../server/server"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { BINARY_NAME } from "../../../../ellamaka/branding"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+import { mountDshEngine } from "./dsh-mount"
 
 export const ServeCommand = effectCmd({
   command: "serve",
@@ -20,6 +21,18 @@ export const ServeCommand = effectCmd({
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`${BINARY_NAME} server listening on http://${server.hostname}:${server.port}`)
 
-    yield* Effect.never
+    // Optional dsh engine (single-process, dual-container, DESIGN-dsh-poc
+    // §2.1/§2.2). The unified Runtime Manager (in dsh-mount.ts, shared with the
+    // `web` command) gates on `ELLAMAKA_DSH` itself — `=0` → disabled with zero
+    // file access — and `disabled`/`degraded` never block the server. The
+    // dynamic import keeps the dsh closure out of the desktop sidecar bundle —
+    // only ELLAMAKA_DSH-enabled CLI runs load it.
+    {
+      const { mountDshEngine: engine } = yield* Effect.promise(() => import("./dsh-mount"))
+      const handle = yield* Effect.promise(() => engine(server))
+      yield* Effect.never.pipe(
+        Effect.ensuring(Effect.promise(() => handle?.dispose() ?? Promise.resolve())),
+      )
+    }
   }),
 })

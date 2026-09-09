@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { ToolFailure } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
+import { ToolFailure } from "@wopal/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@wopal/llm/route"
 import { jsonSchema, tool, type ModelMessage, type Tool } from "ai"
 import { Effect, Layer, Stream } from "effect"
 import { LLMNative } from "@/session/llm/native-request"

@@ -767,7 +767,7 @@ export function createWorkbenchActions(input: {
 // one Workbench provider tree. A module singleton leaks those maps across
 // remounts, server changes, and multiple Workbench instances.
 
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@wopal/ui/context"
 import { useWorkbenchState } from "./view-store"
 import { useSessionStore, useSessionProjectionWriter } from "./session-store"
 import { useServerSDK } from "@/context/server-sdk"

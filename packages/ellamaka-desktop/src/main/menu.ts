@@ -6,7 +6,7 @@ import {
   type DesktopMenuEntry,
   type DesktopMenuPlatform,
   type DesktopMenuRole,
-} from "@opencode-ai/ellamaka-app/desktop-menu"
+} from "@wopal/ellamaka-app/desktop-menu"
 
 import { UPDATER_ENABLED } from "./constants"
 import { runDesktopMenuAction } from "./desktop-menu-actions"

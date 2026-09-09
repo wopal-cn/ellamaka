@@ -31,6 +31,11 @@ export type SidecarListener = {
   setLogLevel(level: SidecarLogLevel): void
 }
 
+export type SpawnedServer = {
+  listener: SidecarListener
+  health: { wait: Promise<void> }
+}
+
 const SIDECAR_SERVICE_NAME = "ellamaka server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
 const SIDECAR_STOP_TIMEOUT = 6_000
@@ -89,7 +94,7 @@ export async function spawnLocalServer(
     env: createSidecarEnv(password),
     serviceName: SIDECAR_SERVICE_NAME,
     stdio: "pipe",
-    execArgv: ["--experimental-strip-types"],
+    execArgv: ["--experimental-strip-types", "--expose-internals"],
   })
   let exited = false
   const exit = defer<number>()
@@ -164,6 +169,12 @@ export async function spawnLocalServer(
       port,
       password,
       needsMigration: options.needsMigration,
+      // Pass the wopal home and dsh-plugins log path explicitly so the sidecar
+      // drives the unified DSH Runtime Manager from the same WOPAL_HOME the
+      // Electron main process resolved (probe + shell-merge in index.ts), not
+      // from a possibly-stale child env.
+      wopalHome: process.env.WOPAL_HOME,
+      logFile: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs", "dsh-plugins.log") : undefined,
     })
   }).catch((error) => {
     if (!exited) child.kill()
@@ -263,6 +274,12 @@ export function createSidecarEnv(password: string): Record<string, string> {
     OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+    // Official rc.1 packages resolve their harness home through $DSH_HOME
+    // directly (e.g. dsh-agent-presets' user preset root), bypassing every
+    // ctx/config seam the integration owns. Point it at the official-layout
+    // home so those resolutions land inside $WOPAL_HOME/dsh/home (A1 layout
+    // alignment) and never touch ~/.dsh.
+    DSH_HOME: join(process.env.WOPAL_HOME ?? "", "dsh", "home"),
   }, getCapturedSidecarExperimentalConfig())
 }
 

@@ -1,5 +1,5 @@
-import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useFilteredList } from "@wopal/ui/hooks"
+import { useSpring } from "@wopal/ui/motion-spring"
 import { shouldSkipRestoreFocus } from "@/components/prompt-input/focus-guard"
 import {
   createEffect,
@@ -35,14 +35,14 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
-import { Button } from "@opencode-ai/ui/button"
-import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Icon, type IconProps } from "@opencode-ai/ui/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Select } from "@opencode-ai/ui/select"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@wopal/ui/button"
+import { DockShellForm, DockTray } from "@wopal/ui/dock-surface"
+import { Icon, type IconProps } from "@wopal/ui/icon"
+import { ProviderIcon } from "@wopal/ui/provider-icon"
+import { Tooltip, TooltipKeybind } from "@wopal/ui/tooltip"
+import { IconButton } from "@wopal/ui/icon-button"
+import { Select } from "@wopal/ui/select"
+import { useDialog } from "@wopal/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
@@ -73,12 +73,24 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { designPromptPlaceholder, promptPlaceholder } from "./prompt-input/placeholder"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { ImagePreview } from "@wopal/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/server-sync"
+import { useCheckServerHealth } from "@/utils/server-health"
 import { pathKey } from "@/utils/path-key"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@wopal/ellamaka-core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
+import {
+  SANDBOX_PRESETS,
+  readDshAdapterSandbox,
+  sandboxToPreset,
+  shouldShowSandboxControl,
+  setPendingSessionSandbox,
+  drainPendingSessionSandbox,
+  subscribeEscalatedSandboxPreset,
+  NEW_SESSION_SANDBOX_KEY,
+  type SandboxPreset,
+} from "./prompt-input/sandbox-control"
 
 interface PromptInputProps {
   class?: string
@@ -93,6 +105,19 @@ interface PromptInputProps {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+}
+
+const SANDBOX_CHOICE_KEY = "sandbox-choice"
+
+// Notification bodies are wrapped in the shell the chat renderer parses as a
+// collapsible context-injection block. `full-access` uses the adapter's wire
+// vocabulary ("danger-full-access") so the model sees the actual trust level.
+function sandboxModeReminderText(preset: SandboxPreset): string {
+  const modeLabel = preset === "full-access" ? "danger-full-access" : preset
+  return `<system-reminder>
+[sandbox mode changed]
+Sandbox mode changed to ${modeLabel}.
+</system-reminder>`
 }
 
 const EXAMPLES = [
@@ -315,6 +340,85 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const buttons = createMemo(() => motion(buttonsSpring()))
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
+
+  // Sandbox tri-state control: visible only for dock composers when all three
+  // hold — the DSH kill switch is open (`ELLAMAKA_DSH` not `0`), the DSH runtime
+  // is actually `ready` (not degraded), and the instance-level (directory)
+  // effective config loads the dsh-adapter plugin. The mode is a PER-SESSION
+  // choice kept in browser storage; the space-level `ellamaka.dsh.sandbox`
+  // default in the effective config is the fallback when the session has no
+  // explicit choice. The choice rides on the prompt payload (`sandboxMode`);
+  // settings files are never written from here.
+  const checkServerHealth = useCheckServerHealth()
+  const [sandboxHealth] = createResource(
+    () => server.current,
+    (current) => checkServerHealth(current.http).catch(() => undefined),
+  )
+  const [sandboxConfig] = createResource(
+    () => pathKey(sdk.directory),
+    (directory) =>
+      sdk
+        .createClient({ directory })
+        .config.get()
+        .then((r) => r.data ?? undefined)
+        .catch(() => undefined),
+  )
+  const sandboxPlugin = createMemo(() => sandboxConfig()?.plugin)
+  const sandboxVisible = createMemo(() =>
+    shouldShowSandboxControl({
+      variant: props.variant,
+      dshStatus: sandboxHealth()?.dsh,
+      plugins: sandboxPlugin() as Parameters<typeof shouldShowSandboxControl>[0]["plugins"],
+    }),
+  )
+  const sandboxDefaultPreset = createMemo(() =>
+    sandboxToPreset(readDshAdapterSandbox(sandboxPlugin() as Parameters<typeof readDshAdapterSandbox>[0])),
+  )
+  const sandboxSessionID = createMemo(() => (props.variant === "new-session" ? undefined : params.id))
+  const [sandboxSaved, setSandboxSaved] = persisted(
+    Persist.workspace(sdk.directory, SANDBOX_CHOICE_KEY, [`${SANDBOX_CHOICE_KEY}.v1`]),
+    createStore<{ session: Record<string, SandboxPreset | undefined> }>({ session: {} }),
+  )
+  const sandboxPreset = createMemo<SandboxPreset>(() => {
+    const id = sandboxSessionID()
+    if (!id) return sandboxDefaultPreset()
+    return sandboxSaved.session[id] ?? sandboxDefaultPreset()
+  })
+  const sandboxSelect = (preset: SandboxPreset, options?: { fromEscalation?: boolean }) => {
+    const id = sandboxSessionID()
+    if (!id) {
+      setPendingSessionSandbox(NEW_SESSION_SANDBOX_KEY, preset)
+      return
+    }
+    setSandboxSaved("session", id, preset)
+    // Both the manual selector and the escalation linkage land here: announce
+    // the new mode to the model before either path branches, so the agent
+    // perceives trust-level changes that happen outside of a user prompt.
+    sdk.client.session
+      .promptAsync({
+        sessionID: id,
+        directory: sdk.directory,
+        noReply: true,
+        parts: [{ type: "text", text: sandboxModeReminderText(preset), synthetic: true }],
+      })
+      .catch(() => undefined)
+    // A MANUAL mode choice restates the session's trust level, so standing
+    // escalation grants accumulated through earlier "always" approvals are
+    // dropped — otherwise the selector would show the narrower mode while
+    // the engine kept silently applying the previously granted wider one.
+    // The escalation-linkage path (fromEscalation) must NOT clear: it runs
+    // right after the user granted that very mode on an approval card.
+    if (options?.fromEscalation) return
+    sdk.client.permission.clearEscalation({ sessionID: id, directory: sdk.directory }).catch(() => undefined)
+  }
+
+  // "Allow always" on a sandbox-escalation approval applies the escalated
+  // mode as the session's standing choice: the engine keeps silently allowing
+  // that mode from then on, so the selector must show it.
+  createEffect(() => {
+    const unsubscribe = subscribeEscalatedSandboxPreset((preset) => sandboxSelect(preset, { fromEscalation: true }))
+    onCleanup(unsubscribe)
+  })
 
   const commentCount = createMemo(() => {
     if (store.mode === "shell") return 0
@@ -1146,6 +1250,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     autoAccept: () => accepting(),
     mode: () => store.mode,
     working,
+    // Always provide the accessor. Config/plugin visibility loads
+    // asynchronously; gating it here would freeze `undefined` for this
+    // PromptInput instance even after the sandbox control appears.
+    sandboxMode: () => {
+      const id = sandboxSessionID()
+      return id ? sandboxSaved.session[id] : undefined
+    },
     editor: () => editorRef,
     queueScroll,
     promptLength,
@@ -1631,6 +1742,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       style={control()}
                     />
                   </Show>
+                  <Show when={sandboxVisible()}>
+                    <ComposerSandboxControl
+                      preset={sandboxPreset}
+                      disabled={() => false}
+                      onSelect={sandboxSelect}
+                      t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+                      style={control()}
+                    />
+                  </Show>
                 </div>
                 <Tooltip placement="top" value={language.t("prompt.action.compact")}>
                   <IconButton
@@ -1857,6 +1977,39 @@ function ComposerVariantControl(props: {
         variant="ghost"
       />
     </TooltipKeybind>
+  )
+}
+
+function ComposerSandboxControl(props: {
+  preset: () => SandboxPreset
+  disabled: () => boolean
+  onSelect: (preset: SandboxPreset) => void
+  t: (key: string) => string
+  style?: JSX.CSSProperties
+}) {
+  return (
+    <div class="relative">
+      <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
+        <Icon name="shield" size="small" />
+      </div>
+      <Select
+        size="normal"
+        options={SANDBOX_PRESETS}
+        current={props.preset()}
+        value={(x) => x}
+        label={(x) => props.t(`prompt.sandbox.${x}`)}
+        onSelect={(value) => {
+          if (!value || value === props.preset()) return
+          props.onSelect(value)
+        }}
+        disabled={props.disabled()}
+        class="max-w-[150px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
+        valueClass="truncate pl-5 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+        triggerStyle={props.style}
+        triggerProps={{ "data-action": "prompt-sandbox" }}
+        variant="ghost"
+      />
+    </div>
   )
 }
 

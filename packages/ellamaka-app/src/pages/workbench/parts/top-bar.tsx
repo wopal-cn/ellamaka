@@ -1,12 +1,12 @@
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
-import { ButtonV2 } from "@opencode-ai/ui/v2/components/button-v2.jsx"
+import { Icon as IconV2 } from "@wopal/ui/v2/components/icon.jsx"
+import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
+import { ButtonV2 } from "@wopal/ui/v2/components/button-v2.jsx"
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useWorkbenchState } from "../view-store"
 import { useSpaceStore } from "../space-store"
 import { useWorkbenchSurface } from "../workbench-surface-context"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@wopal/ui/context/dialog"
 import { useSessionStore } from "../session-store"
 import { DialogCloseTab } from "./workspace"
 import { useSync } from "@/context/sync"
@@ -14,8 +14,9 @@ import { useServerSync } from "@/context/server-sync"
 import { useNotification } from "@/context/notification"
 import { pathKey } from "@/utils/path-key"
 import { SpaceIcon } from "./session-tree-space"
-import { Spinner } from "@opencode-ai/ui/spinner"
+import { Spinner } from "@wopal/ui/spinner"
 import { createFlyoutController } from "./sidebar-flyout"
+import { activateSpaceTab } from "./space-tab-activation"
 
 function PinIcon(props: { class?: string }) {
   return (
@@ -186,9 +187,11 @@ export function WorkbenchTitlebar() {
       <div data-tauri-drag-region class="workbench-macos-window-chrome shrink-0" />
       <div data-tauri-drag-region class="workbench-titlebar-toolbar relative flex h-10 items-center justify-between px-3">
         {/* Brand Logo - Left side */}
-        <div class="flex items-center gap-2 text-v2-text-text-strong [font-weight:530] text-14-regular shrink-0 z-20">
-          <img src="/favicon-96x96.png" class="w-5 h-5 object-contain" alt="Icon" />
-          <img src="/ellamaka-text-logo.png?v=2" class="h-5 w-auto object-contain ellamaka-logo-invert" alt="Logo" />
+        <div class="flex items-center gap-6 text-v2-text-text-strong [font-weight:530] text-14-regular shrink-0 z-20">
+          <div class="flex items-center gap-2">
+            <img src="/favicon-96x96.png" class="w-5 h-5 object-contain" alt="Icon" />
+            <img src="/ellamaka-text-logo.png?v=2" class="h-5 w-auto object-contain ellamaka-logo-invert" alt="Logo" />
+          </div>
         </div>
 
         {/* Space Tabs Bar */}
@@ -220,11 +223,11 @@ export function WorkbenchTitlebar() {
                     "text-v2-text-text-muted hover:text-v2-text-text-base font-medium": !isActive(),
                   }}
                   style={{ "-webkit-app-region": "no-drag" }}
-                  onClick={() => wb.setActive(tab.path)}
+                  onClick={() => activateSpaceTab(wb, tab.path)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
-                      wb.setActive(tab.path)
+                      activateSpaceTab(wb, tab.path)
                     }
                   }}
                   onContextMenu={(e: MouseEvent) => {

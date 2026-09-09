@@ -1,9 +1,9 @@
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
 import { ProxyUtil } from "../proxy-util"
-import { UI_UPSTREAM_URL } from "../../../../ellamaka/branding"
+import { UI_UPSTREAM_URL } from "@wopal/ellamaka-brand/branding"
 
 let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
 

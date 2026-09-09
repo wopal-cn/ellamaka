@@ -12,14 +12,14 @@ import { McpOAuthProvider } from "../../mcp/oauth-provider"
 import { Config } from "@/config/config"
 import { ConfigMCP } from "../../config/mcp"
 import { InstanceRef } from "@/effect/instance-ref"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@wopal/ellamaka-core/global"
 import { modify, applyEdits } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
 import { Bus } from "../../bus"
 import { Effect } from "effect"
-import { BINARY_NAME } from "../../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 function getAuthStatusIcon(status: MCP.AuthStatus): string {
   switch (status) {

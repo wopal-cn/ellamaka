@@ -1,0 +1,464 @@
+{
+ "name": "@sindresorhus/is",
+ "dist-tags": {
+  "latest": "8.1.0"
+ },
+ "versions": {
+  "0.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.1.0.tgz"
+   }
+  },
+  "0.2.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.2.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.2.0.tgz"
+   }
+  },
+  "0.2.1": {
+   "name": "@sindresorhus/is",
+   "version": "0.2.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.2.1.tgz"
+   }
+  },
+  "0.3.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.3.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.3.0.tgz"
+   }
+  },
+  "0.4.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.4.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.4.0.tgz"
+   }
+  },
+  "0.5.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.5.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.5.0.tgz"
+   }
+  },
+  "0.6.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.6.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.6.0.tgz"
+   }
+  },
+  "0.7.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.7.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.7.0.tgz"
+   }
+  },
+  "0.8.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.8.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.8.0.tgz"
+   }
+  },
+  "0.9.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.9.0",
+   "dependencies": {
+    "symbol-observable": "^1.2.0"
+   },
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.9.0.tgz"
+   }
+  },
+  "0.10.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.10.0",
+   "dependencies": {
+    "symbol-observable": "^1.2.0"
+   },
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.10.0.tgz"
+   }
+  },
+  "0.11.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.11.0",
+   "dependencies": {
+    "symbol-observable": "^1.2.0"
+   },
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.11.0.tgz"
+   }
+  },
+  "0.12.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.12.0",
+   "dependencies": {
+    "symbol-observable": "^1.2.0"
+   },
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.12.0.tgz"
+   }
+  },
+  "0.13.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.13.0",
+   "dependencies": {
+    "symbol-observable": "^1.2.0"
+   },
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.13.0.tgz"
+   }
+  },
+  "0.14.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.14.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.14.0.tgz"
+   }
+  },
+  "0.15.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.15.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.15.0.tgz"
+   }
+  },
+  "0.16.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.16.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.16.0.tgz"
+   }
+  },
+  "0.17.0": {
+   "name": "@sindresorhus/is",
+   "version": "0.17.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.17.0.tgz"
+   }
+  },
+  "0.17.1": {
+   "name": "@sindresorhus/is",
+   "version": "0.17.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-0.17.1.tgz"
+   }
+  },
+  "1.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "1.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-1.0.0.tgz"
+   }
+  },
+  "1.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "1.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-1.1.0.tgz"
+   }
+  },
+  "1.2.0": {
+   "name": "@sindresorhus/is",
+   "version": "1.2.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-1.2.0.tgz"
+   }
+  },
+  "2.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "2.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-2.0.0.tgz"
+   }
+  },
+  "2.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "2.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-2.1.0.tgz"
+   }
+  },
+  "2.1.1": {
+   "name": "@sindresorhus/is",
+   "version": "2.1.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-2.1.1.tgz"
+   }
+  },
+  "3.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "3.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-3.0.0.tgz"
+   }
+  },
+  "3.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "3.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-3.1.0.tgz"
+   }
+  },
+  "3.1.1": {
+   "name": "@sindresorhus/is",
+   "version": "3.1.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-3.1.1.tgz"
+   }
+  },
+  "3.1.2": {
+   "name": "@sindresorhus/is",
+   "version": "3.1.2",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-3.1.2.tgz"
+   }
+  },
+  "4.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.0.0.tgz"
+   }
+  },
+  "4.0.1": {
+   "name": "@sindresorhus/is",
+   "version": "4.0.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.0.1.tgz"
+   }
+  },
+  "4.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.1.0.tgz"
+   }
+  },
+  "4.2.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.2.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.2.0.tgz"
+   }
+  },
+  "4.2.1": {
+   "name": "@sindresorhus/is",
+   "version": "4.2.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.2.1.tgz"
+   }
+  },
+  "4.3.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.3.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.3.0.tgz"
+   }
+  },
+  "4.4.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.4.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.4.0.tgz"
+   }
+  },
+  "4.5.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.5.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.5.0.tgz"
+   }
+  },
+  "4.6.0": {
+   "name": "@sindresorhus/is",
+   "version": "4.6.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.6.0.tgz"
+   }
+  },
+  "5.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.0.0.tgz"
+   }
+  },
+  "5.0.1": {
+   "name": "@sindresorhus/is",
+   "version": "5.0.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.0.1.tgz"
+   }
+  },
+  "5.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.1.0.tgz"
+   }
+  },
+  "5.2.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.2.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.2.0.tgz"
+   }
+  },
+  "5.3.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.3.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.3.0.tgz"
+   }
+  },
+  "5.4.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.4.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.4.0.tgz"
+   }
+  },
+  "5.4.1": {
+   "name": "@sindresorhus/is",
+   "version": "5.4.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.4.1.tgz"
+   }
+  },
+  "5.5.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.5.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.5.0.tgz"
+   }
+  },
+  "5.5.1": {
+   "name": "@sindresorhus/is",
+   "version": "5.5.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.5.1.tgz"
+   }
+  },
+  "5.5.2": {
+   "name": "@sindresorhus/is",
+   "version": "5.5.2",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.5.2.tgz"
+   }
+  },
+  "5.6.0": {
+   "name": "@sindresorhus/is",
+   "version": "5.6.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-5.6.0.tgz"
+   }
+  },
+  "6.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "6.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-6.0.0.tgz"
+   }
+  },
+  "6.0.1": {
+   "name": "@sindresorhus/is",
+   "version": "6.0.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-6.0.1.tgz"
+   }
+  },
+  "6.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "6.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-6.1.0.tgz"
+   }
+  },
+  "6.2.0": {
+   "name": "@sindresorhus/is",
+   "version": "6.2.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-6.2.0.tgz"
+   }
+  },
+  "6.3.0": {
+   "name": "@sindresorhus/is",
+   "version": "6.3.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-6.3.0.tgz"
+   }
+  },
+  "6.3.1": {
+   "name": "@sindresorhus/is",
+   "version": "6.3.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-6.3.1.tgz"
+   }
+  },
+  "7.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "7.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-7.0.0.tgz"
+   }
+  },
+  "7.0.1": {
+   "name": "@sindresorhus/is",
+   "version": "7.0.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-7.0.1.tgz"
+   }
+  },
+  "7.0.2": {
+   "name": "@sindresorhus/is",
+   "version": "7.0.2",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-7.0.2.tgz"
+   }
+  },
+  "7.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "7.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-7.1.0.tgz"
+   }
+  },
+  "7.1.1": {
+   "name": "@sindresorhus/is",
+   "version": "7.1.1",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-7.1.1.tgz"
+   }
+  },
+  "7.2.0": {
+   "name": "@sindresorhus/is",
+   "version": "7.2.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-7.2.0.tgz"
+   }
+  },
+  "8.0.0": {
+   "name": "@sindresorhus/is",
+   "version": "8.0.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-8.0.0.tgz"
+   }
+  },
+  "8.1.0": {
+   "name": "@sindresorhus/is",
+   "version": "8.1.0",
+   "dist": {
+    "tarball": "https://registry.npmjs.org/@sindresorhus/is/-/is-8.1.0.tgz"
+   }
+  }
+ }
+}

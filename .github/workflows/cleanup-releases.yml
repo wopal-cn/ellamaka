@@ -36,9 +36,14 @@ on:
         description: "Number of stable releases to keep (retention mode)"
         required: false
         type: string
-        default: "5"
+        default: "3"
       keep-beta:
         description: "Number of beta releases to keep (desktop retention only)"
+        required: false
+        type: string
+        default: "2"
+      keep-rc:
+        description: "Number of CLI rc releases to keep (cli retention only)"
         required: false
         type: string
         default: "2"
@@ -78,7 +83,7 @@ jobs:
               DRY_FLAG="--dry-run"
             fi
             if [ "$PRODUCT" = "ellamaka-cli" ]; then
-              bun packages/ellamaka-release/src/cli/cleanup.ts --product ellamaka-cli --keep-stable "${{ inputs.keep-stable }}" $DRY_FLAG
+              bun packages/ellamaka-release/src/cli/cleanup.ts --product ellamaka-cli --keep-stable "${{ inputs.keep-stable }}" --keep-rc "${{ inputs.keep-rc }}" $DRY_FLAG
             else
               bun packages/ellamaka-release/src/cli/cleanup.ts --product ellamaka-desktop --keep-stable "${{ inputs.keep-stable }}" --keep-beta "${{ inputs.keep-beta }}" $DRY_FLAG
             fi

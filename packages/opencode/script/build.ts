@@ -28,7 +28,39 @@ function readMinWopalCliVersion(): string {
 
 const generated = await import("./generate.ts")
 
-import { Script } from "@opencode-ai/script"
+// ── DSH runtime manifest freshness gate ─────────────────────────────
+// This script is the generic opencode binary bundling point: the compiled
+// `src/index.ts` transitively imports `@wopal/ellamaka-cordis/runtime`, whose
+// `embed-manifest.ts` statically imports `generated/dsh-runtime-manifest.json`
+// and is inlined by Bun at bundle time. Ensure the manifest exists and matches
+// the source before bundling. Release builds verify only (`--check`); dev
+// builds regenerate when missing or dirty.
+const dshManifestGenerator = path.resolve(dir, "../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts")
+const dshManifestPath = path.resolve(dir, "../ellamaka-cordis/generated/dsh-runtime-manifest.json")
+async function ensureDshRuntimeManifest() {
+  if (Script.release) {
+    console.log("[build] verifying DSH runtime manifest (--check)")
+    await $`bun ${dshManifestGenerator} --check`
+    return
+  }
+  const generate = async () => {
+    console.log("[build] generating DSH runtime manifest")
+    await $`bun ${dshManifestGenerator}`
+  }
+  if (!fs.existsSync(dshManifestPath)) {
+    await generate()
+    return
+  }
+  try {
+    await $`bun ${dshManifestGenerator} --check`
+  } catch {
+    console.warn("[build] DSH runtime manifest is out of date — regenerating for dev build")
+    await generate()
+  }
+}
+await ensureDshRuntimeManifest()
+
+import { Script } from "@wopal/ellamaka-release/build-env"
 import pkg from "../package.json"
 
 // Load migrations from migration directories
@@ -70,7 +102,7 @@ const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
 
 const createEmbeddedWebUIBundle = async () => {
   console.log(`Building Web UI to embed in the binary`)
-  const appDir = path.join(import.meta.dirname, "../../app")
+  const appDir = path.join(import.meta.dirname, "../../ellamaka-app")
   const dist = path.join(appDir, "dist")
   await $`OPENCODE_CHANNEL=${Script.channel} bun run --cwd ${appDir} build`
   const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))

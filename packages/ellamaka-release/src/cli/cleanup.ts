@@ -9,7 +9,7 @@
 //
 // Usage:
 //   bun packages/ellamaka-release/src/cli/cleanup.ts \
-//     --product ellamaka-cli --keep-stable 5 [--dry-run]
+//     --product ellamaka-cli --keep-stable 3 --keep-rc 2 [--dry-run]
 //   bun packages/ellamaka-release/src/cli/cleanup.ts \
 //     --product ellamaka-desktop --keep-stable 3 --keep-beta 2 [--dry-run]
 //   bun packages/ellamaka-release/src/cli/cleanup.ts \
@@ -249,9 +249,11 @@ function runRetention({
   giteeToken?: string
   mode: string
 }) {
-  console.log(
-    `\n${mode}Cleaning up old ${config.product} releases (protection model, keep ${flags.keepStable} stable${config.channels.includes("beta") ? ` + ${flags.keepBeta} beta` : ""})\n`,
-  )
+  const keepSummary =
+    `keep ${flags.keepStable} stable` +
+    (config.channels.includes("beta") ? ` + ${flags.keepBeta} beta` : "") +
+    (config.product === "ellamaka-cli" ? ` + ${flags.keepRc} rc` : "")
+  console.log(`\n${mode}Cleaning up old ${config.product} releases (protection model, ${keepSummary})\n`)
 
   const snapshot = buildSnapshot(config, r2Url)
   const aliases = buildAliases(config, r2Url)
@@ -268,6 +270,9 @@ function runRetention({
       snapshot,
       aliases,
       keepStable: keep,
+      // CLI rc releases form an independent retention bucket within the
+      // stable channel; Desktop has no rc shape, so keepRc is inert there.
+      keepRc: config.product === "ellamaka-cli" ? flags.keepRc : 0,
       dryRun: flags.dryRun,
     })
     allDeleteCandidates.push(...plan.deleteCandidates)

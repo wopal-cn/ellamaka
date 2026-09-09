@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "@wopal/ellamaka-release/build-env"
 import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"

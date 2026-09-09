@@ -1,6 +1,6 @@
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { errorFormat } from "@/util/error"
-import { BINARY_NAME } from "../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 import { isRecord } from "@/util/record"
 
 type ConfigIssue = { message: string; path: string[] }

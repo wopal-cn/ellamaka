@@ -17,7 +17,7 @@ import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQueries, useQuery } from "@tanstack/solid-query"
 import { QueryOptionsApi } from "../server-sync"
 import { directoryKey, type DirectoryKey } from "./utils"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@wopal/ui/context"
 
 export function createChildStoreManager(input: {
   owner: Owner

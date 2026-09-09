@@ -1,4 +1,4 @@
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@wopal/ellamaka-core/process"
 import { Effect, Layer, Context, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 

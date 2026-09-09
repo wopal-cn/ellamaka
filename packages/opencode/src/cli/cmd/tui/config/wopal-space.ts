@@ -1,7 +1,7 @@
 export * as TuiConfigWopalSpace from "./wopal-space"
 
 import { Effect } from "effect"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { ConfigParse } from "@/config/parse"
 import { loadWopalSpaceSettingsFiles } from "@/config/wopal-space-settings"
 import type { Info } from "./tui"

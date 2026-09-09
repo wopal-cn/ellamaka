@@ -3,9 +3,9 @@ import { ConfigProvider, Deferred, Effect, Layer } from "effect"
 import type * as Scope from "effect/Scope"
 import { HttpRouter } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { validateSession } from "../../src/cli/cmd/tui/validate-session"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
@@ -349,6 +349,9 @@ describe("HttpApi SDK", () => {
           requiredVersion: "0.3.16",
         },
       })
+      // `dsh` exposes the DSH runtime terminal status (Issue #221): no mount in
+      // this test process means the holder defaults to `disabled`.
+      expect(health.data?.dsh).toBe("disabled")
       expect(yield* firstEvent((signal) => sdk.global.event({ signal }))).toMatchObject({
         payload: { type: "server.connected" },
       })

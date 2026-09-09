@@ -14,7 +14,7 @@ import { cmd } from "../cmd"
 import { parseReleaseIdentity, ReleaseIdentityError } from "@wopal/ellamaka-release/identity"
 
 // OPENCODE_VERSION / OPENCODE_CHANNEL are declared globally by
-// packages/core/src/installation/version.ts. OPENCODE_RELEASE_IDENTITY is
+// packages/ellamaka-core/src/installation/version.ts. OPENCODE_RELEASE_IDENTITY is
 // declared by @wopal/ellamaka-release/identity.
 
 export type ReleaseInfoEnvelope = {

@@ -45,6 +45,22 @@ interface EffectCmdOpts<Args, A> {
    * `serve`, `web`, `account`, `db`, `upgrade`).
    */
   instance?: boolean | ((args: Args) => boolean)
+  /**
+   * Run the handler WITHOUT constructing the AppLayer runtime at all. Only
+   * meaningful together with `instance: false`; takes precedence over it.
+   *
+   * The handler receives plain yargs args (no Effect context, no services —
+   * not even AppRuntime), so it must be a pure local operation: file/disk
+   * work, stdout/stderr writes, process exit. `CliError` failures still flow
+   * through the global FormatError path in `src/cli/error.ts` (message +
+   * exit code), identical to the AppRuntime path.
+   *
+   * Commands documented as engine-free shims (e.g. the `dsh` group, which
+   * only reads/writes profile composition files) MUST use this — routing
+   * them through AppRuntime would boot the whole engine (DB migrations,
+   * models.dev fetch, provider layer) just to read one JSON file.
+   */
+  light?: boolean
   /** Defaults to process.cwd(). Override for commands that take a directory positional. */
   directory?: (args: Args) => string
   handler: (args: WithDoubleDash<Args>) => Effect.Effect<A, CliError, AppServices | InstanceStore.Service>
@@ -111,6 +127,13 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
     async handler(rawArgs) {
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as WithDoubleDash<Args>
+      if (opts.light) {
+        // No AppRuntime construction at all: run the effect on a bare runtime
+        // with no services beyond what the handler's own imports provide.
+        // CliError rejection still reaches the top-level formatter in index.ts.
+        await Effect.runPromise(opts.handler(args) as Effect.Effect<A, CliError>)
+        return
+      }
       const useInstance = typeof opts.instance === "function" ? opts.instance(args) : opts.instance !== false
       if (!useInstance) {
         await runWithSignalBridge(opts.handler(args))

@@ -1,7 +1,7 @@
 /* @jsxImportSource solid-js */
 import { createSignal, createMemo, For, Show, onMount, onCleanup } from "solid-js"
-import { Popover } from "@opencode-ai/ui/popover"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Popover } from "@wopal/ui/popover"
+import { Icon } from "@wopal/ui/icon"
 import { useWorkbenchState, type DiagnosticMessage } from "../view-store"
 import { useLanguage } from "@/context/language"
 

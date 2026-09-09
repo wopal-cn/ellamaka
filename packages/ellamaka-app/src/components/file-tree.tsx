@@ -1,8 +1,8 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Collapsible } from "@wopal/ui/collapsible"
+import { FileIcon } from "@wopal/ui/file-icon"
+import { Icon } from "@wopal/ui/icon"
 import {
   createEffect,
   createMemo,

@@ -13,7 +13,7 @@ import {
   PlatformProvider,
   ServerConnection,
   useCommand,
-} from "@opencode-ai/ellamaka-app"
+} from "@wopal/ellamaka-app"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
@@ -22,7 +22,7 @@ import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { resetZoom, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import "./styles.css"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { useTheme } from "@wopal/ui/theme"
 import { DesktopRouter } from "./desktop-router"
 import type { SidecarRuntimeState } from "../preload/types"
 import { mapSidecarStateToAction, resolveSidecarServer } from "./sidecar-adapter"
@@ -73,7 +73,7 @@ const listenForDeepLinks = () => {
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
-const createPlatform = (releaseVersion: () => string): Platform => {
+const createPlatform = (releaseVersion: () => string, dshProxyOrigin?: () => string | undefined): Platform => {
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -130,6 +130,9 @@ const createPlatform = (releaseVersion: () => string): Platform => {
     os,
     get version() {
       return releaseVersion()
+    },
+    get dshProxyOrigin() {
+      return dshProxyOrigin?.()
     },
 
     async openDirectoryPickerDialog(opts) {
@@ -246,8 +249,8 @@ window.api.onMenuCommand((id) => {
 listenForDeepLinks()
 
   render(() => {
-    const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false, version: pkg.version })))
-    const platform = createPlatform(() => windowConfig()?.version ?? pkg.version)
+    const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false, version: pkg.version, dshProxyOrigin: undefined })))
+    const platform = createPlatform(() => windowConfig()?.version ?? pkg.version, () => windowConfig()?.dshProxyOrigin)
     document.documentElement.dataset.platform = platform.os ? `desktop-${platform.os}` : "desktop"
     const loadLocale = async () => {
     const current = await platform.storage?.("ellamaka.global.dat").getItem("language")

@@ -1,11 +1,11 @@
 import yargs from "yargs"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { Installation } from "@/installation"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { hideBin } from "yargs/helpers"
 import { Log } from "./node"
-import type { Level } from "@opencode-ai/core/util/log"
-import { BINARY_NAME } from "../../ellamaka/branding"
+import type { Level } from "@wopal/ellamaka-core/util/log"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 Log.init({
   print: process.argv.includes("--print-logs"),

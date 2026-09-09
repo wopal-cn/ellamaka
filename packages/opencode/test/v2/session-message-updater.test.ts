@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test"
 import * as DateTime from "effect/DateTime"
 import { SessionID } from "../../src/session/schema"
-import { EventV2 } from "@opencode-ai/core/event"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { SessionEvent } from "@opencode-ai/core/session-event"
-import { SessionMessageUpdater } from "@opencode-ai/core/session-message-updater"
+import { EventV2 } from "@wopal/ellamaka-core/event"
+import { ModelV2 } from "@wopal/ellamaka-core/model"
+import { ProviderV2 } from "@wopal/ellamaka-core/provider"
+import { SessionEvent } from "@wopal/ellamaka-core/session-event"
+import { SessionMessageUpdater } from "@wopal/ellamaka-core/session-message-updater"
 
 test("step snapshots carry over to assistant messages", () => {
   const state: SessionMessageUpdater.MemoryState = { messages: [] }

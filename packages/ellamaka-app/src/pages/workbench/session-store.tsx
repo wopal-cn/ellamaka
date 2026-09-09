@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@wopal/ui/context"
 import { createMemo, createSignal } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { normalizeSpacePath } from "./workbench-scope"

@@ -34,8 +34,14 @@ describe("release-identity: standard SemVer subset", () => {
     })
   })
 
-  test("rejects rc X.Y.Z-rc.N (rc mechanism removed)", () => {
-    expect(() => identity.parseReleaseVersion("1.18.0-rc.2")).toThrow(/rc/)
+  test("accepts rc X.Y.Z-rc.N as a stable-channel candidate", () => {
+    expect(identity.parseReleaseVersion("1.18.0-rc.2")).toEqual({
+      major: 1,
+      minor: 18,
+      patch: 0,
+      prerelease: { kind: "rc", n: 2 },
+      channel: "stable",
+    })
   })
 
   test("rejects legacy X.Y.Z-N (numeric suffix)", () => {
@@ -56,12 +62,17 @@ describe("release-identity: standard SemVer subset", () => {
 })
 
 describe("release-identity: channel/version consistency", () => {
-  test("stable version must not carry prerelease", () => {
+  test("stable channel accepts rc candidates", () => {
+    expect(() => identity.assertChannelVersionConsistent("stable", "1.17.1-rc.1")).not.toThrow()
+  })
+
+  test("stable version must not carry beta prerelease", () => {
     expect(() => identity.assertChannelVersionConsistent("stable", "1.17.1-beta.1")).toThrow(/channel/)
   })
 
   test("beta version must use -beta.N", () => {
     expect(() => identity.assertChannelVersionConsistent("beta", "1.17.0")).toThrow(/channel/)
+    expect(() => identity.assertChannelVersionConsistent("beta", "1.17.0-rc.1")).toThrow(/channel/)
   })
 
   test("rc channel is not a release channel", () => {
@@ -310,6 +321,20 @@ describe("release-identity: SemVer precedence", () => {
   test("beta.N sorts by N", () => {
     expect(identity.compareSemVer("1.17.0-beta.2", "1.17.0-beta.1")).toBeGreaterThan(0)
     expect(identity.compareSemVer("1.17.0-beta.1", "1.17.0-beta.2")).toBeLessThan(0)
+  })
+
+  test("rc sorts below stable with same base", () => {
+    expect(identity.compareSemVer("1.17.0", "1.17.0-rc.1")).toBeGreaterThan(0)
+    expect(identity.compareSemVer("1.17.0-rc.1", "1.17.0")).toBeLessThan(0)
+  })
+
+  test("rc.N sorts by N", () => {
+    expect(identity.compareSemVer("1.17.0-rc.2", "1.17.0-rc.1")).toBeGreaterThan(0)
+    expect(identity.compareSemVer("1.17.0-rc.1", "1.17.0-rc.2")).toBeLessThan(0)
+  })
+
+  test("rc sorts above beta with same base", () => {
+    expect(identity.compareSemVer("1.17.0-rc.1", "1.17.0-beta.1")).toBeGreaterThan(0)
   })
 
   test("equal versions compare equal", () => {

@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
+import { Icon as IconV2 } from "@wopal/ui/v2/components/icon.jsx"
 import type { WopalSpace } from "../space-store"
 import type { GroupSession, SessionTreeLocation } from "./session-tree-services"
 import { SessionTreeRow } from "./session-tree-row"

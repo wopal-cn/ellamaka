@@ -7,7 +7,7 @@ import { mergeSessionTreeSessions } from "./session-tree-merge"
 import type { WopalSpace } from "../space-store"
 import { useWorkbenchActions } from "../workbench-actions"
 import { scopeFromTab } from "../workbench-scope"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@wopal/ui/context/dialog"
 import { reportWorkbenchError } from "../workbench-error"
 import { DialogDeleteSession, DialogRenameSession, DialogSessionDetails } from "./session-tree-dialogs"
 import {

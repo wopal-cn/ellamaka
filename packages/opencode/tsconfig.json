@@ -12,7 +12,7 @@
       "@/*": ["./src/*"],
       "@tui/*": ["./src/cli/cmd/tui/*"],
       "@test/*": ["./test/*"],
-      "@ellamaka/build/*": ["../ellamaka/build/*"]
+      "@wopal/ellamaka-brand/*": ["../ellamaka-brand/*"]
     }
   }
 }

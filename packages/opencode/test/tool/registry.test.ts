@@ -3,13 +3,14 @@ import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
+import type { ToolDefinition } from "@opencode-ai/plugin"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Plugin } from "@/plugin"
 import { Question } from "@/question"
 import { Todo } from "@/session/todo"
@@ -95,12 +96,61 @@ const brokenPluginLayer = Layer.succeed(
   }),
 )
 
+// Fake Plugin.Service that exposes a `tool.provider` hook reading the current
+// supplied set from a mutable closure variable. This models a dsh container
+// whose mounted tool set changes between model requests.
+function providerPluginLayer(supply: { current: Record<string, unknown> }) {
+  return Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      init: () => Effect.void,
+      trigger: ((name: unknown, input: unknown, output: unknown) => {
+        if (name === "tool.provider") {
+          const out = output as { tools: Record<string, ToolDefinition> }
+          for (const [id, def] of Object.entries(supply.current)) {
+            out.tools[id] = def as ToolDefinition
+          }
+        }
+        return Effect.succeed(output)
+      }) as Plugin.Interface["trigger"],
+      list: () => Effect.succeed([]),
+    }),
+  )
+}
+
+// Fake Plugin.Service whose `tool.provider` hook always throws. Used to prove
+// a throwing provider degrades to the static tool set instead of breaking the
+// model request. Mirrors the real `Plugin.trigger`, which wraps each hook call
+// in `Effect.promise`, so a throwing hook surfaces as a recoverable error.
+const throwingProviderLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    init: () => Effect.void,
+    trigger: ((name: unknown, _input: unknown, _output: unknown) =>
+      name === "tool.provider"
+        ? Effect.promise(async () => {
+            throw new Error("provider boom")
+          })
+        : Effect.succeed({})) as Plugin.Interface["trigger"],
+    list: () => Effect.succeed([]),
+  }),
+)
+
+const dynamicTool = (description: string) => ({
+  description,
+  args: {},
+  execute: async () => "dynamic",
+})
+
 const it = testEffect(Layer.mergeAll(registryLayer(), node, Agent.defaultLayer))
 const scout = testEffect(
   Layer.mergeAll(registryLayer({ flags: { experimentalScout: true } }), node, Agent.defaultLayer),
 )
 const withBrokenPlugin = testEffect(
   Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
+)
+const withThrowingProvider = testEffect(
+  Layer.mergeAll(registryLayer({ plugin: throwingProviderLayer }), node, Agent.defaultLayer),
 )
 
 afterEach(async () => {
@@ -556,4 +606,188 @@ describe("tool.registry", () => {
       expect(ids).toContain("cowsay")
     }),
   )
+
+  describe("dynamic tool provider", () => {
+    const supply: { current: Record<string, unknown> } = { current: {} }
+    const withProvider = testEffect(
+      Layer.mergeAll(
+        registryLayer({ plugin: providerPluginLayer(supply) }),
+        node,
+        Agent.defaultLayer,
+      ),
+    )
+
+    const toolsFor = (registry: ToolRegistry.Interface) =>
+      Effect.gen(function* () {
+        const agent = yield* Agent.Service
+        return yield* registry.tools({
+          providerID: ProviderID.opencode,
+          modelID: ModelID.make("test"),
+          agent: yield* agent.defaultInfo(),
+        })
+      })
+
+    withProvider.instance("exposes a dynamically supplied tool", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        supply.current = { custom_probe: dynamicTool("a dynamic probe tool") }
+        const tools = yield* toolsFor(registry)
+        const probe = tools.find((t) => t.id === "custom_probe")
+        expect(probe).toBeDefined()
+        if (!probe) throw new Error("custom_probe tool was not returned")
+        expect(probe.description).toBe("a dynamic probe tool")
+      }),
+    )
+
+    withProvider.instance("dynamic provider wins over builtin on id collision", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        supply.current = { grep: { description: "dynamic grep", args: {}, execute: async () => "dynamic grep" } }
+        const tools = yield* toolsFor(registry)
+        const grep = tools.find((t) => t.id === "grep")
+        if (!grep) throw new Error("grep tool was not returned")
+        const output = yield* grep.execute(
+          {},
+          {
+            sessionID: SessionID.make("ses_test"),
+            messageID: MessageID.make("msg_test"),
+            agent: "build",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          } satisfies Tool.Context,
+        )
+        expect(output.output).toBe("dynamic grep")
+      }),
+    )
+
+    withProvider.instance("removing a dynamic tool restores the builtin", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        supply.current = { grep: { description: "dynamic grep", args: {}, execute: async () => "dynamic grep" } }
+        const withProvider = yield* toolsFor(registry)
+        const overridden = withProvider.find((t) => t.id === "grep")
+        if (!overridden) throw new Error("grep tool was not returned")
+        expect((yield* overridden.execute({}, {
+          sessionID: SessionID.make("ses_test"),
+          messageID: MessageID.make("msg_test"),
+          agent: "build",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        } satisfies Tool.Context)).output).toBe("dynamic grep")
+
+        supply.current = {}
+        const after = yield* toolsFor(registry)
+        const restored = after.find((t) => t.id === "grep")
+        if (!restored) throw new Error("grep tool was not returned after removal")
+        const output = yield* restored.execute(
+          { pattern: "x", path: "." },
+          {
+            sessionID: SessionID.make("ses_test"),
+            messageID: MessageID.make("msg_test"),
+            agent: "build",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          } satisfies Tool.Context,
+        )
+        expect(output.output).not.toBe("dynamic grep")
+      }),
+    )
+
+    it.instance("no provider equals static collection (builtin + custom)", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const withProviderTools = yield* toolsFor(registry)
+        const registryNoProvider = yield* ToolRegistry.Service
+        const baseTools = yield* toolsFor(registryNoProvider)
+        // Both resolve the same service instance; when nothing provides dynamic
+        // tools the merged set equals the static base.
+        expect(withProviderTools.map((t) => t.id).sort()).toEqual(baseTools.map((t) => t.id).sort())
+      }),
+    )
+
+    // W-02: lock the D-02 ordering mechanics. A same-name dynamic tool keeps
+    // the static base's original position; brand-new ids are appended in
+    // `localeCompare` sorted order after the (possibly overridden) base.
+    withProvider.instance("orders merged ids: same-name keeps base position, new ids appended sorted", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        // Baseline filtered base order (no dynamic tools supplied).
+        supply.current = {}
+        const base = (yield* toolsFor(registry)).map((t) => t.id)
+        const grepIdx = base.indexOf("grep")
+        expect(grepIdx).toBeGreaterThanOrEqual(0)
+
+        // Override an existing builtin (grep) and add three brand-new ids out
+        // of sorted order to prove append-then-sort.
+        supply.current = {
+          zzz_tool: dynamicTool("z"),
+          grep: { description: "dynamic grep", args: {}, execute: async () => "dynamic grep" },
+          aaa_tool: dynamicTool("a"),
+          mmm_tool: dynamicTool("m"),
+        }
+        const tools = yield* toolsFor(registry)
+        const ids = tools.map((t) => t.id)
+
+        // Same-name override keeps grep at its base position; base order intact.
+        expect(ids.slice(0, base.length)).toEqual(base)
+        // New ids appended in localeCompare order after the base.
+        expect(ids.slice(base.length)).toEqual(["aaa_tool", "mmm_tool", "zzz_tool"])
+        // grep is the dynamic version at its original position.
+        const grepTool = tools[grepIdx]
+        expect(grepTool.id).toBe("grep")
+        const out = yield* grepTool.execute(
+          {},
+          {
+            sessionID: SessionID.make("ses_test"),
+            messageID: MessageID.make("msg_test"),
+            agent: "build",
+            abort: new AbortController().signal,
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          } satisfies Tool.Context,
+        )
+        expect(out.output).toBe("dynamic grep")
+      }),
+    )
+
+    // W-01: byte stability must run through the dynamic provider path, with a
+    // fixed collection containing both a same-name override and new ids.
+    withProvider.instance("unchanged dynamic tool set produces byte-identical output across requests", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        supply.current = {
+          grep: { description: "dynamic grep", args: {}, execute: async () => "dynamic grep" },
+          custom_probe: dynamicTool("a dynamic probe tool"),
+        }
+        const first = yield* toolsFor(registry)
+        const second = yield* toolsFor(registry)
+        expect(JSON.stringify(first)).toBe(JSON.stringify(second))
+      }),
+    )
+
+    // B-01: a throwing provider must degrade to the static set, not break the
+    // model request. Compare against the base produced by a provider that
+    // supplies nothing (empty supply) — a throwing provider must yield the
+    // exact same static set.
+    withThrowingProvider.instance("throwing provider degrades to static tool set", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const tools = yield* toolsFor(registry)
+        const ids = tools.map((t) => t.id)
+        // Static builtin surface intact (the throwing provider added nothing).
+        for (const builtin of ["invalid", "bash", "read", "glob", "grep", "write", "edit"]) {
+          expect(ids).toContain(builtin)
+        }
+        // No dynamic tool leaked in.
+        expect(ids).not.toContain("custom_probe")
+      }),
+    )
+  })
 })

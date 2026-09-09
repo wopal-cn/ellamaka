@@ -1,6 +1,6 @@
 import type { Message } from "@opencode-ai/sdk/v2"
-import { Binary } from "@opencode-ai/core/util/binary"
-import * as Log from "@opencode-ai/core/util/log"
+import { Binary } from "@wopal/ellamaka-core/util/binary"
+import * as Log from "@wopal/ellamaka-core/util/log"
 
 /**
  * Build the ordering key for a message. MessageID is monotonic only within a

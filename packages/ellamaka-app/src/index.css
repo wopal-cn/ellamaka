@@ -1,5 +1,5 @@
-@import "@opencode-ai/ui/styles/tailwind";
-@import "@opencode-ai/ui/v2/styles/tailwind.css";
+@import "@wopal/ui/styles/tailwind";
+@import "@wopal/ui/v2/styles/tailwind.css";
 @import "katex/dist/katex.min.css";
 
 @keyframes workbench-spinner-rotate {
@@ -1147,6 +1147,107 @@ html[data-color-scheme="dark"] [data-slot="workbench-markdown-content"] [data-co
   /* Reserve the scrollbar track so streaming past the max-height threshold
      does not shrink the content box horizontally when the scrollbar appears. */
   scrollbar-gutter: stable;
+}
+
+/* Injection blocks live at the transcript row level, NOT inside the user
+   bubble: a full-width left-aligned channel styled like the tool blocks
+   (border: 0, transparent, trigger/header pattern). Injections belonging to
+   a user turn render here — including injection-only rows, which therefore
+   show no bubble at all. */
+[data-slot="chat-turn-injections"] {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding-inline: var(--workbench-chat-content-inset);
+  box-sizing: border-box;
+}
+
+[data-slot="chat-turn-injections"] [data-component="chat-injection"] {
+  width: 100%;
+}
+
+[data-component="chat-injection"] {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--font-size-small);
+  color: var(--text-weak);
+}
+
+[data-component="chat-injection"] [data-component="icon"] {
+  color: inherit;
+}
+
+/* The injection trigger mirrors the tool-block trigger (chat-tool-trigger):
+   same font-size/color/hover treatment so an injection reads as activity
+   output, not as message content. */
+[data-slot="chat-injection-trigger"] {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 26px;
+  padding: 3px 6px;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--text-weak);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  overflow: hidden;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+[data-slot="chat-injection-trigger"]:hover,
+[data-slot="chat-injection-trigger"]:focus-visible {
+  color: var(--text-strong);
+  background: var(--surface-raised-base-hover);
+}
+
+[data-slot="chat-injection-trigger"]:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--border-weak-base);
+}
+
+[data-slot="chat-injection-header-left"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+[data-slot="chat-injection-tag"] {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--border-weaker-base);
+  border-radius: 4px;
+  font-size: var(--font-size-small);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--text-weaker);
+  background: var(--surface-weak);
+}
+
+[data-slot="chat-injection-content"] {
+  margin-top: 4px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border-weaker-base);
+  border-radius: 6px;
+  background: var(--surface-weak);
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: var(--font-size-small);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 [data-component="chat-context-tool"],

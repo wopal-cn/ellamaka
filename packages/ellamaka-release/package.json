@@ -1,16 +1,18 @@
 {
   "name": "@wopal/ellamaka-release",
+  "version": "2.0.5",
   "private": true,
   "type": "module",
   "exports": {
     "./*": "./src/*.ts"
   },
   "dependencies": {
-    "@opencode-ai/script": "workspace:*"
+    "semver": "^7.6.3"
   },
   "devDependencies": {
-    "@ellamaka/build": "workspace:*",
+    "@wopal/ellamaka-brand": "workspace:*",
     "@opentui/solid": "catalog:",
+    "@types/semver": "catalog:",
     "bun-types": "latest"
   },
   "scripts": {

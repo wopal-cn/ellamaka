@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@wopal/ellamaka-core/util/encode"
 
 export function panelChatRoute(directory: string, sessionID: string) {
   const path = `/${base64Encode(directory)}/session/${sessionID}`

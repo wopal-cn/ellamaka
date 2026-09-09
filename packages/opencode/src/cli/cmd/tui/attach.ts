@@ -5,7 +5,7 @@ import { TuiConfig } from "@/cli/cmd/tui/config/tui"
 import { errorMessage } from "@/util/error"
 import { validateSession } from "./validate-session"
 import { ServerAuth } from "@/server/auth"
-import { BINARY_NAME } from "../../../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 export const AttachCommand = cmd({
   command: "attach <url>",

@@ -20,7 +20,7 @@ import {
 } from "@opentui/core"
 import * as Locale from "@/util/locale"
 import { go, logo } from "@/cli/logo"
-import { BINARY_NAME } from "../../../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 import type { RunSplashTheme } from "./theme"
 
 export const SPLASH_TITLE_LIMIT = 50

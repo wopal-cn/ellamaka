@@ -1,11 +1,12 @@
 import "./init-projectors"
 
 import { NodeHttpServer } from "@effect/platform-node"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
-import { createServer } from "node:http"
+import { createServer, type Server } from "node:http"
+import { installDispatcher, type NodeRouteDispatcher, type NodeRouteMount } from "./node-route-mount"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
@@ -24,6 +25,12 @@ export type Listener = {
   port: number
   url: URL
   stop: (close?: boolean) => Promise<void>
+  /**
+   * Register a controlled Node route mount (e.g. `/dsh`). Matched requests and
+   * upgrades are routed to the mount with the prefix stripped; everything else
+   * keeps the original Effect listener order. Returns a disposer.
+   */
+  mountNodeRoute: (mount: NodeRouteMount) => () => void
 }
 
 type ServerApp = {
@@ -42,6 +49,7 @@ type ListenerState = {
   server: Context.Service.Shape<typeof HttpServer.HttpServer>
   http: ListenerServer
   websockets: WebSocketTracker.Interface
+  dispatcher: NodeRouteDispatcher
 }
 type EffectListener = Omit<Listener, "stop"> & {
   stop: (close?: boolean) => Effect.Effect<void>
@@ -49,6 +57,8 @@ type EffectListener = Omit<Listener, "stop"> & {
 
 interface ListenerServer {
   readonly closeAll: Effect.Effect<void>
+  /** The raw `node:http.Server` backing the listener. */
+  readonly raw: Server
 }
 
 class ListenerServerService extends Context.Service<ListenerServerService, ListenerServer>()(
@@ -78,6 +88,7 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
     hostname: listener.hostname,
     port: listener.port,
     url: listener.url,
+    mountNodeRoute: (mount) => listener.mountNodeRoute(mount),
     stop: (close?: boolean) => Effect.runPromiseExit(listener.stop(close)).then(() => undefined),
   }
 }
@@ -95,6 +106,7 @@ const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unkno
       hostname: opts.hostname,
       port: address.port,
       url: listenerUrl,
+      mountNodeRoute: (mount) => state.dispatcher.mount(mount),
       stop: yield* makeStop(state, unpublishMdns, listenerUrl),
     }
   },
@@ -135,6 +147,10 @@ function startListener(opts: ListenOptions, port: number) {
         server: Context.get(ctx, HttpServer.HttpServer),
         http: Context.get(ctx, ListenerServerService),
         websockets: Context.get(ctx, WebSocketTracker.Service),
+        // Install the route dispatcher after the Effect HTTP handlers are
+        // registered on the raw server, so it can capture them and route
+        // controlled prefixes (e.g. /dsh) while preserving their order.
+        dispatcher: installDispatcher(serverOf(ctx)),
       }),
     ),
   )
@@ -146,6 +162,11 @@ function tcpAddress(state: ListenerState) {
     yield* Scope.close(state.scope, Exit.void).pipe(Effect.ignore)
     return yield* Effect.die(new Error(`Unexpected HttpServer address tag: ${state.server.address._tag}`))
   })
+}
+
+/** The raw `node:http.Server` backing the listener, for dispatcher install. */
+function serverOf(ctx: Context.Context<ListenerServerService>): Server {
+  return Context.get(ctx, ListenerServerService).raw
 }
 
 function makeURL(hostname: string, port: number) {
@@ -215,6 +236,7 @@ function serverLayer(opts: { port: number; hostname: string }) {
     NodeHttpServer.layer(() => server, { port: opts.port, host: opts.hostname, gracefulShutdownTimeout: "1 second" }),
     Layer.succeed(ListenerServerService)(
       ListenerServerService.of({
+        raw: server,
         closeAll: Effect.sync(() => {
           serverRef.forceStop = true
           if (serverRef.closeStarted) server.closeAllConnections()

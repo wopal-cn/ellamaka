@@ -11,7 +11,9 @@ export type WopalCliHealth = {
   reason?: string
 }
 
-export type ServerHealth = { healthy: boolean; version?: string; cli?: WopalCliHealth }
+export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
+
+export type ServerHealth = { healthy: boolean; version?: string; cli?: WopalCliHealth; dsh?: DshRuntimeStatus }
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -102,6 +104,7 @@ export async function checkServerHealth(
             healthy: x.data?.healthy === true,
             version: x.data?.version,
             ...(x.data?.cli ? { cli: x.data.cli } : {}),
+            ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
           })
       .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())

@@ -5,7 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@wopal/ellamaka-core/process"
 import * as Filesystem from "../../../../util/filesystem"
 import * as Process from "../../../../util/process"
 

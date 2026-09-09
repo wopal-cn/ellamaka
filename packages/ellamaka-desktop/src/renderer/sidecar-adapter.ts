@@ -1,5 +1,5 @@
 import type { SidecarRuntimeState } from "../preload/types"
-import type { ServerConnection } from "@opencode-ai/ellamaka-app"
+import type { ServerConnection } from "@wopal/ellamaka-app"
 
 export type SidecarAdapterAction =
   | { action: "wait" }

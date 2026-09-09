@@ -1,5 +1,5 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { describe, expect } from "bun:test"
 import { ConfigError } from "../../src/config/error"
 import { Effect, Layer } from "effect"

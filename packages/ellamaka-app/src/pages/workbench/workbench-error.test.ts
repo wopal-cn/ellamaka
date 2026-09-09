@@ -9,7 +9,7 @@ describe("reportWorkbenchError", () => {
     consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
 
     toastCalls = []
-    mock.module("@opencode-ai/ui/toast", () => ({
+    mock.module("@wopal/ui/toast", () => ({
       showToast: (options: { variant: string; title: string; description?: string }) => {
         toastCalls.push(options)
       },

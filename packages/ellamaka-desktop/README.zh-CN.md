@@ -39,7 +39,7 @@ Electron 是"薄壳"——只负责窗口管理和 sidecar 生命周期。所有
 |---|---|
 | **Main Process** | 创建窗口、启动/停止 sidecar、持有 sidecar 连接凭据。应用退出时终止 sidecar 及全部子进程 |
 | **Preload** | 暴露最小化 IPC 接口（窗口、文件选择、菜单、更新、sidecar 初始化）。Renderer 启用 context isolation，不启用 Node integration |
-| **Renderer** | 即 `@opencode-ai/ellamaka-app` 的 `/workbench` 路由。通过 `PlatformProvider` 获得 `platform: "desktop"`，用于文件选择、菜单、更新和系统集成 |
+| **Renderer** | 即 `@wopal/ellamaka-app` 的 `/workbench` 路由。通过 `PlatformProvider` 获得 `platform: "desktop"`，用于文件选择、菜单、更新和系统集成 |
 | **Sidecar** | 从 `packages/opencode` 构建的 node 运行时。只监听 loopback，每次启动生成临时认证凭据。负责 PTY 创建、探测、重连、Grace 回收和显式删除 |
 
 ### 与 ellamaka-app Workbench 的关系

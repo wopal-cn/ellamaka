@@ -26,17 +26,19 @@ import { WorkbenchSingletonGuard } from "./singleton-guard"
 import { useWorkbenchCommands } from "./use-workbench-commands"
 import { WorkbenchActionsProvider, useWorkbenchActions } from "./workbench-actions"
 import { WorkbenchRuntimeProvider, useWorkbenchRuntime } from "./workbench-runtime"
+import { WorkbenchDshFlagBinding } from "./workbench-dsh-flag-binding"
 import { WorkbenchPromptRegistryProvider } from "./workbench-prompt-registry"
 import { WorkbenchSidecarCleanupBinding } from "./workbench-sidecar-cleanup"
 import { WorkbenchActiveDirectoryProvider } from "./workbench-directory-provider"
 import { WorkbenchSessionDeepLink } from "./workbench-session-deep-link"
+import { DshSurface } from "./dsh-surface"
 import { WorkbenchSurfaceProvider } from "./workbench-surface-context"
 import { ViewRegistryProvider, useViewRegistry, registerDefaultViews } from "./view-registry"
 import { reportWorkbenchError, type WorkbenchErrorDetail, WORKBENCH_ERROR_EVENT } from "./workbench-error"
 import { CliRepairDialog } from "./parts/cli-repair-dialog"
 import { useCommand } from "@/context/command"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Toast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@wopal/ui/context/dialog"
+import { Toast } from "@wopal/ui/toast"
 import { isWorkbenchClosePanelShortcut, isWorkbenchTabCloseProtected } from "./workbench-keyboard"
 
 function WorkbenchShell() {
@@ -246,31 +248,33 @@ function WorkbenchShell() {
                 {() => <WorkbenchTitlebar />}
               </WorkbenchActiveDirectoryProvider>
             </Show>
-          <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-            <SpaceRail onFileClick={handleFileClick} />
-            <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <Workspace />
-              <Show when={display().showFileViewer && surfaceTabs().length > 0 && surfaceActiveKey()}>
-                <WorkbenchInspector
-                  tabs={surfaceTabs()}
-                  activeKey={surfaceActiveKey()!}
-                  onActiveKeyChange={(key) => setSurfaceStore("activeKey", key)}
-                  width={surfaceWidth()}
-                  onWidthChange={(width) => setSurfaceStore("width", width)}
-                  expanded={surfaceStore.expanded}
-                  onExpandedChange={(expanded) => setSurfaceStore("expanded", expanded)}
-                  pinned={surfaceStore.pinned}
-                  onPinnedChange={(pinned) => setSurfaceStore("pinned", pinned)}
-                  onCloseTab={closeSurfaceTabByKey}
-                  onClose={() => {
-                    setSurfaceStore("tabs", [])
-                    setSurfaceStore("activeKey", undefined)
-                  }}
-                  onDismiss={() => wb.setDisplay("showFileViewer", false)}
-                />
-              </Show>
+          <DshSurface>
+            <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+              <SpaceRail onFileClick={handleFileClick} />
+              <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <Workspace />
+                <Show when={display().showFileViewer && surfaceTabs().length > 0 && surfaceActiveKey()}>
+                  <WorkbenchInspector
+                    tabs={surfaceTabs()}
+                    activeKey={surfaceActiveKey()!}
+                    onActiveKeyChange={(key) => setSurfaceStore("activeKey", key)}
+                    width={surfaceWidth()}
+                    onWidthChange={(width) => setSurfaceStore("width", width)}
+                    expanded={surfaceStore.expanded}
+                    onExpandedChange={(expanded) => setSurfaceStore("expanded", expanded)}
+                    pinned={surfaceStore.pinned}
+                    onPinnedChange={(pinned) => setSurfaceStore("pinned", pinned)}
+                    onCloseTab={closeSurfaceTabByKey}
+                    onClose={() => {
+                      setSurfaceStore("tabs", [])
+                      setSurfaceStore("activeKey", undefined)
+                    }}
+                    onDismiss={() => wb.setDisplay("showFileViewer", false)}
+                  />
+                </Show>
+              </div>
             </div>
-          </div>
+          </DshSurface>
           <Show when={display().showStatusbar}>
             <StatusBar />
           </Show>
@@ -351,6 +355,7 @@ export default function Workbench() {
           <WorkbenchRuntimeProvider>
             <WorkbenchActionsProvider>
               <WorkbenchSidecarCleanupBinding />
+              <WorkbenchDshFlagBinding />
               <SpaceStoreProvider>
                 <ViewRegistryProvider>
                   <ErrorBoundary

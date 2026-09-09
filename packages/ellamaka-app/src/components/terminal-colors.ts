@@ -1,5 +1,5 @@
-import { withAlpha } from "@opencode-ai/ui/theme/color"
-import type { ColorValue, HexColor, ResolvedTheme } from "@opencode-ai/ui/theme/types"
+import { withAlpha } from "@wopal/ui/theme/color"
+import type { ColorValue, HexColor, ResolvedTheme } from "@wopal/ui/theme/types"
 
 export interface TerminalTheme {
   background: string

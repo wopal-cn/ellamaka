@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { CliContract, classifyWopalCliVersion, MIN_WOPAL_CLI_VERSION } from "../../src/wopal/cli-contract"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"

@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import { type TestRenderer, createTestRenderer } from "@opentui/core/testing"
 import { buildSplash, splashMeta } from "@/cli/cmd/run/splash"
 import { RUN_THEME_FALLBACK } from "@/cli/cmd/run/theme"
-import { BINARY_NAME } from "../../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 const active: TestRenderer[] = []
 

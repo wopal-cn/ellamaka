@@ -4,7 +4,7 @@ import { effectCmd, fail } from "../effect-cmd"
 import { Git } from "@/git"
 import { InstanceRef } from "@/effect/instance-ref"
 import { Process } from "@/util/process"
-import { BINARY_NAME } from "../../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 export const PrCommand = effectCmd({
   command: "pr <number>",

@@ -3,9 +3,9 @@ export * as ConfigWopalSpaceSettings from "./wopal-space-settings"
 import path from "path"
 import { existsSync } from "fs"
 import { Effect } from "effect"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
-import { detectWopalSpace } from "../../../ellamaka/detect"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { Global } from "@wopal/ellamaka-core/global"
+import { detectWopalSpace } from "@wopal/ellamaka-brand/detect"
 
 export interface WopalSpaceSettingsDeps {
   readConfigFile: (filepath: string) => Effect.Effect<string | undefined, never, never>

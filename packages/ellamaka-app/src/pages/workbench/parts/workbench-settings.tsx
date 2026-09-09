@@ -1,7 +1,7 @@
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
+import { Icon as IconV2 } from "@wopal/ui/v2/components/icon.jsx"
+import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
 import { useLanguage } from "@/context/language"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@wopal/ui/context/dialog"
 
 export function WorkbenchSettingsButton() {
   const language = useLanguage()

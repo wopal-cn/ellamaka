@@ -31,7 +31,7 @@ withdraw 模式执行远端删除（恢复 aliases → 删 R2 prefix → 删 Rel
 ━━━ 选项 ━━━
   -h, --help             显示此帮助
   --channel <stable|beta>  撤回目标渠道（desktop 为多渠道，必须选择；
-                           cli 只有 stable，忽略此选项）
+                           cli 只有 stable，忽略此选项；rc 候选属于 stable 渠道）
   --dry-run              只做全部校验与计划展示，不登记、不提交、不 dispatch
 
 ━━━ 校验（全部通过后才产生任何变更）━━━
@@ -126,9 +126,9 @@ if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
 fi
 
 # --- Version helpers ---
-SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$'
+SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+(-(beta|rc)\.[0-9]+)?$'
 
-# channel_of <version> — 输出 stable | beta
+# channel_of <version> — 输出 stable | beta（rc 候选属于 stable 渠道）
 channel_of() {
   if [[ "$1" == *-beta.* ]]; then echo "beta"; else echo "stable"; fi
 }
@@ -155,13 +155,16 @@ highest_released() {
       const pa = a.split('-'), pb = b.split('-')
       const ca = pa[0].split('.').map(Number), cb = pb[0].split('.').map(Number)
       for (let i = 0; i < 3; i++) if (ca[i] !== cb[i]) return ca[i] - cb[i]
-      const ba = pa[1] ? Number(pa[1].replace('beta.', '')) : Infinity
-      const bb = pb[1] ? Number(pb[1].replace('beta.', '')) : Infinity
-      return ba - bb
+      const rank = (s) => (s === undefined ? 2 : s.startsWith('rc.') ? 1 : 0)
+      const ra = rank(pa[1]), rb = rank(pb[1])
+      if (ra !== rb) return ra - rb
+      const na = pa[1] ? Number(pa[1].split('.')[1]) : 0
+      const nb = pb[1] ? Number(pb[1].split('.')[1]) : 0
+      return na - nb
     }
     let best = null
     for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
-      const m = line.match(new RegExp('refs/tags/ellamaka-' + product + '-v(\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-beta\\\\.\\\\d+)?)\\\$'))
+      const m = line.match(new RegExp('refs/tags/ellamaka-' + product + '-v(\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-(?:beta|rc)\\\\.\\\\d+)?)\\\$'))
       if (!m) continue
       const v = m[1]
       const isBeta = v.includes('-beta.')
@@ -183,13 +186,16 @@ find_previous_version() {
       const pa = a.split('-'), pb = b.split('-')
       const ca = pa[0].split('.').map(Number), cb = pb[0].split('.').map(Number)
       for (let i = 0; i < 3; i++) if (ca[i] !== cb[i]) return ca[i] - cb[i]
-      const ba = pa[1] ? Number(pa[1].replace('beta.', '')) : Infinity
-      const bb = pb[1] ? Number(pb[1].replace('beta.', '')) : Infinity
-      return ba - bb
+      const rank = (s) => (s === undefined ? 2 : s.startsWith('rc.') ? 1 : 0)
+      const ra = rank(pa[1]), rb = rank(pb[1])
+      if (ra !== rb) return ra - rb
+      const na = pa[1] ? Number(pa[1].split('.')[1]) : 0
+      const nb = pb[1] ? Number(pb[1].split('.')[1]) : 0
+      return na - nb
     }
     let best = null
     for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
-      const m = line.match(new RegExp('refs/tags/ellamaka-' + product + '-v(\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-beta\\\\.\\\\d+)?)\\\$'))
+      const m = line.match(new RegExp('refs/tags/ellamaka-' + product + '-v(\\\\d+\\\\.\\\\d+\\\\.\\\\d+(?:-(?:beta|rc)\\\\.\\\\d+)?)\\\$'))
       if (!m) continue
       const v = m[1]
       const isBeta = v.includes('-beta.')
@@ -257,9 +263,12 @@ record_withdrawn() {
         const pa = a.split('-'), pb = b.split('-')
         const ca = pa[0].split('.').map(Number), cb = pb[0].split('.').map(Number)
         for (let i = 0; i < 3; i++) if (ca[i] !== cb[i]) return ca[i] - cb[i]
-        const ba = pa[1] ? Number(pa[1].replace('beta.', '')) : Infinity
-        const bb = pb[1] ? Number(pb[1].replace('beta.', '')) : Infinity
-        return ba - bb
+        const rank = (s) => (s === undefined ? 2 : s.startsWith('rc.') ? 1 : 0)
+        const ra = rank(pa[1]), rb = rank(pb[1])
+        if (ra !== rb) return ra - rb
+        const na = pa[1] ? Number(pa[1].split('.')[1]) : 0
+        const nb = pb[1] ? Number(pb[1].split('.')[1]) : 0
+        return na - nb
       }
       arr.sort(cmp)
     }
@@ -309,7 +318,7 @@ preflight_repo() {
 # --- Resolve channel ---
 if [ -n "$VERSION" ]; then
   if ! [[ "$VERSION" =~ $SEMVER_RE ]]; then
-    die "版本号格式无效: v${VERSION}（应为 X.Y.Z 或 X.Y.Z-beta.N）"
+    die "版本号格式无效: v${VERSION}（应为 X.Y.Z、X.Y.Z-rc.N 或 X.Y.Z-beta.N）"
   fi
   VERSION_CHANNEL="$(channel_of "$VERSION")"
   if [ -n "$CHANNEL" ] && [ "$CHANNEL" != "$VERSION_CHANNEL" ]; then

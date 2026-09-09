@@ -1,7 +1,7 @@
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Flock } from "@opencode-ai/core/util/flock"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
+import { Flock } from "@wopal/ellamaka-core/util/flock"
 import { Git } from "@/git"
 import {
   repositoryCachePath,

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
 
-mock.module("@opencode-ai/ui/icon", () => ({
+mock.module("@wopal/ui/icon", () => ({
   Icon: () => undefined,
 }))
 

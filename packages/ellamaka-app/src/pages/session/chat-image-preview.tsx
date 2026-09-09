@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { Icon } from "@opencode-ai/ui/icon"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { Icon } from "@wopal/ui/icon"
+import { ImagePreview } from "@wopal/ui/image-preview"
 
 export const imagePreviewZoom = {
   min: 25,

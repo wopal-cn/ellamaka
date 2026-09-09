@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Effect, FileSystem, Layer } from "effect"
 import { Truncate } from "@/tool/truncate"
 import { Config } from "@/config/config"

@@ -1,7 +1,7 @@
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Binary } from "@opencode-ai/core/util/binary"
+import { showToast } from "@wopal/ui/toast"
+import { base64Encode } from "@wopal/ellamaka-core/util/encode"
+import { Binary } from "@wopal/ellamaka-core/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
@@ -14,6 +14,7 @@ import { type ContextItem, type ImageAttachmentPart, type Prompt, usePrompt } fr
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { setSessionModel } from "@/utils/session-model-tracker"
+import { drainPendingSessionSandbox, NEW_SESSION_SANDBOX_KEY, type SandboxPreset } from "./sandbox-control"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
@@ -35,6 +36,8 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  /** Per-message sandbox mode from the composer selector; absent = space default. */
+  sandboxMode?: SandboxPreset
 }
 
 type FollowupSendInput = {
@@ -164,6 +167,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
       parts: requestParts,
       variant: input.draft.variant,
+      ...(input.draft.sandboxMode ? { sandboxMode: input.draft.sandboxMode } : {}),
     })
     return true
   } catch (err) {
@@ -182,6 +186,8 @@ type PromptSubmitInput = {
   autoAccept: Accessor<boolean>
   mode: Accessor<"normal" | "shell">
   working: Accessor<boolean>
+  /** Per-session sandbox mode reader for the composer's dock variant. */
+  sandboxMode?: Accessor<SandboxPreset | undefined>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   promptLength: (prompt: Prompt) => number
@@ -400,6 +406,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     }
     const agent = currentAgent.name
     const context = prompt.context.items().slice()
+    // New-session composers have no session id to persist against; the
+    // selector parked the choice under the fixed pending key. Drain it into
+    // the created session so follow-ups inherit the selection.
+    const sandboxMode = isNewSession ? drainPendingSessionSandbox(NEW_SESSION_SANDBOX_KEY) : input.sandboxMode?.()
     const draft: FollowupDraft = {
       sessionID: session.id,
       sessionDirectory,
@@ -408,6 +418,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       agent,
       model,
       variant,
+      ...(sandboxMode ? { sandboxMode } : {}),
     }
 
     const clearInput = () => {

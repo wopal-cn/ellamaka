@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, Schema } from "effect"
 import { mkdir } from "fs/promises"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@wopal/ellamaka-core/global"
 import { SpaceRegistry } from "@/wopal/space-registry"
 import { CliContract } from "@/wopal/cli-contract"
 import { SessionDirectoryHealth } from "./session-directory-health"

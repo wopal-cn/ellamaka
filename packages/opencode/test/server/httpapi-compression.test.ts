@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { gunzipSync, inflateSync } from "node:zlib"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, invalidateGlobalConfig, tmpdir } from "../fixture/fixture"

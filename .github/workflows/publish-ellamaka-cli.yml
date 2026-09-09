@@ -1,6 +1,8 @@
 name: Publish Ellamaka CLI
 
 on:
+  push:
+    tags: ["ellamaka-cli-v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -32,8 +34,8 @@ on:
           - mac
           - windows
 
-# tag-release.sh 触发本 workflow：仅 dispatch，不监听 push:tags。
-# 现在触发权归 tag-release.sh，按 --cli/--desktop 选择性 dispatch。
+# 触发权归 release-cli.sh / release-desktop.sh：一步制 bump 后 push tag（push: tags 触发本
+# workflow）；failed attempt 的 re-release 走 workflow_dispatch --ref <tag>。
 # Per docs/DISTRIBUTION.md §4.1/§7, releases are immutable: versioned R2
 # paths are never cleared, committed releases are never overwritten.
 
@@ -55,16 +57,23 @@ jobs:
       - name: Derive version
         id: version
         run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
+          # push:tags 事件（release-cli / release-desktop 一步制发布）：版本从 tag 解析，
+          # 必为正式发布。workflow_dispatch：输入版本（发布/重发/CI dev 共用）。
+          if [[ "${{ github.event_name }}" = "push" ]]; then
+            version="${GITHUB_REF_NAME#ellamaka-cli-v}"
+            tag="${GITHUB_REF_NAME}"
+            release="true"
+          elif [[ -n "${{ inputs.version }}" ]]; then
             version="${{ inputs.version }}"
             tag="v${version}"
+            if [[ "${{ inputs.publish }}" == "true" ]]; then
+              release="true"
+            else
+              release=""
+            fi
           else
             version="0.0.0-dev"
             tag=""
-          fi
-          if [[ "${{ inputs.publish }}" == "true" && -n "${{ inputs.version }}" ]]; then
-            release="true"
-          else
             release=""
           fi
           {
@@ -72,6 +81,20 @@ jobs:
             echo "release=${release}"
             echo "tag=${tag}"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+      - name: Validate version matches package.json anchor
+        if: steps.version.outputs.release != ''
+        run: |
+          # 版本真相源 = packages/ellamaka-cli/package.json（docs/DISTRIBUTION.md
+          # §3.2）。tag 版本必须等于锚点文件版本 —— 防手抖打错 tag 或
+          # dispatch 错版本。发布路径的 OPENCODE_VERSION 即由此而来。
+          PKG_VERSION="$(node -e "console.log(require('./packages/ellamaka-cli/package.json').version)")"
+          if [ "${{ steps.version.outputs.version }}" != "$PKG_VERSION" ]; then
+            echo "ERROR: release version ${{ steps.version.outputs.version }} does not match packages/ellamaka-cli/package.json version $PKG_VERSION."
+            echo "  Bump the anchor first (scripts/release-cli.sh), or fix the tag."
+            exit 1
+          fi
+          echo "  version matches packages/ellamaka-cli/package.json: $PKG_VERSION"
 
   build-and-release:
     needs: version
@@ -103,6 +126,13 @@ jobs:
             --git-commit "$GITHUB_SHA" \
             --workflow-run-id "$GITHUB_RUN_ID" \
             --output release-context.json
+
+      - name: Verify DSH runtime manifest freshness
+        run: |
+          # The bundled CLI inlines generated/dsh-runtime-manifest.json at
+          # bundle time; the committed manifest must match the source before
+          # packaging. Read-only check, fails on drift.
+          bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
 
       - name: Build
         run: |

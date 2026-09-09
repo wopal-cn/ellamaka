@@ -63,6 +63,42 @@ source "$PROJECT_ROOT/scripts/lib/version.sh"
 # schema types match the runtime floor during development and verification.
 sync_min_wopal_cli_version "$PROJECT_ROOT"
 
+# ── DSH runtime manifest freshness ────────────────────────────────
+# The CLI binary inlines generated/dsh-runtime-manifest.json at bundle time
+# (static JSON import in @wopal/ellamaka-cordis/runtime). Release builds
+# (OPENCODE_RELEASE=1, CI) only verify with `--check`; dev builds regenerate
+# when the committed manifest is missing or dirty. The build entry itself
+# (ellamaka-release build.ts) also gates — this keeps the local chain explicit.
+ensure_dsh_manifest() {
+  local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts"
+  if [ -n "${OPENCODE_RELEASE:-}" ]; then
+    echo "🔒 Verifying DSH runtime manifest (--check)"
+    bun "$generator" --check
+    return 0
+  fi
+  if bun "$generator" --check >/dev/null 2>&1; then
+    echo "✓ DSH runtime manifest up to date"
+  else
+    echo "⚠️  DSH runtime manifest out of date — regenerating for dev build"
+    bun "$generator"
+  fi
+}
+
+# ── DSH runtime lock freshness ─────────────────────────────────
+# Same gate as the manifest: release/CI only verifies the embedded lock binds
+# the current manifest fingerprint; dev builds regenerate when the lock is
+# missing or drifted (only happens after a dependency version bump; the
+# generator's fast path exits in milliseconds when the fingerprint matches).
+ensure_dsh_lock() {
+  local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts"
+  if [ -n "${OPENCODE_RELEASE:-}" ]; then
+    echo "🔒 Verifying DSH runtime lock (--check)"
+    bun "$generator" --check
+    return 0
+  fi
+  bun "$generator"
+}
+
 # ── CLI build ──────────────────────────────────────────────
 
 function build_cli() {
@@ -130,6 +166,10 @@ function build_cli() {
         ;;
     esac
   done
+
+  # Run from repo root (generator path is root-relative) before the build.
+  ensure_dsh_manifest
+  ensure_dsh_lock
 
   cd "$PROJECT_ROOT/packages/opencode"
 

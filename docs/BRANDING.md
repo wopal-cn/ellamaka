@@ -1,11 +1,11 @@
 # ellamaka — 品牌化与定制设计
 
 > **状态**: Active
-> **更新时间**: 2026-08-03
+> **更新时间**: 2026-09-01
 > **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
 > **配套文档**: `./DESIGN.md`（架构概览）、`./DISTRIBUTION.md`（分发与版本身份契约）、`./BRANDING.md`（品牌化真相源）
 
-本文档是 ellamaka 品牌化定制的唯一真相源。记录每项定制设计的**目的、内容、要求和实现逻辑**。具体文件级变更由 `git diff upstream/dev` 回答，不在本文档中维护。
+本文档是 ellamaka 品牌化定制的唯一真相源。记录每项定制设计的**目的、内容、要求和实现逻辑**。ellamaka 已放弃跟踪上游（见 §12），需要参考上游实现时从 `labs/ref-repos/opencode/` 读取，本文档不依赖 `git diff upstream/dev`。
 
 ## 0. 项目精简
 
@@ -30,6 +30,9 @@
 | `.opencode/`                                    | opencode 项目级开发配置                             | 上游 IDE 配置，ellamaka 开发不依赖                                                    |
 | `packages/stats/`                               | 云监控面板                                          | v1.15.x 新增，CLI 分发无云监控需求                                                    |
 | `packages/opencode/test/installation/`          | 安装/升级测试                                       | 测试 opencode 的 npm/brew/GitHub 升级链路，ellamaka 由 wopal-cli 接管，该路径为死代码 |
+| `packages/app/`                                 | 上游 Web UI                                         | ellamaka 使用 `packages/ellamaka-app`；上游 UI 已放弃跟踪，参考 `labs/ref-repos/opencode/packages/app` |
+| `packages/desktop/`                             | 上游 Electron 桌面                                  | ellamaka 使用 `packages/ellamaka-desktop`；上游桌面已放弃跟踪，参考 `labs/ref-repos/opencode/packages/desktop` |
+| `packages/storybook/`                           | 上游组件文档                                        | 无引用死包，ellamaka 不维护组件文档                                                |
 
 ### 已删除文件
 
@@ -77,7 +80,9 @@
 
 ### 实现逻辑
 
-独立文件 `packages/ellamaka/branding.ts`，零侵入上游源码。消费者通过相对 import 引用，品牌值不在上游文件中出现。
+独立文件 `packages/ellamaka-brand/branding.ts`（包 `@wopal/ellamaka-brand`），零侵入上游源码。消费者一律通过包路径 import（`@wopal/ellamaka-brand/branding`），禁止相对路径跨包引用，品牌值不在上游文件中出现。
+
+> 包沿革：品牌常量最初位于 `packages/ellamaka/branding.ts`（包名 `@wopal/ellamaka-build`）。2026-09-01 包结构定案（见 DESIGN.md §2.1）：目录与包名统一为 `ellamaka-brand`，名实相符——该包只承载运行时品牌身份，不含构建逻辑；构建与发布归属 `@wopal/ellamaka-release`。
 
 ---
 
@@ -129,11 +134,13 @@ Core `Global` 只负责 `WOPAL_HOME` 路径布局，不将 `.env` 文件写入 `
 
 **上游 `script/build.ts` 零侵入**。ellamaka 通过独立 copy 文件 `packages/ellamaka-release/src/cli/build.ts` 实现 5 类定制：
 
-1. **品牌注入**：`BINARY_NAME` 替换硬编码 `"opencode"`，`CHANNEL_RELEASE`/`CHANNEL_DEV` 替换上游渠道
+1. **品牌注入**：`BINARY_NAME` 替换硬编码 `"opencode"`，`CHANNEL_RELEASE`/`CHANNEL_DEV`（import 自 `@wopal/ellamaka-brand/branding`）替换上游渠道
 2. **平台裁剪**：`--arch primary` 构建 7 个 P1 目标（4 个 native + 3 个 x64 baseline），排除 musl、Linux arm64 和 Windows arm64 变体
 3. **路径适配**：import 路径加 `../opencode/` 前缀，指向引擎源码
 4. **单平台构建**：`--single` 仅构建当前平台
-5. **Web UI 选择**：`--web-ui ellamaka-app|app|none` 选择嵌入 ellamaka UI、上游 UI 或不嵌入 UI
+5. **Web UI 选择**：`--web-ui ellamaka-app|none` 选择嵌入 ellamaka UI 或不嵌入 UI
+
+构建期版本/渠道解析由 `@wopal/ellamaka-release` 的 `build-env` 模块提供（原 `@wopal/ellamaka-script` 的 `Script`，2026-09-01 收编，见 DESIGN.md §2.1）。
 
 ### 要求
 
@@ -210,7 +217,7 @@ CLI 入口中间件先清除继承的 `WOPAL_SPACE`/`WOPAL_SPACE_ROOT`，再执�
 
 ### 实现逻辑
 
-独立文件 `packages/ellamaka/detect.ts` 提供纯目录检测。CLI 入口将结果转换成单进程兼容 env。Sidecar 直接将当前 directory 的检测结果传给 PluginInput，不把空间状态写入进程 env。
+独立文件 `packages/ellamaka-brand/detect.ts` 提供纯目录检测。CLI 入口将结果转换成单进程兼容 env。Sidecar 直接将当前 directory 的检测结果传给 PluginInput，不把空间状态写入进程 env。
 
 ---
 
@@ -417,7 +424,7 @@ WopalSpace 模式下，`<spaceRoot>/.wopal/skills/` 的同名技能显式优先�
 
 ### 目的
 
-Ellamaka 通过 wopal-cli 分发安装。`wopal ellamaka install` 默认安装 Desktop latest 与 CLI stable latest；`--cli` 只安装 CLI stable latest。制品使用自有 CDN，不依赖 OpenCode 的 GitHub/npm/brew 更新通道。
+Ellamaka 通过 wopal-cli 分发安装。`wopal ellamaka install` 默认安装 Desktop latest 与 CLI latest；`--cli` 只安装 CLI latest。制品使用自有 CDN，不依赖 OpenCode 的 GitHub/npm/brew 更新通道。
 
 ### 9.1 安装方法
 
@@ -529,9 +536,15 @@ ellamaka 对上游源码的所有修改遵循以下原则，以最小化每次�
 
 ## 12. 上游合并策略
 
-正式采用的 OpenCode Engine version/commit 记录在 `release/upstreams.lock.json` 的 `sources.opencode`。冻结的 `packages/app` 与 `packages/desktop` 各自读取同一文件中的 `componentBaselines[<path>]`，它们可以继续停留在历史复制基线，不被 Engine baseline 升级顺带改写。CLI/Desktop build 和 release workflow 必须读取 lock，不在各自脚本中维护重复常量。只有上游同步流程可以更新 Engine baseline；component baseline 需要独立显式更新。普通 build/release 禁止临时输入或自动采用网络上的最新 OpenCode tag。
+> **状态**: 已放弃跟踪上游（2026-08-31 起）。ellamaka 不再从 `upstream/dev` 合并 OpenCode 变更，`dev` 分支不再作为上游跟踪线。以下历史机制仅作记录，不再执行。
 
-### 合并保护文件
+正式采用的 OpenCode Engine version/commit 记录在 `release/upstreams.lock.json` 的 `sources.opencode`，作为 provenance 与 v1 兼容基线保留。CLI/Desktop build 和 release workflow 必须读取 lock，不在各自脚本中维护重复常量。普通 build/release 禁止临时输入或自动采用网络上的最新 OpenCode tag。
+
+### 参考来源
+
+ellamaka 已放弃跟踪上游，后续如需参考 OpenCode 对应模块代码（如 `packages/app`、`packages/desktop`、`packages/core` 等），统一从本地参考仓库 `labs/ref-repos/opencode/` 读取对应模块，不再依赖 `upstream` remote 或 `git diff upstream/dev`。
+
+### 合并保护文件（历史记录，不再执行）
 
 合并时如与上游冲突，以下文件始终保留 ellamaka 版本：
 
@@ -543,9 +556,9 @@ ellamaka 对上游源码的所有修改遵循以下原则，以最小化每次�
 | `docs/UPSTREAM-MERGE-LOG.md`                                                             | 合并历史记录         |
 | `scripts/`                                                                               | ellamaka 自有脚本    |
 | `.github/workflows/publish-ellamaka-cli.yml`                                                 | ellamaka CI          |
-| `packages/ellamaka/`                                                                     | ellamaka 品牌包      |
+| `packages/ellamaka-brand/`                                                               | ellamaka 品牌包      |
 
-### 合并冲突热点
+### 合并冲突热点（历史记录，不再执行）
 
 以下文件在上游改动频繁，注入点应尽可能小：
 
@@ -554,7 +567,7 @@ ellamaka 对上游源码的所有修改遵循以下原则，以最小化每次�
 - `src/cli/cmd/run/splash.ts` — 启动/退出画面，退出 resume 命令通过 `BINARY_NAME` 注入
 - `core/src/global.ts` — 路径系统
 
-### 合并后验证
+### 合并后验证（历史记录，不再执行）
 
 1. `bun typecheck`
 2. `bun packages/ellamaka-release/src/cli/build.ts --arch primary --web-ui ellamaka-app`
@@ -602,7 +615,7 @@ TUI 首页 tips 系统和 sidebar 版本署名中不再出现 `OpenCode` 引用�
 
 ### 14.1 Tips 列表
 
-原创 tips 列表定义在 `packages/ellamaka/tips.ts`，导出 `ELLAMAKA_TIPS`。tips-view.tsx 通过 import 引用，不再内联定义。
+原创 tips 列表定义在 `packages/ellamaka-brand/tips.ts`（包 `@wopal/ellamaka-brand`），导出 `ELLAMAKA_TIPS`。tips-view.tsx 通过 import 引用，不再内联定义。
 
 **策展原则**：
 
@@ -613,7 +626,7 @@ TUI 首页 tips 系统和 sidebar 版本署名中不再出现 `OpenCode` 引用�
 
 ### 14.2 Sidebar 版本署名
 
-sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中的 `OpenCode` → `BINARY_TITLE`（`Ellamaka`）。通过 import `BINARY_TITLE` from `packages/ellamaka/branding` 注入。
+sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中的 `OpenCode` → `BINARY_TITLE`（`Ellamaka`）。通过 import `BINARY_TITLE` from `@wopal/ellamaka-brand/branding` 注入。
 
 ---
 
@@ -622,8 +635,8 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 ### 目的
 
 `packages/ellamaka-app` 是 ellamaka 的官方 web UI,通过 fork 上游
-`packages/app` 创建。承接从 `poc/web` 验证的产品形态(三栏 IDE 工作台),
-同时保持与上游 `opencode` 能力更新的同步能力。
+`packages/app` 创建。承接从 `poc/web` 验证的产品形态(三栏 IDE 工作台)。
+上游 `packages/app` 已放弃跟踪（见 §12），后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
 
 **设计决策与架构详见 [WORKBENCH.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/WORKBENCH.md) 以及 [DESIGN.md §8](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/DESIGN.md)。** 本节记录品牌化实施细节。
 
@@ -631,9 +644,9 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 
 | 维度     | 上游 `packages/app` | `packages/ellamaka-app`      |
 | -------- | ------------------- | ---------------------------- |
-| 包名     | `@opencode-ai/app`  | `@opencode-ai/ellamaka-app`  |
+| 包名     | `@opencode-ai/app`  | `@wopal/ellamaka-app`        |
 | 功能范围 | 通用 AI Agent UI    | WopalSpace 工作台 + 空间管理 |
-| 上游同步 | 跟随上游            | 选择性同步(§15.3)            |
+| 上游同步 | 已放弃跟踪          | 独立演进                     |
 | 构建嵌入 | opencode 二进制     | ellamaka 二进制              |
 
 ### 15.2 文件级差异
@@ -642,7 +655,7 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 
 | 文件                                  | 差异类型 | 说明                                                                                  |
 | ------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
-| `package.json`                        | 修改     | `name`: `@opencode-ai/ellamaka-app`;"workspace:\*" 依赖保持一致                       |
+| `package.json`                        | 修改     | `name`: `@wopal/ellamaka-app`;"workspace:\*" 依赖保持一致                            |
 | `src/app.tsx`                         | 追加     | 注册 `/workbench` 路由和 ViewProvider                                                 |
 | `src/pages/workbench/index.tsx`       | 新增     | 工作台页面主布局(TopBar + ActivityBar + Sidebar + Workspace + StatusBar)              |
 | `src/pages/workbench/view.tsx`        | 新增     | 视图切换 Provider(TUI/Chat/Split),持久化到 localStorage                               |
@@ -659,19 +672,17 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 
 ```bash
 bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app  # ellamaka 官方 Web UI
-bun packages/ellamaka-release/src/cli/build.ts --web-ui app           # 上游 app 基线
 bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌入 Web UI
 ```
 
 默认值是 `ellamaka-app`。嵌入机制不变:Vite build → dist/ → `opencode-web-ui.gen.ts` 编译入二进制。
 
-### 15.4 上游同步策略
+### 15.4 上游关系与合并保护
 
-详见 `docs/DESIGN.md §8.4`。`.gitattributes` 保护规则:
+ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不再从上游同步。`.gitattributes` 保护规则:
 
 | 目录                              | 合并保护     | 说明                         |
 | --------------------------------- | ------------ | ---------------------------- |
-| `packages/app/`                   | `merge=ours` | 上游对照基线,不接受上游覆盖  |
 | `packages/ellamaka-app/`          | `merge=ours` | ellamaka 定制,不接受上游覆盖 |
 | `packages/ellamaka-app/` 新增目录 | 无保护       | 无上游对应,不参与合并冲突    |
 
@@ -703,7 +714,7 @@ bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌�
 
 **已完成(基础设施跑通 → 空间侧栏接通)**:
 
-1. 复制 `packages/app` → `packages/ellamaka-app`(排除 node_modules/dist/.turbo)
+1. 复制 `packages/app` → `packages/ellamaka-app`(排除 node_modules/dist/.turbo)。上游已放弃跟踪，现在从 `labs/ref-repos/opencode/packages/app` 读取参考实现
 2. 修改 `package.json` 元数据
 3. 在 `packages/ellamaka-release/src/cli/build.ts` 切换嵌入源
 4. 注册 `/workbench` 路由 + 三栏布局骨架(TopBar/ActivityBar/Sidebar/Workspace/StatusBar)
@@ -711,7 +722,7 @@ bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌�
 6. 空间侧栏接通真实数据:通过 `wopalSpace.spaces` SDK 方法(后端 §16)拉取 `$WOPAL_HOME/config/settings.jsonc` 的 WopalSpace 注册表
 7. 点击空间在 workbench 内开 tab,不跳转官方 session 路由(符合 PoC 设计)
 
-**后续迭代**:TUI 视图接入(复用 terminal.tsx) → Chat 视图接入(复用 session 组件) → Split 分屏 → 命令面板集成 → 上游 app 同步。
+**后续迭代**:TUI 视图接入(复用 terminal.tsx) → Chat 视图接入(复用 session 组件) → Split 分屏 → 命令面板集成。
 
 ### 15.7 相关文档
 
@@ -971,16 +982,16 @@ Space
 
 | 维度       | 上游基线                     | ellamaka-desktop                                         |
 | ---------- | ---------------------------- | -------------------------------------------------------- |
-| 包路径     | `packages/desktop`           | `packages/ellamaka-desktop`                              |
-| 包名       | `@opencode-ai/desktop`       | `@opencode-ai/ellamaka-desktop`                          |
+| 包路径     | `packages/desktop`（已删，参考 `labs/ref-repos/opencode/packages/desktop`） | `packages/ellamaka-desktop`                              |
+| 包名       | `@opencode-ai/desktop`       | `@wopal/ellamaka-desktop`                                |
 | 桌面框架   | 初始复制时为 Electron 41.2.1 | Electron；具体版本由 Ellamaka Desktop 自身依赖与测试决定 |
-| 渲染应用   | `@opencode-ai/app`           | `@opencode-ai/ellamaka-app`                              |
+| 渲染应用   | `@opencode-ai/app`（已删，参考 `labs/ref-repos/opencode/packages/app`） | `@wopal/ellamaka-app`                                    |
 | 默认界面   | OpenCode 主界面              | Ellamaka Workbench `/workbench`                          |
 | 本地运行时 | OpenCode node sidecar        | Ellamaka/WopalSpace node sidecar                         |
 
 ### 17.2 包边界
 
-`ellamaka-desktop` 与 `ellamaka-app` 采用相同的独立复制模式。上游 `packages/desktop` 保持裁剪状态，桌面定制集中在 `packages/ellamaka-desktop`。
+`ellamaka-desktop` 与 `ellamaka-app` 采用相同的独立复制模式。上游 `packages/desktop` 已删除（2026-08-31），桌面定制集中在 `packages/ellamaka-desktop`，参考代码从 `labs/ref-repos/opencode/packages/desktop` 读取。
 
 - Renderer 依赖 `ellamaka-app` 的根导出、Vite 插件、CSS、public 资源和 i18n 字典。
 - Main Process 与 Preload 负责窗口、IPC、系统能力、更新和 sidecar 生命周期。
@@ -1007,14 +1018,13 @@ Space
 - 应用退出时，Main Process 停止 sidecar，Instance finalizer 立即终止全部 PTY 和子进程。
 - PTY 所有权集中在 sidecar；Electron Main 与 Preload 保持窗口、系统能力和 sidecar 生命周期边界。
 
-### 17.4 上游同步策略
+### 17.4 上游关系
 
-`ellamaka-desktop` 的历史复制起点是 OpenCode v1.15.13。当前冻结 component baseline 由 upstream lock 记录；它不会仅因 Engine baseline 前进而自动变化。
+`ellamaka-desktop` 的历史复制起点是 OpenCode v1.15.13，记录于 `release/upstreams.lock.json`。ellamaka 已放弃跟踪上游（见 §12），上游 `packages/desktop` 已删除，参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
 
-- 当前 component baseline 上的修复通过人工 review 后选择性移植。
-- Electron 安全修复、进程生命周期修复和平台兼容修复可独立回移，并通过桌面测试验证。
-- Ellamaka 升级 OpenCode Engine baseline 时，sidecar 与 Engine API 必须同步评估；app/desktop component baseline 是否升级是独立、显式、可审计的决定。
-- 独立包保留基线来源和定制差异记录，确保后续同步可审计。
+- Electron 安全修复、进程生命周期修复和平台兼容修复可从参考实现独立回移，并通过桌面测试验证。
+- Ellamaka 如升级 OpenCode Engine baseline，sidecar 与 Engine API 同步评估。
+- 独立包保留基线来源和定制差异记录，确保演进可审计。
 
 ### 17.5 实施边界
 

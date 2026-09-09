@@ -138,6 +138,41 @@ describe("SidecarSupervisor", () => {
     expect(states[states.length - 1]).toBe("ready")
   })
 
+  test("ready connection is URL-only (no dshPort) and survives restart", async () => {
+    const supervisor = createSupervisor(mockSpawner)
+    const startPromise = supervisor.start()
+    await tick()
+
+    const { result, passHealth } = createSpawnResult()
+    mockSpawner.resolve(result)
+    await tick()
+    passHealth()
+    await startPromise
+
+    const state = supervisor.getState()
+    expect(state.status).toBe("ready")
+    expect(state.connection!.url).toBe("http://127.0.0.1:12345")
+    expect(state.connection!.username).toBe("ellamaka")
+    expect(state.connection!.password).toBe("test-password")
+    // The connection carries no dshPort — the DSH surface is served under /dsh
+    // on the same listener, so no second-port discovery is needed.
+    expect(state.connection).not.toHaveProperty("dshPort")
+
+    // Restart keeps the URL-only connection.
+    const restartPromise = supervisor.restart("user")
+    await tick()
+    const { result: result2, passHealth: passHealth2 } = createSpawnResult()
+    mockSpawner.resolve(result2)
+    await tick()
+    passHealth2()
+    await restartPromise
+
+    const restarted = supervisor.getState()
+    expect(restarted.status).toBe("ready")
+    expect(restarted.connection!.url).toBe("http://127.0.0.1:12345")
+    expect(restarted.connection).not.toHaveProperty("dshPort")
+  })
+
   // ── starting → lost (spawn fails) ──────────────────────────────────────
 
   test("starting → lost when spawn throws", async () => {

@@ -8,6 +8,8 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## 1. Canonical References
 
 - DESIGN: `docs/DESIGN.md`
+- DSH POC DESIGN: `docs/DESIGN-dsh-poc.md` (dual-engine fusion experiment: bridge/absorb dual-track, edge-channel usage of dsh tool plugins)
+- PLAN TODOS: `docs/PLAN-TODOS.md`
 - API CONTRACT: `docs/API-CONTRACT.md`
 - BRANDING: `docs/BRANDING.md`
 - WORKBENCH: `docs/WORKBENCH.md`
@@ -15,7 +17,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - DISTRIBUTION: `docs/DISTRIBUTION.md`
 - Upstream Merge logs: `docs/UPSTREAM-MERGE-LOG.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
-- `.gitattributes` — fork-specific file merge protection (`merge=ours`)
+- `.gitattributes` — merge-strategy history notes; all `merge=ours` rules removed 2026-09-01 (upstream tracking ended; the driver silently discarded one side of conflicted files)
 - opencode package rules: `packages/opencode/AGENTS.md`
 - ellamaka-app package rules: `packages/ellamaka-app/AGENTS.md`
 - desktop package rules: `packages/ellamaka-desktop/AGENTS.md`
@@ -27,9 +29,9 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | Directory | Responsibility |
 |---|---|
 | `packages/opencode/` | Inherited OpenCode engine main package; see `packages/opencode/AGENTS.md` for internal rules |
-| `packages/core/` | Shared core, flags, global paths, installation/runtime primitives |
-| `packages/app/`, `packages/ui/`, `packages/storybook/` | Inherited UI surfaces; only modify when engine/TUI requires |
-| `packages/plugin/`, `packages/script/`, `packages/util/` | Workspace support packages |
+| `packages/ellamaka-core/` | Shared core, flags, global paths, installation/runtime primitives |
+| `packages/ui/` | Inherited UI component library; only modify when engine/TUI requires |
+| `packages/plugin/`, `packages/ellamaka-script/` | Workspace support packages |
 | `packages/sdk/` | SDK workspace; JS SDK regeneration uses existing script |
 | `packages/ellamaka/` | Brand constants, logo, build wrapper, WopalSpace auto-detection, install path detection, and package-level tests |
 | `packages/ellamaka-app/` | Workbench Web UI frontend; see `packages/ellamaka-app/AGENTS.md` for internal rules |
@@ -80,8 +82,9 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | Build ellamaka-branded CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
 | Build CLI binary | `./scripts/build.sh cli` |
 | Build desktop app | `./scripts/build.sh desktop` |
-| Release Desktop beta | `./scripts/tag-release.sh X.Y.Z-beta.N --channel beta --desktop` |
-| Release Desktop prod | `./scripts/tag-release.sh X.Y.Z --channel prod --desktop` |
+| Release CLI | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]` |
+| Release Desktop | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
+| Withdraw a released version | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
 | Dev server (TUI/Workbench/Desktop) | `./scripts/dev.sh` |
 | Post-upstream clean check | `./scripts/check-cleanup.sh` |
 | Desktop package tests | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
@@ -97,7 +100,7 @@ Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/buil
 - When new modules need access to upstream internal capabilities, prefer callback/closure injection over directly exposing upstream Service type boundaries.
 - Extract shared helpers when reusing upstream logic; do not copy large upstream flows.
 - Do not perform unrelated formatting, import reordering, dependency reordering, or object key reordering on upstream files.
-- `.gitattributes` configures `merge=ours` protection for fork-specific files. Upstream merges automatically preserve ellamaka versions; do not delete or modify these rules.
+- `.gitattributes` no longer carries any `merge=ours` rules (removed 2026-09-01: upstream tracking has ended, and the driver silently discarded main-side changes — including a security fix — during conflict resolution). Conflicts must surface and be resolved explicitly, file by file; do not re-add merge strategy drivers.
 
 ### HTTP API and SDK Contract
 
@@ -106,6 +109,8 @@ Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/buil
 - Paths express domain resources and their natural relationships. Query parameters express query conditions. Filesystem access, shell execution, CLI invocation, and directory provisioning are owned by their domain services rather than exposed as browser-callable primitives.
 - The SDK is generated through Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts`. Application code uses the generated client; `packages/sdk/js/src/v2/gen/**` is owned by the generation pipeline.
 - Every endpoint addition or modification tests its schemas, success result, domain errors, and middleware boundary, regenerates the SDK, and updates DESIGN and BRANDING.
+- **SDK regeneration is all-or-nothing**: after any payload schema change, always run `bun script/build.ts` from `packages/sdk/js` (never hand-edit gen files). A field is shipped only when BOTH `types.gen.ts` and `sdk.gen.ts` contain it — the type layer alone is not proof; a stale `buildClientParams` mapping silently drops the field at encoding time with no error (see DESIGN-dsh-poc §6.7). Verify with `rg "<fieldName>" src/v2/gen/` hitting both files, or diff the regenerated output.
+- **Permission rules: explicit beats wildcard only by position**: evaluation is LAST-wins over the merged ruleset, and one agent's frontmatter can come from multiple copies (`~/.wopal` home + space `.wopal`) deep-merged in load order. Frontmatter must not declare `"*": allow`-style wildcards (engine defaults already provide the wildcard fallback); only explicit narrowings. After changing permission frontmatter, verify on the live instance via `GET /agent` that the explicit rule sits after any wildcard in the merged list (see DESIGN-dsh-poc §6.8).
 
 ### Workbench Frontend Development
 
@@ -124,10 +129,30 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - Versioned R2 paths are immutable. Pre-commit failed attempts may clear their own partial objects before retry at the same version; post-commit releases must never be overwritten. Whole-version withdrawal follows `docs/DISTRIBUTION.md` §7.3.
 - Download tables show DMG, EXE, AppImage, and deb. ZIP, blockmap, and `latest-*.yml` are updater assets.
 
+### Cordis Development Constraints
+
+- **Dependency boundary**: `@deepseek-ai/cordis` appears only inside `@wopal/ellamaka-cordis` (locked at 4.0.1); deeply-coupled dsh packages (agent-loop/session/session-query/compaction/subagent/schedule) stay out of mainline runtime for now (see DSH POC DESIGN §7 current conventions — no red lines in PoC, changes need user+Wopal joint confirmation); the runtime probe test (`forbidden-load.test.ts`) remains as an observation tool
+- **Live-home quarantine (dsh in ellamaka)**: while the ellamaka engine is running, nothing outside the engine process may write under `$WOPAL_HOME/dsh/home/profiles/` — including "idempotent" writes whose content is unchanged (the loader's standing rebuild keys on composition-file mtime/size, not content, so a same-content write races the engine and can trigger the tool-cordis registration-conflict error storm). Tests, dumps, and diagnostics that would touch profile files run against a temp home by injection (`dumpDshConfig`/`mountDshWeb` accept `dshHome`/`installAnchor`); CLI tests assert definitions or use injected temp homes, never the real `Global.Path.wopalHome`. Engine restart is the user's action; the host never repairs the live home. The plugin install area is the profile's own `node_modules/` + the profile `package.json` declaration (official semantics) — the legacy `plugins/` install area and `installed.json` store are retired (a leftover store file migrates once into the profile manifests on the next CLI run).
+- **Bridge form**: all Effect↔async bridges follow DSH POC DESIGN §6.2 (`Effect.forkIn(scope)(work)` with the work Fiber held; interrupt via `runtime.runFork(Fiber.interrupt(fiber))`; never drive long-running work via `runPromise`)
+- **Contract discipline**: contracts are self-owned inside `@wopal/ellamaka-cordis` (shapes borrowed from dsh; never import dsh contract packages or track rc releases); external plugins mount only after passing contract conformance smoke tests (DSH POC DESIGN §4.1)
+- **Test gate**: cordis integration tests live in `packages/opencode/test/cordis/`; bridge package changes keep existing opencode tests green
+- **Event-log folds are LAST-wins**: dsh session events (`sandbox/mode`, `approval/policy`) fold with the last event winning. "Restore the default" requires appending the default value explicitly; "equal to default" and "not chosen" are different semantics and must never share a code path (see DESIGN-dsh-poc §4.5 fold invariant). A test that asserts "same value appends nothing" pins the wrong semantics unless the log carries no prior overrides.
+
+### Logging Rules
+
+- **Plugin logging**: cordis plugins log exclusively via built-in `ctx.logger` (auto-named by plugin); no `console.log`, no manual Logger creation; the container-level Exporter bridges to the ellamaka `Log` system at the assembly layer (DSH POC DESIGN §6.4), so plugins never care where logs go
+- **Must log**: lifecycle state changes (init/created/disposed/mount/unmount), errors and exceptions (including degraded paths), key decisions (selection/fallback/skip)
+- **Must not log**: per-item operations inside loops (per-file/per-entry), routine operations on the success path (every load/every search), information derivable from context
+- **Aggregate**: when a loop needs observability, log one summary outside the loop (`log.info("reverted", { count })`), never per-item inside the loop body
+- **Structured**: carry context in the `extra` field (`log.info("reverting", { file, hash })`), never concatenate into the message; use fixed verb phrases for the message so it is searchable
+- **Never swallow errors silently**: a `catch` must log (error or warn); no empty catch
+- **Level**: default `INFO`; `debug` is diagnostic-only and not emitted in production
+
 ## 5. Testing & Verification
 
 - Code changes follow TDD: write a failing test first, then implement code to make it pass.
 - 在修改任何 TypeScript 代码或添加新文件后，必须自动运行 `bun run typecheck`（或对应 package 的 typecheck），确保零 TypeScript 类型错误。
+- Run `bun run lint` before committing and leave zero lint errors. Oxlint errors fail the command, so keep the tree at `Found N warnings and 0 errors`; pre-existing config-level failures (e.g. a package tsconfig referencing a type package that is never installed) must be fixed, not worked around in individual files.
 - Avoid mocks as much as possible; test real implementations, do not duplicate logic into tests.
 - Tests must run from the corresponding package directory, never from repo root.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.
@@ -137,6 +162,6 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 ## 6. User-Supplied Rules
 
 - JS SDK regeneration: `./packages/sdk/js/script/build.ts`.
-- The default branch in this repo is `main`. The `dev` branch only tracks upstream OpenCode `dev` for merge integration.
-- Use `main` or `origin/main` as the diff baseline; `dev` is for upstream-tracking only.
+- The default branch in this repo is `main`. ellamaka has stopped tracking upstream OpenCode (2026-08-31); the `dev` branch is no longer used for upstream merge integration.
+- Use `main` or `origin/main` as the diff baseline. To reference upstream OpenCode module code, read from `labs/ref-repos/opencode/` in the workspace.
 - Prefer auto-executing clear requests; confirm when missing critical info, security risks, or irreversible operations.

@@ -61,7 +61,8 @@ describe("cleanup core — planRetention", () => {
     const aliases = { "ellamaka/latest/manifest.json": "1.17.0" }
     const plan = planRetention({ config: cli, channel: "stable", snapshot, aliases, keepStable: 3, dryRun: false })
 
-    // 1.17.0 protected (kept regardless), 1.16.0 + 1.15.0 kept, older deleted
+    // keepStable=3 counts the newest 3 total (1.17.0 protected + 1.16.0 +
+    // 1.15.0); 1.14.0 and older are deleted.
     expect(plan.deleteCandidates.map((c) => c.version)).toEqual(["1.14.0", "1.13.0", "1.12.0"])
   })
 
@@ -81,9 +82,13 @@ describe("cleanup core — planRetention", () => {
       "ellamaka-desktop/beta/latest/manifest.json": "1.16.0-beta.1",
     }
     const stable = planRetention({ config: desktop, channel: "stable", snapshot, aliases, keepStable: 2, dryRun: false })
+    // keepStable=2 counts the newest 2 total (1.17.0 protected + 1.16.0);
+    // 1.15.0 is deleted.
     expect(stable.deleteCandidates.map((c) => c.version)).toEqual(["1.15.0"])
 
     const beta = planRetention({ config: desktop, channel: "beta", snapshot, aliases, keepStable: 1, dryRun: false })
+    // keepStable=1 counts the newest 1 total (1.16.0-beta.1 protected);
+    // 1.15.0-beta.2 is deleted.
     expect(beta.deleteCandidates.map((c) => c.version)).toEqual(["1.15.0-beta.2"])
   })
 
@@ -123,6 +128,38 @@ describe("cleanup core — planRetention", () => {
       "1.17.0-beta.1",
       "1.17.0-beta.2",
       "1.17.0-beta.3",
+    ])
+  })
+
+  test("CLI rc releases form an independent retention bucket", () => {
+    const snapshot = {
+      versionedPaths: [
+        "ellamaka/v1.17.0",
+        "ellamaka/v1.16.0",
+        "ellamaka/v1.15.0",
+        "ellamaka/v1.17.0-rc.2",
+        "ellamaka/v1.17.0-rc.1",
+        "ellamaka/v1.16.0-rc.1",
+      ],
+      tags: [],
+    }
+    const aliases = { "ellamaka/latest/manifest.json": "1.17.0-rc.2" }
+    const plan = planRetention({
+      config: cli,
+      channel: "stable",
+      snapshot,
+      aliases,
+      keepStable: 2,
+      keepRc: 1,
+      dryRun: false,
+    })
+    // stable bucket: 1.17.0, 1.16.0, 1.15.0 → keep 2 → delete 1.15.0
+    // rc bucket: 1.17.0-rc.2 (protected, consumes the 1 rc slot), 1.17.0-rc.1,
+    // 1.16.0-rc.1 → delete both older rc
+    expect(plan.deleteCandidates.map((c) => c.version).sort()).toEqual([
+      "1.15.0",
+      "1.16.0-rc.1",
+      "1.17.0-rc.1",
     ])
   })
 

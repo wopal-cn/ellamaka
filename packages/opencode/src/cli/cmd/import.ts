@@ -8,7 +8,7 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 

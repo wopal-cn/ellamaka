@@ -1,4 +1,4 @@
-import { File } from "@opencode-ai/ui/file"
+import { File } from "@wopal/ui/file"
 import type { Component } from "solid-js"
 import { ellamakaFileProps } from "./ellamaka-file-props"
 

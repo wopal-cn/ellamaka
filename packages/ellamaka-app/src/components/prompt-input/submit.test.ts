@@ -19,6 +19,7 @@ const optimisticSeeded: boolean[] = []
 const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
+const sentPrompts: Array<{ sandboxMode?: string }> = []
 const syncedDirectories: string[] = []
 
 let params: { id?: string } = {}
@@ -45,7 +46,10 @@ const clientFor = (directory: string) => {
         return { data: undefined }
       },
       prompt: async () => ({ data: undefined }),
-      promptAsync: async () => ({ data: undefined }),
+      promptAsync: async (input: { sandboxMode?: string }) => {
+        sentPrompts.push(input)
+        return { data: undefined }
+      },
       command: async () => ({ data: undefined }),
       abort: async () => ({ data: undefined }),
     },
@@ -70,11 +74,11 @@ beforeAll(async () => {
     },
   }))
 
-  mock.module("@opencode-ai/ui/toast", () => ({
+  mock.module("@wopal/ui/toast", () => ({
     showToast: () => 0,
   }))
 
-  mock.module("@opencode-ai/core/util/encode", () => ({
+  mock.module("@wopal/ellamaka-core/util/encode", () => ({
     base64Encode: (value: string) => value,
   }))
 
@@ -210,6 +214,7 @@ beforeEach(() => {
   promoted.length = 0
   params = {}
   sentShell.length = 0
+  sentPrompts.length = 0
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
@@ -313,6 +318,37 @@ describe("prompt submit worktree selection", () => {
         model: { providerID: "provider", modelID: "model", variant: "high" },
       },
     })
+  })
+
+  test("reads sandboxMode from its accessor at submit time", async () => {
+    params = { id: "session-1" }
+    let sandboxMode: "read-only" | "workspace-write" | "full-access" | undefined
+    const submit = createPromptSubmit({
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      sandboxMode: () => sandboxMode,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    // This specifically guards against freezing `undefined` before async
+    // config/storage hydration completes.
+    sandboxMode = "read-only"
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Promise.resolve()
+
+    expect(sentPrompts).toHaveLength(1)
+    expect(sentPrompts[0]?.sandboxMode).toBe("read-only")
   })
 
   test("seeds new sessions before optimistic prompts are added", async () => {

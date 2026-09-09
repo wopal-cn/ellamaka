@@ -2,11 +2,11 @@ export * as ConfigPaths from "./paths"
 
 import path from "path"
 import { existsSync } from "fs"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { Global } from "@wopal/ellamaka-core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,

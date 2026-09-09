@@ -1,6 +1,8 @@
 name: Publish Ellamaka Desktop
 
 on:
+  push:
+    tags: ["ellamaka-desktop-v*"]
   workflow_dispatch:
     inputs:
       version:
@@ -32,7 +34,8 @@ on:
         default: "false"
         type: boolean
 
-# tag-release.sh 触发本 workflow：仅 dispatch，不监听 push:tags。
+# 触发权归 release-cli.sh / release-desktop.sh：一步制 bump 后 push tag（push: tags 触发本
+# workflow）；failed attempt 的 re-release 走 workflow_dispatch --ref <tag>。
 # Per docs/DISTRIBUTION.md §4.1/§7, releases are immutable: versioned R2
 # paths are never cleared, committed releases are never overwritten.
 permissions:
@@ -55,49 +58,64 @@ jobs:
       - name: Derive version
         id: version
         run: |
-          if [[ -n "${{ inputs.version }}" ]]; then
-            version="${{ inputs.version }}"
-            tag="v${version}"
-          else
-            version="0.0.0-${{ inputs.channel || 'prod' }}.0"
-            tag=""
-          fi
-
-          # Publishing is explicit: only when the publish input is set AND a
-          # version is provided. A version alone no longer implies a release
-          # (build.sh CI path passes a dev version with publish=false).
-          if [[ "${{ inputs.publish }}" == "true" && -n "${{ inputs.version }}" ]]; then
+          # push:tags 事件（release-cli / release-desktop 一步制发布）：版本从 tag 解析，
+          # channel 由版本后缀推断（-beta.N → beta），必为正式发布。
+          # workflow_dispatch：输入版本（发布/重发/CI dev 共用）。
+          if [[ "${{ github.event_name }}" = "push" ]]; then
+            version="${GITHUB_REF_NAME#ellamaka-desktop-v}"
+            tag="${GITHUB_REF_NAME}"
             release="true"
+            if [[ "$version" =~ -beta\.[0-9]+$ ]]; then
+              channel="beta"
+            else
+              channel="prod"
+            fi
+            matrix='[{"os":"macos-latest","package_cmd":"package:mac --arm64 --x64"},{"os":"windows-latest","package_cmd":"package:win"},{"os":"ubuntu-latest","package_cmd":"package:linux --arm64 --x64"}]'
           else
-            release=""
-          fi
+            if [[ -n "${{ inputs.version }}" ]]; then
+              version="${{ inputs.version }}"
+              tag="v${version}"
+            else
+              version="0.0.0-${{ inputs.channel || 'prod' }}.0"
+              tag=""
+            fi
 
-          if [[ "$version" =~ -beta\.[0-9]+$ ]]; then
-            inferred_channel="beta"
-          else
-            inferred_channel="prod"
-          fi
+            # Publishing is explicit: only when the publish input is set AND a
+            # version is provided. A version alone no longer implies a release
+            # (build.sh CI path passes a dev version with publish=false).
+            if [[ "${{ inputs.publish }}" == "true" && -n "${{ inputs.version }}" ]]; then
+              release="true"
+            else
+              release=""
+            fi
 
-          channel="${{ inputs.channel || 'prod' }}"
+            if [[ "$version" =~ -beta\.[0-9]+$ ]]; then
+              inferred_channel="beta"
+            else
+              inferred_channel="prod"
+            fi
 
-          if [[ "$channel" == "beta" && ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
-            echo "ERROR: beta releases require X.Y.Z-beta.N"
-            exit 1
-          fi
-          if [[ "$channel" == "prod" && "$version" == *-beta.* ]]; then
-            echo "ERROR: beta versions require channel=beta"
-            exit 1
-          fi
+            channel="${{ inputs.channel || 'prod' }}"
 
-          # Build matrix: all platforms by default, or a single platform when
-          # the os input selects one. tag-release.sh dispatches without the
-          # os input, so the default keeps the full three-platform matrix.
-          case "${{ inputs.os || 'all' }}" in
-            windows) matrix='[{"os":"windows-latest","package_cmd":"package:win"}]' ;;
-            mac) matrix='[{"os":"macos-latest","package_cmd":"package:mac --arm64 --x64"}]' ;;
-            linux) matrix='[{"os":"ubuntu-latest","package_cmd":"package:linux --arm64 --x64"}]' ;;
-            *) matrix='[{"os":"macos-latest","package_cmd":"package:mac --arm64 --x64"},{"os":"windows-latest","package_cmd":"package:win"},{"os":"ubuntu-latest","package_cmd":"package:linux --arm64 --x64"}]' ;;
-          esac
+            if [[ "$channel" == "beta" && ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
+              echo "ERROR: beta releases require X.Y.Z-beta.N"
+              exit 1
+            fi
+            if [[ "$channel" == "prod" && "$version" == *-beta.* ]]; then
+              echo "ERROR: beta versions require channel=beta"
+              exit 1
+            fi
+
+            # Build matrix: all platforms by default, or a single platform when
+            # the os input selects one. release-cli.sh / release-desktop.sh trigger via push tags
+            # without the os input, so the default keeps the full matrix.
+            case "${{ inputs.os || 'all' }}" in
+              windows) matrix='[{"os":"windows-latest","package_cmd":"package:win"}]' ;;
+              mac) matrix='[{"os":"macos-latest","package_cmd":"package:mac --arm64 --x64"}]' ;;
+              linux) matrix='[{"os":"ubuntu-latest","package_cmd":"package:linux --arm64 --x64"}]' ;;
+              *) matrix='[{"os":"macos-latest","package_cmd":"package:mac --arm64 --x64"},{"os":"windows-latest","package_cmd":"package:win"},{"os":"ubuntu-latest","package_cmd":"package:linux --arm64 --x64"}]' ;;
+            esac
+          fi
 
           {
             echo "version=${version}"
@@ -106,6 +124,20 @@ jobs:
             echo "channel=${channel}"
             echo "matrix=${matrix}"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+      - name: Validate version matches package.json anchor
+        if: steps.version.outputs.release != ''
+        run: |
+          # 版本真相源 = packages/ellamaka-desktop/package.json
+          # （docs/DISTRIBUTION.md §3.2）。tag 版本必须等于锚点文件版本，
+          # 防手抖打错 tag 或 dispatch 错版本。
+          PKG_VERSION="$(node -e "console.log(require('./packages/ellamaka-desktop/package.json').version)")"
+          if [ "${{ steps.version.outputs.version }}" != "$PKG_VERSION" ]; then
+            echo "ERROR: release version ${{ steps.version.outputs.version }} does not match packages/ellamaka-desktop/package.json version $PKG_VERSION."
+            echo "  Bump the anchor first (scripts/release-desktop.sh), or fix the tag."
+            exit 1
+          fi
+          echo "  version matches packages/ellamaka-desktop/package.json: $PKG_VERSION"
 
   build-desktop:
     needs: version
@@ -153,6 +185,14 @@ jobs:
           name: release-context
           path: release-context.json
           if-no-files-found: error
+
+      - name: Verify DSH runtime manifest freshness
+        working-directory: packages/ellamaka-desktop
+        run: |
+          # The packaged sidecar inlines generated/dsh-runtime-manifest.json at
+          # bundle time (via the opencode build); the committed manifest must
+          # match the source before packaging. Read-only check, fails on drift.
+          bun ../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
 
       - name: Build desktop (electron-vite)
         working-directory: packages/ellamaka-desktop

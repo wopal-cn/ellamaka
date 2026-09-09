@@ -1,6 +1,6 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@opencode-ai/ui/toast"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { showToast } from "@wopal/ui/toast"
+import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -29,9 +29,9 @@ import { createRefreshQueue } from "./global-sync/queue"
 import { directoryKey } from "./global-sync/utils"
 import { PathKey } from "@/utils/path-key"
 import { createDirSyncContext } from "./directory-sync"
-import { createSimpleContext, NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { createSimpleContext, NormalizedProviderListResponse } from "@wopal/ui/context"
 import { createRefCountMap } from "@/utils/refcount"
-import { retry } from "@opencode-ai/core/util/retry"
+import { retry } from "@wopal/ellamaka-core/util/retry"
 
 type GlobalStore = {
   ready: boolean

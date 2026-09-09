@@ -1,4 +1,4 @@
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
+import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
 import { Show, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Portal } from "solid-js/web"
 import { createStore } from "solid-js/store"

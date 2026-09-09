@@ -1,6 +1,6 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
-import appPlugin from "@opencode-ai/ellamaka-app/vite"
+import appPlugin from "@wopal/ellamaka-app/vite"
 import * as fs from "node:fs/promises"
 import * as fsSync from "node:fs"
 
@@ -14,6 +14,7 @@ const channel = (() => {
 })()
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+const dshProxyTarget = process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.OPENCODE_PORT ?? "4097"}`
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -40,7 +41,15 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: { index: "src/main/index.ts", sidecar: "src/main/sidecar.ts" },
+        input: {
+          index: "src/main/index.ts",
+          sidecar: "src/main/sidecar.ts",
+          "source-ts-loader": "src/main/source-ts-loader.ts",
+        },
+        // kerberos is an optional peer of proxy-agent-negotiate (pulled in by the
+        // npm bootstrap deps bundled in the opencode server dist); it is loaded
+        // lazily at runtime with a graceful fallback, so keep it external.
+        external: ["kerberos"],
       },
       externalizeDeps: { include: [nodePtyPkg] },
     },
@@ -95,6 +104,25 @@ export default defineConfig({
   },
   renderer: {
     plugins: [appPlugin, sentry],
+    server: {
+      proxy: {
+        "/dsh": {
+          target: dshProxyTarget,
+          changeOrigin: true,
+          ws: true,
+          configure: (proxy) => {
+            const rewrite = (
+              proxyReq: { setHeader(key: string, value: string): void },
+              req: { headers: Record<string, string | string[] | undefined> },
+            ) => {
+              if (req.headers.origin) proxyReq.setHeader("origin", dshProxyTarget)
+            }
+            proxy.on("proxyReq", rewrite)
+            proxy.on("proxyReqWs", rewrite)
+          },
+        },
+      },
+    },
     publicDir: "../../../ellamaka-app/public",
     root: "src/renderer",
     build: {

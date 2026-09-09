@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **状态**: Active
-> **更新时间**: 2026-08-03
+> **更新时间**: 2026-09-08
 > **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
 
 ## 1. Role
@@ -42,6 +42,23 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 
 上游文件改动遵循：新文件优先、提前返回 guard、回调注入、禁止格式化重排。完整策略和合并保护文件清单见 **BRANDING.md §9**。
 
+## 2.1 品牌与构建包结构
+
+ellamaka 的品牌身份与构建发布分属两个包，沿运行时/构建期边界划分：
+
+| 包 | 职责 | 消费方 |
+|---|---|---|
+| `@wopal/ellamaka-brand`（`packages/ellamaka-brand/`） | 品牌真相源：branding 常量（BINARY_NAME、BINARY_TITLE、channel 常量、UI_UPSTREAM_URL）、logo/wordmark、TUI tips、WopalSpace 目录检测 | opencode 运行时（全部走包路径 import）；`ellamaka-release` 构建期（读 BINARY_NAME/CHANNEL_RELEASE） |
+| `@wopal/ellamaka-release`（`packages/ellamaka-release/`） | 构建与发布唯一枢纽：构建编排（`src/cli/build.ts`）、构建期版本/渠道解析（`src/build-env.ts`）、发布身份模型（`src/identity.ts`）、构建目标矩阵、release context、manifest、gitee、cleanup、inventory、upstream lock | 构建脚本与 CI workflow；`opencode` 的 release-info 命令运行时读取 identity 模型 |
+
+边界纪律：
+
+- 运行时（opencode）只依赖 `ellamaka-brand`；对 `ellamaka-release` 的唯一运行时依赖是 `identity` 模型（`ellamaka debug release-info`），该模型是构建期与运行期共享的纯数据契约，位于 release 包是因为它的 schema 与 manifest/构建流水线同源演进。
+- `ellamaka-release` 不被任何运行时热路径引用；它依赖 `ellamaka-brand`（构建期读品牌常量），方向单一，无环。
+- 品牌常量消费一律走包路径 `@wopal/ellamaka-brand/branding` 等导出，禁止相对路径跨包引用。
+
+历史上本结构由三个包承载（`packages/ellamaka`/`@wopal/ellamaka-build`、`@wopal/ellamaka-script`、`@wopal/ellamaka-release`），2026-09-01 收编定案：`ellamaka-build` 更名 `ellamaka-brand`，`ellamaka-script` 的 `Script` 收编为 `ellamaka-release` 的 `build-env` 模块。
+
 ## 3. Configuration Contract
 
 Ellamaka 运行时包含两种模式：
@@ -73,11 +90,13 @@ WopalSpace 模式下配置加载优先级（低→高）：
 
 ## 5. Upstream Merge Boundary
 
+> **状态**: 已放弃跟踪上游（2026-08-31 起）。ellamaka 不再从 `upstream/dev` 合并 OpenCode 变更，`dev` 分支不再作为上游跟踪线。以下历史机制仅作记录，不再执行。
+
 | 规则     | 说明                                                                                  |
 | -------- | ------------------------------------------------------------------------------------- |
-| 分支     | `main` = 定制稳定线；`dev` = 跟踪 upstream/dev，不作为开发主线                        |
-| 合并方向 | upstream/dev → merge to main                                                          |
-| 裁剪前缀 | 见 `UPSTREAM-MERGE-LOG.md`（desktop、enterprise、slack、nix、specs 等非 engine 组件） |
+| 分支     | `main` = 定制稳定线；`dev` = 不再跟踪 upstream/dev                                    |
+| 合并方向 | 无（已放弃上游合并）                                                                  |
+| 参考来源 | 后续如需参考 OpenCode 模块代码，从 `labs/ref-repos/opencode/` 读取对应模块            |
 
 详细合并流程、合并保护文件清单、定制代码最小侵入原则、冲突热点和验证清单见 **BRANDING.md §9**。
 
@@ -125,13 +144,40 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 `WOPAL_HOME` 是 sidecar 的进程级安装根。它拥有全局配置、全局能力和运行时存储。`WOPAL_SPACE` 与 `WOPAL_SPACE_ROOT` 只服务单目录 CLI 兼容边界，不承担 server request routing 或 plugin context 所有权。
 
-## 8. Web UI 与 ellamaka-app
 
-### 8.1 背景
+## 8. Unified Reload & Lifecycle
+
+后端把运行时单元的可重载能力统一为一个模型：一个 `ReloadController` 管理若干 `ReloadUnit`，每个单元独立用同一套生命周期协议重载。单元是进程内的可重载边界：
+
+| 单元 | 状态源 | 重载含义 |
+| --- | --- | --- |
+| `global` | 全局 config 与 provider | dispose 全部 instance 并重新 bootstrap，发出 `global.disposed` |
+| `instance:<directory>` | 单目录 instance | `InstanceStore.reload`（dispose + bootstrap） |
+| `dsh:web` | web profile manifest / closure | 重建 DSH web 容器 |
+| `dsh:tools` | ellamaka-tools profile manifest / closure | 重建 DSH 工具容器 |
+
+**两级重载**：
+
+- **Hot replay** —— config-only 与 patch 变更，原地回放配置，不产生新代际。DSH 由 profile watcher 承载；opencode 配置 watch 同属此类。
+- **Cold reload** —— 版本与代码变更。统一协议 `drain → dispose → build → verify → publish(generation) → notify`，产生新 generation。
+
+**隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器、宿主经 node:http 代理转发 `/dsh`。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
+
+**触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`；共享 dsh-base/closure 变 → web+tools；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明依赖边；当前 global 不依赖任何 dsh 单元，未来做集中配置管理只需增补一条边。
+
+**发布与事件**：每个单元原子发布 entry/route 与 generation，事件携带 `unit` 与 `generation`。保留 `global.disposed` 的兼容语义；DSH 单元重载只重建 Workbench 的 DSH iframe，不触发整个 sidecar 的 generation。
+
+**一致性**：materialize/install 与 cold reload 在 shared home 锁上串行；先停旧代、确认终止，再启新代；重载超时或失败只降级该单元，不升级为整进程重启。
+
+DSH 容器装配与融合细则见 [DESIGN-dsh-poc.md](./DESIGN-dsh-poc.md)。
+
+## 9. Web UI 与 ellamaka-app
+
+### 9.1 背景
 
 WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 验证(`poc/web`)——确认 Web TUI 可行、多空间并行可行、TUI+Chat 融合可行——需要以正式技术栈承载产品形态。
 
-### 8.2 设计决策
+### 9.2 设计决策
 
 **不在 PoC 基础上迭代,而是 fork 上游 `packages/app` 为 `packages/ellamaka-app`**:
 
@@ -139,23 +185,26 @@ WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 
 | ------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
 | 直接修改 `packages/app`                           | ❌ 否决 | 侵入上游源码,合并上游 `opencode` 更新时冲突面大                                   |
 | 在 `poc/web` 基础上迭代                           | ❌ 否决 | PoC 代码质量和架构无法承接产品化(单文件 1025 行、裸 JSON 协议、CDN 外部依赖)      |
-| **Fork `packages/app` → `packages/ellamaka-app`** | ✅ 采纳 | 复用现有基础设施(core/sdk/ui/i18n/terminal/theme);保持上游同步能力;定制与上游解耦 |
+| **Fork `packages/app` → `packages/ellamaka-app`** | ✅ 采纳 | 复用现有基础设施(core/sdk/ui/i18n/terminal/theme);定制与上游解耦                 |
 
-### 8.3 详细规约
+### 9.3 详细规约
 
-关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、上游同步细节、PoC 能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
+关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、PoC 能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
 
 - 中文版：[WORKBENCH.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/WORKBENCH.md)
 
+> 上游 `packages/app` 已放弃跟踪（见 §5），`ellamaka-app` 独立演进。后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
+
 ---
 
-## 9. Related Documents
+## 10. Related Documents
 
 | 文档                              | 引用目的                                                       |
 | --------------------------------- | -------------------------------------------------------------- |
 | `./BRANDING.md`                   | 品牌化定制唯一真相源—                                          |
 | `./API-CONTRACT.md`               | Runtime API、OpenAPI、生成 SDK 与 Wopal CLI adapter 契约       |
 | `./WORKBENCH.md`                  | ellamaka 自定义工作台 app 设计                                 |
+| `./DESIGN-dsh-poc.md`            | ellamaka 与 dsh 融合架构（DSH 容器装配、插件供应链、Bun 宿主 HMR） |
 | `./DISTRIBUTION.md`               | 产品 SemVer、OpenCode upstream、构建身份、兼容选择、release、artifact、安装契约 |
 | `../../wopal-cli/docs/DESIGN.md`  | wopal-cli 如何消费 ellamaka release                            |
 | `UPSTREAM-MERGE-LOG.md`           | 裁剪边界、合并策略、验证经验                                   |

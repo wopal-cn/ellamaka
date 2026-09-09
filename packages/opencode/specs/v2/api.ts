@@ -1,7 +1,7 @@
 // @ts-nocheck
 
-import { OpenCode } from "@opencode-ai/core"
-import { ReadTool } from "@opencode-ai/core/tools"
+import { OpenCode } from "@wopal/ellamaka-core"
+import { ReadTool } from "@wopal/ellamaka-core/tools"
 
 const opencode = OpenCode.make({})
 

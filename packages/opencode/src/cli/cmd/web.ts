@@ -3,10 +3,10 @@ import { Server } from "../../server/server"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
-import { BINARY_NAME } from "../../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -47,6 +47,22 @@ export const WebCommand = effectCmd({
     UI.println(UI.logo("  "))
     UI.empty()
 
+    // Optional dsh engine, same assembly as `serve` (single-port scheme,
+    // DESIGN-dsh-poc §2.1/§2.2). The unified Runtime Manager gates on
+    // `ELLAMAKA_DSH` itself (`=0` → disabled) and `disabled`/`degraded` never
+    // block the server. The dynamic import keeps the dsh closure out of the
+    // desktop sidecar bundle. Mount BEFORE opening the browser: this block
+    // must not suspend, the open() below and the final Effect.never own the
+    // command's lifetime.
+    let dshDispose: (() => Promise<void>) | undefined
+    {
+      const { mountDshEngine } = yield* Effect.promise(() => import("./dsh-mount"))
+      const handle = yield* Effect.promise(() => mountDshEngine(server, { entry: "web" }))
+      if (handle) {
+        dshDispose = () => handle.dispose()
+      }
+    }
+
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
       const localhostUrl = `http://localhost:${server.port}`
@@ -80,6 +96,12 @@ export const WebCommand = effectCmd({
       open(displayUrl).catch(() => {})
     }
 
-    yield* Effect.never
+    yield* Effect.never.pipe(
+      Effect.ensuring(
+        Effect.promise(async () => {
+          await dshDispose?.()
+        }),
+      ),
+    )
   }),
 })

@@ -8,6 +8,8 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## 1. Canonical References
 
 - DESIGN: `docs/DESIGN.md`
+- DSH POC DESIGN: `docs/DESIGN-dsh-poc.md`（双引擎融合实验：桥/吸收双轨、dsh 工具插件边缘通道）
+- PLAN TODOS: `docs/PLAN-TODOS.md`
 - API CONTRACT: `docs/API-CONTRACT.md`
 - BRANDING: `docs/BRANDING.md`
 - WORKBENCH: `docs/WORKBENCH.md`
@@ -27,9 +29,9 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | 目录 | 职责 |
 |---|---|
 | `packages/opencode/` | OpenCode inherited engine 主包；内部规则见 `packages/opencode/AGENTS.md` |
-| `packages/core/` | shared core、flags、global paths、installation/runtime 基础能力 |
-| `packages/app/`, `packages/ui/`, `packages/storybook/` | inherited UI surfaces；只在 engine/TUI 需要时改动 |
-| `packages/plugin/`, `packages/script/`, `packages/util/` | workspace support packages |
+| `packages/ellamaka-core/` | shared core、flags、global paths、installation/runtime 基础能力 |
+| `packages/ui/` | inherited UI 组件库；只在 engine/TUI 需要时改动 |
+| `packages/plugin/`, `packages/ellamaka-script/` | workspace support packages |
 | `packages/sdk/` | SDK workspace；JS SDK regeneration 使用既有脚本 |
 | `packages/ellamaka/` | 品牌常量、品牌字模、构建包装、WopalSpace 自动检测、安装路径判断及包级测试 |
 | `packages/ellamaka-app/` | Workbench Web UI 前端；内部规则见 `packages/ellamaka-app/AGENTS.md` |
@@ -80,8 +82,9 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | 构建 ellamaka 品牌 CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
 | 构建 CLI 二进制 | `./scripts/build.sh cli` |
 | 构建桌面应用 | `./scripts/build.sh desktop` |
-| 发布 Desktop beta | `./scripts/tag-release.sh X.Y.Z-beta.N --channel beta --desktop` |
-| 发布 Desktop prod | `./scripts/tag-release.sh X.Y.Z --channel prod --desktop` |
+| 发布 CLI（一步制） | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]` |
+| 发布 Desktop（一步制） | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
+| 撤回已发布版本 | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
 | 开发服务（TUI/Workbench/桌面） | `./scripts/dev.sh` |
 | 上游合并后精简检查 | `./scripts/check-cleanup.sh` |
 | 桌面包测试 | `bun test --preload ./electron-mock.ts --force-exit src`（from `packages/ellamaka-desktop`） |
@@ -123,6 +126,23 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - macOS 公共包使用 ad-hoc 签名。它保证 bundle 签名结构完整，但用户仍需主动接受 Gatekeeper 风险。
 - 版本化 R2 路径不可变。提交前 failed attempt 可清空自身 partial 对象后同版本重试；提交后 release 不得覆盖。整版撤回遵循 `docs/DISTRIBUTION.md` §7.3。
 - 下载表展示 DMG、EXE、AppImage 和 deb。ZIP、blockmap 与 `latest-*.yml` 属于 updater 资产。
+
+### Cordis 开发约束
+
+- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本锁 4.0.1）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）禁止被主线代码 import、禁止运行时加载、禁止作为插件挂载——required peer 仅供类型解析（如 SessionId）不算违反，以运行时加载探针为零为验收（`forbidden-load.test.ts`）——见 DSH POC DESIGN §7 红线
+- **桥接形态**：Effect↔async 桥接一律遵守 DSH POC DESIGN §6.2（`Effect.forkIn(scope)(work)` 持有 work Fiber；中断经 `runtime.runFork(Fiber.interrupt(fiber))`；禁止 `runPromise` 驱动长任务）
+- **契约纪律**：契约在 `@wopal/ellamaka-cordis` 内自持（形状借鉴 dsh，不 import dsh 契约包、不跟随 rc 演进）；外部插件须通过契约符合性冒烟测试方可挂载（DSH POC DESIGN §4.1）
+- **测试门禁**：cordis 集成测试放 `packages/opencode/test/cordis/`；桥接包变更保持 opencode 既有测试零回归
+
+### 日志规范
+
+- **插件日志**：cordis 插件内一律用内建 `ctx.logger`（自动以插件名命名），禁止 `console.log`、禁止手动创建 Logger；容器级 Exporter 在装配层统一桥接到 ellamaka `Log` 体系（DSH POC DESIGN §6.4），插件不关心日志输出目标
+- **必须打**：生命周期状态变更（init/created/disposed/mount/unmount）、错误与异常（含降级路径）、关键决策（选型/回退/跳过）
+- **禁止打**：循环内逐项操作（逐文件/逐条）、成功路径的常规操作（每次加载/每次搜索）、可从上下文推导的信息
+- **聚合**：循环内需观测时，循环外打一次汇总（`log.info("reverted", { count })`），不在循环体内逐项打
+- **结构化**：上下文用 `extra` 字段携带（`log.info("reverting", { file, hash })`），禁止拼接进 message；message 用固定动词短语便于检索
+- **禁止静默吞错**：catch 后必须打日志（error 或 warn），不得空 catch
+- **级别**：默认 `INFO`；`debug` 仅诊断用，生产模式不输出
 
 ## 5. Testing
 

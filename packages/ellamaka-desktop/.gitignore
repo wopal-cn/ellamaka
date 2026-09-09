@@ -28,3 +28,6 @@ resources/opencode-cli*
 resources/icons
 resources/*.metainfo.xml
 resources/release-identity.json
+# Build artifact: prebuild copies the generated DSH runtime manifest here for
+# the packaged sidecar; regenerated on every build, never committed.
+resources/dsh-runtime-manifest.json

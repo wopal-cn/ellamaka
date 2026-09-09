@@ -1,6 +1,6 @@
 import { BusEvent } from "@/bus/bus-event"
 import { SessionID, MessageID, PartID } from "./schema"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { LSP } from "@/lsp/lsp"
 import { Snapshot } from "@/snapshot"
@@ -22,8 +22,8 @@ import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { DateTime, Effect, Schema, Types } from "effect"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
+import { NonNegativeInt } from "@wopal/ellamaka-core/schema"
+import * as EffectLogger from "@wopal/ellamaka-core/effect/logger"
 import { MessageError } from "./message-error"
 import { AuthError, OutputLengthError } from "./message-error"
 export { AuthError, OutputLengthError } from "./message-error"
@@ -346,6 +346,11 @@ export const User = Schema.Struct({
   }),
   system: Schema.optional(Schema.String),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  // Per-message dsh sandbox mode selected in the composer (read-only /
+  // workspace-write / full-access). Carried on the user message so forks and
+  // queue follow-ups inherit the choice; absent falls back to the space-level
+  // `ellamaka.dsh.sandbox` default.
+  sandboxMode: Schema.optional(Schema.Literals(["read-only", "workspace-write", "full-access"])),
 }).annotate({ identifier: "UserMessage" })
 export type User = Types.DeepMutable<Schema.Schema.Type<typeof User>>
 

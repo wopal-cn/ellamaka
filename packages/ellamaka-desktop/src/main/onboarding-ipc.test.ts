@@ -986,6 +986,41 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
     expect(state?.currentStep).toBe("ontology-setup")
   })
 
+  test("ontology-setup fails (not completes) when prepare-runtime reports a CLI failure", async () => {
+    // B-03 regression: a failed prepare-runtime (runtime preparation) must
+    // fail the step rather than being swallowed, so onboarding cannot declare
+    // runtime ready.
+    const spy = spyOn(setupMachineClient, "runSetupOperation").mockImplementation(async (opts: any) => {
+      if (opts.operation === "prepare-ontology") {
+        return { status: "completed" as const, result: { mode: "clone" } } as any
+      }
+      if (opts.operation === "prepare-runtime") {
+        return {
+          status: "failed" as const,
+          error: {
+            code: "SETUP_OPERATION_FAILED",
+            message: "runtime preparation failed",
+            details: "Operation: prepare-runtime\nExit code: 1",
+          },
+        } as any
+      }
+      return { status: "completed" as const, result: {} } as any
+    })
+
+    try {
+      const handlers = createOnboardingIpcHandlers({ homePath: testHome })
+      const result = await handlers["onboarding-execute-step"]({}, "ontology-setup", { mode: "clone" })
+      expect(result.status).toBe("failed")
+      expect(result.error?.code).toBe("SETUP_OPERATION_FAILED")
+      expect(result.error?.details).toContain("prepare-runtime")
+    } finally {
+      spy.mockRestore()
+    }
+
+    const state = readOnboardingState(testHome)
+    expect(state?.steps["ontology-setup"]).toBe("failed")
+  })
+
   test("onboardingExecuteStep create-space success marks step done without premature navigation", async () => {
     const executor = async () => ({ status: "completed" as const, result: {} })
     const handlers = createOnboardingIpcHandlers({ homePath: testHome, executeStep: executor })
@@ -1229,5 +1264,66 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
 
     expect(result.status).toBe("completed")
     expect(existsSync(join(testHome, "logs", "onboarding.log"))).toBe(false)
+  })
+
+  test("ontology-setup forwards prepare-runtime progress to the LogDrawer", async () => {
+    // The ontology-setup step runs prepare-ontology then prepare-runtime (which
+    // materialises settings, scripts and base capabilities). The
+    // prepare-runtime machine operation's progress lines must reach
+    // broadcastProgress so the LogDrawer shows the preparation phase.
+    const events: Array<{ step?: string; phase?: string; message?: string }> = []
+    const operations: string[] = []
+    const spy = spyOn(setupMachineClient, "runSetupOperation").mockImplementation(async (opts: any) => {
+      operations.push(opts.operation)
+      if (opts.operation === "prepare-runtime") {
+        // Emit a non-JSON progress line exactly as the wopal-cli machine
+        // operation does (setup-machine-client forwards these to onProgress).
+        opts.onProgress?.({ phase: "prepare-runtime", message: "writing settings.jsonc" })
+        opts.onProgress?.({ phase: "prepare-runtime", message: "materialising base capabilities…" })
+      }
+      return { status: "completed" as const, result: {} } as any
+    })
+
+    try {
+      const handlers = createOnboardingIpcHandlers({
+        homePath: testHome,
+        broadcastProgress: (event) => events.push(event),
+      })
+      const result = await handlers["onboarding-execute-step"]({}, "ontology-setup", { mode: "clone" })
+      expect(result.status).toBe("completed")
+    } finally {
+      spy.mockRestore()
+    }
+
+    // Both operations ran.
+    expect(operations).toEqual(["prepare-ontology", "prepare-runtime"])
+    // The preparation progress reached the renderer LogDrawer.
+    expect(events.some((e) => e.step === "ontology-setup" && e.phase === "prepare-runtime" && e.message?.includes("settings"))).toBe(true)
+    expect(events.some((e) => e.step === "ontology-setup" && e.phase === "prepare-runtime" && e.message?.includes("capabilities"))).toBe(true)
+  })
+
+  test("create-space forwards initialize-space progress to the LogDrawer", async () => {
+    // create-space runs initialize-space. Its machine-operation progress lines
+    // must reach broadcastProgress.
+    const events: Array<{ step?: string; phase?: string; message?: string }> = []
+    const spy = spyOn(setupMachineClient, "runSetupOperation").mockImplementation(async (opts: any) => {
+      if (opts.operation === "initialize-space") {
+        opts.onProgress?.({ phase: "initialize-space", message: "reconciling space worktree (3/5)" })
+      }
+      return { status: "completed" as const, result: { spaceName: "space1", spacePath: join(testHome, "space1") } } as any
+    })
+
+    try {
+      const handlers = createOnboardingIpcHandlers({
+        homePath: testHome,
+        broadcastProgress: (event) => events.push(event),
+      })
+      const result = await handlers["onboarding-execute-step"]({}, "create-space", { path: join(testHome, "ws") })
+      expect(result.status).toBe("completed")
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(events.some((e) => e.step === "create-space" && e.phase === "initialize-space" && e.message?.includes("space worktree"))).toBe(true)
   })
 })

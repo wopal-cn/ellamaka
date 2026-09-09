@@ -53,6 +53,30 @@ describe("checkServerHealth", () => {
     })
   })
 
+  test("preserves the dsh runtime status when the server reports it", async () => {
+    const fetch = (async () =>
+      new Response(JSON.stringify({ healthy: true, version: "1.2.3", dsh: "ready" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof globalThis.fetch
+
+    const result = await checkServerHealth(server, fetch)
+
+    expect(result).toEqual({ healthy: true, version: "1.2.3", dsh: "ready" })
+  })
+
+  test("omits the dsh flag when the server does not report it", async () => {
+    const fetch = (async () =>
+      new Response(JSON.stringify({ healthy: true, version: "1.2.3" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof globalThis.fetch
+
+    const result = await checkServerHealth(server, fetch)
+
+    expect(result).toEqual({ healthy: true, version: "1.2.3" })
+  })
+
   test("returns unhealthy when request fails", async () => {
     const fetch = (async () => {
       throw new Error("network")

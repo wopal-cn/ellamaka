@@ -70,4 +70,16 @@ describe("publish-ellamaka-desktop workflow", () => {
     expect(cleanupYml).toContain("${ROOT}/latest/latest.yml")
     expect(cleanupYml).toContain("${ROOT}/latest/${name}.blockmap")
   })
+
+  test("gates on DSH runtime manifest freshness before packaging", () => {
+    // The packaged sidecar inlines generated/dsh-runtime-manifest.json at
+    // bundle time; the committed manifest must match the source before
+    // packaging. The check is read-only (--check) and precedes the build.
+    expect(workflow).toContain("Verify DSH runtime manifest freshness")
+    expect(workflow).toContain("generate-dsh-runtime-manifest.ts --check")
+    const gateIdx = workflow.indexOf("generate-dsh-runtime-manifest.ts --check")
+    const buildIdx = workflow.indexOf("Build desktop (electron-vite)")
+    expect(gateIdx).toBeGreaterThan(-1)
+    expect(buildIdx).toBeGreaterThan(gateIdx)
+  })
 })

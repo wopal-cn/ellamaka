@@ -1,11 +1,12 @@
 import windowState from "electron-window-state"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import { resolveThemeVariant } from "@wopal/ui/theme/resolve"
+import type { DesktopTheme } from "@wopal/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
+import { createDshHttpProxy, createDshProxy, isDshPath } from "./dsh-proxy"
 import { exportDebugLogs, write as writeLog } from "./logging"
 import { createUnresponsiveSampler } from "./unresponsive"
 import { createWindowShowGuard } from "./window-show-guard"
@@ -25,6 +26,26 @@ const oc2Background = {
 }
 const documentPolicyHeader = "Document-Policy"
 const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
+// The DSH proxy forwards the browser-auth token exchange, which answers with
+// a 303 + Set-Cookie. Electron's `net.fetch` cannot surface manual redirects
+// (`redirect: "manual"` throws "Redirect was cancelled"), so the proxy uses
+// the Node/undici `fetch` — it returns the 303 response as-is and lets the
+// proxy capture the session cookie for subsequent requests.
+const dshProxy = createDshProxy((url, init) => fetch(url.toString(), init))
+// The packaged renderer origin (`oc://renderer`) refuses WebSocket URLs, so
+// the DSH iframe targets this standard-HTTP proxy (with WS upgrade support)
+// instead of the oc:// handler. Both proxies share the same sidecar target.
+const dshHttpProxy = createDshHttpProxy()
+let dshHttpProxyPort: number | undefined
+// Port 0: the OS assigns a free port so the packaged app and dev instances
+// can run side by side without an EADDRINUSE race (the listen() promise
+// resolves with the actual bound port).
+void dshHttpProxy.listen(0).then((port) => {
+  dshHttpProxyPort = port
+  writeLog("protocol", "dsh http proxy listening", { port })
+}).catch((error) => {
+  writeLog("protocol", "dsh http proxy listen failed", { error }, "error")
+})
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -57,6 +78,16 @@ export function setBackgroundColor(color: string) {
 
 export function getBackgroundColor(): string | undefined {
   return backgroundColor
+}
+
+export function setDshProxyTarget(url?: string) {
+  dshProxy.setTarget(url)
+  dshHttpProxy.setTarget(url)
+}
+
+/** The standard-HTTP DSH proxy origin (packaged iframe target); undefined before listen. */
+export function getDshHttpProxyOrigin(): string | undefined {
+  return dshHttpProxyPort === undefined ? undefined : `http://127.0.0.1:${dshHttpProxyPort}`
 }
 
 function iconsDir() {
@@ -203,6 +234,17 @@ export function registerRendererProtocol() {
     if (url.host !== rendererHost) {
       writeLog("protocol", "rejected host", { url: request.url }, "warn")
       return new Response("Not found", { status: 404 })
+    }
+
+    if (isDshPath(url.pathname)) {
+      try {
+        const response = await dshProxy.handle(request)
+        if (response) return response
+        return new Response("DSH unavailable", { status: 503 })
+      } catch (error) {
+        writeLog("protocol", "dsh proxy error", { url: request.url, error }, "error")
+        return new Response("DSH unavailable", { status: 502 })
+      }
     }
 
     const file = resolve(rendererRoot, `.${decodeURIComponent(url.pathname)}`)

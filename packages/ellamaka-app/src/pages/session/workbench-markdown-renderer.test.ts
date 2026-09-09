@@ -11,11 +11,11 @@ import {
 
 const parsed = mock((src: string) => `<p>${src}</p>`)
 
-mock.module("@opencode-ai/ui/context/marked", () => ({
+mock.module("@wopal/ui/context/marked", () => ({
   useMarked: () => ({ parse: parsed }),
 }))
 
-mock.module("@opencode-ai/ui/context/i18n", () => ({
+mock.module("@wopal/ui/context/i18n", () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }))
 

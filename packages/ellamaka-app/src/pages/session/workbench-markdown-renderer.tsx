@@ -1,8 +1,8 @@
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { useTheme } from "@opencode-ai/ui/theme/context"
+import { useI18n } from "@wopal/ui/context/i18n"
+import { useTheme } from "@wopal/ui/theme/context"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
-import { checksum } from "@opencode-ai/core/util/encode"
+import { checksum } from "@wopal/ellamaka-core/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
 import { streamBlocks } from "./workbench-markdown-stream"
@@ -296,7 +296,7 @@ function touch(key: string, value: Entry) {
  * kilocode two-pass pipeline into the Workbench-owned layer: synchronous
  * parse with stable block splitting and incremental DOM updates, a fast path
  * for completed content, and a structure-preserving progressive highlight
- * pass. The shared `@opencode-ai/ui` Markdown component is left untouched,
+ * pass. The shared `@wopal/ui` Markdown component is left untouched,
  * so the official Session page keeps its current behavior.
  */
 export function WorkbenchMarkdown(

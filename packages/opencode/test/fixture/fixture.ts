@@ -1,14 +1,14 @@
 import { $ } from "bun"
-import * as Observability from "@opencode-ai/core/effect/observability"
-import { Global } from "@opencode-ai/core/global"
+import * as Observability from "@wopal/ellamaka-core/effect/observability"
+import { Global } from "@wopal/ellamaka-core/global"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { Effect, Context, Layer, ManagedRuntime, Scope, Exit } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as ScopeType from "effect/Scope"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { memoMap } from "@wopal/ellamaka-core/effect/memo-map"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import type { Config } from "@/config/config"
 import { Config as ConfigService } from "@/config/config"
@@ -79,7 +79,7 @@ async function stop(dir: string) {
 }
 
 // Global test config path. Global.Path.config is fixed at module load time
-// (packages/core/src/global.ts) and points into the per-PID isolated WOPAL_HOME
+// (packages/ellamaka-core/src/global.ts) and points into the per-PID isolated WOPAL_HOME
 // redirected by test/preload.ts, so writes here never touch production config.
 const globalSettingsFile = path.join(Global.Path.config, "settings.jsonc")
 

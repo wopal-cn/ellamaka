@@ -1,4 +1,4 @@
-import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import type { DesktopTheme } from "@wopal/ui/theme/types"
 import ellamakaThemeJson from "./ellamaka.json"
 
 export const ellamakaTheme = ellamakaThemeJson as DesktopTheme

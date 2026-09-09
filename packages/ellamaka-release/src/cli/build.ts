@@ -5,7 +5,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
-import { BINARY_NAME, CHANNEL_RELEASE } from "@ellamaka/build/branding"
+import { BINARY_NAME, CHANNEL_RELEASE } from "@wopal/ellamaka-brand/branding"
 import { buildReleaseIdentityForBuild } from "../build-identity"
 import { filterTargets, type BuildTarget } from "../build-targets"
 
@@ -18,7 +18,7 @@ process.chdir(dir)
 
 const generated = await import("../../../opencode/script/generate.ts")
 
-import { Script } from "@opencode-ai/script"
+import { Script } from "../build-env"
 import pkg from "../../../opencode/package.json"
 
 // Release builds always use the release channel (latest). Development builds
@@ -26,6 +26,48 @@ import pkg from "../../../opencode/package.json"
 // main|prod; dev.sh sets local), so the binary's channel and its database
 // name agree.
 const channel = Script.release ? CHANNEL_RELEASE : Script.channel
+
+// ── DSH runtime manifest freshness gate ─────────────────────────────
+// The bundled CLI carries the DSH runtime manifest through the static JSON
+// import in `@wopal/ellamaka-cordis/runtime` (embed-manifest.ts), which Bun
+// inlines at bundle time. So the generated manifest must exist and match the
+// source before any bundling below.
+//
+// Release builds only ever verify (`--check`, read-only, exit != 0 on drift)
+// — they must not regenerate a manifest that is committed to the repo.
+// Development builds generate when the manifest is missing or dirty, with a
+// warning, so a local build never ships a stale closure definition.
+const dshManifestGenerator = path.resolve(
+  __dirname,
+  "../../../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts",
+)
+const dshManifestPath = path.resolve(
+  __dirname,
+  "../../../ellamaka-cordis/generated/dsh-runtime-manifest.json",
+)
+async function ensureDshRuntimeManifest() {
+  if (Script.release) {
+    console.log("[build] verifying DSH runtime manifest (--check)")
+    await $`bun ${dshManifestGenerator} --check`
+    return
+  }
+  const generate = async () => {
+    console.log("[build] generating DSH runtime manifest")
+    await $`bun ${dshManifestGenerator}`
+  }
+  if (!fs.existsSync(dshManifestPath)) {
+    await generate()
+    return
+  }
+  // Dev mode: generate when dirty (no longer matching the source) and warn.
+  try {
+    await $`bun ${dshManifestGenerator} --check`
+  } catch {
+    console.warn("[build] DSH runtime manifest is out of date — regenerating for dev build")
+    await generate()
+  }
+}
+await ensureDshRuntimeManifest()
 
 // Load migrations from migration directories
 const migrationDirs = (
@@ -70,7 +112,7 @@ const baselineFlag = process.argv.includes("--baseline")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
 const plugin = createSolidTransformPlugin()
 const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
-const webUiOptions = ["ellamaka-app", "app", "none"] as const
+const webUiOptions = ["ellamaka-app", "none"] as const
 type WebUiOption = (typeof webUiOptions)[number]
 const webUiIndex = process.argv.indexOf("--web-ui")
 const webUiArg = webUiIndex === -1 ? "ellamaka-app" : process.argv[webUiIndex + 1]

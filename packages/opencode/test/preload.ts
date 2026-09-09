@@ -87,7 +87,7 @@ process.env["WOPAL_DEBUG_LOG_DIR"] = path.join(dir, "logs")
 process.env["OPENCODE_DB"] = ":memory:"
 
 // Now safe to import from src/
-const { Log } = await import("@opencode-ai/core/util/log")
+const { Log } = await import("@wopal/ellamaka-core/util/log")
 const { initProjectors } = await import("../src/server/projectors")
 
 void Log.init({

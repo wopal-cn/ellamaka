@@ -426,6 +426,7 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  sandboxMode?: "read-only" | "workspace-write" | "full-access"
 }
 
 export type AssistantMessage = {
@@ -4028,6 +4029,7 @@ export type GlobalHealthResponses = {
       actualVersion?: string
       reason?: string
     }
+    dsh?: "disabled" | "preparing" | "ready" | "degraded"
   }
 }
 
@@ -4282,6 +4284,33 @@ export type WorkbenchSessionGroupsResponses = {
 }
 
 export type WorkbenchSessionGroupsResponse = WorkbenchSessionGroupsResponses[keyof WorkbenchSessionGroupsResponses]
+
+export type WorkbenchDshUrlData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/workbench/dsh-url"
+}
+
+export type WorkbenchDshUrlErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type WorkbenchDshUrlError = WorkbenchDshUrlErrors[keyof WorkbenchDshUrlErrors]
+
+export type WorkbenchDshUrlResponses = {
+  /**
+   * Authenticated DSH iframe entry URL
+   */
+  200: {
+    url: string
+  }
+}
+
+export type WorkbenchDshUrlResponse = WorkbenchDshUrlResponses[keyof WorkbenchDshUrlResponses]
 
 export type EventSubscribeData = {
   body?: never
@@ -6587,6 +6616,7 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    sandboxMode?: "read-only" | "workspace-write" | "full-access"
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -6934,6 +6964,7 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    sandboxMode?: "read-only" | "workspace-write" | "full-access"
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -7184,6 +7215,41 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type PermissionClearEscalationData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/permissions/escalation"
+}
+
+export type PermissionClearEscalationErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type PermissionClearEscalationError = PermissionClearEscalationErrors[keyof PermissionClearEscalationErrors]
+
+export type PermissionClearEscalationResponses = {
+  /**
+   * Escalation grants cleared
+   */
+  200: boolean
+}
+
+export type PermissionClearEscalationResponse =
+  PermissionClearEscalationResponses[keyof PermissionClearEscalationResponses]
 
 export type PartDeleteData = {
   body?: never

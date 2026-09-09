@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
-import { writeFileSync } from "node:fs"
+import { existsSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { resolveChannel } from "./utils"
 
@@ -9,6 +9,44 @@ import { resolve } from "node:path"
 const channel = resolveChannel()
 await $`bun ./scripts/copy-icons.ts ${channel}`
 await $`bun ./scripts/copy-metainfo.ts ${channel}`
+
+// Generate / verify the DSH runtime manifest BEFORE building the sidecar:
+// `script/build-node.ts` bundles `src/node.ts` → `@wopal/ellamaka-cordis/runtime`
+// → `embed-manifest.ts`, whose static JSON import inlines
+// `generated/dsh-runtime-manifest.json` into the sidecar bundle. Running the
+// generator here guarantees the packaged sidecar carries a manifest that
+// matches the source at build time. Release channels (beta/prod) only verify
+// (`--check`, read-only); the local `main` channel regenerates when the
+// committed manifest is missing or dirty.
+const resourcesDir = resolve(import.meta.dir, "..", "resources")
+const dshManifestSrc = resolve(import.meta.dir, "..", "..", "ellamaka-cordis", "generated", "dsh-runtime-manifest.json")
+const dshManifestOut = join(resourcesDir, "dsh-runtime-manifest.json")
+const dshManifestGenerator = resolve(import.meta.dir, "..", "..", "ellamaka-cordis", "script", "generate-dsh-runtime-manifest.ts")
+
+if (channel === "main") {
+  const generate = async () => {
+    console.log("[prebuild] generating DSH runtime manifest")
+    await $`bun ${dshManifestGenerator}`
+  }
+  if (!existsSync(dshManifestSrc)) {
+    await generate()
+  } else {
+    try {
+      await $`bun ${dshManifestGenerator} --check`
+    } catch {
+      console.warn("[prebuild] DSH runtime manifest is out of date — regenerating for local build")
+      await generate()
+    }
+  }
+} else {
+  console.log("[prebuild] verifying DSH runtime manifest (--check)")
+  await $`bun ${dshManifestGenerator} --check`
+}
+
+// Copy the manifest into the resources injection dir (mirroring the
+// release-identity pattern) so the packaged bundle carries a readable copy.
+writeFileSync(dshManifestOut, await Bun.file(dshManifestSrc).text())
+console.log(`[prebuild] wrote ${dshManifestOut}`)
 
 await $`cd ../opencode && bun script/build-node.ts`
 
@@ -19,7 +57,6 @@ await $`cd ../opencode && bun script/build-node.ts`
 await writeEmbeddedReleaseIdentity(channel)
 
 async function writeEmbeddedReleaseIdentity(channel: "main" | "beta" | "prod") {
-  const resourcesDir = resolve(import.meta.dir, "..", "resources")
   const outPath = join(resourcesDir, "release-identity.json")
   const ctxPath = process.env.ELLAMAKA_RELEASE_CONTEXT_PATH
 

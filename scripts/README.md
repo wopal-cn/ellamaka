@@ -24,13 +24,21 @@ CLI 常用选项：
 
 Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建；`--platform linux\|win` → dispatch GitHub Actions CI 并下载产物。CI 构建仅接受 `--channel beta\|prod`（`main` 仅本地）。
 
-### `release.sh` — 发布 CLI / Desktop 版本
+### `release-cli.sh` / `release-desktop.sh` — 一步发布 CLI / Desktop 版本
 
 ```bash
-./scripts/release.sh <cli|desktop> [version] [--channel <beta|prod>] [--dry-run] [--no-cleanup]
+./scripts/release-cli.sh [--patch|--minor|--major|--rc] [--dry-run] [--no-push] [--no-watch] [--no-cleanup] [version]
+./scripts/release-desktop.sh [--patch|--minor|--major|--beta] [--dry-run] [--no-push] [--no-watch] [--no-cleanup] [version]
 ```
 
-创建版本 tag 并 dispatch 发布 workflow。版本省略时自动推荐（渠道最高 tag 无有效 manifest 则重发，否则推荐下一版本）。`--dry-run` 只打印发布计划不执行。
+统一版本线模型：根 `package.json` 是产品版本线 base 的唯一真相源，两个产品锚点（`ellamaka-cli` / `ellamaka-desktop`）只承载通道状态（`-rc.N` / `-beta.N`）。目标 base 永远等于版本线 base，版本号自动推断：
+
+- `--patch`（默认）：发布版本线 base 本身（`2.0.4-rc.2` → `2.0.4`，候选转正）
+- `--rc` / `--beta`：候选通道续发（同 base 续 N+1，锚点落后时从新 base 的 `.1` 起步）
+- `--minor` / `--major`：开新版本线（根 + 依赖包镜像同步 bump）
+- Desktop 无独立渠道参数：`--beta` 即 beta 渠道（发布到 `ellamaka-desktop/beta/`），缺席即 prod
+
+流程：推断 → bump 锚点 → 提交 → namespaced tag → 推送（tag push 触发 workflow）→ watch → 自动触发历史清理。非 main 分支只允许 prerelease。目标 tag 已在远端时：有 manifest 拒绝（不可变），无 manifest 以该 tag 重发（幂等）。`--dry-run` 只打印发布计划不执行。
 
 ### `withdraw-release.sh` — 整版撤回已发布版本
 
@@ -68,39 +76,22 @@ bun run scripts/scalar-doc.ts
 
 在独立端口提供 Scalar UI，并把 API 请求代理到 ellamaka，支持 "Try it out" 调试。默认 `http://localhost:4100`，代理到 `http://127.0.0.1:4097`。
 
-## 上游合并
-
-### `ellamaka-merge-prep.sh` — 合并前预检报告
-
-```bash
-./scripts/ellamaka-merge-prep.sh <target-tag> [--from <commit>] [--json]
-```
-
-merge 前分析并预测冲突，输出 4 段报告：上游增量、ellamaka 自定义、merge 模拟（`git merge-tree` 冲突分类）、裁剪缺口。只读分析，不碰工作区。
-
-### `check-cleanup.sh` — 合并后清理上游残留
-
-```bash
-./scripts/check-cleanup.sh          # 仅报告
-./scripts/check-cleanup.sh --clean # 报告并删除（rm -rf）
-```
-
-检查并清理上游 OpenCode merge 后不应保留的残留文件/目录（白名单见 `docs/BRANDING.md §0`）。默认只报告，`--clean` 才删除。
-
 ## 共享库
 
 ### `lib/version.sh` — 版本解析
 
-被 `build.sh` / `dev.sh` / `release.sh` 等 source 的共享函数库：
+被 `build.sh` / `dev.sh` / `release-cli.sh` / `release-desktop.sh` 等 source 的共享函数库：
 
 - `resolve_build_version <product> <suffix>` — 解析构建版本（下一 patch + 后缀 + 时间戳）
+- `current_version <cli|desktop|deps>` — 版本源读取（产品锚点 package.json 是唯一版本源）
 - `sync_min_wopal_cli_version` — 同步 `@wopal/cli-capability-schema` 依赖下界
 - `resolve_min_wopal_cli_version` — 解析有效 `MIN_WOPAL_CLI_VERSION`
-- `highest_release_tag` / `suggest_release_version` — 发布版本建议
+- `highest_release_tag` — 发布版本最高 tag 查询（failed-attempt 判定用）
+
+发布版本推断已迁移至 `packages/ellamaka-release/src/version-line.ts`（统一版本线模型），由 `scripts/lib/release.sh` 调用。
 
 ## 推荐工作流
 
 - **日常开发**：`dev.sh serve` → 改代码 → `build.sh cli` 验证
-- **发布**：`release.sh cli` / `release.sh desktop --channel beta`
+- **发布**：`release-cli.sh --rc` / `release-desktop.sh --beta`（一步制：推断 → bump → tag → push 触发 workflow）
 - **撤回**：`withdraw-release.sh <product>`
-- **上游合并**：`ellamaka-merge-prep.sh <tag>` → merge → `check-cleanup.sh --clean` → `bun typecheck && bun test`

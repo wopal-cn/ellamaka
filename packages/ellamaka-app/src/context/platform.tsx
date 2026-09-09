@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@wopal/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "../desktop-menu"
@@ -92,6 +92,9 @@ export type Platform = {
 
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
+
+  /** Standard-HTTP DSH proxy origin for the packaged iframe (desktop only) */
+  dshProxyOrigin?: string
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>

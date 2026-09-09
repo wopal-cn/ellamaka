@@ -1,6 +1,6 @@
 import { FetchHttpClient } from "effect/unstable/http"
 import { Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Auth } from "../../src/auth"
 import { Workspace } from "../../src/control-plane/workspace"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"

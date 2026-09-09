@@ -1,6 +1,6 @@
 export * as ConfigError from "./error"
 
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { Schema } from "effect"
 
 const Issue = Schema.StructWithRest(

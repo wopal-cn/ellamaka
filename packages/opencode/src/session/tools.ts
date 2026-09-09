@@ -16,7 +16,7 @@ import { MessageV2 } from "./message-v2"
 import * as Session from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 
 const log = Log.create({ service: "session.tools" })
@@ -29,6 +29,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   bypassAgentCheck: boolean
   messages: MessageV2.WithParts[]
   promptOps: TaskPromptOps
+  // Per-message dsh sandbox mode from the latest user message (composer
+  // selector). Undefined falls back to the space-level default in the adapter.
+  sandboxMode?: "read-only" | "workspace-write" | "full-access"
 }) {
   const resolveStart = Date.now()
   const tools: Record<string, AITool> = {}
@@ -44,7 +47,12 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      ...(input.sandboxMode ? { sandboxMode: input.sandboxMode } : {}),
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>

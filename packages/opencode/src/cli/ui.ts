@@ -1,7 +1,7 @@
 import { EOL } from "os"
 import { Schema } from "effect"
 import { logo as glyphs } from "./logo"
-import { wordmark } from "@ellamaka/build/logo"
+import { wordmark } from "@wopal/ellamaka-brand/logo"
 
 export class CancelledError extends Schema.TaggedErrorClass<CancelledError>()("UICancelledError", {}) {}
 

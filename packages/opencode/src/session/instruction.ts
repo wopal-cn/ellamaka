@@ -4,10 +4,10 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { Config } from "@/config/config"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { withTransientReadRetry } from "@/util/effect-http-client"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@wopal/ellamaka-core/global"
 import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
 

@@ -15,7 +15,7 @@ import { DialogSelect, type DialogSelectOption as SelectOption } from "../ui/dia
 import { Prompt } from "../component/prompt"
 import { Slot as HostSlot } from "./slots"
 import type { useToast } from "../ui/toast"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import * as Keymap from "../keymap"
 import { createCommandShim } from "./command-shim"
 

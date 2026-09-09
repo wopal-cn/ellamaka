@@ -11,13 +11,13 @@ mock.module("./workbench-markdown-renderer", () => ({
   WorkbenchMarkdown: (props: { text: string }) => <div data-slot="chat-markdown">{props.text}</div>,
 }))
 
-mock.module("@opencode-ai/ui/icon", () => ({
+mock.module("@wopal/ui/icon", () => ({
   Icon: (props: { name: string }) => <span data-slot="chat-icon" data-icon={props.name} />,
 }))
 
 const showDialog = mock((_content: () => JSX.Element) => undefined)
 
-mock.module("@opencode-ai/ui/context/dialog", () => ({
+mock.module("@wopal/ui/context/dialog", () => ({
   useDialog: () => ({ show: showDialog }),
 }))
 
@@ -32,7 +32,7 @@ type FileDiffStubProps = {
   after?: { contents?: string }
 }
 
-mock.module("@opencode-ai/ui/context/file", () => ({
+mock.module("@wopal/ui/context/file", () => ({
   useFileComponent: () => (props: FileDiffStubProps) => (
     <div data-component="file-diff-block" data-mode={props.mode}>
       <span data-slot="file-diff-deletions">
@@ -88,7 +88,7 @@ function OpenCodeMessagePartStub(props: OpenCodeMessagePartStubProps) {
   )
 }
 
-mock.module("@opencode-ai/ui/collapsible", () => ({
+mock.module("@wopal/ui/collapsible", () => ({
   Collapsible: Object.assign(
     (props: { open?: boolean; onOpenChange?: (open: boolean) => void; children: JSX.Element }) => (
       <div data-component="collapsible" data-open={props.open}>
@@ -106,6 +106,7 @@ mock.module("@opencode-ai/ui/collapsible", () => ({
   ),
 }))
 import {
+  ContextInjectionBlock,
   InteractionBlock,
   NarrativeBlock,
   ReasoningBlock,
@@ -153,6 +154,10 @@ function assistantMessage(id: string, parentID: string, opts: Partial<AssistantM
 
 function textPart(id: string, messageID: string, text: string): Part {
   return { id, sessionID: "ses_1", messageID, type: "text", text }
+}
+
+function syntheticTextPart(id: string, messageID: string, text: string): Part {
+  return { id, sessionID: "ses_1", messageID, type: "text", text, synthetic: true }
 }
 
 function reasoningPart(id: string, messageID: string, text: string): Part {
@@ -285,6 +290,84 @@ describe("UserMessageBlock", () => {
     ;(host.querySelector("[data-action='chat-user-revert']") as HTMLButtonElement).click()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(calls[1]).toEqual({ sessionID: "ses_1", messageID: "u-actions" })
+    host.remove()
+  })
+
+  test("does not render injection parts; they are handled by the transcript row layer", () => {
+    const u = userMessage("u-inject")
+    const parts: Part[] = [
+      textPart("p1", "u-inject", "my prompt"),
+      syntheticTextPart("p2", "u-inject", "<rules-context>**Rule:** be terse</rules-context>"),
+    ]
+    const host = mount(() => <UserMessageBlock message={u} parts={parts} />)
+    // The bubble keeps only the real prompt text; injections never enter it.
+    expect(host.querySelector("[data-slot='chat-user-text']")?.textContent).toBe("my prompt")
+    expect(host.querySelector("[data-component='chat-injection']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-turn-injections']")).toBeNull()
+    host.remove()
+  })
+
+  test("renders no bubble for a shell-wrapped text part without the synthetic flag", () => {
+    const u = userMessage("u-shell-only")
+    const parts: Part[] = [
+      textPart("p1", "u-shell-only", "<system-reminder>[WOPAL TASK PROGRESS] running</system-reminder>"),
+    ]
+    const host = mount(() => <UserMessageBlock message={u} parts={parts} />)
+    expect(host.querySelector("[data-slot='chat-user-text']")).toBeNull()
+    expect(host.querySelector("[data-component='chat-injection']")).toBeNull()
+    host.remove()
+  })
+})
+
+describe("ContextInjectionBlock", () => {
+  test("renders a collapsed injection block with label and shell tag", () => {
+    const part = syntheticTextPart("p-inj", "u1", "<memory-context>memory body</memory-context>")
+    const host = mount(() => <ContextInjectionBlock part={part} />)
+    const block = host.querySelector("[data-component='chat-injection']")
+    expect(block).not.toBeNull()
+    expect(block?.getAttribute("data-injection-tag")).toBe("memory")
+    expect(host.querySelector("[data-slot='chat-injection-label']")?.textContent).toBe("workbench.chat.injection")
+    expect(host.querySelector("[data-slot='chat-injection-tag']")?.textContent).toBe("memory")
+    const trigger = host.querySelector("[data-slot='chat-injection-trigger']") as HTMLElement
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    host.remove()
+  })
+
+  test("renders shell-wrapped parts that lack the synthetic flag", () => {
+    const part = textPart("p-inj-flagless", "u1", "<system-reminder>[WOPAL TASK IDLE]\ntask finished\n</system-reminder>")
+    const host = mount(() => <ContextInjectionBlock part={part} />)
+    const block = host.querySelector("[data-component='chat-injection']")
+    expect(block).not.toBeNull()
+    expect(block?.getAttribute("data-injection-tag")).toBe("reminder")
+    expect(host.querySelector("[data-slot='chat-markdown']")?.textContent).toContain("WOPAL TASK IDLE")
+    host.remove()
+  })
+
+  test("expands via stored expansion state and shows the tag-stripped markdown body", () => {
+    const part = syntheticTextPart("p-inj-open", "u1", "<system-reminder>\n## Sandbox changed\n\n- mode: off\n</system-reminder>")
+    chatExpansionState.set(part.sessionID, "injection", part.id, true)
+    const host = mount(() => <ContextInjectionBlock part={part} />)
+    const trigger = host.querySelector("[data-slot='chat-injection-trigger']") as HTMLElement
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    expect(host.querySelector("[data-slot='chat-injection-content']")).not.toBeNull()
+    expect(host.querySelector("[data-slot='chat-markdown']")?.textContent).toContain("## Sandbox changed")
+    expect(host.textContent).not.toContain("<system-reminder>")
+    host.remove()
+  })
+
+  test("uses the reminder tag for content without a recognized shell", () => {
+    const part = syntheticTextPart("p-inj-plain", "u1", "plain injected text")
+    const host = mount(() => <ContextInjectionBlock part={part} />)
+    expect(host.querySelector("[data-component='chat-injection']")?.getAttribute("data-injection-tag")).toBe(
+      "reminder",
+    )
+    host.remove()
+  })
+
+  test("renders nothing for narrative text parts", () => {
+    const part = textPart("p-plain", "u1", "normal text")
+    const host = mount(() => <ContextInjectionBlock part={part} />)
+    expect(host.querySelector("[data-component='chat-injection']")).toBeNull()
     host.remove()
   })
 })

@@ -12,17 +12,22 @@ function count(text: string, needle: string) {
 }
 
 describe("publish-ellamaka workflow", () => {
-  test("triggers only by manual dispatch, not by tag push", () => {
-    // tag-release.sh owns trigger authority; workflows must not listen to
-    // push:tags, otherwise --desktop still fires CLI run (wasted runner quota
-    // + user confusion). Cancel-after-trigger is the anti-pattern we removed.
-    // The trigger block lives under `on:` at top level — match it precisely,
-    // not explanatory comments that mention the old push design.
+  test("release triggered by CLI tag push, with dispatch as re-release/dev path", () => {
+    // release-cli.sh / release-desktop.sh own trigger authority: one-step
+    // bump → push namespaced tag → push:tags fires this workflow. failed-attempt
+    // re-release and CI dev builds go through workflow_dispatch.
     expect(workflow).toContain("workflow_dispatch:")
-    expect(workflow).not.toMatch(/^on:\s*\n\s*push:\s*\n\s*tags:/m)
-    expect(workflow).not.toMatch(/\n  push:\s*\n\s*tags:\s*\n\s*-\s*"v\*"/)
-    expect(workflow).not.toContain('github.event_name == "push"')
-    expect(workflow).not.toContain("${GITHUB_REF_NAME#v}")
+    expect(workflow).toMatch(/\n  push:\s*\n\s*tags:\s*\[\s*"ellamaka-cli-v\*"\s*\]/)
+    expect(workflow).toContain('github.event_name }}" = "push"')
+    expect(workflow).toContain("${GITHUB_REF_NAME#ellamaka-cli-v}")
+  })
+
+  test("release builds gate version against the CLI anchor package.json", () => {
+    // The version truth source is packages/ellamaka-cli/package.json
+    // (DISTRIBUTION.md §3.2). The tag version must equal the anchor file;
+    // mismatches fail before any build starts.
+    expect(workflow).toContain("packages/ellamaka-cli/package.json")
+    expect(workflow).toContain("Validate version matches package.json anchor")
   })
 
   test("builds release binaries with release channel and archives the 4 P1 artifacts", () => {
@@ -153,5 +158,17 @@ describe("publish-ellamaka workflow", () => {
     // Per Task 5, cleanup is a separate workflow with protection model.
     // The inline cleanup job must be removed.
     expect(workflow).not.toContain("cleanup-ellamaka-releases.mjs")
+  })
+
+  test("gates on DSH runtime manifest freshness before packaging", () => {
+    // The bundled CLI inlines generated/dsh-runtime-manifest.json at bundle
+    // time; the committed manifest must match the source before packaging.
+    // The check is read-only (--check) and precedes the Build step.
+    expect(workflow).toContain("Verify DSH runtime manifest freshness")
+    expect(workflow).toContain("bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check")
+    const gateIdx = workflow.indexOf("generate-dsh-runtime-manifest.ts --check")
+    const buildIdx = workflow.indexOf("- name: Build")
+    expect(gateIdx).toBeGreaterThan(-1)
+    expect(buildIdx).toBeGreaterThan(gateIdx)
   })
 })

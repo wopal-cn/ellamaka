@@ -10,9 +10,9 @@
 
 ## 1. 方向与核心理念
 
-Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面。`packages/app` 保存上游应用实现，作为功能、组件和同步差异的参考基线。
+Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面（fork 自上游 `packages/app`）。
 
-**根本边界**：`packages/app` 保持上游原貌。`packages/ellamaka-app` 是 Ellamaka 自有的应用副本，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。上游更新先进入参考基线，再按 Ellamaka 的产品目标选择性同步到自有应用。
+**根本边界**：ellamaka 已放弃跟踪上游（见 `BRANDING.md` §12），`packages/ellamaka-app` 是 Ellamaka 自有的应用副本，独立演进，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。需要参考上游 UI 实现时，从 `labs/ref-repos/opencode/packages/app` 读取，不再依赖 `packages/app` 副本或上游同步。
 
 **核心概念**：
 
@@ -70,11 +70,11 @@ packages/ellamaka-app/           ← ellamaka 定制 web UI
   └── src/context/                 ← 应用级上下文与目录范围状态
 ```
 
-### 3.3 与上游同步策略
+### 3.3 与上游关系
 
-- **上游参考基线**：`packages/app/` 保存上游应用实现，用于观察产品变化和审查同步差异。
-- **选择性同步**：上游 `packages/app` 更新时，通过差异审查，将符合 Ellamaka 产品方向的能力重新实现或移植到 `packages/ellamaka-app/`。Ellamaka 已形成独立体验的区域继续由自有设计主导。
-- **依赖同步**：`package.json` 中的 `workspace:*` 依赖与上游保持同步。
+- **上游参考来源**：ellamaka 已放弃跟踪上游（2026-08-31）。需要观察上游产品变化或审查差异时，从 `labs/ref-repos/opencode/packages/app` 读取对应实现。
+- **选择性参考**：从参考仓库的 `packages/app` 中，通过差异审查，将符合 Ellamaka 产品方向的能力重新实现或移植到 `packages/ellamaka-app/`。Ellamaka 已形成独立体验的区域继续由自有设计主导。
+- **依赖维护**：`package.json` 中的 `workspace:*` 依赖由本仓库统一维护，不再与上游对齐。
 
 ---
 
@@ -207,7 +207,7 @@ Chat 的信息组织借鉴 Kilo Code 在紧凑开发界面中的成熟经验：�
 
 #### 4.6.2 所有权与组件边界
 
-`packages/app/` 保留为上游应用参考。`packages/ellamaka-app/` 拥有 Workbench Chat 的完整呈现层，可根据产品目标深入定制。
+`packages/ellamaka-app/` 拥有 Workbench Chat 的完整呈现层，可根据产品目标深入定制。上游实现参考 `labs/ref-repos/opencode/packages/app`（已放弃跟踪，见 `BRANDING.md` §12）。
 
 **核心决策：`packages/ui` 零修改；内容块在自建与复用官方组件之间务实选择。**
 

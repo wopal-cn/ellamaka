@@ -1,5 +1,5 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@wopal/ui/context/dialog"
+import { showToast } from "@wopal/ui/toast"
 import { Show, createEffect, For, createSignal, createMemo, on, onCleanup } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"

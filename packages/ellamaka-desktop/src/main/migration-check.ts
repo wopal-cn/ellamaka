@@ -17,7 +17,7 @@ import { join } from "node:path"
  * at least once. Probing only `storage/` causes the loading overlay to appear
  * on every launch, even though the migration already succeeded.
  *
- * WOPAL_HOME resolution mirrors `@opencode-ai/core/global.ts`:
+ * WOPAL_HOME resolution mirrors `@wopal/ellamaka-core/global.ts`:
  * `process.env.WOPAL_HOME || ~/.wopal`.
  */
 const LEGACY_SUBDIRS = [

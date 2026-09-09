@@ -353,4 +353,14 @@ export interface Hooks {
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
+  /**
+   * Per-request dynamic tool provider. Called on every model request inside
+   * `ToolRegistry.tools()` so plugins can supply the current tool set in real
+   * time (e.g. dsh mounts/unmounts). Static `Hooks.tool` tools remain frozen at
+   * instance init; `tool.provider` wins on id collision.
+   */
+  "tool.provider"?: (
+    input: { providerID: string; modelID: string },
+    output: { tools: Record<string, ToolDefinition> },
+  ) => Promise<void>
 }

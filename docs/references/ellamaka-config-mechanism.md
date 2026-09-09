@@ -84,7 +84,7 @@ wopal-space 模式**不加载**：
 
 ## 二、核心环境变量
 
-定义于 `packages/core/src/flag/flag.ts`。
+定义于 `packages/ellamaka-core/src/flag/flag.ts`。
 
 ### 配置相关
 

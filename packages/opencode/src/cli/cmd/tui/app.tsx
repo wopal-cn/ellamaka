@@ -20,8 +20,8 @@ import {
   on,
 } from "solid-js"
 import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./win32"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { BINARY_NAME, BINARY_TITLE } from "../../../../../ellamaka/branding"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { BINARY_NAME, BINARY_TITLE } from "@wopal/ellamaka-brand/branding"
 import semver from "semver"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
@@ -1007,7 +1007,6 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
   })
 
   event.on("installation.update-available", async (evt) => {
-    console.log("installation.update-available", evt)
     const version = evt.properties.version
 
     const skipped = kv.get("skipped_version")
@@ -1036,10 +1035,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     const result = await sdk.client.global.upgrade({ target: version })
 
     if (result.error || !result.data?.success) {
+      const detail = result.error
+        ? errorMessage(result.error)
+        : result.data && "error" in result.data
+          ? result.data.error
+          : undefined
       toast.show({
         variant: "error",
         title: "Update Failed",
-        message: "Update failed",
+        message: detail ? `Update failed: ${detail}` : `Update to v${version} failed`,
         duration: 10000,
       })
       return

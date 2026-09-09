@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
+import { resolveThemeVariant } from "@wopal/ui/theme/resolve"
+import type { DesktopTheme } from "@wopal/ui/theme/types"
 import { resolveTerminalTheme } from "./terminal-colors"
 
 const theme: DesktopTheme = {

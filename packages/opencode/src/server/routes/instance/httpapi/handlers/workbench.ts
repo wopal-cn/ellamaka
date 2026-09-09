@@ -10,6 +10,7 @@ import {
 } from "@/workbench/session-provisioner"
 import { SessionProjection, WorkbenchSpaceNotFound } from "@/workbench/session-projection"
 import { SessionDirectoryHealth } from "@/workbench/session-directory-health"
+import { WorkbenchDshUrl } from "@/workbench/dsh-url"
 import { CapabilityContractError as CapabilityContractFailure, SpaceControlUnavailable } from "@/wopal/cli-schema"
 import {
   CapabilityContractError,
@@ -23,6 +24,7 @@ import {
 export const workbenchHandlers = HttpApiBuilder.group(RootHttpApi, "workbench", (handlers) =>
   Effect.gen(function* () {
     const projection = yield* SessionProjection.Service
+    const dshUrl = yield* WorkbenchDshUrl
     const sessionGroups = Effect.fn("WorkbenchHttpApi.sessionGroups")(function* () {
       const groups = yield* projection.getSessionGroups().pipe(
         Effect.catch((error) => Effect.fail(controlApiError(error))),
@@ -37,7 +39,12 @@ export const workbenchHandlers = HttpApiBuilder.group(RootHttpApi, "workbench", 
         })),
       }
     })
-    return handlers.handle("sessionGroups", sessionGroups)
+    const dshUrlHandler = Effect.fn("WorkbenchHttpApi.dshUrl")(function* () {
+      return { url: dshUrl.get() }
+    })
+    return handlers
+      .handle("sessionGroups", sessionGroups)
+      .handle("dshUrl", dshUrlHandler)
   }),
 )
 

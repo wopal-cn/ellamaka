@@ -7,7 +7,10 @@ import {
   defaultExpanded,
   extractPromptSummary,
   formatTurnDuration,
+  isInjectionPart,
+  isInjectionText,
   isRenderablePart,
+  parseSyntheticInjection,
   partTitle,
   relativizeProjectPath,
   type PartClassification,
@@ -107,16 +110,14 @@ describe("isRenderablePart", () => {
     expect(isRenderablePart({ id: "4", sessionID: "s", messageID: "a1", type: "patch", hash: "x", files: [] }, msg)).toBe(false)
   })
 
-  test("hides synthetic text when the assistant message is not running", () => {
-    const msg = assistantMessage("a1", "u1") // completed
-    const part = textPart("p1", "a1", "temp", true)
-    expect(isRenderablePart(part, msg)).toBe(false)
-  })
-
-  test("shows synthetic text while the assistant message is running", () => {
-    const msg = assistantMessage("a1", "u1", { time: { created: 2000 } }) // running
-    const part = textPart("p1", "a1", "temp", true)
-    expect(isRenderablePart(part, msg)).toBe(true)
+  test("keeps synthetic text renderable regardless of message role or completion", () => {
+    const completedAssistant = assistantMessage("a1", "u1") // completed
+    const runningAssistant = assistantMessage("a2", "u1", { time: { created: 2000 } }) // running
+    const user = userMessage("u2")
+    const part = textPart("p1", "a1", "injected context", true)
+    expect(isRenderablePart(part, completedAssistant)).toBe(true)
+    expect(isRenderablePart(part, runningAssistant)).toBe(true)
+    expect(isRenderablePart({ ...part, messageID: "u2" }, user)).toBe(true)
   })
 
   test("shows normal text parts", () => {
@@ -144,6 +145,27 @@ describe("classifyPart", () => {
     const a = assistantMessage("a1", "u1")
     expect(classifyPart(textPart("p1", "a1", "hi"), a).kind).toBe("narrative")
     expect(classifyPart(reasoningPart("r1", "a1", "think"), a).kind).toBe("reasoning")
+  })
+
+  test("classifies synthetic text as injection regardless of owning message role", () => {
+    const a = assistantMessage("a1", "u1")
+    const u = userMessage("u2")
+    expect(classifyPart(textPart("p1", "a1", "injected", true), a).kind).toBe("injection")
+    expect(classifyPart(textPart("p2", "u2", "injected", true), u).kind).toBe("injection")
+  })
+
+  test("classifies shell-wrapped text as injection even without the synthetic flag", () => {
+    const a = assistantMessage("a1", "u1")
+    const u = userMessage("u2")
+    // wopal-plugin task notifications arrive as plain text parts wrapped in
+    // <system-reminder>, with no synthetic flag.
+    expect(classifyPart(textPart("p1", "u2", "<system-reminder>[WOPAL TASK PROGRESS] running</system-reminder>"), u).kind).toBe("injection")
+    expect(classifyPart(textPart("p2", "a1", "<rules-context>rule</rules-context>"), a).kind).toBe("injection")
+    expect(classifyPart(textPart("p3", "a1", "<memory-context>memory</memory-context>"), a).kind).toBe("injection")
+    // Leading whitespace before the shell still matches.
+    expect(classifyPart(textPart("p4", "u2", "\n  <system-reminder>note</system-reminder>"), u).kind).toBe("injection")
+    // Narrative text that merely mentions a shell inline is NOT an injection.
+    expect(classifyPart(textPart("p5", "a1", "see <system-reminder> docs"), a).kind).toBe("narrative")
   })
 
   test("classifies context tools", () => {
@@ -204,6 +226,24 @@ describe("partTitle", () => {
   })
 })
 
+describe("isInjectionText / isInjectionPart", () => {
+  test("matches recognized shells after trimming leading whitespace", () => {
+    expect(isInjectionText("<system-reminder>note</system-reminder>")).toBe(true)
+    expect(isInjectionText("\n  <system-reminder>note</system-reminder>")).toBe(true)
+    expect(isInjectionText("<rules-context>r</rules-context>")).toBe(true)
+    expect(isInjectionText("<memory-context>m</memory-context>")).toBe(true)
+    expect(isInjectionText("hello world")).toBe(false)
+    expect(isInjectionText("")).toBe(false)
+  })
+
+  test("classifies parts by the synthetic flag or shell content", () => {
+    expect(isInjectionPart(textPart("p1", "u1", "plain", true))).toBe(true)
+    expect(isInjectionPart(textPart("p2", "u1", "<system-reminder>note</system-reminder>"))).toBe(true)
+    expect(isInjectionPart(textPart("p3", "u1", "plain"))).toBe(false)
+    expect(isInjectionPart(reasoningPart("r1", "u1", "thinking"))).toBe(false)
+  })
+})
+
 describe("defaultExpanded", () => {
   test("expands running blocks and collapses completed history", () => {
     const a = assistantMessage("a1", "u1")
@@ -223,12 +263,56 @@ describe("defaultExpanded", () => {
   })
 })
 
+describe("parseSyntheticInjection", () => {
+  test("strips the system-reminder shell and trims the body", () => {
+    const parsed = parseSyntheticInjection("<system-reminder>\n  task note\n</system-reminder>\n")
+    expect(parsed.tag).toBe("reminder")
+    expect(parsed.body).toBe("task note")
+  })
+
+  test("recognizes rules-context and memory-context shells", () => {
+    expect(parseSyntheticInjection("<rules-context>rule text</rules-context>").tag).toBe("rules")
+    expect(parseSyntheticInjection("<rules-context>rule text</rules-context>").body).toBe("rule text")
+    expect(parseSyntheticInjection("<memory-context>**memory**</memory-context>").tag).toBe("memory")
+    expect(parseSyntheticInjection("<memory-context>**memory**</memory-context>").body).toBe("**memory**")
+  })
+
+  test("preserves markdown and nested angle brackets inside the shell", () => {
+    const body = "# Heading\n\n- item <tag>kept</tag>\n"
+    const parsed = parseSyntheticInjection(`<system-reminder>${body}</system-reminder>`)
+    expect(parsed.body).toBe("# Heading\n\n- item <tag>kept</tag>")
+  })
+
+  test("treats unrecognized content as a reminder-styled body", () => {
+    const parsed = parseSyntheticInjection("plain injected text")
+    expect(parsed.tag).toBe("reminder")
+    expect(parsed.body).toBe("plain injected text")
+  })
+
+  test("renders an unterminated streaming shell as reminder content", () => {
+    const parsed = parseSyntheticInjection("<memory-context>partial streaming")
+    expect(parsed.tag).toBe("memory")
+    expect(parsed.body).toBe("partial streaming")
+  })
+})
+
 describe("extractPromptSummary", () => {
   test("prefers the first valid text part for the user summary", () => {
     const u = userMessage("u1")
     const parts = [textPart("p1", "u1", "  **hello** world  "), textPart("p2", "u1", "second")]
     const summary = extractPromptSummary({ message: u, parts })
     expect(summary).toBe("hello world")
+  })
+
+  test("skips injection parts (synthetic or shell-wrapped) for the user summary", () => {
+    const u = userMessage("u1")
+    const parts = [
+      textPart("p1", "u1", "<system-reminder>[WOPAL TASK IDLE] done</system-reminder>"),
+      { id: "p2", sessionID: "ses_1", messageID: "u1", type: "text", text: "<rules-context>rules</rules-context>", synthetic: true } as Part,
+      textPart("p3", "u1", "real prompt"),
+    ]
+    const summary = extractPromptSummary({ message: u, parts })
+    expect(summary).toBe("real prompt")
   })
 
   test("returns a stable status summary for empty replies", () => {

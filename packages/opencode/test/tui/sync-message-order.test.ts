@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message } from "@opencode-ai/sdk/v2"
-import { Binary } from "@opencode-ai/core/util/binary"
+import { Binary } from "@wopal/ellamaka-core/util/binary"
 import { mergeMessages, keyOf, activeTurnAssistantID } from "@/cli/cmd/tui/context/sync-merge"
 
 /**

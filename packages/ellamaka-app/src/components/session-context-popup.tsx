@@ -1,5 +1,5 @@
-import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
-import { Popover } from "@opencode-ai/ui/popover"
+import { ProgressCircle } from "@wopal/ui/progress-circle"
+import { Popover } from "@wopal/ui/popover"
 import { createMemo, createSignal, Show, type JSX } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"

@@ -1,0 +1,16 @@
+{
+  "name": "@wopal/ellamaka-brand",
+  "version": "2.0.5",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./*.ts"
+  },
+  "devDependencies": {
+    "@opentui/solid": "catalog:",
+    "bun-types": "latest"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

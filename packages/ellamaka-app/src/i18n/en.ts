@@ -272,6 +272,10 @@ export const dict = {
 
   "prompt.popover.emptyResults": "No matching results",
   "prompt.popover.emptyCommands": "No matching commands",
+  "prompt.sandbox.label": "Sandbox",
+  "prompt.sandbox.read-only": "Read Only",
+  "prompt.sandbox.workspace-write": "Workspace Write",
+  "prompt.sandbox.full-access": "Full Access",
   "prompt.dropzone.label": "Drop images, PDFs, or text files here",
   "prompt.dropzone.file.label": "Drop to @mention file",
   "prompt.slash.badge.custom": "custom",
@@ -652,6 +656,7 @@ export const dict = {
   "workbench.chat.reasoning": "Thinking",
   "workbench.chat.compaction": "Context compacted",
   "workbench.chat.retry": "Retry #{{attempt}}",
+  "workbench.chat.injection": "Context injection",
   "terminal.connectionLost.abnormalClose": "WebSocket closed abnormally: {{code}}",
   "terminal.connectionLost.description":
     "The terminal connection was interrupted. This can happen when the server restarts.",
@@ -939,6 +944,7 @@ export const dict = {
   "settings.permissions.tool.websearch.description": "Search the web",
   "settings.permissions.tool.external_directory.title": "External Directory",
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
+  "settings.permissions.tool.sandbox_escalation.title": "Sandbox Escalation",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
   "settings.permissions.tool.doom_loop.description": "Detect repeated tool calls with identical input",
 

@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@wopal/ui/context"
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"

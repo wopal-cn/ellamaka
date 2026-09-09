@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
+import { EffectFlock } from "@wopal/ellamaka-core/util/effect-flock"
 import { McpAuth } from "../../src/mcp/auth"
 
 function authFile() {

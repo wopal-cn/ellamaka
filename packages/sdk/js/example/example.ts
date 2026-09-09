@@ -4,7 +4,7 @@ import { pathToFileURL } from "bun"
 const server = await createOpencodeServer()
 const client = createOpencodeClient({ baseUrl: server.url })
 
-const input = await Array.fromAsync(new Bun.Glob("packages/core/*.ts").scan())
+const input = await Array.fromAsync(new Bun.Glob("packages/ellamaka-core/src/*.ts").scan())
 
 const tasks: Promise<void>[] = []
 for await (const file of input) {

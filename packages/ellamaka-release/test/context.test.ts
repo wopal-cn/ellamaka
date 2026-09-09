@@ -64,8 +64,11 @@ describe("buildReleaseContext", () => {
     expect(() => buildReleaseContext({ tag: "v1.17.1", ...baseArgs })).toThrow(/namespaced/)
   })
 
-  test("rejects an rc tag (rc mechanism removed)", () => {
-    expect(() => buildReleaseContext({ tag: "ellamaka-cli-v1.18.0-rc.2", ...baseArgs })).toThrow(/rc/)
+  test("accepts an rc tag as a stable-channel candidate", () => {
+    const ctx = buildReleaseContext({ tag: "ellamaka-cli-v1.18.0-rc.2", ...baseArgs })
+    expect(ctx.version).toBe("1.18.0-rc.2")
+    expect(ctx.channel).toBe("stable")
+    expect(ctx.sourceTag).toBe("ellamaka-cli-v1.18.0-rc.2")
   })
 
   test("rejects a bad upstream lock", () => {

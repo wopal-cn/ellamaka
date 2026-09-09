@@ -5,7 +5,12 @@ const channel = (() => {
   if (raw === "main" || raw === "beta" || raw === "prod") return raw
   return "main"
 })()
-const version = process.env.OPENCODE_VERSION?.trim()
+
+// 版本真相源 = 本包 package.json（docs/DISTRIBUTION.md §3.2）。release 构建
+// 让 electron-builder 原生读它的 version（CI 已校验 tag == 锚点文件），
+// 只有非 release 构建（dev stamp）才用 OPENCODE_VERSION 覆盖。
+const isRelease = process.env.OPENCODE_RELEASE === "true"
+const version = isRelease ? undefined : process.env.OPENCODE_VERSION?.trim()
 const build = process.env.OPENCODE_BUILD_ID?.trim()
 const buildVersion = build ? build.slice(0, 12) : undefined
 const electronDist = process.env.ELECTRON_DIST?.trim()

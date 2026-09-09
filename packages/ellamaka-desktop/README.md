@@ -36,7 +36,7 @@ Electron is a thin shell — it only manages window lifecycle and the sidecar pr
 |---|---|
 | **Main Process** | Creates windows, starts/stops the sidecar, holds sidecar connection credentials. Terminates the sidecar and all child processes on app exit |
 | **Preload** | Exposes a minimal IPC interface (window, file picker, menus, updates, sidecar init). Renderer has context isolation enabled, Node integration disabled |
-| **Renderer** | The `@opencode-ai/ellamaka-app` `/workbench` route. Receives `platform: "desktop"` via `PlatformProvider` for file picker, menus, updates, and system integration |
+| **Renderer** | The `@wopal/ellamaka-app` `/workbench` route. Receives `platform: "desktop"` via `PlatformProvider` for file picker, menus, updates, and system integration |
 | **Sidecar** | Node runtime built from `packages/opencode`. Listens on loopback only, generates temporary auth credentials per launch. Owns PTY creation, probing, reconnection, Grace reaping, and explicit deletion |
 
 ### Relationship with ellamaka-app Workbench

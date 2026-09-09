@@ -1,7 +1,7 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
-import * as Log from "@opencode-ai/core/util/log"
-import type { Level } from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
+import type { Level } from "@wopal/ellamaka-core/util/log"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
@@ -11,9 +11,10 @@ import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { ensureProcessMetadata } from "@wopal/ellamaka-core/util/opencode-process"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { mountDshIfEnabled } from "@/cli/cmd/tui/dsh-mount"
 
 ensureProcessMetadata("worker")
 
@@ -45,6 +46,25 @@ GlobalBus.on("event", (event) => {
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
+
+// Optional dsh tool container (single-process, no webserver). The unified
+// Runtime Manager gates on `ELLAMAKA_DSH` internally (`=0` → disabled with
+// zero file access) and mounts the ellamaka-tools profile onto a process-level
+// cordis hub, exposing the container so the dsh-adapter plugin can project
+// container tools into ellamaka's ToolRegistry. `disabled`/`degraded` never
+// block the TUI: nothing dsh-related is mounted and the worker runs untouched.
+let dshHost: { dispose(): Promise<void> } | undefined
+
+void mountDshIfEnabled()
+  .then((host) => {
+    dshHost = host
+    if (host) Log.Default.info("dsh tool container mounted", {})
+  })
+  .catch((error) => {
+    Log.Default.error("failed to mount dsh tool container", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
@@ -93,6 +113,7 @@ export const rpc = {
 
     await InstanceRuntime.disposeAllInstances()
     if (server) await server.stop(true)
+    if (dshHost) await dshHost.dispose()
   },
 }
 

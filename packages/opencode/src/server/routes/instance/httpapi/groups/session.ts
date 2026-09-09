@@ -96,6 +96,7 @@ export const SessionPaths = {
   revert: `${root}/:sessionID/revert`,
   unrevert: `${root}/:sessionID/unrevert`,
   permissions: `${root}/:sessionID/permissions/:permissionID`,
+  permissionsEscalation: `${root}/:sessionID/permissions/escalation`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
@@ -401,6 +402,19 @@ export const SessionApi = HttpApi.make("session")
             summary: "Respond to permission",
             description: "Approve or deny a permission request from the AI assistant.",
             deprecated: true,
+          }),
+        ),
+        HttpApiEndpoint.delete("permissionClearEscalation", SessionPaths.permissionsEscalation, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Escalation grants cleared"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "permission.clearEscalation",
+            summary: "Clear session escalation grants",
+            description:
+              "Drop every sandbox-escalation 'always' grant the session has accumulated. Session-scoped by design; other permission types are untouched.",
           }),
         ),
         HttpApiEndpoint.delete("deleteMessage", SessionPaths.deleteMessage, {

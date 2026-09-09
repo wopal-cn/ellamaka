@@ -17,7 +17,7 @@ const FEED_TO_CHANNEL = { prod: "stable", beta: "beta" } as const
 export type Product = (typeof PRODUCTS)[number]
 export type ReleaseChannel = (typeof RELEASE_CHANNELS)[number]
 export type DevChannel = (typeof DEV_CHANNELS)[number]
-export type Prerelease = { kind: "beta"; n: number }
+export type Prerelease = { kind: "beta" | "rc"; n: number }
 
 export type ParsedVersion = {
   major: number
@@ -148,7 +148,13 @@ export function parseReleaseVersion(version: string): ParsedVersion {
 
   match = version.match(SEMVER_RC_RE)
   if (match) {
-    fail("ERC", `version ${version} is an rc shape; rc releases are removed — use a stable X.Y.Z`)
+    return {
+      major: Number(match[1]),
+      minor: Number(match[2]),
+      patch: Number(match[3]),
+      prerelease: { kind: "rc", n: Number(match[4]) },
+      channel: "stable",
+    }
   }
 
   match = version.match(SEMVER_RE)
@@ -453,7 +459,14 @@ export function compareSemVer(a: string, b: string): number {
   if (left.minor !== right.minor) return left.minor - right.minor
   if (left.patch !== right.patch) return left.patch - right.patch
   if (left.channel !== right.channel) return left.channel === "stable" ? 1 : -1
-  if (left.prerelease && right.prerelease) return left.prerelease.n - right.prerelease.n
+  if (left.prerelease && right.prerelease) {
+    if (left.prerelease.kind !== right.prerelease.kind) {
+      return left.prerelease.kind === "rc" ? 1 : -1
+    }
+    return left.prerelease.n - right.prerelease.n
+  }
+  if (left.prerelease) return -1
+  if (right.prerelease) return 1
   return 0
 }
 

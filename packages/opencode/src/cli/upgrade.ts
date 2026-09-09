@@ -1,12 +1,12 @@
 import { Config } from "@/config/config"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { Installation } from "@/installation"
-import { InstallationVersion, InstallationChannel } from "@opencode-ai/core/installation/version"
+import { InstallationVersion, InstallationChannel } from "@wopal/ellamaka-core/installation/version"
 import { GlobalBus } from "@/bus/global"
 import { existsSync, readFileSync } from "fs"
 import path from "path"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import semver from "semver"
 
 const log = Log.create({ service: "upgrade" })
@@ -22,6 +22,20 @@ const log = Log.create({ service: "upgrade" })
  */
 export function shouldSkipAutoUpgrade(channel: string, currentVersion: string): boolean {
   return channel !== "latest"
+}
+
+/**
+ * Whether the update-available notification should be shown for this build.
+ *
+ * A source checkout ("local" channel) never notifies: there is no binary to
+ * upgrade — the install transaction would only replace `~/.wopal/bin/ellamaka`
+ * while the running process keeps executing from the source tree, so the
+ * dialog would be a dead end. Preview builds ("main"/"beta"/"prod") notify so
+ * testers see newer releases; stable notifies per SemVer comparison.
+ */
+export function shouldNotifyUpdate(channel: string, currentVersion: string, latest: string): boolean {
+  if (channel === "local") return false
+  return isUpdateAvailable(currentVersion, latest)
 }
 
 /**
@@ -92,9 +106,16 @@ export async function upgrade() {
     return
   }
 
-  // Non-stable channels (dev builds, local debug, previews) are not published
-  // to the CDN stable manifest. Auto-upgrading them would replace the dev/local
-  // binary with the stable one. Skip auto-upgrade and notify only.
+  // A source checkout ("local" channel) has no binary to upgrade — the
+  // install transaction would only replace ~/.wopal/bin/ellamaka while the
+  // running process keeps executing from the source tree. Stay silent.
+  if (InstallationChannel === "local") {
+    log.info(`local source build (current ${InstallationVersion}), skip update check`)
+    return
+  }
+
+  // Non-stable channels (preview builds) are not published to the CDN stable
+  // manifest. Auto-upgrading them would replace the binary. Notify only.
   if (shouldSkipAutoUpgrade(InstallationChannel, InstallationVersion)) {
     log.info(`skip auto-upgrade for ${InstallationChannel} channel build (current ${InstallationVersion}, latest ${latest})`)
     GlobalBus.emit("event", {

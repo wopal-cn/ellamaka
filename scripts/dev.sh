@@ -602,7 +602,14 @@ start_backend() {
   local port="$1" debug="$2" debug_modules="$3" preload="$4"
   shift 4
   local plugin_modules=""
-  local -a env_args=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" OPENCODE_MODELS_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") args=(serve --port "$port" --print-logs)
+  local -a env_args=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" OPENCODE_MODELS_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")")
+  # Official rc.1 packages resolve their harness home through $DSH_HOME
+  # directly (e.g. dsh-agent-presets' user preset root), bypassing every
+  # ctx/config seam the integration owns. Point it at the official-layout
+  # home so those resolutions land inside $WOPAL_HOME/dsh/home (A1 layout
+  # alignment) and never touch ~/.dsh.
+  env_args+=(DSH_HOME="${WOPAL_HOME:-$HOME/.wopal}/dsh/home")
+  local -a args=(serve --port "$port" --print-logs)
   if [ "$debug" = true ]; then
     plugin_modules="$(plugin_debug_modules "$debug_modules")"
     args+=(--log-level DEBUG)
@@ -1034,6 +1041,9 @@ cmd_desktop() {
   else
     require_free_ports 5173 || return 1
   fi
+  local desktop_sidecar_port="${OPENCODE_PORT:-4097}"
+  choose_free_port desktop-sidecar "$desktop_sidecar_port"
+  desktop_sidecar_port="$SELECTED_PORT"
   export OPENCODE_CHANNEL="$CHANNEL"
   # Keep the schema dependency floor in lockstep with .ci/versions.json
   # before resolving MIN_WOPAL_CLI_VERSION (idempotent no-op when aligned).
@@ -1056,7 +1066,14 @@ cmd_desktop() {
 
   mkdir -p "$DEV_DIR"
   local plugin_modules=""
-  local -a desktop_env=(ELAMAKA_DESKTOP_DEV=1 ELAMAKA_DESKTOP_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION")
+  local -a desktop_env=(ELAMAKA_DESKTOP_DEV=1 ELAMAKA_DESKTOP_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" OPENCODE_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
+  # The sidecar's dshmarket install worker re-launches this command for
+  # `dsh plugin` installs (Bun installer). Point it at the worktree CLI
+  # entry run via bun — no engine build required; the sidecar falls back to
+  # <WOPAL_HOME>/bin/ellamaka when unset.
+  if [ -f "$root/packages/opencode/src/index.ts" ]; then
+    desktop_env+=(ELLAMAKA_DSH_INSTALL_COMMAND="bun $root/packages/opencode/src/index.ts")
+  fi
   if $cdp_debug; then
     desktop_env+=(ELAMAKA_DESKTOP_CDP=1)
   fi

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
+import { resolveThemeVariant } from "@wopal/ui/theme/resolve"
 import { ellamakaTheme, ELLAMAKA_THEME_ID } from "./ellamaka-theme"
 
 describe("ellamaka theme", () => {

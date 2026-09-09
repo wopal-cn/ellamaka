@@ -3,8 +3,8 @@ import path from "path"
 import semver from "semver"
 import { Context, Duration, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Global } from "@opencode-ai/core/global"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
+import { Global } from "@wopal/ellamaka-core/global"
 // Effective minimum wopal-cli version. Build scripts
 // (scripts/lib/version.sh resolve_min_wopal_cli_version) inject
 // MIN_WOPAL_CLI_VERSION from .ci/versions.json (auto-following the

@@ -71,7 +71,7 @@ Renderer 将它们呈现为四个阶段：
 | 空间与记忆 | `create-space`、`ai-provider`、`memory-config` | 创建或复用 Space，配置可选 Provider，并配置全局或 Space 级记忆。                     |
 | 启动       | `done`                                         | 展示健康摘要、可选 Star 操作，并从健康门禁进入 Workbench。                           |
 
-`github-auth` 是底层状态步骤，不单独渲染页面。`install-cli` 负责 Wopal CLI 健康，读取 CLI stable latest，并按运行时版本检查（wopal-cli 下界 + CLI 主版本与 Desktop 一致）完成校验与安装；不使用精确 `engineVersion` pin，也不搜索历史 CLI。Desktop 应用本身在进入 onboarding 前已由用户或 `wopal setup` 安装。Runtime 准备由 `ontology-setup` 成功后的 machine operation 执行。
+`github-auth` 是底层状态步骤，不单独渲染页面。`install-cli` 负责 Wopal CLI 健康，读取 CLI latest，并按运行时版本检查（wopal-cli 下界 + CLI 主版本与 Desktop 一致）完成校验与安装；不使用精确 `engineVersion` pin，也不搜索历史 CLI。Desktop 应用本身在进入 onboarding 前已由用户或 `wopal setup` 安装。Runtime 准备由 `ontology-setup` 成功后的 machine operation 执行。
 
 顶部阶段追踪器只允许访问已解锁阶段。用户可以返回已访问步骤；返回后重新 probe，并以真实机器状态重算后续阶段。任何成功结果都停留在当前页面，直到用户显式点击"下一步"。
 
@@ -102,7 +102,7 @@ Renderer 将它们呈现为四个阶段：
 
 ### 5.1 CLI bootstrap 与 machine operation
 
-`system-check` 由 Main 执行本地 bootstrap 检查。`install-cli` 先运行站点 installer 的 install-only 模式安装或复用 Wopal CLI，再调用 machine operation 读取 CLI stable latest 并安装外部 Ellamaka CLI。machine operation 在修改 binary 前完成 latest manifest 的 ReleaseIdentity 与 artifact SHA-256 校验；latest 不兼容时明确失败并建议刷新或重试。Wopal CLI 的版本来自直接执行已安装 binary 的 `wopal --version`。
+`system-check` 由 Main 执行本地 bootstrap 检查。`install-cli` 先运行站点 installer 的 install-only 模式安装或复用 Wopal CLI，再调用 machine operation 读取 CLI latest 并安装外部 Ellamaka CLI。machine operation 在修改 binary 前完成 latest manifest 的 ReleaseIdentity 与 artifact SHA-256 校验；latest 不兼容时明确失败并建议刷新或重试。Wopal CLI 的版本来自直接执行已安装 binary 的 `wopal --version`。
 
 其余系统变更通过 `wopal setup --machine --json --api-version 1` 执行。Main 验证 `setup.operation` JSON envelope，并把 CLI 的 `created`、`reused`、`skipped` 结果映射为 Desktop 结果。
 
@@ -117,6 +117,18 @@ Main 是 timeout 的唯一 Owner。Wopal installer 具有下载超时和五分�
 Main 将步骤进度广播给 Renderer，并记录到 `$WOPAL_HOME/logs/onboarding.log`。日志超过 1 MB 时滚动为 `onboarding.log.1`，写入前会脱敏常见 token 与 API key 模式。Renderer 日志抽屉保存最近 200 条显示记录，并保留用户的展开状态。
 
 执行型 operation 使用显式 runtime impact：`externalCli` 与 `desktopSidecar` 分开报告，`stopRunning` 是调用方授权输入，不是 operation 自动推导的成功结果。替换外部 Bun CLI 不得停止 Desktop sidecar；只有确需重启内嵌 sidecar 的 operation 才能在 UI 明确说明活跃 Session/PTY 会终止并确认后执行。
+
+### 5.3 依赖安装
+
+Onboarding 不预装插件与 dsh 依赖（2026-09-01 决策，原提前物化方案已废弃）。依赖安装由 ellamaka 运行时兜底统一负责：
+
+| 依赖 | 运行时兜底 |
+| ---- | ---------- |
+| 用户级插件依赖 | ellamaka 首次使用即装 |
+| 空间级插件依赖 | ellamaka per-directory 加载时安装 |
+| dsh 依赖闭包 | ellamaka 装配 dsh 前自物化（Runtime Manager，见 `DESIGN-dsh-poc.md` §3.4） |
+
+onboarding 可能被跳过（用户已完成后重装、纯终端 setup、外部安装），运行时兜底保证依赖始终可用，onboarding 编排对依赖安装无前置要求。
 
 ## 6. 关键文件
 

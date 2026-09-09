@@ -15,6 +15,11 @@ export type ToolContext = {
    */
   worktree: string
   abort: AbortSignal
+  /**
+   * Per-call extras forwarded from the host (e.g. `sandboxMode` from the
+   * composer selector). Shape is host-defined; plugins must tolerate absence.
+   */
+  extra?: { [key: string]: unknown }
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Promise<void>
 }

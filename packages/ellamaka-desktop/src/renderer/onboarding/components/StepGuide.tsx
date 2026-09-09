@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js"
-import { Markdown } from "@opencode-ai/ui/markdown"
+import { Markdown } from "@wopal/ui/markdown"
 import {
   prepareStepGuideMarkdown,
   type StepGuideAssets,

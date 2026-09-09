@@ -1,5 +1,5 @@
 import type { WorkspaceID } from "@/control-plane/schema"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { Effect, Scope } from "effect"
 
 /**

@@ -115,11 +115,16 @@ export class CapabilityContractError extends Schema.TaggedErrorClass<CapabilityC
   { httpApiStatus: 502 },
 ) {}
 
+const WorkbenchDshUrlResponse = Schema.Struct({
+  url: Schema.Union([Schema.String, Schema.Undefined]),
+})
+
 export const WorkbenchPaths = {
   sessions: "/workbench/sessions",
   sessionGroups: "/workbench/session-groups",
   sessionTree: "/workbench/session-tree",
   locations: "/workbench/locations",
+  dshUrl: "/workbench/dsh-url",
 } as const
 
 const WorkbenchErrors = [
@@ -142,6 +147,15 @@ export const WorkbenchApi = HttpApi.make("workbench")
           identifier: "workbench.sessionGroups",
           summary: "List legacy Workbench session groups",
           description: "Compatibility projection for existing consumers. New Workbench clients use session-tree.",
+        })),
+      )
+      .add(
+        HttpApiEndpoint.get("dshUrl", WorkbenchPaths.dshUrl, {
+          success: described(WorkbenchDshUrlResponse, "Authenticated DSH iframe entry URL"),
+        }).annotateMerge(OpenApi.annotations({
+          identifier: "workbench.dshUrl",
+          summary: "Resolve the authenticated DSH iframe entry",
+          description: "Returns the launch-token iframe URL for the mounted dsh web engine, or url: undefined when the engine is disabled or not yet mounted.",
         })),
       )
       .annotateMerge(OpenApi.annotations({ title: "workbench", description: "Workbench compatibility routes." }))

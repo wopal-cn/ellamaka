@@ -4,7 +4,7 @@ import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Bus } from "../../src/bus"
@@ -25,7 +25,7 @@ import { Session } from "@/session/session"
 import { SessionMessageTable } from "../../src/session/session.sql"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { SessionCompaction } from "../../src/session/compaction"
 import { SessionSummary } from "../../src/session/summary"
 import { Instruction } from "../../src/session/instruction"
@@ -42,8 +42,8 @@ import { Shell } from "../../src/shell/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
-import * as Log from "@opencode-ai/core/util/log"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import * as Log from "@wopal/ellamaka-core/util/log"
+import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import * as Database from "../../src/storage/db"
 import { Ripgrep } from "../../src/file/ripgrep"
 import { Format } from "../../src/format"
@@ -713,6 +713,50 @@ noLLMServer.instance(
         ]),
       )
     }),
+  { config: cfg },
+)
+
+it.instance("prompt persists sandboxMode on the user message", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      sandboxMode: "read-only",
+      parts: [{ type: "text", text: "hello sandbox" }],
+    })
+
+    const stored = [...MessageV2.stream(chat.id)].find((m) => m.info.role === "user")
+    expect(stored?.info.role).toBe("user")
+    if (stored?.info.role === "user") {
+      expect(stored.info.sandboxMode).toBe("read-only")
+    }
+  }),
+  { config: cfg },
+)
+
+it.instance("prompt omits sandboxMode when not selected", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "no sandbox choice" }],
+    })
+
+    const stored = [...MessageV2.stream(chat.id)].find((m) => m.info.role === "user")
+    if (stored?.info.role === "user") {
+      expect(stored.info.sandboxMode).toBeUndefined()
+    }
+  }),
   { config: cfg },
 )
 

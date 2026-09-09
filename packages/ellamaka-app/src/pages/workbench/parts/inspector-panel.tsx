@@ -1,5 +1,5 @@
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
-import { Tabs } from "@opencode-ai/ui/tabs"
+import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
+import { Tabs } from "@wopal/ui/tabs"
 import {
   For,
   Match,
@@ -13,13 +13,13 @@ import {
   onMount,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileSearchHandle } from "@opencode-ai/ui/file"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import type { FileSearchHandle } from "@wopal/ui/file"
+import { useFileComponent } from "@wopal/ui/context/file"
+import { ScrollView } from "@wopal/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { sampledChecksum } from "@opencode-ai/core/util/encode"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
-import { findFileLineNumber, readShadowLineSelection } from "@opencode-ai/ui/pierre/file-selection"
+import { sampledChecksum } from "@wopal/ellamaka-core/util/encode"
+import { previewSelectedLines } from "@wopal/ui/pierre/selection-bridge"
+import { findFileLineNumber, readShadowLineSelection } from "@wopal/ui/pierre/file-selection"
 import { FileProvider, useFile, type SelectedLineRange } from "@/context/file"
 import { selectionFromLines } from "@/context/file/types"
 import { useLanguage } from "@/context/language"

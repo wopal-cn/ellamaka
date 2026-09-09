@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../lib/cli-process"
-import { BINARY_NAME } from "../../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
 describe("ellamaka --version output", () => {
   cliIt.live(

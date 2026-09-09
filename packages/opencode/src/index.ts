@@ -2,7 +2,7 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { ConsoleCommand } from "./cli/cmd/account"
 import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
@@ -11,8 +11,8 @@ import { UninstallCommand } from "./cli/cmd/uninstall"
 import { ModelsCommand } from "./cli/cmd/models"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
+import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
 import { Filesystem } from "@/util/filesystem"
@@ -29,18 +29,23 @@ import { EOL } from "os"
 import path from "node:path"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
-import { BINARY_NAME } from "../../ellamaka/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
-import { Global } from "@opencode-ai/core/global"
-import { detectWopalSpace } from "../../ellamaka/detect"
+import { Global } from "@wopal/ellamaka-core/global"
+import { detectWopalSpace } from "@wopal/ellamaka-brand/detect"
 import { JsonMigration } from "@/storage/json-migration"
 import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
+import { DshInitCommand } from "./cli/cmd/dsh-init"
+import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
+import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
+import { Effect } from "effect"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
+import { ensureProcessMetadata } from "@wopal/ellamaka-core/util/opencode-process"
 import { isRecord } from "@/util/record"
 
 const processMetadata = ensureProcessMetadata("main")
@@ -209,6 +214,73 @@ const cli = yargs(args)
   .command(PrCommand)
   .command(SessionCommand)
   .command(PluginCommand)
+  .command({
+    command: "dsh [args...]",
+    describe: "dsh profile tools — plugin management and config dumps (official dsh CLI shape)",
+    builder: (y) =>
+      y
+        .positional("args", {
+          type: "string",
+          array: true,
+          default: [] as string[],
+          describe: "launch arguments after the dsh flags (boot mode is served by `ellamaka serve`)",
+        })
+        // The launcher flags the official dsh parser owns (official order);
+        // yargs hoists parent options, so they parse in every position.
+        .option("profile", {
+          type: "string",
+          describe: "the profile under $WOPAL_HOME/dsh/home/profiles to operate on",
+        })
+        .option("patch", {
+          type: "string",
+          nargs: 1,
+          array: true,
+          describe: "extra patch-list overlay applied after the profile layer (repeatable, argv order)",
+        })
+        .option("dump-config", {
+          type: "boolean",
+          describe: "print the composed profile tree and exit",
+        })
+        .option("dump-default-config", {
+          type: "boolean",
+          describe: "print the profile's bundle layers (no user layer) and exit",
+        })
+        .middleware(() => {
+          // Official rejectParentOptions (bin.js): launcher flags must not
+          // precede the `plugin` subcommand. yargs hoists parent options, so
+          // the position check runs on the raw argv, not parsed values.
+          if (dshRootFlagsBeforePlugin(args)) {
+            throw new Error(
+              "error: dsh plugin takes none of parent --profile, --patch, --dump-config, or --dump-default-config before the subcommand (official dsh semantics); use: `ellamaka dsh plugin --profile <name> add <package>`",
+            )
+          }
+        })
+        .command(DshPluginCommand)
+        .command(DshDumpConfigCommand)
+        .command(DshInitCommand)
+        .epilogue(DSH_HELP_EXAMPLES),
+    handler: async (argv) => {
+      // Official resolveBoot semantics (Plan 223 D-01/D-03): the root flags
+      // resolve a config dump; boot mode (`--profile <name>` without a dump
+      // flag) errors pointing at `ellamaka serve` (Out of Scope here).
+      const invocation = dshDumpResolve(
+        {
+          profile: argv.profile as string | undefined,
+          patch: argv.patch as string[] | undefined,
+          "dump-config": argv["dump-config"] === true,
+          "dump-default-config": argv["dump-default-config"] === true,
+        },
+        (argv.args ?? []) as string[],
+      )
+      await Effect.runPromise(
+        runDshDump({
+          profileName: invocation.profile,
+          defaultOnly: invocation.defaultOnly,
+          overlayPatches: invocation.patches,
+        }),
+      )
+    },
+  })
   .command(DbCommand)
   .fail((msg, err) => {
     if (

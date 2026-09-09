@@ -1,13 +1,13 @@
 import { createEffect, createMemo, createSignal, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { getFilename } from "@opencode-ai/core/util/path"
+import { Icon } from "@wopal/ui/icon"
+import { Collapsible } from "@wopal/ui/collapsible"
+import { useDialog } from "@wopal/ui/context/dialog"
+import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { useLanguage } from "@/context/language"
 import { agentColor } from "@/utils/agent"
-import { agentDisplayName, formatTurnDuration } from "./chat-render.utils"
+import { agentDisplayName, formatTurnDuration, isInjectionPart, parseSyntheticInjection } from "./chat-render.utils"
 import { chatExpansionState } from "./chat-expansion-state"
 import { WorkbenchMarkdown } from "./workbench-markdown-renderer"
 import { ChatImagePreview } from "./chat-image-preview"
@@ -51,6 +51,11 @@ async function writeClipboard(text: string) {
  * UserMessageBlock renders the user's request bubble. It shows the prompt text
  * and, in SDK order, any file attachments, agent references and subtask
  * summaries that belong to the user input model.
+ * Injection text parts (synthetic-flagged or shell-wrapped) are NOT rendered
+ * here: they present as tool-style context-injection blocks at the transcript
+ * row level (see TranscriptRowView), left-aligned outside the bubble. A user
+ * message whose text content is only injections renders no bubble at all —
+ * its row shows only the injection container.
  */
 export function UserMessageBlock(props: {
   message: UserMessage
@@ -64,7 +69,7 @@ export function UserMessageBlock(props: {
   if (props.parts.length > 0 && props.parts.every((p) => p.type === "compaction")) return null
   const text = createMemo(() =>
     props.parts
-      .filter((p) => p.type === "text" && !p.synthetic)
+      .filter((p) => p.type === "text" && !isInjectionPart(p))
       .map((p) => (p.type === "text" ? p.text : ""))
       .join("\n"),
   )
@@ -294,6 +299,50 @@ export function NarrativeBlock(props: {
           </For>
         </div>
       </Show>
+    </div>
+  )
+}
+
+/**
+ * ContextInjectionBlock renders an injection text part (synthetic-flagged or
+ * shell-wrapped) as a collapsible "context injection" document. The header
+ * carries the i18n label plus the injection shell tag (reminder/rules/memory);
+ * the body shows the tag-stripped inner content as Markdown. Blocks default to
+ * collapsed and remember manual toggles across virtual-list remounts, mirroring
+ * ReasoningBlock's expansion policy.
+ */
+export function ContextInjectionBlock(props: { part: Part }) {
+  const language = useLanguage()
+  if (!isInjectionPart(props.part)) return null
+  const injection = createMemo(() =>
+    parseSyntheticInjection(props.part.type === "text" ? props.part.text : ""),
+  )
+  const stored = () => chatExpansionState.get(props.part.sessionID, "injection", props.part.id)
+  const [selected, setSelected] = createSignal(stored())
+  const open = () => selected() ?? false
+  const setOpen = (next: boolean) => {
+    setSelected(next)
+    chatExpansionState.set(props.part.sessionID, "injection", props.part.id, next)
+  }
+
+  return (
+    <div
+      data-component="chat-injection"
+      data-part-id={props.part.id}
+      data-injection-tag={injection().tag}
+    >
+      <Collapsible open={open()} onOpenChange={setOpen}>
+        <Collapsible.Trigger data-slot="chat-injection-trigger" aria-expanded={open()}>
+          <div data-slot="chat-injection-header-left">
+            <Icon name="archive" size="small" />
+            <span data-slot="chat-injection-label">{language.t("workbench.chat.injection")}</span>
+          </div>
+          <span data-slot="chat-injection-tag">{injection().tag}</span>
+        </Collapsible.Trigger>
+        <Collapsible.Content data-slot="chat-injection-content">
+          <WorkbenchMarkdown text={injection().body} cacheKey={props.part.id} streaming={false} />
+        </Collapsible.Content>
+      </Collapsible>
     </div>
   )
 }

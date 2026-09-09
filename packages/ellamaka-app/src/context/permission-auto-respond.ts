@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@wopal/ellamaka-core/util/encode"
 
 export function acceptKey(sessionID: string, directory?: string) {
   if (directory === undefined || directory === null) return sessionID

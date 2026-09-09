@@ -7,7 +7,7 @@ import type { JSX } from "solid-js"
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { PromptNavigator, type PromptNavigatorProps } from "./prompt-navigator"
 
-mock.module("@opencode-ai/ui/icon", () => ({
+mock.module("@wopal/ui/icon", () => ({
   Icon: (props: { name: string }) => <span data-slot="chat-icon" data-icon={props.name} />,
 }))
 
@@ -105,6 +105,90 @@ describe("PromptNavigator", () => {
     const items = host.querySelectorAll("[data-slot='chat-prompt-item']")
     expect(items.length).toBe(2)
     expect(host.querySelector("[data-slot='chat-prompt-item'][data-message-id='u-comp']")).toBeNull()
+    host.remove()
+  })
+
+  test("excludes synthetic-only user messages from the rail and directory", () => {
+    const u1 = userMessage("u1", "hello")
+    const uNotify = userMessage("u-notify", "")
+    const u2 = userMessage("u2", "world")
+    const syntheticPart: Part = {
+      id: "sp1",
+      sessionID: "ses_1",
+      messageID: "u-notify",
+      type: "text",
+      text: "<system-reminder>sandbox mode changed</system-reminder>",
+      synthetic: true,
+    }
+    const host = mount(() => (
+      <PromptNavigator
+        {...baseProps({
+          userMessages: [u1, uNotify, u2],
+          getParts: (id: string) => (id === "u-notify" ? [syntheticPart] : [textPart(`p-${id}`, id, id === "u1" ? "hello" : "world")]),
+        })}
+      />
+    ))
+
+    expect(host.querySelectorAll("[data-slot='chat-prompt-tick']").length).toBe(2)
+    expect(host.querySelector("[data-slot='chat-prompt-tick'][data-message-id='u-notify']")).toBeNull()
+
+    openDirectory(host)
+    const items = host.querySelectorAll("[data-slot='chat-prompt-item']")
+    expect(items.length).toBe(2)
+    expect(host.querySelector("[data-slot='chat-prompt-item'][data-message-id='u-notify']")).toBeNull()
+    host.remove()
+  })
+
+  test("excludes flagless shell-wrapped notification messages from the rail and directory", () => {
+    const u1 = userMessage("u1", "hello")
+    const uTask = userMessage("u-task", "")
+    const u2 = userMessage("u2", "world")
+    // wopal-plugin task notifications arrive without the synthetic flag.
+    const taskPart: Part = {
+      id: "tp1",
+      sessionID: "ses_1",
+      messageID: "u-task",
+      type: "text",
+      text: "<system-reminder>\n[WOPAL TASK IDLE]\n**ID:** `t1`\n</system-reminder>",
+    }
+    const host = mount(() => (
+      <PromptNavigator
+        {...baseProps({
+          userMessages: [u1, uTask, u2],
+          getParts: (id: string) => (id === "u-task" ? [taskPart] : [textPart(`p-${id}`, id, id === "u1" ? "hello" : "world")]),
+        })}
+      />
+    ))
+
+    expect(host.querySelectorAll("[data-slot='chat-prompt-tick']").length).toBe(2)
+    expect(host.querySelector("[data-slot='chat-prompt-tick'][data-message-id='u-task']")).toBeNull()
+
+    openDirectory(host)
+    const items = host.querySelectorAll("[data-slot='chat-prompt-item']")
+    expect(items.length).toBe(2)
+    expect(host.querySelector("[data-slot='chat-prompt-item'][data-message-id='u-task']")).toBeNull()
+    expect(host.textContent).not.toContain("空回复")
+    host.remove()
+  })
+
+  test("keeps a mixed user message (real text plus shell-wrapped part) as one entry", () => {
+    const u1 = userMessage("u-mixed", "")
+    const mixedParts: Part[] = [
+      textPart("p-real", "u-mixed", "my actual prompt"),
+      textPart("p-inj", "u-mixed", "<system-reminder>attached context</system-reminder>"),
+    ]
+    const host = mount(() => (
+      <PromptNavigator
+        {...baseProps({
+          userMessages: [u1],
+          getParts: (id: string) => (id === "u-mixed" ? mixedParts : []),
+        })}
+      />
+    ))
+
+    openDirectory(host)
+    expect(host.querySelectorAll("[data-slot='chat-prompt-item']").length).toBe(1)
+    expect(host.querySelector("[data-slot='chat-prompt-user']")?.textContent).toBe("my actual prompt")
     host.remove()
   })
 

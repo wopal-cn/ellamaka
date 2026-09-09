@@ -1,10 +1,11 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@wopal/ui/context"
 import { makePersisted } from "@solid-primitives/storage"
 import { batch, createEffect, createRenderEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   clonePersistedWorkbench,
   createWorkbenchStore,
+  GENERAL_TAB_PATH,
   PERSISTED_DEFAULTS,
   type PersistedWorkbench,
   type WorkbenchSessionBinding,
@@ -12,8 +13,6 @@ import {
 import { scopeFromTab, type SpaceScope } from "./workbench-scope"
 import { selectActiveWorkbenchContext } from "./active-workbench-context"
 import type { BoundWorkbenchPanel } from "./workbench-actions"
-import { useServer } from "@/context/server"
-import { LEGACY_WORKBENCH_STORAGE_NAME, prepareWorkbenchStorage } from "./workbench-storage"
 
 export {
   DISPLAY_DEFAULTS,
@@ -54,18 +53,15 @@ export function watchWorkbenchPersistence(
   })
 }
 
-export function initWorkbenchState(
-  storageName = LEGACY_WORKBENCH_STORAGE_NAME,
-  storage = typeof window !== "undefined" ? window.localStorage : undefined,
-) {
+export function initWorkbenchState() {
   const workbench = createWorkbenchStore()
   const [hydrated, setHydrated] = createSignal(false)
 
   const [persisted, setPersisted] = makePersisted(
       createStore<PersistedWorkbench>(clonePersistedWorkbench(PERSISTED_DEFAULTS)),
       {
-        name: storageName,
-        storage,
+        name: "workbench",
+        storage: typeof window !== "undefined" ? window.localStorage : undefined,
       },
     )
 
@@ -108,7 +104,6 @@ export function initWorkbenchState(
       window.addEventListener("visibilitychange", handleVisibility)
       window.addEventListener("pagehide", handlePageHide)
       onCleanup(() => {
-        syncToPersisted()
         window.removeEventListener("visibilitychange", handleVisibility)
         window.removeEventListener("pagehide", handlePageHide)
         if (saveTimer) clearTimeout(saveTimer)
@@ -118,6 +113,10 @@ export function initWorkbenchState(
     const [refreshVersion, setRefreshVersion] = createSignal(0)
     const [persistentHint, setPersistentHintValue] = createSignal("")
     const [statusMessage, setStatusMessageValue] = createSignal("")
+    // DSH availability mirrors the server-side `ELLAMAKA_DSH` kill switch as
+    // reported by /global/health (`dsh` field). Undefined until the first
+    // health probe resolves.
+    const [dshEnabled, setDshEnabled] = createSignal<boolean | undefined>(undefined)
     let persistentHintTimer: ReturnType<typeof setTimeout> | undefined
     let statusMessageTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -290,6 +289,16 @@ export function initWorkbenchState(
       setStatusMessage,
       get persistentHint() { return persistentHint() },
       setPersistentHint,
+      get dshEnabled() { return dshEnabled() },
+      setDshEnabled,
+      // DSH replaces the Assistant (general) tab content when enabled. Derived
+      // from the active tab path so the tab highlight, click semantics, and
+      // persistence (activeTabPath is persisted) stay truthful — no separate
+      // visibility signal to desynchronize (DESIGN-dsh-poc §10).
+      get dshVisible() {
+        if (!dshEnabled()) return false
+        return (workbench.activeTabPath ?? GENERAL_TAB_PATH) === GENERAL_TAB_PATH
+      },
       get diagnostics() { return diagnosticsList() },
       pushDiagnostic,
       removeDiagnostic,
@@ -307,11 +316,7 @@ export function initWorkbenchState(
 
 const WorkbenchStateContext = createSimpleContext({
   name: "WorkbenchState",
-  init: () => {
-    const server = useServer()
-    const storage = typeof window !== "undefined" ? window.localStorage : undefined
-    return initWorkbenchState(prepareWorkbenchStorage(storage, server.current), storage)
-  },
+  init: initWorkbenchState,
 })
 
 export const useWorkbenchState = () => WorkbenchStateContext.use()

@@ -105,6 +105,7 @@ export function planRetention({
   snapshot,
   aliases,
   keepStable,
+  keepRc = 0,
   dryRun = false,
 }: {
   config: ProductConfig
@@ -112,6 +113,7 @@ export function planRetention({
   snapshot: ReleaseSnapshot
   aliases: AliasMap
   keepStable: number
+  keepRc?: number
   dryRun?: boolean
 }): RetentionPlan {
   const graph = buildReferenceGraph(snapshot, aliases, config)
@@ -148,12 +150,39 @@ export function planRetention({
   if (!Number.isFinite(keepStable) || keepStable < 0) {
     throw new Error(`keepStable must be a finite non-negative integer, got '${keepStable}'`)
   }
+  if (!Number.isFinite(keepRc) || keepRc < 0) {
+    throw new Error(`keepRc must be a finite non-negative integer, got '${keepRc}'`)
+  }
 
+  // Retention keeps the newest N releases of the bucket and deletes the
+  // oldest beyond that. The latest alias normally points at the newest
+  // release, so it is naturally retained; as a defensive guard, a release
+  // the latest alias references is never deleted even if it falls outside
+  // the newest N (e.g. a release whose alias promotion lagged).
+  //
+  // CLI rc releases form an independent retention bucket within the stable
+  // channel: they are counted separately from bare stable versions, so a
+  // long rc sequence never evicts the stable history (docs/DISTRIBUTION.md
+  // §7.2). Desktop has no rc shape; keepRc is inert there.
   const deleteCandidates = []
-  for (let i = 0; i < candidates.length; i++) {
-    const c = candidates[i]!
+  let stableKept = 0
+  let rcKept = 0
+  for (const c of candidates) {
+    const isRc = c.version.includes("-rc.")
+    if (isRc) {
+      if (rcKept < keepRc) {
+        rcKept++
+        continue
+      }
+    } else {
+      if (stableKept < keepStable) {
+        stableKept++
+        continue
+      }
+    }
+    // Beyond the newest N: delete, unless the latest alias references it
+    // (defensive guard — never delete what the latest alias points at).
     if (c.protected) continue
-    if (i < keepStable) continue
     deleteCandidates.push(c)
   }
 
