@@ -9,6 +9,7 @@ import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { ptyAvailable } from "../fixture/pty"
 
 void Log.init({ print: false })
 
@@ -19,7 +20,9 @@ const original = {
   envUsername: process.env.ELLAMAKA_SERVER_USERNAME,
 }
 const auth = { username: "opencode", password: "listen-secret" }
-const testPty = process.platform === "win32" ? test.skip : test
+// PTY cases need a real `forkpty()`; hosts without spawn privileges (sandboxed
+// runners) can only skip — the capability probe fails fast and cached.
+const testPty = process.platform === "win32" || !ptyAvailable() ? test.skip : test
 
 afterEach(async () => {
   Flag.ELLAMAKA_SERVER_PASSWORD = original.ELLAMAKA_SERVER_PASSWORD
