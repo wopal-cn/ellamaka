@@ -1,5 +1,7 @@
 import { Global } from "@wopal/ellamaka-core/global"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { join } from "node:path"
+import { GlobalBus } from "@/bus/global"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   initializeDshRuntime,
@@ -90,12 +92,41 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
     let pluginService: { stop(): Promise<void> } | undefined
     try {
       const { startDshPluginService } = await import("@wopal/ellamaka-cordis/plugins/runtime")
+      // Structured logger (W-02 parity with serve): replay failures land in
+      // the dsh-plugins log file. The console fallback would spray raw error
+      // objects into the TUI surface and break the interface.
+      const watcherLog = hub.ctx.logger("dsh-plugins")
       pluginService = startDshPluginService({
         home,
-        containers: [{ profile: "ellamaka-tools", ctx: hub.ctx, includeEntry: host.includeEntry }],
+        containers: [{ profile: "ellamaka-tools", ctx: hub.ctx, includeEntry: host.includeEntry, stackContext: host.stackContext }],
+        logger: {
+          info: (message, extra) => watcherLog.info(message, extra),
+          warn: (message, extra) => watcherLog.warn(message, extra),
+          error: (message, extra) => watcherLog.error(message, extra),
+        },
+        // Surface replay failures in the TUI error area (toast) instead of a
+        // bare console write: GlobalBus events reach the UI over the
+        // /global/event SSE stream and render through TuiEvent.ToastShow
+        // (same channel as worktree/global-lifecycle emits).
+        onReplayError: (profile, error) => {
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: "tui.toast.show",
+              properties: {
+                title: "dsh plugin replay failed",
+                message: `Profile "${profile}" keeps its last good state: ${(error as Error).message}`,
+                variant: "error",
+                duration: 8000,
+              },
+            },
+          })
+        },
       })
     } catch (error) {
-      console.error(`dsh plugin runtime service failed to start: ${(error as Error).message}`)
+      hub.ctx.logger("dsh-plugins").warn("plugin runtime service failed to start", {
+        error: (error as Error).message,
+      })
     }
 
     return {
@@ -107,7 +138,24 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
       },
     }
   } catch (error) {
-    console.error(`dsh tool container mount failed: ${(error as Error).message}`)
+    // Surface the mount failure through the TUI error area (toast) — a bare
+    // console write would corrupt the interface — and keep a structured log
+    // record for diagnosis.
+    Log.Default.error("dsh tool container mount failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+    GlobalBus.emit("event", {
+      directory: "global",
+      payload: {
+        type: "tui.toast.show",
+        properties: {
+          title: "dsh tool container failed",
+          message: `The dsh tool container did not mount; the TUI continues without dsh tools: ${(error as Error).message}`,
+          variant: "error",
+          duration: 8000,
+        },
+      },
+    })
     try {
       await hub?.dispose()
     } catch {
