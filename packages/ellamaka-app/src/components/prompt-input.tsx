@@ -109,6 +109,17 @@ interface PromptInputProps {
 
 const SANDBOX_CHOICE_KEY = "sandbox-choice"
 
+// Notification bodies are wrapped in the shell the chat renderer parses as a
+// collapsible context-injection block. `full-access` uses the adapter's wire
+// vocabulary ("danger-full-access") so the model sees the actual trust level.
+function sandboxModeReminderText(preset: SandboxPreset): string {
+  const modeLabel = preset === "full-access" ? "danger-full-access" : preset
+  return `<system-reminder>
+[sandbox mode changed]
+Sandbox mode changed to ${modeLabel}.
+</system-reminder>`
+}
+
 const EXAMPLES = [
   "prompt.example.1",
   "prompt.example.2",
@@ -380,6 +391,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
     setSandboxSaved("session", id, preset)
+    // Both the manual selector and the escalation linkage land here: announce
+    // the new mode to the model before either path branches, so the agent
+    // perceives trust-level changes that happen outside of a user prompt.
+    sdk.client.session
+      .promptAsync({
+        sessionID: id,
+        directory: sdk.directory,
+        noReply: true,
+        parts: [{ type: "text", text: sandboxModeReminderText(preset), synthetic: true }],
+      })
+      .catch(() => undefined)
     // A MANUAL mode choice restates the session's trust level, so standing
     // escalation grants accumulated through earlier "always" approvals are
     // dropped — otherwise the selector would show the narrower mode while
