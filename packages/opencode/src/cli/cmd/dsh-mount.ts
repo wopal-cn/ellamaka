@@ -1,9 +1,8 @@
 import { Global } from "@wopal/ellamaka-core/global"
 import { join } from "node:path"
-import { existsSync, readFileSync } from "node:fs"
 import type { Listener } from "../../server/server"
-import { ConfigParse } from "@/config/parse"
-import { ConfigDsh } from "@/config/dsh"
+import { Effect } from "effect"
+import { AppRuntime } from "@/effect/app-runtime"
 import { Config } from "@/config/config"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
@@ -26,27 +25,29 @@ export interface DshEngineMountOptions {
 
 /**
  * Read `ellamaka.dsh.trustedHosts` from the global settings.jsonc
- * (auth-fix-1, D-02: the official config surface, default-value layer). Uses
- * the same wrapper-unwrapping and schema as the Config loader's
- * `loadSettingsFile` so acceptance matches exactly; a missing or unparsable
- * file degrades to the `[]` default — a broken settings file must not take
- * down the dsh engine mount.
+ * (auth-fix-1, D-02: the official config surface, default-value layer).
+ * Goes through the standard Config loader (`getGlobal`) so the value gets
+ * the SAME variable substitution (`{env:VAR}`, `{file:path}`) and schema
+ * acceptance as every other settings key (W-01); the loader already degrades
+ * a broken settings file to `{}`, and a missing key yields the fail-closed
+ * `[]` default — a broken settings file must not take down the dsh mount.
+ *
+ * This runs once per engine mount at startup, before any request can arrive,
+ * so the loader's cached global snapshot is fresh by construction; reading
+ * live instead of through the cache would risk a mid-run settings edit
+ * half-applying to a running fence. A settings file that is unparsable or
+ * schema-invalid dies inside the loader (sync throw, not a failed Effect),
+ * so the catch below is the fail-closed backstop — matching the loader's own
+ * broken-file semantics (log + `{}`) one layer up.
  */
-export function readDshTrustedHosts(): readonly string[] {
+export async function readDshTrustedHosts(): Promise<readonly string[]> {
   try {
-    const file = join(Global.Path.config, "settings.jsonc")
-    if (!existsSync(file)) return []
-    const raw = ConfigParse.jsonc(readFileSync(file, "utf-8"), file)
-    if (!isRecord(raw) || !isRecord(raw.ellamaka)) return []
-    const settings = ConfigParse.schema(Config.Info, raw.ellamaka, file)
-    return [...(settings.dsh?.trustedHosts ?? [])]
-  } catch {
+    const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
+    return [...(config.dsh?.trustedHosts ?? [])]
+  } catch (error) {
+    console.error("failed to read dsh.trustedHosts from global settings; using the empty default", error)
     return []
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 export interface DshEngineHandle {
@@ -156,7 +157,7 @@ export async function mountDshEngine(
       ellamakaCommand: resolveEllamakaCommand(),
       // auth-fix-1: the configured LAN authorities ride the web-runtime row
       // into the official webRuntime -> connection fence chain.
-      trustedHosts: readDshTrustedHosts(),
+      trustedHosts: await readDshTrustedHosts(),
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,

@@ -85,7 +85,7 @@ export const runDshDump = (options: {
       installAnchor: anchorPath,
       overlayPatches: options.overlayPatches,
       // auth-fix-1: the dump must reflect the EFFECTIVE fence value.
-      trustedHosts: readDshTrustedHosts(),
+      trustedHosts: yield* Effect.promise(() => readDshTrustedHosts()),
     } as const
 
     const dumped = yield* Effect.tryPromise({

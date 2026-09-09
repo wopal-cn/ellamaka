@@ -72,6 +72,24 @@ export function looksLikeDsh401(body: string | null | undefined): boolean {
 }
 
 /**
+ * The reload target for one self-heal attempt (B-01). The raw `/workbench/
+ * dsh-url` entry points at the backend origin, but the iframe's initial src
+ * was retargeted onto the serving page origin (vite dev proxy, Desktop
+ * dshProxyOrigin) so the SameSite=Strict cookie stays on the iframe's
+ * origin. The heal must land on that same retargeted URL — writing the raw
+ * entry would jump the frame cross-site and the cookie could never ride
+ * along. `dshIframeSrc` already implements this topology, so the heal rides
+ * the exact same derivation as the initial src.
+ */
+export function healTargetUrl(
+  serverUrl: string | undefined,
+  entryUrl: string | undefined,
+  pageOrigin: string | undefined,
+): string | undefined {
+  return dshIframeSrc(serverUrl, entryUrl, pageOrigin)
+}
+
+/**
  * One self-heal attempt for a 401'd keep-alive iframe (auth-fix-2): re-fetch
  * the authenticated entry from `/workbench/dsh-url` and reload the frame —
  * the fresh launch token re-mints the cookie through the official 303
@@ -82,11 +100,14 @@ export function looksLikeDsh401(body: string | null | undefined): boolean {
  * persistent failure cannot storm the server.
  *
  * @param iframe - the keep-alive iframe element
- * @param refetchEntry - resolves a fresh authenticated entry URL (undefined = engine not mounted)
+ * @param refetchEntry - resolves the retargeted reload target (undefined = engine not mounted)
+ * @param hooks - observability seam; `reload` overrides the in-place
+ *   `contentWindow.location.reload()` call (happy-dom cannot observe it)
  */
 export function selfHealDshIframe(
   iframe: HTMLIFrameElement,
   refetchEntry: () => Promise<string | undefined>,
+  hooks?: { reload?: (iframe: HTMLIFrameElement) => void },
 ): void {
   void Promise.resolve()
     .then(refetchEntry)
@@ -96,7 +117,8 @@ export function selfHealDshIframe(
       if (entry === current) {
         // Same token: force the in-place reload so the frame re-runs the
         // token/cookie exchange instead of a no-op src assignment.
-        iframe.contentWindow?.location.reload()
+        if (hooks?.reload) hooks.reload(iframe)
+        else iframe.contentWindow?.location.reload()
         return
       }
       iframe.setAttribute("src", entry)
@@ -192,12 +214,15 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   // so a stale cookie (expiry or engine restart) would otherwise show the
   // bare 401 page forever. The episode gate allows one attempt per failure
   // episode (healthy load re-arms) — no storm on a persistent failure.
+  // B-01: the heal target goes through healTargetUrl so the reload lands on
+  // the page-origin (proxied) URL, never the raw backend entry.
   let iframeEl: HTMLIFrameElement | undefined
+  let reloadCalls = 0
   const heal = createDsh401Healer({
     getFrame: () => iframeEl,
     refetchEntry: async () => {
       await refetch()
-      return entry()?.data?.url
+      return healTargetUrl(server.current?.http.url, entry()?.data?.url, pageOrigin())
     },
   })
   const onLoad = () => {
