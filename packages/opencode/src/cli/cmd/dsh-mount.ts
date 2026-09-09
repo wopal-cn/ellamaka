@@ -1,6 +1,10 @@
 import { Global } from "@wopal/ellamaka-core/global"
 import { join } from "node:path"
+import { existsSync, readFileSync } from "node:fs"
 import type { Listener } from "../../server/server"
+import { ConfigParse } from "@/config/parse"
+import { ConfigDsh } from "@/config/dsh"
+import { Config } from "@/config/config"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   initializeDshRuntime,
@@ -18,6 +22,31 @@ export interface DshEngineMountOptions {
   logFile?: string
   /** The entry name the runtime manager logs under; defaults to `serve`. */
   entry?: "serve" | "web"
+}
+
+/**
+ * Read `ellamaka.dsh.trustedHosts` from the global settings.jsonc
+ * (auth-fix-1, D-02: the official config surface, default-value layer). Uses
+ * the same wrapper-unwrapping and schema as the Config loader's
+ * `loadSettingsFile` so acceptance matches exactly; a missing or unparsable
+ * file degrades to the `[]` default — a broken settings file must not take
+ * down the dsh engine mount.
+ */
+export function readDshTrustedHosts(): readonly string[] {
+  try {
+    const file = join(Global.Path.config, "settings.jsonc")
+    if (!existsSync(file)) return []
+    const raw = ConfigParse.jsonc(readFileSync(file, "utf-8"), file)
+    if (!isRecord(raw) || !isRecord(raw.ellamaka)) return []
+    const settings = ConfigParse.schema(Config.Info, raw.ellamaka, file)
+    return [...(settings.dsh?.trustedHosts ?? [])]
+  } catch {
+    return []
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 export interface DshEngineHandle {
@@ -125,6 +154,9 @@ export async function mountDshEngine(
       runtime,
       disableCodeRuntime: true,
       ellamakaCommand: resolveEllamakaCommand(),
+      // auth-fix-1: the configured LAN authorities ride the web-runtime row
+      // into the official webRuntime -> connection fence chain.
+      trustedHosts: readDshTrustedHosts(),
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,

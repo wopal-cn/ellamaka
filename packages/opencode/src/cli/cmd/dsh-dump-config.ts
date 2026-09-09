@@ -8,6 +8,7 @@ import {
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { dumpDshConfig } from "@wopal/ellamaka-cordis/diagnostics/dump-config"
 import { CliError, effectCmd } from "../effect-cmd"
+import { readDshTrustedHosts } from "./dsh-mount"
 
 /**
  * `ellamaka dsh dump-config` — the ellamaka COMPATIBILITY extension form
@@ -83,6 +84,8 @@ export const runDshDump = (options: {
       dshHome: join(wopalHome, "dsh"),
       installAnchor: anchorPath,
       overlayPatches: options.overlayPatches,
+      // auth-fix-1: the dump must reflect the EFFECTIVE fence value.
+      trustedHosts: readDshTrustedHosts(),
     } as const
 
     const dumped = yield* Effect.tryPromise({

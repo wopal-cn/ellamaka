@@ -396,6 +396,13 @@ export interface DshHostOptions {
    * worker and ignores it.
    */
   ellamakaCommand?: readonly string[]
+  /**
+   * `ellamaka.dsh.trustedHosts` (auth-fix-1): non-loopback authorities the
+   * connection Host/Origin fence accepts. Rides the web-runtime extra row
+   * into the official webRuntime -> connection fence chain (see
+   * `webExtraPatches`). Defaults to `[]` (loopback-only).
+   */
+  trustedHosts?: readonly string[]
 }
 
 /** Internal mount options shared by the web and base entry points. */
@@ -806,6 +813,7 @@ export async function mountDshWeb(ctx: Context, opts: DshHostOptions): Promise<D
     virtualWebServer,
     extraPatches: webExtraPatches({
       disableCodeRuntime: opts.disableCodeRuntime,
+      trustedHosts: opts.trustedHosts,
       extraPatches: opts.extraPatches,
     }),
   })

@@ -123,6 +123,16 @@ export function homePatches(homeDir: string): Record<string, unknown>[] {
 export interface WebExtraPatchesOptions {
   disableCodeRuntime?: boolean
   extraPatches?: Record<string, unknown>[]
+  /**
+   * Non-loopback authorities accepted by the connection Host/Origin fence
+   * (auth-fix-1). Written into the `web-runtime` row — the OFFICIAL fence
+   * source: the official bundle patch wires
+   * `connection.trustedHosts: !!js ctx.webRuntime.trustedHosts`, so configured
+   * authorities ride this row into the connection fence. No separate
+   * connection row is composed here (the official bundle already owns that
+   * row). Defaults to `[]` (loopback-only, rc.1 behavior unchanged).
+   */
+  trustedHosts?: readonly string[]
 }
 
 /**
@@ -138,7 +148,9 @@ export interface WebExtraPatchesOptions {
  *
  * `web-runtime`: the iframe serves under /dsh; a root-path URL would be a
  * wrong entry point, so close web-runtime's URL printing and shell/prompt
- * injection. Full config replacement preserves the connection-trust fields.
+ * injection. Full config replacement preserves the connection-trust fields —
+ * `trustedHosts` carries the configured LAN authorities (auth-fix-1) into the
+ * official webRuntime -> connection fence chain.
  *
  * rc.1 no longer injects an `agent-presets` row: the preset roster is owned
  * by the official bundle (`default: standard` shipped set inside
@@ -152,7 +164,12 @@ export function webExtraPatches(opts: WebExtraPatchesOptions): Record<string, un
     { id: "webserver", disabled: true },
     {
       id: "web-runtime",
-      config: { openBrowser: false, printUrl: false, surfaceContext: false, trustedHosts: [] },
+      config: {
+        openBrowser: false,
+        printUrl: false,
+        surfaceContext: false,
+        trustedHosts: [...(opts.trustedHosts ?? [])],
+      },
     },
     ...(opts.extraPatches ?? []),
   ]
@@ -198,6 +215,12 @@ export interface DumpDshConfigOptions {
    * official CLI rejects that shape one layer up; defense in depth here).
    */
   overlayPatches?: string[]
+  /**
+   * `ellamaka.dsh.trustedHosts` (auth-fix-1): non-loopback authorities the
+   * connection fence accepts. Rendered into the web-runtime extra row so the
+   * dump shows the effective fence value. Defaults to `[]`.
+   */
+  trustedHosts?: readonly string[]
 }
 
 /**
@@ -243,6 +266,7 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
     if (options.profileName === "web") {
       extra = webExtraPatches({
         disableCodeRuntime: true,
+        trustedHosts: options.trustedHosts,
       })
     } else if (options.profileName === "ellamaka-tools") {
       extra = toolsExtraPatches()
