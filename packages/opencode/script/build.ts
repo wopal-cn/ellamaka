@@ -23,8 +23,7 @@ function readMinWopalCliVersion(): string {
     const versions = JSON.parse(fs.readFileSync(path.resolve(dir, "../../.ci/versions.json"), "utf8"))
     if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
   } catch {}
-  // Keep in sync with .ci/versions.json.
-  return "0.3.16"
+  throw new Error("cannot read minWopalCli from .ci/versions.json")
 }
 
 const generated = await import("./generate.ts")

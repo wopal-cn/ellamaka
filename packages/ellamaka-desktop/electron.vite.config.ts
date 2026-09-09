@@ -3,8 +3,29 @@ import { defineConfig } from "electron-vite"
 import appPlugin from "@wopal/ellamaka-app/vite"
 import * as fs from "node:fs/promises"
 import * as fsSync from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
+
+// Single source of truth for the wopal-cli protocol floor is
+// .ci/versions.json (plus the @wopal/cli-capability-schema dependency floor,
+// whose max is exported by scripts/build.sh / dev.sh as
+// MIN_WOPAL_CLI_VERSION). Inject it at build time so packaged main-process
+// code reading import.meta.env.MIN_WOPAL_CLI_VERSION never sees undefined;
+// prefer the resolved env, fall back to reading the repo config directly.
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const minWopalCliVersion = (() => {
+  if (process.env.MIN_WOPAL_CLI_VERSION) return process.env.MIN_WOPAL_CLI_VERSION
+  const versionsPath = path.resolve(__dirname, "../../.ci/versions.json")
+  try {
+    const versions = JSON.parse(fsSync.readFileSync(versionsPath, "utf8"))
+    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
+  } catch {
+    throw new Error(`cannot read minWopalCli from ${versionsPath}`)
+  }
+  throw new Error(`minWopalCli missing in ${versionsPath}`)
+})()
 
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
@@ -37,7 +58,7 @@ export default defineConfig({
   main: {
     define: {
       "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
-      "import.meta.env.MIN_WOPAL_CLI_VERSION": JSON.stringify(process.env.MIN_WOPAL_CLI_VERSION || "0.3.16"),
+      "import.meta.env.MIN_WOPAL_CLI_VERSION": JSON.stringify(minWopalCliVersion),
     },
     build: {
       rollupOptions: {

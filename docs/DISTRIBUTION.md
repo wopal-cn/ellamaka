@@ -364,7 +364,7 @@ Desktop 与 CLI 是同一产品的两种形态，运行时对两种二进制分�
 
 ### 6.5 Schema 契约单一真相源
 
-ellamaka 的 Wopal 集成模块（`packages/opencode/src/wopal/`）通过 npm 依赖消费共享契约包 `@wopal/cli-capability-schema`（`^` 下界，如 `^0.3.13`），不再维护手写 Schema 副本。npm `^` 语义即最低版本语义：编译期类型、运行时最低版本检查、发布门禁三环节复用同一声明。
+ellamaka 的 Wopal 集成模块（`packages/opencode/src/wopal/`）通过 npm 依赖消费共享契约包 `@wopal/cli-capability-schema`（`^` 下界，如 `^0.3.16`），不再维护手写 Schema 副本。npm `^` 语义即最低版本语义：编译期类型、运行时最低版本检查、发布门禁三环节复用同一声明。
 
 - 数据 schema（`spaceListSchema`/`spaceProjectsListSchema`/`spaceSearchSchema`/`skillsListSchema`）从共享包导入，运行时用 `Value.Check`/`Value.Errors` 验证。
 - `CliEnvelope`（稳定协议层）保留本地 TypeBox 定义；运行时错误类（`CapabilityContractError`/`SpaceControlUnavailable`/`StableErrorCode`）保留 Effect。

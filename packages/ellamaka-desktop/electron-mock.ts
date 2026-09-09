@@ -2,6 +2,22 @@
 // Required because the main process imports from 'electron' which is only
 // available within the Electron runtime, not in plain bun.
 import { mock } from "bun:test"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
+
+// Under bun test import.meta.env mirrors process.env. Real desktop builds
+// define-inject import.meta.env.MIN_WOPAL_CLI_VERSION from .ci/versions.json
+// (see electron.vite.config.ts); tests read the same single source here so
+// runtime code that reads the floor never sees undefined.
+const versionsPath = resolve(import.meta.dir, "../../.ci/versions.json")
+try {
+  const versions = JSON.parse(readFileSync(versionsPath, "utf8"))
+  if (typeof versions.minWopalCli === "string" && versions.minWopalCli) {
+    process.env.MIN_WOPAL_CLI_VERSION = versions.minWopalCli
+  }
+} catch {
+  // leave unset — tests that exercise the floor will fail loudly if missing
+}
 
 mock.module("electron", () => ({
   app: {

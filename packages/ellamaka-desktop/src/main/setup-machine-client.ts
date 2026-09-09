@@ -105,7 +105,7 @@ export async function runSetupOperation(options: RunSetupOperationOptions): Prom
       const versionResult = spawnSync(command, ["--version"])
       if (versionResult.stdout) {
         const actual = versionResult.stdout.toString().trim().replace(/^v/, "")
-        const minVersion = import.meta.env.MIN_WOPAL_CLI_VERSION || "0.3.16"
+        const minVersion = import.meta.env.MIN_WOPAL_CLI_VERSION
         const check = checkWopalCliVersion(actual, minVersion)
         if (!check.ok) {
           return {

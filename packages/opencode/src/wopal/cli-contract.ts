@@ -1,18 +1,33 @@
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import path from "path"
 import semver from "semver"
 import { Context, Duration, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Global } from "@wopal/ellamaka-core/global"
-// Effective minimum wopal-cli version. Build scripts
-// (scripts/lib/version.sh resolve_min_wopal_cli_version) inject
-// MIN_WOPAL_CLI_VERSION from .ci/versions.json (auto-following the
-// @wopal/cli-capability-schema dependency floor) via bun define, replacing
-// the process.env read at build time. The static fallback below only
-// applies when running from source without a build; keep it in sync with
-// .ci/versions.json.
-export const MIN_WOPAL_CLI_VERSION = process.env.MIN_WOPAL_CLI_VERSION || "0.3.16"
+// Effective minimum wopal-cli version — the single source of truth is the
+// @wopal/cli-capability-schema dependency floor in packages/opencode/package.json
+// together with .ci/versions.json (resolve_min_wopal_cli_version takes their max).
+// Build scripts inject the resolved value via bun define, replacing the
+// process.env read below at build time, so packaged artifacts never reach the
+// file fallback. When running from source (no build), fall back to reading
+// .ci/versions.json from the repo so the value always comes from the config,
+// never a duplicated literal that can drift.
+function resolveMinWopalCliVersion(): string {
+  const injected = process.env.MIN_WOPAL_CLI_VERSION
+  if (injected) return injected
+  try {
+    const versionsPath = path.resolve(__dirname, "../../../../.ci/versions.json")
+    const versions = JSON.parse(readFileSync(versionsPath, "utf8"))
+    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
+  } catch {
+    // fall through to the error below
+  }
+  throw new Error(
+    "MIN_WOPAL_CLI_VERSION is undefined and .ci/versions.json is not readable; cannot determine the wopal-cli protocol floor.",
+  )
+}
+export const MIN_WOPAL_CLI_VERSION = resolveMinWopalCliVersion()
 
 export const CliHealthSchema = Schema.Struct({
   state: Schema.Union([

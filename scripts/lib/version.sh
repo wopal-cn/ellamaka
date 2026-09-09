@@ -190,7 +190,7 @@ function sync_min_wopal_cli_version() {
 # Resolves the effective MIN_WOPAL_CLI_VERSION for build/dev injection:
 # the higher of
 #   1. the @wopal/cli-capability-schema dependency floor in
-#      packages/opencode/package.json (the "^0.3.13" lower bound), and
+#      packages/opencode/package.json (the "^0.3.16" lower bound), and
 #   2. the minWopalCli value in .ci/versions.json (manual override that may
 #      declare a higher floor ahead of a release).
 # Prints the resolved version (or "0.0.0" when neither source is readable).

@@ -129,7 +129,7 @@ async function checkAndDownloadUpdate(): Promise<UpdateCheckResult> {
     // Each probe failure skips its own check (logged, not blocking): a
     // binary missing from the Electron PATH must not block updates.
     if (wopalCliVersion !== null) {
-      const wopal = checkWopalCliVersion(wopalCliVersion, import.meta.env.MIN_WOPAL_CLI_VERSION || "0.3.16")
+      const wopal = checkWopalCliVersion(wopalCliVersion, import.meta.env.MIN_WOPAL_CLI_VERSION)
       if (!wopal.ok) {
         logger.log("update denied by runtime version gate", {
           reason: wopal.reason,
