@@ -105,7 +105,7 @@ export function composeDshDumpLayers(input: ComposeDshDumpLayersInput): ConfigDu
 
 /**
  * Home patch rows that give plugins an explicit home rooted at the DSH home
- * (`<dshRoot>/home`, official layout; DESIGN-dsh-poc §3.4).
+ * (`<dshRoot>/home`, official layout; DESIGN-ellamaka-dsh §3.4).
  */
 export function homePatches(homeDir: string): Record<string, unknown>[] {
   return [

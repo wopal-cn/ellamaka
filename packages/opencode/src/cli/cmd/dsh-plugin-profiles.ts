@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the `ellamaka dsh plugin` command group (DESIGN-dsh-poc
+ * Pure helpers for the `ellamaka dsh plugin` command group (DESIGN-ellamaka-dsh
  * §9.3): profile parsing with the `tools` alias, and `pkg[@version]` spec
  * splitting. Kept dependency-free so the CLI glue stays trivially testable.
  */

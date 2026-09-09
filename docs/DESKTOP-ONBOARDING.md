@@ -126,7 +126,7 @@ Onboarding 不预装插件与 dsh 依赖（2026-09-01 决策，原提前物化�
 | ---- | ---------- |
 | 用户级插件依赖 | ellamaka 首次使用即装 |
 | 空间级插件依赖 | ellamaka per-directory 加载时安装 |
-| dsh 依赖闭包 | ellamaka 装配 dsh 前自物化（Runtime Manager，见 `DESIGN-dsh-poc.md` §3.4） |
+| dsh 依赖闭包 | ellamaka 装配 dsh 前自物化（Runtime Manager，见 `DESIGN-ellamaka-dsh.md` §3.4） |
 
 onboarding 可能被跳过（用户已完成后重装、纯终端 setup、外部安装），运行时兜底保证依赖始终可用，onboarding 编排对依赖安装无前置要求。
 

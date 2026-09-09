@@ -100,7 +100,7 @@ function makeSessionFake(id: string, cwd: string, seeded: { type: string; data: 
 /**
  * Mount the dsh web engine virtually: the official web profile registers its
  * routes on a VirtualWebServer instead of a second listening socket (final
- * scheme, DESIGN-dsh-poc §2.1). Uses a temp DSH_HOME so the test never touches
+ * scheme, DESIGN-ellamaka-dsh §2.1). Uses a temp DSH_HOME so the test never touches
  * the user's ~/.dsh.
  */
 describe("dsh web engine", () => {
@@ -183,7 +183,7 @@ describe("dsh web engine", () => {
 
   test("mountDshWeb with an explicit installAnchor discovers presets from that closure", async () => {
     // Packaged-CLI scheme: the anchor lives in the materialised closure under
-    // the dsh home, not in the module graph (DESIGN-dsh-poc §2.2). The preset
+    // the dsh home, not in the module graph (DESIGN-ellamaka-dsh §2.2). The preset
     // roster itself is bundled inside @deepseek-ai/dsh-agent-presets (rc.1);
     // this test pins that the mounted roster resolves from the mount's own
     // closure and carries the shipped `standard` preset.

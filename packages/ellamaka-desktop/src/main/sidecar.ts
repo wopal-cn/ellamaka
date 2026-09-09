@@ -157,7 +157,7 @@ async function start(command: StartCommand) {
         cors: ["oc://renderer"],
       }),
     )
-    // Optional dsh engine (single-process, DESIGN-dsh-poc §2.1/§3.4). The
+    // Optional dsh engine (single-process, DESIGN-ellamaka-dsh §2.1/§3.4). The
     // unified Runtime Manager (consumed via `virtual:opencode-server`, which
     // the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
     // (`=0` → disabled with zero file access) and materialises the closure on

@@ -75,7 +75,7 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
   // installed plugin into `node_modules/.ignored/`). Passing
   // `ellamakaCommand` provides the desktopProfiles/desktopPnpm install
   // worker and the market routes installs through the ellamaka Bun
-  // installer instead (DESIGN-dsh-poc 「Bun 安装器流水线」).
+  // installer instead (DESIGN-ellamaka-dsh 「Bun 安装器流水线」).
   test("desktop sidecar bootDshWeb supplies the market install worker (ellamakaCommand)", () => {
     const source = readFileSync(
       join(import.meta.dir, "..", "..", "..", "packages", "ellamaka-desktop", "src", "main", "sidecar.ts"),

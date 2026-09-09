@@ -48,7 +48,7 @@ export const WebCommand = effectCmd({
     UI.empty()
 
     // Optional dsh engine, same assembly as `serve` (single-port scheme,
-    // DESIGN-dsh-poc §2.1/§2.2). The unified Runtime Manager gates on
+    // DESIGN-ellamaka-dsh §2.1/§2.2). The unified Runtime Manager gates on
     // `ELLAMAKA_DSH` itself (`=0` → disabled) and `disabled`/`degraded` never
     // block the server. The dynamic import keeps the dsh closure out of the
     // desktop sidecar bundle. Mount BEFORE opening the browser: this block

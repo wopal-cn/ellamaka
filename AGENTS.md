@@ -8,7 +8,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## 1. Canonical References
 
 - DESIGN: `docs/DESIGN.md`
-- DSH POC DESIGN: `docs/DESIGN-dsh-poc.md` (dual-engine fusion experiment: bridge/absorb dual-track, edge-channel usage of dsh tool plugins)
+- DSH POC DESIGN: `docs/DESIGN-ellamaka-dsh.md` (dual-engine fusion experiment: bridge/absorb dual-track, edge-channel usage of dsh tool plugins)
 - PLAN TODOS: `docs/PLAN-TODOS.md`
 - API CONTRACT: `docs/API-CONTRACT.md`
 - BRANDING: `docs/BRANDING.md`
@@ -109,8 +109,8 @@ Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/buil
 - Paths express domain resources and their natural relationships. Query parameters express query conditions. Filesystem access, shell execution, CLI invocation, and directory provisioning are owned by their domain services rather than exposed as browser-callable primitives.
 - The SDK is generated through Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts`. Application code uses the generated client; `packages/sdk/js/src/v2/gen/**` is owned by the generation pipeline.
 - Every endpoint addition or modification tests its schemas, success result, domain errors, and middleware boundary, regenerates the SDK, and updates DESIGN and BRANDING.
-- **SDK regeneration is all-or-nothing**: after any payload schema change, always run `bun script/build.ts` from `packages/sdk/js` (never hand-edit gen files). A field is shipped only when BOTH `types.gen.ts` and `sdk.gen.ts` contain it — the type layer alone is not proof; a stale `buildClientParams` mapping silently drops the field at encoding time with no error (see DESIGN-dsh-poc §6.7). Verify with `rg "<fieldName>" src/v2/gen/` hitting both files, or diff the regenerated output.
-- **Permission rules: explicit beats wildcard only by position**: evaluation is LAST-wins over the merged ruleset, and one agent's frontmatter can come from multiple copies (`~/.wopal` home + space `.wopal`) deep-merged in load order. Frontmatter must not declare `"*": allow`-style wildcards (engine defaults already provide the wildcard fallback); only explicit narrowings. After changing permission frontmatter, verify on the live instance via `GET /agent` that the explicit rule sits after any wildcard in the merged list (see DESIGN-dsh-poc §6.8).
+- **SDK regeneration is all-or-nothing**: after any payload schema change, always run `bun script/build.ts` from `packages/sdk/js` (never hand-edit gen files). A field is shipped only when BOTH `types.gen.ts` and `sdk.gen.ts` contain it — the type layer alone is not proof; a stale `buildClientParams` mapping silently drops the field at encoding time with no error (see DESIGN-ellamaka-dsh §6.7). Verify with `rg "<fieldName>" src/v2/gen/` hitting both files, or diff the regenerated output.
+- **Permission rules: explicit beats wildcard only by position**: evaluation is LAST-wins over the merged ruleset, and one agent's frontmatter can come from multiple copies (`~/.wopal` home + space `.wopal`) deep-merged in load order. Frontmatter must not declare `"*": allow`-style wildcards (engine defaults already provide the wildcard fallback); only explicit narrowings. After changing permission frontmatter, verify on the live instance via `GET /agent` that the explicit rule sits after any wildcard in the merged list (see DESIGN-ellamaka-dsh §6.8).
 
 ### Workbench Frontend Development
 
@@ -136,7 +136,7 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - **Bridge form**: all Effect↔async bridges follow DSH POC DESIGN §6.2 (`Effect.forkIn(scope)(work)` with the work Fiber held; interrupt via `runtime.runFork(Fiber.interrupt(fiber))`; never drive long-running work via `runPromise`)
 - **Contract discipline**: contracts are self-owned inside `@wopal/ellamaka-cordis` (shapes borrowed from dsh; never import dsh contract packages or track rc releases); external plugins mount only after passing contract conformance smoke tests (DSH POC DESIGN §4.1)
 - **Test gate**: cordis integration tests live in `packages/opencode/test/cordis/`; bridge package changes keep existing opencode tests green
-- **Event-log folds are LAST-wins**: dsh session events (`sandbox/mode`, `approval/policy`) fold with the last event winning. "Restore the default" requires appending the default value explicitly; "equal to default" and "not chosen" are different semantics and must never share a code path (see DESIGN-dsh-poc §4.5 fold invariant). A test that asserts "same value appends nothing" pins the wrong semantics unless the log carries no prior overrides.
+- **Event-log folds are LAST-wins**: dsh session events (`sandbox/mode`, `approval/policy`) fold with the last event winning. "Restore the default" requires appending the default value explicitly; "equal to default" and "not chosen" are different semantics and must never share a code path (see DESIGN-ellamaka-dsh §4.5 fold invariant). A test that asserts "same value appends nothing" pins the wrong semantics unless the log carries no prior overrides.
 
 ### Logging Rules
 

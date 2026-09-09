@@ -77,7 +77,7 @@ export const Flag = {
   },
   // Disable switch (kill switch), default ON. `ELLAMAKA_DSH=0` disables dsh;
   // unset or any non-"0" value enables. Unified across CLI (serve/web/tui) and
-  // the desktop sidecar (DESIGN-dsh-poc §3.4, constraint #11).
+  // the desktop sidecar (DESIGN-ellamaka-dsh §3.4, constraint #11).
   get ELLAMAKA_DSH() {
     return process.env.ELLAMAKA_DSH?.toLowerCase() !== "0"
   },

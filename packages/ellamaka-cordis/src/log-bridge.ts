@@ -50,7 +50,7 @@ export interface CordisLogExporterDeps {
 
 /**
  * Build a cordis `Exporter` that routes all plugin `ctx.logger` output to an
- * ellamaka-managed sink, bypassing the ellamaka main log (DESIGN-dsh-poc
+ * ellamaka-managed sink, bypassing the ellamaka main log (DESIGN-ellamaka-dsh
  * §6.4).
  *
  * The exporter:

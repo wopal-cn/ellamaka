@@ -26,7 +26,7 @@ export interface CordisHubOptions {
  * The Effect `ManagedRuntime` mount point held by a {@link CordisHub}.
  *
  * Bridge services use this runtime to execute Effect work from the async
- * cordis side per DESIGN-dsh-poc §6.2 (`ManagedRuntime.runFork` +
+ * cordis side per DESIGN-ellamaka-dsh §6.2 (`ManagedRuntime.runFork` +
  * `Effect.forkIn(scope)`, never `runPromise` for long-lived work). When the
  * hub is created outside an Effect scope (e.g. a bare `new CordisHub()`),
  * `runtime` is `null`.

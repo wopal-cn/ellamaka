@@ -26,7 +26,7 @@ function resolveCordisContext(): typeof import("@deepseek-ai/cordis")["Context"]
  * Per-instance Cordis container.
  *
  * Each hub owns a fresh cordis `Context` and provides a mount point for
- * bridging work into the Effect world when needed (DESIGN-dsh-poc §6.2).
+ * bridging work into the Effect world when needed (DESIGN-ellamaka-dsh §6.2).
  *
  * Lifecycle:
  * - `mount(plugin, options)` loads a cordis plugin into the hub's context.
@@ -34,7 +34,7 @@ function resolveCordisContext(): typeof import("@deepseek-ai/cordis")["Context"]
  *
  * The hub is the single cordis boundary in the repository: every cordis value
  * import is erased at build time and resolved at runtime via
- * `@wopal/ellamaka-cordis/runtime` (DESIGN-dsh-poc §3.4.6).
+ * `@wopal/ellamaka-cordis/runtime` (DESIGN-ellamaka-dsh §3.4.6).
  */
 export class CordisHub {
   /** The cordis context backing this hub. */

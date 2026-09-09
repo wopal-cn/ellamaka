@@ -4,7 +4,7 @@ import { acquireMaterializeLock, releaseMaterializeLock, type LockToken } from "
 
 /**
  * Profile manifest: the OFFICIAL composition source of truth for dsh plugins
- * (DESIGN-dsh-poc 「真相源与目录布局」). The profile directory's `package.json`
+ * (DESIGN-ellamaka-dsh 「真相源与目录布局」). The profile directory's `package.json`
  * carries the installed packages (`dependencies`) and the activated plugin
  * layers (`dsh.profile.bundles`) — the same files the official CLI, the
  * dshmarket and Ellamaka read and write. No second manifest exists (D-04).

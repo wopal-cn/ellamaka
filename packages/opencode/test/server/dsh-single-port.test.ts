@@ -52,7 +52,7 @@ function authorization() {
 
 /**
  * Mount the DSH web profile onto a real Ellamaka listener under /dsh, mirroring
- * the serve.ts wiring (DESIGN-dsh-poc §2.1 single-port scheme). Runs the real
+ * the serve.ts wiring (DESIGN-ellamaka-dsh §2.1 single-port scheme). Runs the real
  * unified Runtime Manager: a complete closure is seeded under a temp WOPAL_HOME
  * (via `seedDshClosure`), the manager fast-path resolves it `ready`, and the
  * web profile mounts with the closure runtime injected — exactly what the CLI

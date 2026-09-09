@@ -1,7 +1,7 @@
 # DeepSeek Harness (dsh) 架构深度解构与 Ellamaka 融合演进研究报告
 
 > **文档定位**：本报告对 DeepSeek AI 开源的智能体框架 **DeepSeek Harness (`dsh`)** 及其底层 **Cordis 插件容器** 进行了系统性的全景解构。对比 Ellamaka 的 **Effect TS** 架构体系，涵盖设计哲学、微内核插件机制、Skills/MCP、Subagent/命令/权限、API 范式、底层性能差异、Bun 运行时兼容性实测，并直面两套系统在数据模型与交互契约上的 4 大核心冲突。
-> **研究结论**：本报告只承载研究结论（解构、审计、复刻、选型、语义分析），设计决策见 `../DESIGN-dsh-poc.md`。
+> **研究结论**：本报告只承载研究结论（解构、审计、复刻、选型、语义分析），设计决策见 `../DESIGN-ellamaka-dsh.md`。
 
 ---
 
@@ -127,7 +127,7 @@ export const inject = ['tools', 'systemPrompt', 'subprocess']
 
 ### 3.2 Bun 运行时兼容性
 
-> **勘误（2026-08-16）**：本节表格原文标注为"实测"，但写作当时并无实测证据——dsh 仓库 CI（`.github/workflows/`）全部为 Node（node24），无任何 Bun 配置，下表实为基于依赖类型的推断性结论。后续已由真实冒烟测试补验部分内容：`@deepseek-ai/cordis@4.0.1` 在 Bun 1.3 下服务注册、inject 依赖、事件系统、`ctx.fiber.dispose()` 生命周期全链路可用（init 1.79ms）。插件级兼容性未逐包实测，实际挂载时须按契约符合性冒烟测试逐个验证（见 `../DESIGN-dsh-poc.md` §4.1）。
+> **勘误（2026-08-16）**：本节表格原文标注为"实测"，但写作当时并无实测证据——dsh 仓库 CI（`.github/workflows/`）全部为 Node（node24），无任何 Bun 配置，下表实为基于依赖类型的推断性结论。后续已由真实冒烟测试补验部分内容：`@deepseek-ai/cordis@4.0.1` 在 Bun 1.3 下服务注册、inject 依赖、事件系统、`ctx.fiber.dispose()` 生命周期全链路可用（init 1.79ms）。插件级兼容性未逐包实测，实际挂载时须按契约符合性冒烟测试逐个验证（见 `../DESIGN-ellamaka-dsh.md` §4.1）。
 
 | 插件类别 | 代表插件 | 底层依赖 | Bun 兼容性预期（推断，未逐包实测） |
 | :--- | :--- | :--- | :--- |
@@ -165,7 +165,7 @@ export const inject = ['tools', 'systemPrompt', 'subprocess']
 
 ## 6. 审计修正的关键发现
 
-> 早期融合方案（换心手术 + 4 大网桥 + dsh 插件生态挂载）经深度审计后修正。以下为审计修正的研究结论，设计决策见 `../DESIGN-dsh-poc.md`。
+> 早期融合方案（换心手术 + 4 大网桥 + dsh 插件生态挂载）经深度审计后修正。以下为审计修正的研究结论，设计决策见 `../DESIGN-ellamaka-dsh.md`。
 
 1. **早期 POC 代码存在 API 虚构**：`SessionProcessor.processTurn(sessionID)` 不存在（真实 API 为 `SessionProcessor.Service.create()` 返回 `Handle`，经 `handle.process(streamInput)` 驱动）；`ctx.dispose()` 在 Cordis v4 中应为 `ctx.fiber.dispose()`。
 2. **dsh 插件的挂载成本被低估**：dsh 工具插件 inject 的 `tools`/`systemPrompt`/`subprocess` 是 dsh 核心服务，深层依赖 `dsh-session` 事件日志。464 包审计将插件按 session 依赖分为三梯队：约 40 个零依赖（接触面仅 `session.header` 只读；2026-08-17 勘误：此处的「零依赖」指运行时零依赖——spill 栈经 required peer 引入 dsh-session 仅供 `SessionId` 类型解析，`import type` 编译期擦除，运行时不加载，已由 `packages/ellamaka-cordis/test/forbidden-load.test.ts` 加载探针实证）、仅 tool-todo 需 `append()` 单方法、session-query/subagent/schedule/compaction/agent-loop 为深耦合梯队——而深耦合梯队的全部能力 ellamaka 已自持。
@@ -526,7 +526,7 @@ cordis.patch.yml（声明式 entry 树）
 
 ## 17. 容器集成机制深度研究（2026-08-20，源码级）
 
-> **研究定位**：回答"ellamaka 如何消费 cordis 容器内插件能力"的机制问题。涵盖 dsh 工具注册表 API、ellamaka 工具管道实证、三层插件实例化模型、同进程通信机制、wopal-plugin 形态核查、方案演进中被推翻的假设、待验证猜想清单。本节内容为源码实证或明确标注的待验证猜想；集成方案的形态决策与实验计划见 `../DESIGN-dsh-poc.md` 与 `../PLAN-TODOS.md`。
+> **研究定位**：回答"ellamaka 如何消费 cordis 容器内插件能力"的机制问题。涵盖 dsh 工具注册表 API、ellamaka 工具管道实证、三层插件实例化模型、同进程通信机制、wopal-plugin 形态核查、方案演进中被推翻的假设、待验证猜想清单。本节内容为源码实证或明确标注的待验证猜想；集成方案的形态决策与实验计划见 `../DESIGN-ellamaka-dsh.md` 与 `../PLAN-TODOS.md`。
 
 ### 17.1 dsh 工具注册表：完整的动态消费 API（源码实证）
 
@@ -750,7 +750,7 @@ base profile **已挂载** `dsh-session`、`dsh-agent-loop`、`dsh-session-query
 
 #### 17.10 dsh 工具消费的 `exec.agent` 契约面（2026-08-21，源码实证）
 
-> **用途**：B1 session 门面设计的契约对照证据（设计定稿见 `DESIGN-dsh-poc.md` §4.1.1）。本节只记录 dsh 工具实际消费的 `exec.agent` 面与 ellamaka 侧可提供的数据，不含设计决策。
+> **用途**：B1 session 门面设计的契约对照证据（设计定稿见 `DESIGN-ellamaka-dsh.md` §4.1.1）。本节只记录 dsh 工具实际消费的 `exec.agent` 面与 ellamaka 侧可提供的数据，不含设计决策。
 
 对 base profile 工具层逐包读源码，`exec.agent` 实际被消费的面：
 

@@ -29,7 +29,7 @@ export interface DshMountHandle {
  * `globalThis.__ellamakaDshContainer` for the dsh-adapter plugin. Tools then
  * execute with a lightweight per-call context — no live dsh sessions.
  *
- * Assembly (DESIGN-dsh-poc §3.4.4): the unified Runtime Manager gates on
+ * Assembly (DESIGN-ellamaka-dsh §3.4.4): the unified Runtime Manager gates on
  * `ELLAMAKA_DSH` itself (`=0` → `disabled` with zero file access) and is
  * called unconditionally; `ready` mounts the tool container with the closure
  * runtime injected; `disabled`/`degraded` return `undefined` and the TUI runs

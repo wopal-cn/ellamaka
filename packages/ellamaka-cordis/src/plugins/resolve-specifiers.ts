@@ -1,7 +1,7 @@
 /**
  * B1 (拆雷) explicit specifier resolution: rewrite a Bridge-composed row's
  * `name` to an absolute `file://` URL BEFORE the row reaches the Loader
- * (DESIGN-dsh-poc 「Bun 下不伪造 loader.internal（拆雷）」, Path 1 per the
+ * (DESIGN-ellamaka-dsh 「Bun 下不伪造 loader.internal（拆雷）」, Path 1 per the
  * spike record `.wopal-space/.tmp/spike-result.md`).
  *
  * After the fake `loader.internal` injection is removed, the official

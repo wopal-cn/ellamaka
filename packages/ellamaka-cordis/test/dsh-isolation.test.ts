@@ -6,7 +6,7 @@ import { Context } from "@deepseek-ai/cordis"
 import { mountDshWeb, mountDshTools } from "../src/dsh-web"
 
 /**
- * dsh runtime isolation (DESIGN-dsh-poc §3.4): every dsh engine runtime byte
+ * dsh runtime isolation (DESIGN-ellamaka-dsh §3.4): every dsh engine runtime byte
  * (settings/sessions/storages/credentials) lands under `$WOPAL_HOME/dsh/home`,
  * NOT `~/.dsh`. Purely via config injection — `process.env.DSH_HOME` is never
  * set by the integration code itself (the host sets it for B-class env reads

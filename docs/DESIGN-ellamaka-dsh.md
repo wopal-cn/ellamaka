@@ -595,7 +595,6 @@ Permission 评估为 LAST-wins（`findLast`），规则表顺序 = frontmatter �
 | 7 | 动态加载 | Bridge 仅从 installAnchor 对应闭包加载官方运行时；应用 bundle、cwd、workspace 和全局 node_modules 不影响解析 |
 | 8 | 失败语义 | 首次安装、升级、离线、超时、integrity 失败与损坏闭包均产生确定的状态和诊断；Ellamaka 能以无 DSH 模式继续运行 |
 | 9 | 隔离 | 依赖闭包、home 与 plugins 各归其位；Ellamaka 不读写 `~/.dsh`；`DSH_HOME` env 由宿主设置为 `home/`（官方包 env 直读汇合点），集成代码不消费它 |
-| 10 | PoC 机制退出 | 生产链路不再使用 TS strip-types、`.js → .ts` loader、`resources/dsh-materialize/cordis` 源码副本及手工版本常量 |
 
 ---
 
@@ -700,15 +699,6 @@ Ellamaka 容器常驻注入这两个 service；`desktopPnpm.runPlugin(args, dir,
 
 - **配置双轨**：工具投影侧（插件的工具是否投影进 ellamaka、白名单）走空间级 `settings.jsonc`；dsh 界面侧（entry 级配置）命令式写补丁层，动态生效。
 - **信任边界**：命令式安装是用户显式动作，做 tarball integrity 校验；第三方插件与宿主同进程执行的风险在安装输出中明示。不新造权限体系。
-
-### 迁移路径
-
-1. 布局迁移：`state/*` → `home/`，`profiles/` → `home/profiles/`，`.agent-presets` → `home/.agent-presets`；`state/` 退役（引擎停止后一次性执行）。
-2. env 注入改指 `home/`：dev.sh 与 Desktop sidecar。
-3. 安装器 retarget：从 `plugins/<pkg>/<ver>/` + store 改写为 profile node_modules + package.json 声明；`installed.json`/`composePluginLayers` 退役。
-4. 宿主安装工契约：`desktopProfiles` + `desktopPnpm` 注入实现。
-5. 已装 poc 插件（hello、weapon-rack 等）迁移到官方声明形态。
-6. 回归验收：preset 发现、市场安装流、官方 CLI 同 home 互操作、插件热挂载、dump-config。
 
 ### 验收基线
 
@@ -1084,7 +1074,7 @@ ellamaka 的终局形态是「**一个 runtime，N 个壳**」：server 是唯�
 
 ### 阶段边界
 
-**Phase 1（POC 内，本线执行）**：单端口壳化，sidecar 保留。dsh 生态尚未完全 Bun 兼容，desktop 引擎需要 electron node 环境（utilityProcess）承载 serve 服务——sidecar 构建链是 POC 的现实，不是设计错误。改造内容：
+**Phase 1（本线执行）**：单端口壳化，sidecar 保留。dsh 生态尚未完全 Bun 兼容，desktop 引擎需要 electron node 环境（utilityProcess）承载 serve 服务——保留 sidecar 构建链是当前现实，不是设计错误。改造内容：
 
 - renderer 从 `oc://` 迁到 `http://127.0.0.1:<sidecarPort>/workbench`；sidecar 开始 serve SPA（从 resources 目录 serve electron-vite 已产出的 `out/renderer`，引擎侧 serveUI 加目录 fallback，UI 与引擎构建解耦）。
 - **删除 4123 整层**：`dshHttpProxy`、`createDshProxy`、进程内 cookie jar、`platform.dshProxyOrigin` 链路、`dsh-surface.tsx` 的 `oc:` 分支——同源后 cookie 与 WS 浏览器原生处理，desktop 走 web 模式代码路径（`pageOrigin = location.origin`，`dshIframeSrc` 回落 `<origin>/dsh/`）。

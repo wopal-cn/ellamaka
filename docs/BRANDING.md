@@ -553,7 +553,6 @@ ellamaka 已放弃跟踪上游，后续如需参考 OpenCode 对应模块代码�
 | `README.md`、`README.zh-CN.md`                                                           | ellamaka 项目 README |
 | `AGENTS.md`、`AGENTS.zh-CN.md`                                                           | ellamaka 开发规范    |
 | `docs/DESIGN.md`、`docs/DISTRIBUTION.md`、`docs/BRANDING.md` | ellamaka 设计文档    |
-| `docs/UPSTREAM-MERGE-LOG.md`                                                             | 合并历史记录         |
 | `scripts/`                                                                               | ellamaka 自有脚本    |
 | `.github/workflows/publish-ellamaka-cli.yml`                                                 | ellamaka CI          |
 | `packages/ellamaka-brand/`                                                               | ellamaka 品牌包      |
@@ -635,7 +634,7 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 ### 目的
 
 `packages/ellamaka-app` 是 ellamaka 的官方 web UI,通过 fork 上游
-`packages/app` 创建。承接从 `poc/web` 验证的产品形态(三栏 IDE 工作台)。
+`packages/app` 创建。承载三栏 IDE 工作台的产品形态。
 上游 `packages/app` 已放弃跟踪（见 §12），后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
 
 **设计决策与架构详见 [WORKBENCH.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/WORKBENCH.md) 以及 [DESIGN.md §8](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/DESIGN.md)。** 本节记录品牌化实施细节。
@@ -702,15 +701,7 @@ ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不
    - **默认状态 (`null`)**：禁用反向代理机制，避免在任何未显式配置的情况下泄漏网络请求或展示非预期品牌界面。
    - **品牌托管支持（Custom Host Support）**：仅在部署品牌方自有的 Workbench 静态托管服务（例如 `https://ellamaka.wopal.cn`）时，可通过将 `UI_UPSTREAM_URL` 显式声明为指定域名，复用路由透传机制，实现云端前端与本地 CLI 引擎的契约衔接。
 
-### 15.6 与 poc/web 的关系
-
-| 阶段       | poc/web               | ellamaka-app             |
-| ---------- | --------------------- | ------------------------ |
-| 现状       | 原型验证中            | 待创建                   |
-| 验证完成后 | 保留作为探索参考      | 承接产品化代码和架构决策 |
-| 后续       | 能力逐步迁移,最终归档 | 唯一 web UI 产品形态     |
-
-### 15.7 实施范围
+### 15.6 实施范围
 
 **已完成(基础设施跑通 → 空间侧栏接通)**:
 
@@ -720,7 +711,7 @@ ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不
 4. 注册 `/workbench` 路由 + 三栏布局骨架(TopBar/ActivityBar/Sidebar/Workspace/StatusBar)
 5. 视图切换 Provider(TUI/Chat/Split)持久化到 localStorage
 6. 空间侧栏接通真实数据:通过 `wopalSpace.spaces` SDK 方法(后端 §16)拉取 `$WOPAL_HOME/config/settings.jsonc` 的 WopalSpace 注册表
-7. 点击空间在 workbench 内开 tab,不跳转官方 session 路由(符合 PoC 设计)
+7. 点击空间在 workbench 内开 tab,不跳转官方 session 路由
 
 **后续迭代**:TUI 视图接入(复用 terminal.tsx) → Chat 视图接入(复用 session 组件) → Split 分屏 → 命令面板集成。
 
@@ -730,7 +721,6 @@ ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不
 | ---------------------------------- | ------------------------------- |
 | `packages/ellamaka-app/AGENTS.md`  | 包级开发规则                    |
 | `docs/ELLAMAKA-WORKBENCH.zh-CN.md` | ellamaka-app 详细设计与架构设计 |
-| `poc/web/OVERVIEW.md`              | PoC 验证结果                    |
 
 ---
 

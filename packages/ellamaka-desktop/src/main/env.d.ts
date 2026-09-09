@@ -33,7 +33,7 @@ declare module "virtual:opencode-server" {
   export const bootstrap: typeof import("../../../opencode/dist/types/src/node").bootstrap
 
   /**
-   * The DSH runtime wiring surface (DESIGN-dsh-poc §3.4), re-exported as flat
+   * The DSH runtime wiring surface (DESIGN-ellamaka-dsh §3.4), re-exported as flat
    * symbols by the opencode `node.ts` and consumed by the sidecar to drive the
    * unified Runtime Manager and mount the web/tool containers. Typed
    * structurally so the desktop package needs no `@wopal/ellamaka-cordis`

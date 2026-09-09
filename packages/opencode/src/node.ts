@@ -5,7 +5,7 @@ export * as Log from "@wopal/ellamaka-core/util/log"
 export { Database } from "@/storage/db"
 export { JsonMigration } from "@/storage/json-migration"
 
-// DSH runtime wiring surface (DESIGN-dsh-poc §3.4): the unified Runtime
+// DSH runtime wiring surface (DESIGN-ellamaka-dsh §3.4): the unified Runtime
 // Manager, the default embedded manifest, the install-anchor resolver, the
 // closure module loader, and the web/tool container mount entry points. The
 // Desktop sidecar consumes these through `virtual:opencode-server` (declared

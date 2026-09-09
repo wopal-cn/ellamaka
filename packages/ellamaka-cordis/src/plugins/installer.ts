@@ -7,7 +7,7 @@ import { resolveTree, type ResolveSpec, type ResolvedTree } from "./resolver.js"
 
 /**
  * Plugin installer: the install/remove pipeline of the dsh plugin supply
- * chain, rewritten to the OFFICIAL end state (DESIGN-dsh-poc 「Bun 安装器流水线」).
+ * chain, rewritten to the OFFICIAL end state (DESIGN-ellamaka-dsh 「Bun 安装器流水线」).
  *
  * Registry pipeline: resolveTree → per-package extract into a staging dir
  * (pacote in production via the injectable {@link ExtractLike}) → entry +

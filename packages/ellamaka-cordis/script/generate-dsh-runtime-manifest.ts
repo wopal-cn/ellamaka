@@ -11,7 +11,7 @@
  *
  * The manifest carries only the exact direct dependency versions. No lock file
  * is read or embedded: the closure lock is produced at runtime by npm during
- * materialisation (DESIGN-dsh-poc §3.4.3).
+ * materialisation (DESIGN-ellamaka-dsh §3.4.3).
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"

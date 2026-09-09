@@ -11,7 +11,7 @@ import {
 
 /**
  * Plugin Runtime Service: watches the profile composition files and replays
- * include patches into the running containers (DESIGN-dsh-poc A2, D-03).
+ * include patches into the running containers (DESIGN-ellamaka-dsh A2, D-03).
  *
  * Trigger contract (event driven, Plan Task 5): the watched set is each
  * container's profile composition files — `package.json` (the manifest

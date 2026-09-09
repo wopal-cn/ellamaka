@@ -5,7 +5,7 @@ import { profileDirOf, healPluginsModuleFallback } from "./compose.js"
 
 /**
  * One-time migration of the retired `installed.json` plugin store into the
- * official profile manifest truth source (DESIGN-dsh-poc 迁移路径 #3/#5).
+ * official profile manifest truth source (DESIGN-ellamaka-dsh 迁移路径 #3/#5).
  *
  * For every store entry and every profile it was enabled in (defaulting to
  * `web` when an entry declares none): the package entity moves from the

@@ -4,7 +4,7 @@ import { composeFullPatchStack, profileDirOf, readUserPatchLayer, type DshPlugin
 import type { DshPluginContainer, DshPluginServiceLogger } from "./runtime.js"
 
 /**
- * Bun host HMR adapter (DESIGN-dsh-poc 「Bun 宿主 HMR 适配器」, B3 收窄).
+ * Bun host HMR adapter (DESIGN-ellamaka-dsh 「Bun 宿主 HMR 适配器」, B3 收窄).
  *
  * Replaces the official `cordis-plugin-hmr` on the Bun serve path, where the
  * official plugin cannot run (it requires the Node internal loader).

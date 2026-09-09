@@ -1,6 +1,6 @@
 /**
  * Minimal dependency resolver for user-plugin installation
- * (DESIGN-dsh-poc §9.4, spike 1 in `.wopal-space/.tmp/dsh-plugin-spike/`).
+ * (DESIGN-ellamaka-dsh §9.4, spike 1 in `.wopal-space/.tmp/dsh-plugin-spike/`).
  *
  * A small BFS resolver over abridged registry packuments replaces Arborist
  * for third-party plugin trees (Arborist busy-loops inside a compiled binary;
@@ -46,7 +46,7 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<unknown>
 export const DEFAULT_RESOLVER_REGISTRY = "https://registry.npmjs.org/"
 
 /**
- * A registry spec the resolver refuses (DESIGN-dsh-poc「插件供应链」: git/tarball/
+ * A registry spec the resolver refuses (DESIGN-ellamaka-dsh「插件供应链」: git/tarball/
  * file transports are the phase-2 scope; phase 1 errors with npm guidance).
  * Raised before any network activity.
  */
@@ -224,7 +224,7 @@ export interface ResolveOptions {
 
 /**
  * Reject the transports the supply chain explicitly does not support
- * (DESIGN-dsh-poc「插件供应链」). Called on the raw version spec before any fetch.
+ * (DESIGN-ellamaka-dsh「插件供应链」). Called on the raw version spec before any fetch.
  */
 function assertSupportedSpec(spec: string): void {
   if (/^(?:github|git\+|git|file|link|workspace|tarball|https?):/i.test(spec)) {

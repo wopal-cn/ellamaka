@@ -46,11 +46,11 @@ function resolveEllamakaCommand(): string[] {
 
 /**
  * Mount the full dsh engine (web + tool containers) on a running Ellamaka
- * server under `/dsh` (single-port scheme, DESIGN-dsh-poc §2.1). Shared by
+ * server under `/dsh` (single-port scheme, DESIGN-ellamaka-dsh §2.1). Shared by
  * the `serve` and `web` commands; the TUI uses its tools-only variant in
  * `tui/dsh-mount.ts`.
  *
- * Assembly (DESIGN-dsh-poc §3.4.4/§3.4.5):
+ * Assembly (DESIGN-ellamaka-dsh §3.4.4/§3.4.5):
  * 1. The unified Runtime Manager runs first — it gates on `ELLAMAKA_DSH`
  *    itself (`=0` → `disabled` with zero file access), so it is called
  *    unconditionally; no manual kill-switch check here.

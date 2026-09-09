@@ -3,7 +3,7 @@
  * unified Runtime Manager's fast path hits and `createDshRuntimeApi` resolves
  * the six official `@deepseek-ai/*` modules from it.
  *
- * The closure mirrors what the real materialiser produces (DESIGN-dsh-poc
+ * The closure mirrors what the real materialiser produces (DESIGN-ellamaka-dsh
  * §3.4.5): `closures/<fingerprint>/` with `package.json`, `package-lock.json`,
  * `runtime-manifest.json` and a `node_modules/@deepseek-ai` tree. Instead of
  * running arborist against the network, the `@deepseek-ai` tree is a symlink to
@@ -29,7 +29,7 @@ const CORDIS_DEEPSEEK_AI_DIR = join(
 /**
  * A minimal valid npm lockfile v3 document — the runtime-lock shape the real
  * materialiser's Arborist produces. The runtime only checks presence + shape
- * (DESIGN-dsh-poc §3.4.3), so a v3 lockfile with a packages map suffices.
+ * (DESIGN-ellamaka-dsh §3.4.3), so a v3 lockfile with a packages map suffices.
  */
 function runtimeLock(manifest: { dependencies: Record<string, string> }): string {
   const packages: Record<string, { version: string }> = { "": { version: "0.0.0" } }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 
-// ELLAMAKA_DSH is a kill switch, default ON (DESIGN-dsh-poc §3.4, constraint
+// ELLAMAKA_DSH is a kill switch, default ON (DESIGN-ellamaka-dsh §3.4, constraint
 // #11). `ELLAMAKA_DSH=0` disables dsh; unset or any non-"0" value enables it.
 describe("ELLAMAKA_DSH kill switch", () => {
   afterEach(() => {

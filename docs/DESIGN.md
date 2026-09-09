@@ -37,10 +37,10 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | Skill 加载                | base/user 并发解析，space overlay 按序覆盖                                                        | —                 |
 | Branding & build          | BINARY_NAME、构建包装、CLI 品牌常量                                                               | §2–§4             |
 | TUI 空间配置              | `settings.jsonc` 的 `tui` 字段和主题目录                                                          | §4.7              |
-| Web UI 产品化             | Fork 上游 `packages/app` 为 `packages/ellamaka-app`，承接 poc/web 验证的产品形态                  | §9（本文件），§15 |
+| Web UI 产品化             | Fork 上游 `packages/app` 为 `packages/ellamaka-app`，作为官方 Web 工作台形态                  | §9（本文件），§15 |
 | Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | §7.1（本文件）    |
 
-上游文件改动遵循：新文件优先、提前返回 guard、回调注入、禁止格式化重排。完整策略和合并保护文件清单见 **BRANDING.md §9**。
+上游文件改动遵循：新文件优先、提前返回 guard、回调注入、禁止格式化重排。完整策略和合并保护文件清单见 **BRANDING.md §12**。
 
 ## 2.1 品牌与构建包结构
 
@@ -98,7 +98,7 @@ WopalSpace 模式下配置加载优先级（低→高）：
 | 合并方向 | 无（已放弃上游合并）                                                                  |
 | 参考来源 | 后续如需参考 OpenCode 模块代码，从 `labs/ref-repos/opencode/` 读取对应模块            |
 
-详细合并流程、合并保护文件清单、定制代码最小侵入原则、冲突热点和验证清单见 **BRANDING.md §9**。
+详细合并流程、合并保护文件清单、定制代码最小侵入原则、冲突热点和验证清单见 **BRANDING.md §12**。
 
 ## 6. Distribution
 
@@ -169,27 +169,21 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 **一致性**：materialize/install 与 cold reload 在 shared home 锁上串行；先停旧代、确认终止，再启新代；重载超时或失败只降级该单元，不升级为整进程重启。
 
-DSH 容器装配与融合细则见 [DESIGN-dsh-poc.md](./DESIGN-dsh-poc.md)。
+DSH 容器装配与融合细则见 [DESIGN-ellamaka-dsh.md](./DESIGN-ellamaka-dsh.md)。
 
 ## 9. Web UI 与 ellamaka-app
 
-### 9.1 背景
+### 9.1 定位
 
-WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 验证(`poc/web`)——确认 Web TUI 可行、多空间并行可行、TUI+Chat 融合可行——需要以正式技术栈承载产品形态。
+WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。`ellamaka-app`（`packages/ellamaka-app/`）是该形态的官方实现，fork 自上游 `packages/app`，以正式技术栈承载三栏 IDE 工作台、多空间并行与 TUI+Chat 融合的产品形态。
 
-### 9.2 设计决策
+### 9.2 架构决策
 
-**不在 PoC 基础上迭代,而是 fork 上游 `packages/app` 为 `packages/ellamaka-app`**:
-
-| 方案                                              | 决策    | 原因                                                                              |
-| ------------------------------------------------- | ------- | --------------------------------------------------------------------------------- |
-| 直接修改 `packages/app`                           | ❌ 否决 | 侵入上游源码,合并上游 `opencode` 更新时冲突面大                                   |
-| 在 `poc/web` 基础上迭代                           | ❌ 否决 | PoC 代码质量和架构无法承接产品化(单文件 1025 行、裸 JSON 协议、CDN 外部依赖)      |
-| **Fork `packages/app` → `packages/ellamaka-app`** | ✅ 采纳 | 复用现有基础设施(core/sdk/ui/i18n/terminal/theme);定制与上游解耦                 |
+`ellamaka-app` 通过 fork 上游 `packages/app` 获得，而非在既有原型上迭代。这一选择让定制代码与上游解耦：它复用现有基础设施（core/sdk/ui/i18n/terminal/theme），Web UI 形态随 ellamaka 独立演进，不受上游 `packages/app` 更新节奏约束。
 
 ### 9.3 详细规约
 
-关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、PoC 能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
+关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
 
 - 中文版：[WORKBENCH.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/WORKBENCH.md)
 
@@ -204,9 +198,8 @@ WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。经过 PoC 
 | `./BRANDING.md`                   | 品牌化定制唯一真相源—                                          |
 | `./API-CONTRACT.md`               | Runtime API、OpenAPI、生成 SDK 与 Wopal CLI adapter 契约       |
 | `./WORKBENCH.md`                  | ellamaka 自定义工作台 app 设计                                 |
-| `./DESIGN-dsh-poc.md`            | ellamaka 与 dsh 融合架构（DSH 容器装配、插件供应链、Bun 宿主 HMR） |
+| `./DESIGN-ellamaka-dsh.md`            | ellamaka 与 dsh 融合架构（DSH 容器装配、插件供应链、Bun 宿主 HMR） |
 | `./DISTRIBUTION.md`               | 产品 SemVer、OpenCode upstream、构建身份、兼容选择、release、artifact、安装契约 |
 | `../../wopal-cli/docs/DESIGN.md`  | wopal-cli 如何消费 ellamaka release                            |
-| `UPSTREAM-MERGE-LOG.md`           | 裁剪边界、合并策略、验证经验                                   |
 | `packages/opencode/AGENTS.md`     | engine package 内部规则                                        |
 | `packages/ellamaka-app/AGENTS.md` | ellamaka 官方 web UI 包级开发规则                              |

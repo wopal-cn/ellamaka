@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 
 // ---------------------------------------------------------------------------
 // Runtime manifest types & pure helpers for the DSH production materialisation
-// (DESIGN-dsh-poc.md §3.4.3).
+// (DESIGN-ellamaka-dsh.md §3.4.3).
 //
 // The manifest carries ONLY the DSH official DIRECT dependencies as exact
 // versions (the single editing source is `packages/ellamaka-cordis/package.json`).

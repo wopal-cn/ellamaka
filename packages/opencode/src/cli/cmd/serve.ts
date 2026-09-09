@@ -21,7 +21,7 @@ export const ServeCommand = effectCmd({
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`${BINARY_NAME} server listening on http://${server.hostname}:${server.port}`)
 
-    // Optional dsh engine (single-process, dual-container, DESIGN-dsh-poc
+    // Optional dsh engine (single-process, dual-container, DESIGN-ellamaka-dsh
     // §2.1/§2.2). The unified Runtime Manager (in dsh-mount.ts, shared with the
     // `web` command) gates on `ELLAMAKA_DSH` itself — `=0` → disabled with zero
     // file access — and `disabled`/`degraded` never block the server. The

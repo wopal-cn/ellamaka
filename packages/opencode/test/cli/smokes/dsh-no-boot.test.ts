@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 
 // The dsh command group is a lightweight shim over profile composition files
-// (DESIGN-dsh-poc: "ellamaka dsh is the Bun executor stand-in for the official
+// (DESIGN-ellamaka-dsh: "ellamaka dsh is the Bun executor stand-in for the official
 // dsh CLI"; dump-config is documented "without booting"). These tests pin the
 // no-boot contract at the process boundary: the engine's boot side effects
 // (SQLite DB open/migrate, provider layer, models.dev fetch) must NEVER run

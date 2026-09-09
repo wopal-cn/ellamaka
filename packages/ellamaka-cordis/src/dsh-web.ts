@@ -383,7 +383,7 @@ export interface DshHostOptions {
   /**
    * The resolved DSH runtime module handle, loaded via
    * `@wopal/ellamaka-cordis/runtime` from the materialised closure
-   * (DESIGN-dsh-poc §3.4.6). When omitted, the module falls back to the
+   * (DESIGN-ellamaka-dsh §3.4.6). When omitted, the module falls back to the
    * package closure (source/dev mode) — keeping existing callers unchanged.
    */
   runtime?: DshRuntimeApi
@@ -432,7 +432,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // without `@deepseek-ai/*` in their own closure and MUST never reach this
   // fallback.
   const runtime = opts.runtime ?? createPackageDshRuntimeApi()
-  // dsh runtime isolation (DESIGN-dsh-poc §3.4): every dsh engine runtime byte
+  // dsh runtime isolation (DESIGN-ellamaka-dsh §3.4): every dsh engine runtime byte
   // (settings/sessions/storages/credentials/.../home-patch) lands under
   // `$WOPAL_HOME/dsh/home`, NOT `~/.dsh`. Done via pure config injection —
   // this mount never reads `process.env.DSH_HOME` for its own paths. When
@@ -578,7 +578,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   ctx.baseUrl = pathToFileURL(dirname(rootConfig)).href + "/"
   // Override the ctx-injected `dshHomePath` so `!!js dshHomePath('sessions')`
   // (etc.) expressions in the bundle patch layers resolve under the DSH home
-  // — the default resolver reads `$DSH_HOME`/`~/.dsh` (DESIGN-dsh-poc §3.4
+  // — the default resolver reads `$DSH_HOME`/`~/.dsh` (DESIGN-ellamaka-dsh §3.4
   // A-type); the host sets `DSH_HOME` to this same home dir at launch, so
   // both resolution paths agree.
   ctx.provide("dshHomePath", (...segments: string[]) => join(homeDir, ...segments))
@@ -613,7 +613,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     }
   }
   const loaderFiber = await ctx.registry.plugin(runtime.pluginLoader)
-  // B1 拆雷 (DESIGN-dsh-poc 「Bun 下不伪造 loader.internal（拆雷）」): the
+  // B1 拆雷 (DESIGN-ellamaka-dsh 「Bun 下不伪造 loader.internal（拆雷）」): the
   // Bridge no longer injects a fake `loader.internal` when the runtime
   // provides none — the fake object fooled the official hmr capability guard
   // into misusing Node-private loader APIs and was the rc.2 incident's
@@ -653,7 +653,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // host module graph: a bundled host (packaged CLI bunfs, Desktop sidecar)
   // carries no dsh packages, so the Node internal loader resolves them via
   // this parent URL — the dsh home root, whose `node_modules/` ancestry holds
-  // the materialised closure (DESIGN-dsh-poc §2.2). From source the same
+  // the materialised closure (DESIGN-ellamaka-dsh §2.2). From source the same
   // closure is materialised too (the kill switch guards its absence), so
   // passing the base unconditionally is mode-independent.
   const bareModuleBaseUrl = pathToFileURL(join(installAnchor, "..", "..", "..")).href + "/"
@@ -834,7 +834,7 @@ export async function mountDshWeb(ctx: Context, opts: DshHostOptions): Promise<D
       return `${url.pathname}?${url.searchParams}`
     },
     // Dispose the VirtualWebServer first (closes every upgrade socket it
-    // dispatched, per DESIGN-dsh-poc §2.1 item 10) before unmounting the
+    // dispatched, per DESIGN-ellamaka-dsh §2.1 item 10) before unmounting the
     // Loader, so Node closeAllConnections() does not strand raw WebSockets.
     dispose: async () => {
       virtualWebServer.dispose()

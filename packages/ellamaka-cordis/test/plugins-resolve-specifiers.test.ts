@@ -9,7 +9,7 @@ import { resolveRowSpecifier } from "../src/plugins/resolve-specifiers"
 /**
  * B1 (拆雷) explicit specifier resolution: Bridge-composed rows must reach the
  * Loader as absolute `file://` URLs, resolution order closure -> profiles
- * (DESIGN-dsh-poc 「Bun 下不伪造 loader.internal（拆雷）」, Path 1 per the
+ * (DESIGN-ellamaka-dsh 「Bun 下不伪造 loader.internal（拆雷）」, Path 1 per the
  * spike record). The fixtures are self-contained under tmpdir — nothing under
  * the real home is read or written.
  */

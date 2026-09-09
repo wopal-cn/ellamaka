@@ -15,7 +15,7 @@ import { join } from "node:path"
 // serve handler, so the `web` entry silently shipped without any /dsh mount
 // (packaged `web` fell into the SPA fallback). Every command that owns a
 // server must delegate to the shared assembly — which now runs the unified
-// Runtime Manager (gating on ELLAMAKA_DSH internally, DESIGN-dsh-poc §3.4.4)
+// Runtime Manager (gating on ELLAMAKA_DSH internally, DESIGN-ellamaka-dsh §3.4.4)
 // and mounts only on `ready`.
 describe("server entry points wire the shared dsh assembly", () => {
   const cases = [

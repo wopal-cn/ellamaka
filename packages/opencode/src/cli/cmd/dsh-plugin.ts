@@ -16,7 +16,7 @@ import { dshResolvePluginArgs, type DshResolvedPlugin } from "./dsh-cli"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 
 /**
- * `ellamaka dsh plugin` — the official-order command surface (DESIGN-dsh-poc
+ * `ellamaka dsh plugin` — the official-order command surface (DESIGN-ellamaka-dsh
  * §632, Plan 223 D-02): `dsh plugin --profile <name> <args...>` with the
  * remaining args forwarded VERBATIM to the ellamaka Bun installer (never pnpm).
  *
@@ -74,7 +74,7 @@ export const DshPluginCommand = effectCmd({
     "manage a profile's dsh plugins via the ellamaka installer (official order: dsh plugin --profile <name> add <package>)",
   instance: false,
   // Engine-free shim: pure profile-file operations, no AppLayer boot
-  // (DESIGN-dsh-poc — `ellamaka dsh` must not start the engine).
+  // (DESIGN-ellamaka-dsh — `ellamaka dsh` must not start the engine).
   light: true,
   builder: (yargs) =>
     yargs

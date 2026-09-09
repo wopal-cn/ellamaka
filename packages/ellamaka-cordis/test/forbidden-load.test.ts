@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Module } from "node:module"
 
 /**
- * Runtime gate (DESIGN-dsh-poc §7 current convention 2).
+ * Runtime gate (DESIGN-ellamaka-dsh §7 current convention 2).
  *
  * The six deeply-coupled dsh packages (agent-loop/session/session-query/
  * compaction/subagent/schedule) must never be loaded at runtime by the

@@ -206,7 +206,7 @@ failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时—�
 分支渠道约束（branch-channel policy）：
 
 - `main`：CLI stable/rc 与 Desktop prod/beta 均可发布。
-- 非 `main` 分支（`poc-*` 等）：只允许 prerelease —— CLI `X.Y.Z-rc.N`、Desktop `X.Y.Z-beta.N`；禁止发布裸 `X.Y.Z`。该约束以**通道级预检**在版本推断之前执行：非 main 分支上 `--patch`/`--minor`/`--major`（stable/prod 目标：候选转正或开新正式版）直接拒绝并提示切回 main；`--rc`/`--beta` 进入推断。dry-run 同样触发，让分支策略在发布计划第一屏显式可见。
+- 非 `main` 分支（特性分支等）：只允许 prerelease —— CLI `X.Y.Z-rc.N`、Desktop `X.Y.Z-beta.N`；禁止发布裸 `X.Y.Z`。该约束以**通道级预检**在版本推断之前执行：非 main 分支上 `--patch`/`--minor`/`--major`（stable/prod 目标：候选转正或开新正式版）直接拒绝并提示切回 main；`--rc`/`--beta` 进入推断。dry-run 同样触发，让分支策略在发布计划第一屏显式可见。
 - prerelease 的 base `X.Y.Z` 必须高于该产品已发布 prod/stable 的最高版本：已发布 `2.0.3` 时，prerelease 从 `2.0.4-rc.1` / `2.0.4-beta.1` 开始，`2.0.3-rc.1` / `2.0.3-beta.1` 被拒绝。
 - 版本单调：同类产品的全部发布（stable、rc、beta）处于同一单调递增序列。rc 占用 base slot 后，后续修复只能发更高版本（`2.0.5-rc.2`、`2.1.0`……），不能回退到已发 rc 的 base 之下。
 

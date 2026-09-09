@@ -8,7 +8,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## 1. Canonical References
 
 - DESIGN: `docs/DESIGN.md`
-- DSH POC DESIGN: `docs/DESIGN-dsh-poc.md`（双引擎融合实验：桥/吸收双轨、dsh 工具插件边缘通道）
+- DSH POC DESIGN: `docs/DESIGN-ellamaka-dsh.md`（双引擎融合实验：桥/吸收双轨、dsh 工具插件边缘通道）
 - PLAN TODOS: `docs/PLAN-TODOS.md`
 - API CONTRACT: `docs/API-CONTRACT.md`
 - BRANDING: `docs/BRANDING.md`

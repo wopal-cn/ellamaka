@@ -1,7 +1,7 @@
 import type { DshRuntimeManifestV1 } from "./manifest.js"
 
 /**
- * The embedded DSH runtime lock (DESIGN-dsh-poc §3.4.3).
+ * The embedded DSH runtime lock (DESIGN-ellamaka-dsh §3.4.3).
  *
  * The lock is the complete transitive dependency tree resolved from the
  * manifest's exact direct dependency versions at BUILD time (source
