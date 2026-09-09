@@ -117,12 +117,13 @@ wopal-space 模式**不加载**：
 | `WOPAL_HOME` | 覆盖 `~/.wopal/` 根路径 |
 | `ELLAMAKA_MODELS_URL` | 自定义 provider catalog 的 base URL，默认 `https://models.opencode.ai` |
 | `ELLAMAKA_MODELS_PATH` | 显式指定的 provider catalog 文件路径；Ellamaka 只读取，绝不删除或改写该文件 |
+| `ELLAMAKA_MODELS_FALLBACK_PATH` | 仅开发入口注入的只读 fallback snapshot；先请求 URL，失败后才读取它 |
 | `ELLAMAKA_MODELS_API_JSON` | 仅构建期使用的显式 catalog JSON 文件路径；有效时优先于网络与仓库 snapshot |
 | `ELLAMAKA_MODELS_DEV` | 仅构建产物内联使用的已校验 catalog；不应由用户手动设置 |
 | `OPENCODE_DB` | 指定数据库路径 |
 | `OPENCODE_SKIP_MIGRATIONS` | 跳过数据库迁移 |
 
-> 模型发现不再兼容 `OPENCODE_MODELS_*` 或 `MODELS_DEV_API_JSON`。运行时只接受有效、非空的 provider catalog；默认缓存可自行恢复，而显式路径与仓库 `.ci/models.json` snapshot 始终是只读输入。构建不会自动刷新或回写该 snapshot。
+> 模型发现不再兼容 `OPENCODE_MODELS_*` 或 `MODELS_DEV_API_JSON`。运行时只接受有效、非空的 provider catalog；默认缓存可自行恢复，而显式路径与仓库 `.ci/models.json` snapshot 始终是只读输入。开发入口以 `ELLAMAKA_MODELS_FALLBACK_PATH` 注入仓库 snapshot，因此正常启动会先请求 catalog URL，网络失败才依次使用本机缓存和该 snapshot。构建不会自动刷新或回写该 snapshot。
 
 ---
 

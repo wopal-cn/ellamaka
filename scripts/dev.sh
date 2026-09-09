@@ -602,7 +602,7 @@ start_backend() {
   local port="$1" debug="$2" debug_modules="$3" preload="$4"
   shift 4
   local plugin_modules=""
-  local -a env_args=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")")
+  local -a env_args=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")")
   # Official rc.1 packages resolve their harness home through $DSH_HOME
   # directly (e.g. dsh-agent-presets' user preset root), bypassing every
   # ctx/config seam the integration owns. Point it at the official-layout
@@ -804,7 +804,7 @@ cmd_tui() {
 
   if $attach; then
     mkdir -p "$DEV_DIR"
-    local caller_pwd="$(pwd)" attach_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") attach_args=() plugin_modules=""
+    local caller_pwd="$(pwd)" attach_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") attach_args=() plugin_modules=""
     if $debug; then
       attach_args+=(--log-level DEBUG)
       plugin_modules="$(plugin_debug_modules "$debug_modules")"
@@ -849,7 +849,7 @@ cmd_tui() {
   fi
 
   mkdir -p "$DEV_DIR"
-  local caller_pwd="$(pwd)" tui_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") tui_args=() plugin_modules=""
+  local caller_pwd="$(pwd)" tui_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") tui_args=() plugin_modules=""
   if $debug; then
     tui_args+=(--log-level DEBUG)
     plugin_modules="$(plugin_debug_modules "$debug_modules")"

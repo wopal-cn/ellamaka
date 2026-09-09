@@ -4,6 +4,7 @@ import { Flag } from "@wopal/ellamaka-core/flag/flag"
 const catalogVariables = [
   "ELLAMAKA_MODELS_URL",
   "ELLAMAKA_MODELS_PATH",
+  "ELLAMAKA_MODELS_FALLBACK_PATH",
   "OPENCODE_MODELS_URL",
   "OPENCODE_MODELS_PATH",
 ] as const
@@ -59,13 +60,17 @@ describe("Ellamaka model catalog configuration", () => {
     process.env.OPENCODE_MODELS_PATH = "/tmp/legacy-models.json"
     delete process.env.ELLAMAKA_MODELS_URL
     delete process.env.ELLAMAKA_MODELS_PATH
+    delete process.env.ELLAMAKA_MODELS_FALLBACK_PATH
     expect(Flag.ELLAMAKA_MODELS_URL).toBeUndefined()
     expect(Flag.ELLAMAKA_MODELS_PATH).toBeUndefined()
+    expect(Flag.ELLAMAKA_MODELS_FALLBACK_PATH).toBeUndefined()
 
     process.env.ELLAMAKA_MODELS_URL = "https://catalog.example.test"
     process.env.ELLAMAKA_MODELS_PATH = "/tmp/ellamaka-models.json"
+    process.env.ELLAMAKA_MODELS_FALLBACK_PATH = "/tmp/ellamaka-models-fallback.json"
     expect(Flag.ELLAMAKA_MODELS_URL).toBe("https://catalog.example.test")
     expect(Flag.ELLAMAKA_MODELS_PATH).toBe("/tmp/ellamaka-models.json")
+    expect(Flag.ELLAMAKA_MODELS_FALLBACK_PATH).toBe("/tmp/ellamaka-models-fallback.json")
   })
 
   test("does not expose deprecated OPENCODE catalog flags", () => {

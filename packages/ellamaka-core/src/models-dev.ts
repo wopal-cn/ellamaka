@@ -175,6 +175,7 @@ export const layer = Layer.effect(
     const ttl = Duration.minutes(5)
     const lockKey = `models-dev:${filepath}`
     const explicitPath = Flag.ELLAMAKA_MODELS_PATH
+    const fallbackPath = Flag.ELLAMAKA_MODELS_FALLBACK_PATH
     const diskPath = explicitPath ?? filepath
     const fetchEnabled = !process.argv.includes("--get-yargs-completions")
 
@@ -193,20 +194,25 @@ export const layer = Layer.effect(
         catch: () => undefined,
       }).pipe(Effect.orElseSucceed(() => undefined))
 
-    const loadFromDisk = Effect.fn("ModelsDev.loadFromDisk")(function* () {
+    const loadFromFile = Effect.fn("ModelsDev.loadFromFile")(function* (candidate: string, managed = false) {
       // AppFileSystem.readJson delegates to JSON.parse, which can defect rather
       // than fail. Catalog input failures must remain recoverable.
-      const text = yield* fs.readFileString(diskPath).pipe(Effect.orElseSucceed(() => undefined))
+      const text = yield* fs.readFileString(candidate).pipe(Effect.orElseSucceed(() => undefined))
       const catalog = text === undefined ? undefined : yield* parseCatalog(text)
       if (catalog) return catalog
 
       // A caller-owned snapshot is strictly read-only. Only the cache under
       // Global.Path.cache is managed by this runtime and safe to self-heal.
-      if (explicitPath === undefined && text !== undefined) {
-        yield* fs.remove(filepath, { force: true }).pipe(Effect.ignore)
+      if (managed && text !== undefined) {
+        yield* fs.remove(candidate, { force: true }).pipe(Effect.ignore)
       }
       return undefined
     })
+
+    const loadFromDisk = () => loadFromFile(diskPath, explicitPath === undefined)
+    const loadDefaultCache = () => loadFromFile(filepath, true)
+    const loadFallback = () =>
+      fallbackPath === undefined ? Effect.succeed(undefined) : loadFromFile(fallbackPath)
 
     const loadSnapshot = Effect.sync(() =>
       typeof ELLAMAKA_MODELS_DEV === "undefined" ? undefined : catalogFromUnknown(ELLAMAKA_MODELS_DEV),
@@ -217,7 +223,7 @@ export const layer = Layer.effect(
       if (!stat) return false
       const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
       if (Date.now() - mtime >= Duration.toMillis(ttl)) return false
-      return Boolean(yield* loadFromDisk())
+      return Boolean(yield* loadDefaultCache())
     })
 
     const fetchAndWrite = Effect.fn("ModelsDev.fetchAndWrite")(function* () {
@@ -238,19 +244,56 @@ export const layer = Layer.effect(
       return catalog
     })
 
+    const fetchWithLock = () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* Flock.effect(lockKey)
+          return yield* fetchAndWrite()
+        }),
+      )
+
+    const loadLiveFallback = Effect.fn("ModelsDev.loadLiveFallback")(function* () {
+      const fromCache = yield* loadDefaultCache()
+      if (fromCache) return fromCache
+      const fallback = yield* loadFallback()
+      if (fallback) return fallback
+      return yield* loadSnapshot
+    })
+
+    const fetchLiveCatalog = Effect.fn("ModelsDev.fetchLiveCatalog")(function* () {
+      return yield* fetchWithLock().pipe(
+        Effect.catch((error) =>
+          Effect.gen(function* () {
+            const fallback = yield* loadLiveFallback()
+            if (fallback) {
+              yield* Effect.logWarning("Failed to fetch provider catalog; using local fallback").pipe(
+                Effect.annotateLogs("source", source),
+                Effect.annotateLogs("error", String(error)),
+              )
+              return fallback
+            }
+            return yield* Effect.fail(error)
+          }),
+        ),
+      )
+    })
+
     const populate = Effect.gen(function* () {
+      // The development launcher supplies a fallback snapshot explicitly. In
+      // that mode the network is authoritative: a successful request exposes
+      // new providers immediately, while a failure still has local recovery.
+      if (fallbackPath !== undefined && explicitPath === undefined) {
+        if (!fetchEnabled) return (yield* loadLiveFallback()) ?? {}
+        return yield* fetchLiveCatalog()
+      }
+
       const fromDisk = yield* loadFromDisk()
       if (fromDisk) return fromDisk
       const snapshot = yield* loadSnapshot
       if (snapshot) return snapshot
       if (!fetchEnabled) return {}
       // Flock is cross-process: concurrent opencode CLIs can race on this cache file.
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
-          return yield* fetchAndWrite()
-        }),
-      )
+      return yield* fetchWithLock()
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
@@ -271,7 +314,10 @@ export const layer = Layer.effect(
         }),
       ).pipe(
         Effect.tapCause((cause) =>
-          Effect.logError("Failed to fetch models.opencode.ai").pipe(Effect.annotateLogs("cause", cause)),
+          Effect.logError("Failed to fetch provider catalog").pipe(
+            Effect.annotateLogs("source", source),
+            Effect.annotateLogs("cause", cause),
+          ),
         ),
         Effect.ignore,
       )

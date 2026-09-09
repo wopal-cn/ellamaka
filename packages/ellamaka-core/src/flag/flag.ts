@@ -81,6 +81,9 @@ export const Flag = {
   get ELLAMAKA_MODELS_PATH() {
     return process.env["ELLAMAKA_MODELS_PATH"]
   },
+  get ELLAMAKA_MODELS_FALLBACK_PATH() {
+    return process.env["ELLAMAKA_MODELS_FALLBACK_PATH"]
+  },
   // Disable switch (kill switch), default ON. `ELLAMAKA_DSH=0` disables dsh;
   // unset or any non-"0" value enables. Unified across CLI (serve/web/tui) and
   // the desktop sidecar (DESIGN-dsh-poc §3.4, constraint #11).

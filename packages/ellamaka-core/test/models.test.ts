@@ -17,6 +17,7 @@ import path from "path"
 const COMPLETION_ARG = "--get-yargs-completions"
 const originalUrl = process.env.ELLAMAKA_MODELS_URL
 const originalPath = process.env.ELLAMAKA_MODELS_PATH
+const originalFallbackPath = process.env.ELLAMAKA_MODELS_FALLBACK_PATH
 const bundled = globalThis as typeof globalThis & { ELLAMAKA_MODELS_DEV?: unknown }
 const originalSnapshot = bundled.ELLAMAKA_MODELS_DEV
 const hadCompletionArg = process.argv.includes(COMPLETION_ARG)
@@ -26,7 +27,10 @@ const testRoot = await mkdtemp(path.join(os.tmpdir(), "ellamaka-models-test-"))
 const testCachePath = path.join(testRoot, "cache")
 const testStatePath = path.join(testRoot, "state")
 
-function restoreEnv(key: "ELLAMAKA_MODELS_URL" | "ELLAMAKA_MODELS_PATH", value: string | undefined) {
+function restoreEnv(
+  key: "ELLAMAKA_MODELS_URL" | "ELLAMAKA_MODELS_PATH" | "ELLAMAKA_MODELS_FALLBACK_PATH",
+  value: string | undefined,
+) {
   if (value === undefined) delete process.env[key]
   else process.env[key] = value
 }
@@ -36,6 +40,7 @@ beforeAll(() => {
   Flock.setGlobal({ state: testStatePath })
   delete process.env.ELLAMAKA_MODELS_URL
   delete process.env.ELLAMAKA_MODELS_PATH
+  delete process.env.ELLAMAKA_MODELS_FALLBACK_PATH
   delete bundled.ELLAMAKA_MODELS_DEV
   if (!hadCompletionArg) process.argv.push(COMPLETION_ARG)
 })
@@ -44,6 +49,7 @@ afterAll(() => {
   Flock.setGlobal({ state: originalStatePath })
   restoreEnv("ELLAMAKA_MODELS_URL", originalUrl)
   restoreEnv("ELLAMAKA_MODELS_PATH", originalPath)
+  restoreEnv("ELLAMAKA_MODELS_FALLBACK_PATH", originalFallbackPath)
   if (originalSnapshot === undefined) delete bundled.ELLAMAKA_MODELS_DEV
   else bundled.ELLAMAKA_MODELS_DEV = originalSnapshot
   if (!hadCompletionArg) {
@@ -166,6 +172,7 @@ beforeEach(async () => {
   await rm(explicitCacheFile, { force: true })
   delete process.env.ELLAMAKA_MODELS_URL
   delete process.env.ELLAMAKA_MODELS_PATH
+  delete process.env.ELLAMAKA_MODELS_FALLBACK_PATH
   delete bundled.ELLAMAKA_MODELS_DEV
 })
 
@@ -300,6 +307,49 @@ describe("ModelsDev Service", () => {
         expect(result).toEqual(fixture)
         const final = yield* Ref.get(state)
         expect(final.calls.length).toBeGreaterThanOrEqual(1)
+      }),
+    ),
+  )
+
+  it.live("get() falls back to the developer snapshot when a live catalog request is invalid", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        process.env.ELLAMAKA_MODELS_URL = "https://catalog.example.test"
+        process.env.ELLAMAKA_MODELS_FALLBACK_PATH = explicitCacheFile
+        const fallback = JSON.stringify(fixture)
+        yield* writeCacheText(fallback, explicitCacheFile)
+        const state = yield* Ref.make({ ...initialState, body: "{}" })
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture)
+        expect(yield* readCacheText(explicitCacheFile)).toBe(fallback)
+        const final = yield* Ref.get(state)
+        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+        expect(final.calls[0]?.url).toBe("https://catalog.example.test/api.json")
+      }),
+    ),
+  )
+
+  it.live("get() prefers a live catalog over stale cache and the developer snapshot", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        process.env.ELLAMAKA_MODELS_FALLBACK_PATH = explicitCacheFile
+        const fallback = JSON.stringify(fixture)
+        yield* writeCache(fixture)
+        yield* writeCacheText(fallback, explicitCacheFile)
+        const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+        expect(result).toEqual(fixture2)
+        expect(yield* readCacheText()).toBe(JSON.stringify(fixture2))
+        expect(yield* readCacheText(explicitCacheFile)).toBe(fallback)
+        const final = yield* Ref.get(state)
+        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+        expect(final.calls[0]?.url).toBe("https://models.opencode.ai/api.json")
       }),
     ),
   )
