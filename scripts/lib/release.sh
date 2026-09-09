@@ -261,7 +261,7 @@ highest_released_tag() {
 # 版本越新反而永远无法发布（死锁）。
 check_min_wopal_cli_released() {
   local req_ver="${MIN_WOPAL_CLI_VERSION:-}"
-  [ -n "$req_ver" ] || return 0
+  [ -n "$req_ver" ] || die "MIN_WOPAL_CLI_VERSION 未设置，无法校验 wopal-cli 协议下界（fail-closed）"
   echo "→ 检查 minWopalCli (v${req_ver}) 是否已满足：wopal-cli 远端最高已发布版本..."
   local wopal_repo="https://github.com/wopal-cn/wopal-cli.git"
   local ok=""
@@ -432,9 +432,11 @@ run_release() {
     check_workspace_clean || WORKSPACE_DIRTY=true
   fi
 
-  if command -v jq >/dev/null 2>&1 && [ -f "$REPO_ROOT/.ci/versions.json" ]; then
-    export MIN_WOPAL_CLI_VERSION=$(jq -r .minWopalCli "$REPO_ROOT/.ci/versions.json")
-  fi
+  # 统一下界来源：与 build/dev 一致走 resolve_min_wopal_cli_version（node 读取，
+  # 不依赖 jq）。fail-closed：解析失败必须终止发布，禁止静默跳过门禁。
+  MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$REPO_ROOT")"
+  [ "$MIN_WOPAL_CLI_VERSION" != "0.0.0" ] || die "无法解析 minWopalCli 生效下界：请检查 .ci/versions.json 与 packages/opencode/package.json 的 @wopal/cli-capability-schema 依赖下界"
+  export MIN_WOPAL_CLI_VERSION
   check_min_wopal_cli_released
   check_dep_floor_synced
 

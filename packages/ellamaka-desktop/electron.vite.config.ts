@@ -37,7 +37,7 @@ export default defineConfig({
   main: {
     define: {
       "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
-      "import.meta.env.MIN_WOPAL_CLI_VERSION": JSON.stringify(process.env.MIN_WOPAL_CLI_VERSION || "0.3.13"),
+      "import.meta.env.MIN_WOPAL_CLI_VERSION": JSON.stringify(process.env.MIN_WOPAL_CLI_VERSION || "0.3.16"),
     },
     build: {
       rollupOptions: {
