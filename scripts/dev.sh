@@ -128,8 +128,21 @@ space_rel_path() {
 
 is_running() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
+# The health/config probes ride the same Basic auth the backend enforces:
+# when a password is configured (ELLAMAKA_SERVER_PASSWORD), an anonymous
+# probe gets 401 and the wait loop would kill a perfectly healthy server.
+# The username defaults to the engine default (ellamaka); ELLAMAKA_SERVER_USERNAME
+# overrides it exactly like the backend reads it.
+backend_curl() {
+  if [ -n "$ELLAMAKA_SERVER_PASSWORD" ]; then
+    curl -sf --max-time 1 -u "${ELLAMAKA_SERVER_USERNAME:-ellamaka}:$ELLAMAKA_SERVER_PASSWORD" "$@"
+  else
+    curl -sf --max-time 1 "$@"
+  fi
+}
+
 backend_healthy() {
-  curl -sf --max-time 1 "http://127.0.0.1:$1/global/health" >/dev/null 2>&1
+  backend_curl "http://127.0.0.1:$1/global/health" >/dev/null 2>&1
 }
 
 wait_backend() {
@@ -142,7 +155,7 @@ wait_backend() {
 }
 
 warmup_config() {
-  curl -sf "http://127.0.0.1:$1/global/config" >/dev/null 2>&1 || true
+  backend_curl "http://127.0.0.1:$1/global/config" >/dev/null 2>&1 || true
 }
 
 pgid_of() {
