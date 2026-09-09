@@ -9,6 +9,7 @@ import { resolveTurnAnchor } from "./turn-anchor"
 import {
   ChatTurnFrame,
   CompactionDivider,
+  ContextInjectionBlock,
   InteractionBlock,
   NarrativeBlock,
   ReasoningBlock,
@@ -27,7 +28,7 @@ import {
   SubagentActivityBlock,
   type OpenCodeEditRendererProps,
 } from "./chat-tool-blocks"
-import { classifyPart } from "./chat-render.utils"
+import { classifyPart, isInjectionPart } from "./chat-render.utils"
 import { PromptNavigator } from "./prompt-navigator"
 
 /**
@@ -227,36 +228,94 @@ function AssistantPartBlock(props: {
       when={kind() === "narrative"}
       fallback={
         <Show
-          when={kind() === "reasoning"}
+          when={kind() === "injection"}
           fallback={
             <Show
-              when={kind() === "compaction"}
+              when={kind() === "reasoning"}
               fallback={
                 <Show
-                  when={kind() === "retry"}
+                  when={kind() === "compaction"}
                   fallback={
                     <Show
-                      when={kind() === "interaction"}
-                      fallback={<UnknownPartBlock part={props.part} />}
+                      when={kind() === "retry"}
+                      fallback={
+                        <Show
+                          when={kind() === "interaction"}
+                          fallback={<UnknownPartBlock part={props.part} />}
+                        >
+                          <InteractionBlock part={props.part} message={props.message} />
+                        </Show>
+                      }
                     >
-                      <InteractionBlock part={props.part} message={props.message} />
+                      <RetryOutcome part={props.part} />
                     </Show>
                   }
                 >
-                  <RetryOutcome part={props.part} />
+                  <CompactionDivider part={props.part} />
                 </Show>
               }
             >
-              <CompactionDivider part={props.part} />
+              <ReasoningBlock part={props.part} message={props.message} defaultOpen={props.showReasoningSummaries} />
             </Show>
           }
         >
-          <ReasoningBlock part={props.part} message={props.message} defaultOpen={props.showReasoningSummaries} />
+          <ContextInjectionBlock part={props.part} />
         </Show>
       }
     >
       <NarrativeBlock part={props.part} message={props.message} showMeta={props.showMeta} modelName={props.modelName} />
     </Show>
+  )
+}
+
+/**
+ * UserRowContent splits a user row's parts into two presentation channels:
+ * injection text parts (synthetic-flagged or shell-wrapped) render as
+ * tool-style left-aligned ContextInjectionBlocks in a full-width container,
+ * and everything else renders via UserMessageBlock (the right-aligned bubble).
+ *
+ * A user message whose text content is ONLY injections (a noReply notification
+ * such as a sandbox-mode reminder or a wopal-plugin task notification) renders
+ * no bubble at all — just the injection container, mirroring how compaction
+ * markers suppress the empty prompt bubble.
+ */
+function UserRowContent(props: {
+  row: Extract<TranscriptRow, { type: "user" }>
+  actions?: ChatUserActions
+  actionLabels?: ChatUserActionLabels
+}) {
+  const parts = () => props.row.parts
+  const injections = createMemo(() => parts().filter((part) => isInjectionPart(part)))
+  const bubbleParts = createMemo(() => parts().filter((part) => !isInjectionPart(part)))
+  const hasBubbleContent = createMemo(() =>
+    bubbleParts().some((part) => {
+      if (part.type === "text") return part.text.trim().length > 0
+      return true
+    }),
+  )
+
+  return (
+    <>
+      <Show when={hasBubbleContent()}>
+        <UserMessageBlock
+          message={props.row.message}
+          parts={bubbleParts()}
+          actions={props.actions}
+          actionLabels={props.actionLabels}
+        />
+      </Show>
+      <Show when={injections().length > 0}>
+        <div data-slot="chat-turn-injections">
+          <For each={injections()}>
+            {(part) => (
+              <Show when={part.id} keyed>
+                <ContextInjectionBlock part={part} />
+              </Show>
+            )}
+          </For>
+        </div>
+      </Show>
+    </>
   )
 }
 
@@ -325,9 +384,8 @@ function TranscriptRowView(props: {
         </Show>
         <Show when={userRow()}>
           {(current) => (
-            <UserMessageBlock
-              message={current().message}
-              parts={current().parts}
+            <UserRowContent
+              row={current()}
               actions={props.actions}
               actionLabels={props.actionLabels}
             />

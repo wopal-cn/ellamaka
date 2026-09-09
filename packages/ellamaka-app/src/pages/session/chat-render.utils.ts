@@ -12,6 +12,7 @@ export type PartClassification =
   | { kind: "narrative" }
   | { kind: "reasoning" }
   | { kind: "context" }
+  | { kind: "injection" }
   | { kind: "shell" }
   | { kind: "file-change" }
   | { kind: "subagent" }
@@ -29,6 +30,31 @@ const HIDDEN_PART_TYPES = new Set(["step-start", "step-finish", "snapshot", "pat
 /** Todo tools render in the composer todo dock, never in the transcript. */
 const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 
+/** Shell prefixes that mark a text payload as a context injection. */
+const INJECTION_SHELL_PREFIXES = ["<system-reminder>", "<rules-context>", "<memory-context>"] as const
+
+/**
+ * Returns whether a text payload is a shell-wrapped context injection.
+ * Matching is content-based on the trimmed text so wopal-plugin task
+ * notifications (`<system-reminder>`-wrapped parts posted without the SDK
+ * `synthetic` flag) are detected identically to flagged synthetic parts.
+ */
+export function isInjectionText(text: string): boolean {
+  const trimmed = text.trimStart()
+  return INJECTION_SHELL_PREFIXES.some((shell) => trimmed.startsWith(shell))
+}
+
+/**
+ * Returns whether a text part presents as a context injection: either the SDK
+ * flagged it `synthetic` or its content is wrapped in a recognized injection
+ * shell. Both routes render as tool-style ContextInjectionBlocks, never inside
+ * the user bubble.
+ */
+export function isInjectionPart(part: Part): boolean {
+  if (part.type !== "text") return false
+  return part.synthetic === true || isInjectionText(part.text)
+}
+
 function isAssistantMessage(message: Message): message is AssistantMessage {
   return message.role === "assistant"
 }
@@ -39,16 +65,15 @@ function isRunning(message: AssistantMessage): boolean {
 
 /**
  * Returns whether a part should enter the transcript. Internal snapshot/patch
- * and step markers are hidden. Synthetic text is only shown while its owning
- * assistant message is still running and hidden once it completes. Todo tool
- * parts are owned by the composer todo dock and never enter the transcript.
+ * and step markers are hidden. Injection text (synthetic-flagged or
+ * shell-wrapped) is always renderable: it carries plugin context injections
+ * and is presented as a collapsible block regardless of the owning message
+ * role or completion state. Todo tool parts are owned by the composer todo
+ * dock and never enter the transcript.
  */
 export function isRenderablePart(part: Part, message: Message): boolean {
   if (HIDDEN_PART_TYPES.has(part.type)) return false
   if (part.type === "tool" && HIDDEN_TOOLS.has(part.tool)) return false
-  if (part.type === "text" && part.synthetic) {
-    return isAssistantMessage(message) && isRunning(message)
-  }
   return true
 }
 
@@ -63,6 +88,7 @@ export function classifyPart(part: Part, message: Message): PartClassification {
 
   switch (part.type) {
     case "text":
+      if (isInjectionPart(part)) return { kind: "injection" }
       return { kind: "narrative" }
     case "reasoning":
       return { kind: "reasoning" }
@@ -118,10 +144,48 @@ export function defaultExpanded(part: Part, message: Message): boolean {
 }
 
 /**
+ * A parsed synthetic context injection. `tag` identifies the plugin shell the
+ * content arrived in; `body` is the tag-stripped markdown payload.
+ */
+export type SyntheticInjection = {
+  tag: "reminder" | "rules" | "memory"
+  body: string
+}
+
+const INJECTION_SHELLS: Array<{ tag: SyntheticInjection["tag"]; open: string; close: string }> = [
+  { tag: "reminder", open: INJECTION_SHELL_PREFIXES[0], close: "</system-reminder>" },
+  { tag: "rules", open: INJECTION_SHELL_PREFIXES[1], close: "</rules-context>" },
+  { tag: "memory", open: INJECTION_SHELL_PREFIXES[2], close: "</memory-context>" },
+]
+
+/**
+ * Parses a synthetic text part's content into its injection shell tag and
+ * tag-stripped markdown body. Only the outer shell is removed; nested content
+ * is preserved verbatim and trimmed. A part without a recognized leading shell
+ * falls back to the `reminder` presentation so unknown injections never lose
+ * content.
+ */
+export function parseSyntheticInjection(text: string): SyntheticInjection {
+  const trimmed = text.trim()
+  for (const shell of INJECTION_SHELLS) {
+    if (!trimmed.startsWith(shell.open)) continue
+    const rest = trimmed.slice(shell.open.length)
+    const end = rest.lastIndexOf(shell.close)
+    if (end !== -1) {
+      return { tag: shell.tag, body: rest.slice(0, end).trim() }
+    }
+    // Unterminated shell (streaming): render the tail as-is.
+    return { tag: shell.tag, body: rest.trim() }
+  }
+  return { tag: "reminder", body: trimmed }
+}
+
+/**
  * Extracts a stable prompt summary for the PromptNavigator. The user summary
- * prefers the first valid text part; the assistant summary prefers the last
- * narrative text block. Empty, running or error replies produce a stable
- * status summary.
+ * prefers the first valid non-injection text part (synthetic-flagged or
+ * shell-wrapped payloads never summarize as prompt text); the assistant
+ * summary prefers the last narrative text block. Empty, running or error
+ * replies produce a stable status summary.
  */
 export function extractPromptSummary(input: {
   message: UserMessage
@@ -131,7 +195,7 @@ export function extractPromptSummary(input: {
   const { parts, assistant } = input
 
   const userText = parts
-    .filter((p) => p.type === "text" && !p.synthetic && p.messageID === input.message.id)
+    .filter((p) => p.type === "text" && p.messageID === input.message.id && !isInjectionPart(p))
     .map((p) => (p.type === "text" ? p.text : ""))
     .map(cleanSummary)
     .find((t) => t.length > 0)

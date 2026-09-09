@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from "solid-js"
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
-import { cleanSummary, extractPromptSummary, isRenderablePart } from "./chat-render.utils"
+import { cleanSummary, extractPromptSummary, isInjectionPart, isRenderablePart } from "./chat-render.utils"
 import { isCompactionMarker } from "./chat-transcript"
 
 export type PromptNavigatorProps = {
@@ -25,6 +25,23 @@ export type PromptNavigatorProps = {
  * the rail and a two-line summary in the directory popover. It never parses SDK
  * data itself; it reads the transcript layer's prompt index and summaries.
  */
+/**
+ * Returns whether a user message is a prompt: it must carry at least one
+ * non-injection text part (or a file/agent/subtask attachment). Structural
+ * messages — compaction markers and injection-only notifications (synthetic
+ * reminders, wopal-plugin task notifications posted without the synthetic
+ * flag) — never surface in the prompt rail or directory.
+ */
+function isPromptMessage(message: UserMessage, getParts: (messageID: string) => Part[]): boolean {
+  if (isCompactionMarker(message, getParts)) return false
+  const parts = getParts(message.id)
+  if (parts.length === 0) return true
+  return parts.some((part) => {
+    if (part.type === "text") return !isInjectionPart(part) && part.text.trim().length > 0
+    return part.type === "file" || part.type === "agent" || part.type === "subtask"
+  })
+}
+
 export function PromptNavigator(props: PromptNavigatorProps) {
   const [open, setOpen] = createSignal(false)
   let popoverRef: HTMLDivElement | undefined
@@ -39,15 +56,15 @@ export function PromptNavigator(props: PromptNavigatorProps) {
 
   const entries = createMemo(() =>
     props.userMessages
-      // Compaction markers are structural boundaries, not prompts; they never
-      // appear in the prompt rail or directory.
-      .filter((message) => !isCompactionMarker(message, getParts))
+      // Compaction markers and injection-only notifications are structural
+      // boundaries, not prompts; they never appear in the rail or directory.
+      .filter((message) => isPromptMessage(message, getParts))
       .map((message) => {
         const parts = getParts(message.id)
         const assistant = assistantFor(message.id)
         const assistantText = assistant
           .flatMap((a) => getParts(a.id))
-          .filter((p) => p.type === "text" && !p.synthetic)
+          .filter((p) => p.type === "text" && !isInjectionPart(p))
           .map((p) => (p.type === "text" ? p.text : ""))
           .map(cleanSummary)
           .filter((t) => t.trim().length > 0)
@@ -176,7 +193,7 @@ export function PromptNavigator(props: PromptNavigatorProps) {
                 data-active={entry.userMessageID === activeUserMessageID()}
                 on:click={() => jump(entry.userMessageID)}
               >
-                <div data-slot="chat-prompt-user">{entry.userSummary || "（空回复）"}</div>
+                <div data-slot="chat-prompt-user">{entry.userSummary}</div>
                 <div data-slot="chat-prompt-assistant">{entry.assistantSummary || "（无回复）"}</div>
               </button>
             )}
@@ -188,7 +205,7 @@ export function PromptNavigator(props: PromptNavigatorProps) {
         data-open={preview() !== undefined}
         style={{ "--preview-top": `${preview()?.top ?? 0}px` }}
       >
-        <div data-slot="chat-prompt-preview-text">{previewEntry()?.userSummary || "（空回复）"}</div>
+        <div data-slot="chat-prompt-preview-text">{previewEntry()?.userSummary ?? ""}</div>
       </div>
     </div>
   )
