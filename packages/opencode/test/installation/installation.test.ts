@@ -10,6 +10,7 @@ import {
   readJsoncConfig,
   getWorkspaceAutoupdate,
   shouldSkipAutoUpgrade,
+  shouldNotifyUpdate,
   isUpdateAvailable,
 } from "../../src/cli/upgrade"
 import { mkdirSync, writeFileSync, rmSync } from "fs"
@@ -284,6 +285,28 @@ describe("shouldSkipAutoUpgrade", () => {
 
   test("unknown preview channel should skip auto-upgrade", () => {
     expect(shouldSkipAutoUpgrade("beta", "1.15.14-beta.1")).toBe(true)
+  })
+})
+
+describe("shouldNotifyUpdate", () => {
+  test("local channel (source checkout) never notifies", () => {
+    expect(shouldNotifyUpdate("local", "local", "2.0.5-rc.1")).toBe(false)
+  })
+
+  test("local channel never notifies even when a newer release exists", () => {
+    expect(shouldNotifyUpdate("local", "0.0.0-local-20260909", "2.0.5-rc.1")).toBe(false)
+  })
+
+  test("preview channel build notifies when an update is available", () => {
+    expect(shouldNotifyUpdate("main", "1.15.13-main.20260731135022", "2.0.5-rc.1")).toBe(true)
+  })
+
+  test("stable channel notifies when an update is available", () => {
+    expect(shouldNotifyUpdate("latest", "2.0.4", "2.0.5-rc.1")).toBe(true)
+  })
+
+  test("stable channel does not notify when already latest", () => {
+    expect(shouldNotifyUpdate("latest", "2.0.5-rc.1", "2.0.5-rc.1")).toBe(false)
   })
 })
 

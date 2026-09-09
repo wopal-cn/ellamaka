@@ -25,6 +25,20 @@ export function shouldSkipAutoUpgrade(channel: string, currentVersion: string): 
 }
 
 /**
+ * Whether the update-available notification should be shown for this build.
+ *
+ * A source checkout ("local" channel) never notifies: there is no binary to
+ * upgrade — the install transaction would only replace `~/.wopal/bin/ellamaka`
+ * while the running process keeps executing from the source tree, so the
+ * dialog would be a dead end. Preview builds ("main"/"beta"/"prod") notify so
+ * testers see newer releases; stable notifies per SemVer comparison.
+ */
+export function shouldNotifyUpdate(channel: string, currentVersion: string, latest: string): boolean {
+  if (channel === "local") return false
+  return isUpdateAvailable(currentVersion, latest)
+}
+
+/**
  * Whether `latest` is strictly newer than `current` per SemVer 2.0.
  *
  * Uses `semver.lt` instead of string equality so prerelease builds compare
@@ -92,9 +106,16 @@ export async function upgrade() {
     return
   }
 
-  // Non-stable channels (dev builds, local debug, previews) are not published
-  // to the CDN stable manifest. Auto-upgrading them would replace the dev/local
-  // binary with the stable one. Skip auto-upgrade and notify only.
+  // A source checkout ("local" channel) has no binary to upgrade — the
+  // install transaction would only replace ~/.wopal/bin/ellamaka while the
+  // running process keeps executing from the source tree. Stay silent.
+  if (InstallationChannel === "local") {
+    log.info(`local source build (current ${InstallationVersion}), skip update check`)
+    return
+  }
+
+  // Non-stable channels (preview builds) are not published to the CDN stable
+  // manifest. Auto-upgrading them would replace the binary. Notify only.
   if (shouldSkipAutoUpgrade(InstallationChannel, InstallationVersion)) {
     log.info(`skip auto-upgrade for ${InstallationChannel} channel build (current ${InstallationVersion}, latest ${latest})`)
     GlobalBus.emit("event", {
