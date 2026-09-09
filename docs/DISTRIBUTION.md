@@ -400,12 +400,12 @@ cleanup 输出待删除对象与保护原因的审计清单后才执行。任何
 
 | 产品 | 渠道 | 保留数量 | 说明 |
 |------|------|---------|------|
-| `ellamaka-cli` | stable | 5 | 保留最新 5 个 stable 版本 |
-| `ellamaka-cli` | rc | 2 | 独立 rc 保留桶，不占用 stable 名额 |
-| `ellamaka-desktop` | stable | 3 | 保留最新 3 个 stable 版本 |
-| `ellamaka-desktop` | beta | 2 | 保留最新 2 个 beta 版本 |
+| `ellamaka-cli` | stable | 3 | 保留最新 3 个正式版本 |
+| `ellamaka-cli` | rc | 2 | 保留最新 2 个 rc 候选；与 stable 共用同一个 R2 存储桶（`ellamaka/v*`），语义等同 stable，但保留计数独立，不占用 stable 名额 |
+| `ellamaka-desktop` | stable | 3 | 保留最新 3 个正式版本 |
+| `ellamaka-desktop` | beta | 2 | 保留最新 2 个 beta 候选版本 |
 
-保留数量按同一 product/channel 内标准 SemVer 降序计数，从最老的版本开始删除，直到只剩保留数量个。CLI rc 在 stable 桶之外单独按 `-rc.N` 序列计数。latest 别名通常指向最新版本，天然在保留名额内；作为防御，latest 指向的版本即使落在保留名额之外也永不删除。legacy 版本 fail-closed 保留。`cleanup-releases.yml` 的 `keep-stable`/`keep-beta`/`keep-rc` inputs 可覆盖这些默认值。
+保留数量按同一 product/channel 内标准 SemVer 降序计数，从最老的版本开始删除，直到只剩保留数量个。CLI rc 与 stable 处于同一路径空间、以稳定渠道语义对待，但在保留计数上与 bare stable 独立：rc 按 `-rc.N` 序列单独保留 2 个，stable 单独保留 3 个，二者互不蚕食名额。latest 别名通常指向最新版本，天然在保留名额内；作为防御，latest 指向的版本即使落在保留名额之外也永不删除。legacy 版本 fail-closed 保留。`cleanup-releases.yml` 的 `keep-stable`/`keep-beta`/`keep-rc` inputs 可覆盖这些默认值。
 
 ### 7.3 Failed Attempt and Whole-Version Withdrawal
 

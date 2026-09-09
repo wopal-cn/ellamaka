@@ -376,11 +376,11 @@ trigger_cleanup() {
   echo "→ 触发 cleanup workflow ($PRODUCT, retention apply)..."
   if [ "$SUBCOMMAND" = "cli" ]; then
     gh workflow run cleanup-releases.yml -R wopal-cn/ellamaka \
-      -f mode=retention -f product=ellamaka-cli -f apply=true -f keep-stable=2 \
+      -f mode=retention -f product=ellamaka-cli -f apply=true -f keep-stable=3 -f keep-rc=2 \
       || echo "⚠️  cleanup workflow 触发失败（可手动触发）"
   else
     gh workflow run cleanup-releases.yml -R wopal-cn/ellamaka \
-      -f mode=retention -f product=ellamaka-desktop -f apply=true -f keep-stable=2 -f keep-beta=2 \
+      -f mode=retention -f product=ellamaka-desktop -f apply=true -f keep-stable=3 -f keep-beta=2 \
       || echo "⚠️  cleanup workflow 触发失败（可手动触发）"
   fi
 }

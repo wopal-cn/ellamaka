@@ -128,7 +128,7 @@ describe("desktop release repair", () => {
     // manifest is absent is a failed attempt and may be re-dispatched on
     // that tag; a tag with an effective manifest is immutable and refused.
     expect(engine).toContain("has_effective_manifest")
-    expect(engine).toContain("highest_release_tag")
+    expect(engine).toContain("highest_released_tag")
     expect(engine).toContain("check_branch_channel_policy")
     // Committed releases are immutable: refuse to re-release a tag that has
     // a valid manifest.

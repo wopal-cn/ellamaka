@@ -82,7 +82,7 @@ export function parseArgs(
   const flags: Flags = {
     product: null as unknown as Flags["product"],
     mode: "retention",
-    keepStable: 5,
+    keepStable: 3,
     keepBeta: 2,
     keepRc: 2,
     dryRun: false,

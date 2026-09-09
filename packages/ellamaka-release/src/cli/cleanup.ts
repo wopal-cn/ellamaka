@@ -9,7 +9,7 @@
 //
 // Usage:
 //   bun packages/ellamaka-release/src/cli/cleanup.ts \
-//     --product ellamaka-cli --keep-stable 5 --keep-rc 2 [--dry-run]
+//     --product ellamaka-cli --keep-stable 3 --keep-rc 2 [--dry-run]
 //   bun packages/ellamaka-release/src/cli/cleanup.ts \
 //     --product ellamaka-desktop --keep-stable 3 --keep-beta 2 [--dry-run]
 //   bun packages/ellamaka-release/src/cli/cleanup.ts \
