@@ -25,6 +25,8 @@ const CONTEXT_TOOLS = new Set(["read", "glob", "grep", "list"])
 const SHELL_TOOLS = new Set(["bash", "shell"])
 const FILE_CHANGE_TOOLS = new Set(["edit", "write", "apply_patch"])
 
+// Snapshot/patch parts are no longer produced (snapshot mechanism removed);
+// they stay in the hidden set only so legacy history parts never render.
 const HIDDEN_PART_TYPES = new Set(["step-start", "step-finish", "snapshot", "patch"])
 
 /** Todo tools render in the composer todo dock, never in the transcript. */
@@ -64,8 +66,8 @@ function isRunning(message: AssistantMessage): boolean {
 }
 
 /**
- * Returns whether a part should enter the transcript. Internal snapshot/patch
- * and step markers are hidden. Injection text (synthetic-flagged or
+ * Returns whether a part should enter the transcript. Legacy snapshot/patch
+ * parts and step markers are hidden. Injection text (synthetic-flagged or
  * shell-wrapped) is always renderable: it carries plugin context injections
  * and is presented as a collapsible block regardless of the owning message
  * role or completion state. Todo tool parts are owned by the composer todo

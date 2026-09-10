@@ -19,7 +19,6 @@ export type Event =
   | EventMessagePartDelta
   | EventPermissionAsked
   | EventPermissionReplied
-  | EventSessionDiff
   | EventSessionError
   | EventQuestionAsked
   | EventQuestionReplied
@@ -188,14 +187,6 @@ export type PermissionRequest = {
     messageID: string
     callID: string
   }
-}
-
-export type SnapshotFileDiff = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
 }
 
 export type ProviderAuthError = {
@@ -402,6 +393,14 @@ export type OutputFormatJsonSchema = {
 }
 
 export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
+
+export type SnapshotFileDiff = {
+  file?: string
+  patch?: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
 
 export type UserMessage = {
   id: string
@@ -825,7 +824,6 @@ export type GlobalEvent = {
     | EventMessagePartDelta
     | EventPermissionAsked
     | EventPermissionReplied
-    | EventSessionDiff
     | EventSessionError
     | EventQuestionAsked
     | EventQuestionReplied
@@ -2644,15 +2642,6 @@ export type EventPermissionReplied = {
     sessionID: string
     requestID: string
     reply: "once" | "always" | "reject"
-  }
-}
-
-export type EventSessionDiff = {
-  id: string
-  type: "session.diff"
-  properties: {
-    sessionID: string
-    diff: Array<SnapshotFileDiff>
   }
 }
 
@@ -6530,37 +6519,6 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
-
-export type SessionDiffData = {
-  body?: never
-  path: {
-    sessionID: string
-  }
-  query?: {
-    directory?: string
-    workspace?: string
-    messageID?: string
-  }
-  url: "/session/{sessionID}/diff"
-}
-
-export type SessionDiffErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type SessionDiffError = SessionDiffErrors[keyof SessionDiffErrors]
-
-export type SessionDiffResponses = {
-  /**
-   * Successfully retrieved diff
-   */
-  200: Array<SnapshotFileDiff>
-}
-
-export type SessionDiffResponse = SessionDiffResponses[keyof SessionDiffResponses]
 
 export type SessionMessagesData = {
   body?: never

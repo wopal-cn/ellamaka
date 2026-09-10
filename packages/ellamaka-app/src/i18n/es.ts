@@ -502,9 +502,6 @@ export const dict = {
   "session.review.loadingChanges": "Cargando cambios...",
   "session.review.empty": "No hay cambios en esta sesión aún",
   "session.review.noVcs": "No se detectó Sistema de Control de Versiones Git, los cambios no se muestran",
-  "session.review.noSnapshot":
-    "El seguimiento de instantáneas está deshabilitado en la configuración, por lo que los cambios de sesión no están disponibles",
-  "session.review.noChanges": "Sin cambios",
 
   "session.files.selectToOpen": "Selecciona un archivo para abrir",
   "session.files.all": "Todos los archivos",

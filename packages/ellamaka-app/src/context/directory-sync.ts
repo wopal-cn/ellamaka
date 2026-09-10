@@ -11,7 +11,7 @@ import {
 import { createServerSyncContext } from "./server-sync"
 import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
-import { diffs as list, message as clean } from "@/utils/diffs"
+import { message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
 import { cmpMessage, keyOf } from "./global-sync/utils"
 
@@ -246,7 +246,6 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
   const initialMessagePageSize = 80
   const historyMessagePageSize = 200
   const inflight = new Map<string, Promise<void>>()
-  const inflightDiff = new Map<string, Promise<void>>()
   const inflightTodo = new Map<string, Promise<void>>()
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const maxDirs = 30
@@ -562,19 +561,6 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
 
           await Promise.all([sessionReq, messagesReq])
         })
-      },
-      async diff(sessionID: string, opts?: { force?: boolean }) {
-        const [store, setStore] = serverSync.child(directory)
-        touch(directory, setStore, sessionID)
-        if (store.session_diff[sessionID] !== undefined && !opts?.force) return
-
-        const key = keyFor(directory, sessionID)
-        return runInflight(inflightDiff, key, () =>
-          retry(() => client.session.diff({ sessionID })).then((diff) => {
-            if (!tracked(directory, sessionID)) return
-            setStore("session_diff", sessionID, reconcile(list(diff.data), { key: "file" }))
-          }),
-        )
       },
       async todo(sessionID: string, opts?: { force?: boolean }) {
         const [store, setStore] = serverSync.child(directory)

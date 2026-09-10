@@ -1,9 +1,7 @@
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
 import type { Message } from "@opencode-ai/sdk/v2/client"
 
-type Diff = SnapshotFileDiff | VcsFileDiff
-
-function diff(value: unknown): value is Diff {
+function diff(value: unknown): value is VcsFileDiff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   if (!("file" in value) || typeof value.file !== "string") return false
   if (!("patch" in value) || typeof value.patch !== "string") return false
@@ -17,7 +15,7 @@ function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
-export function diffs(value: unknown): Diff[] {
+export function diffs(value: unknown): VcsFileDiff[] {
   if (Array.isArray(value) && value.every(diff)) return value
   if (Array.isArray(value)) return value.filter(diff)
   if (diff(value)) return [value]
@@ -25,6 +23,8 @@ export function diffs(value: unknown): Diff[] {
   return Object.values(value).filter(diff)
 }
 
+// Summary diffs are legacy snapshot payload (no longer produced); only the
+// display fields are normalized, the raw diffs value passes through untouched.
 export function message(value: Message): Message {
   if (value.role !== "user") return value
 
@@ -34,16 +34,14 @@ export function message(value: Message): Message {
 
   const title = typeof raw.title === "string" ? raw.title : undefined
   const body = typeof raw.body === "string" ? raw.body : undefined
-  const next = diffs(raw.diffs)
 
-  if (title === raw.title && body === raw.body && next === raw.diffs) return value
+  if (title === raw.title && body === raw.body) return value
 
   return {
     ...value,
     summary: {
       ...(title === undefined ? {} : { title }),
       ...(body === undefined ? {} : { body }),
-      diffs: next,
-    },
-  }
+    } as Message["summary"],
+  } as Message
 }

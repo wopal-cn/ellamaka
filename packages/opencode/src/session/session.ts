@@ -23,12 +23,10 @@ import { SyncEvent } from "../sync"
 import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
-import { Storage } from "@/storage/storage"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
-import { Snapshot } from "@/snapshot"
 import { ProjectID } from "../project/schema"
 import { WorkspaceID } from "../control-plane/schema"
 import { SessionID, MessageID, PartID } from "./schema"
@@ -59,6 +57,8 @@ export function isDefaultTitle(title: string) {
 type SessionRow = typeof SessionTable.$inferSelect
 
 export function fromRow(row: SessionRow): Info {
+  // summary_additions/deletions/files remain authoritative; summary_diffs is
+  // a historical column from the removed git-snapshot mechanism (read-only).
   const summary =
     row.summary_additions !== null || row.summary_deletions !== null || row.summary_files !== null
       ? {
@@ -129,6 +129,8 @@ export function toRow(info: Info) {
     summary_additions: info.summary?.additions,
     summary_deletions: info.summary?.deletions,
     summary_files: info.summary?.files,
+    // Historical git-snapshot diffs: never written for new sessions but kept
+    // round-tripping so imported/legacy rows do not lose data.
     summary_diffs: info.summary?.diffs,
     metadata: info.metadata,
     cost: info.cost ?? 0,
@@ -164,7 +166,11 @@ const Summary = Schema.Struct({
   additions: Schema.Finite,
   deletions: Schema.Finite,
   files: Schema.Finite,
-  diffs: optionalOmitUndefined(Schema.Array(Snapshot.FileDiff)),
+  /**
+   * Historical file diffs from the removed git-snapshot mechanism.
+   * @deprecated no longer produced; retained solely to load old sessions
+   */
+  diffs: optionalOmitUndefined(Schema.Array(MessageV2.FileDiff)),
 })
 
 const Tokens = Schema.Struct({
@@ -197,7 +203,15 @@ const Time = Schema.Struct({
 const Revert = Schema.Struct({
   messageID: MessageID,
   partID: optionalOmitUndefined(PartID),
+  /**
+   * Historical snapshot hash from the removed git-snapshot mechanism.
+   * @deprecated tolerated on decode, never written
+   */
   snapshot: optionalOmitUndefined(Schema.String),
+  /**
+   * Historical snapshot diff marker from the removed git-snapshot mechanism.
+   * @deprecated tolerated on decode, never written
+   */
   diff: optionalOmitUndefined(Schema.String),
 })
 
@@ -361,13 +375,6 @@ export const Event = {
     aggregate: "sessionID",
     schema: CreatedEventSchema,
   }),
-  Diff: BusEvent.define(
-    "session.diff",
-    Schema.Struct({
-      sessionID: SessionID,
-      diff: Schema.Array(Snapshot.FileDiff),
-    }),
-  ),
   Error: BusEvent.define(
     "session.error",
     Schema.Struct({
@@ -484,7 +491,6 @@ export interface Interface {
   }) => Effect.Effect<void>
   readonly clearRevert: (sessionID: SessionID) => Effect.Effect<void>
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
-  readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
@@ -523,13 +529,12 @@ const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D)
 export const layer: Layer.Layer<
   Service,
   never,
-  BackgroundJob.Service | Bus.Service | Storage.Service | SyncEvent.Service | RuntimeFlags.Service
+  BackgroundJob.Service | Bus.Service | SyncEvent.Service | RuntimeFlags.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const background = yield* BackgroundJob.Service
     const bus = yield* Bus.Service
-    const storage = yield* Storage.Service
     const sync = yield* SyncEvent.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -794,12 +799,6 @@ export const layer: Layer.Layer<
       yield* patch(input.sessionID, { time: { updated: Date.now() }, summary: input.summary })
     })
 
-    const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-      return yield* storage
-        .read<Snapshot.FileDiff[]>(["session_diff", sessionID])
-        .pipe(Effect.orElseSucceed((): Snapshot.FileDiff[] => []))
-    })
-
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {
       if (input.limit) {
         return (yield* MessageV2.page({ sessionID: input.sessionID, limit: input.limit })).items
@@ -885,7 +884,6 @@ export const layer: Layer.Layer<
       setRevert,
       clearRevert,
       setSummary,
-      diff,
       messages,
       children,
       remove,
@@ -903,7 +901,6 @@ export const layer: Layer.Layer<
 export const defaultLayer = layer.pipe(
   Layer.provide(BackgroundJob.defaultLayer),
   Layer.provide(Bus.layer),
-  Layer.provide(Storage.defaultLayer),
   Layer.provide(SyncEvent.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )

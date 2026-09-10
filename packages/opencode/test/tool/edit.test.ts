@@ -279,20 +279,6 @@ describe("tool.edit", () => {
         expect((yield* fail({ filePath: dirpath, oldString: "old", newString: "new" })).message).toContain("directory")
       }),
     )
-
-    it.instance("tracks file diff statistics", () =>
-      Effect.gen(function* () {
-        const test = yield* TestInstance
-        const filepath = path.join(test.directory, "file.txt")
-        yield* put(filepath, "line1\nline2\nline3")
-
-        const result = yield* run({ filePath: filepath, oldString: "line2", newString: "new line a\nnew line b" })
-
-        expect(result.metadata.filediff).toBeDefined()
-        expect(result.metadata.filediff.file).toBe(filepath)
-        expect(result.metadata.filediff.additions).toBeGreaterThan(0)
-      }),
-    )
   })
 
   describe("line endings", () => {

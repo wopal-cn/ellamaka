@@ -453,10 +453,7 @@ export const dict = {
   "session.review.change.other": "Modifications",
   "session.review.loadingChanges": "Chargement des modifications...",
   "session.review.empty": "Aucune modification dans cette session pour l'instant",
-  "session.review.noChanges": "Aucune modification",
   "session.review.noVcs": "Aucun système de contrôle de version Git détecté, modifications non affichées",
-  "session.review.noSnapshot":
-    "Le suivi des instantanés est désactivé dans la configuration, les modifications de session sont donc indisponibles",
   "session.files.selectToOpen": "Sélectionnez un fichier à ouvrir",
   "session.files.all": "Tous les fichiers",
   "session.files.empty": "Aucun fichier",

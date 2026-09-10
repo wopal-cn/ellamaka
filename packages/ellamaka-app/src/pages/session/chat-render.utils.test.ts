@@ -102,7 +102,9 @@ function retryPart(id: string, messageID: string): Part {
 }
 
 describe("isRenderablePart", () => {
-  test("hides step-start, step-finish, snapshot and patch parts", () => {
+  // snapshot/patch parts are no longer produced (snapshot mechanism removed)
+  // but remain in the hidden set so legacy history parts never render.
+  test("hides step-start, step-finish and legacy snapshot/patch parts", () => {
     const msg = assistantMessage("a1", "u1")
     expect(isRenderablePart({ id: "1", sessionID: "s", messageID: "a1", type: "step-start" }, msg)).toBe(false)
     expect(isRenderablePart({ id: "2", sessionID: "s", messageID: "a1", type: "step-finish", reason: "x", cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, msg)).toBe(false)

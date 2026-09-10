@@ -8,7 +8,7 @@ import { ResizeHandle } from "@wopal/ui/resize-handle"
 import { Mark } from "@wopal/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@wopal/ui/context/dialog"
 
@@ -27,15 +27,21 @@ import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type S
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
-type RenderDiff = (SnapshotFileDiff & { file: string }) | VcsFileDiff
+type RenderDiff = VcsFileDiff
 
-function renderDiff(value: SnapshotFileDiff | VcsFileDiff): value is RenderDiff {
-  return typeof value.file === "string"
+function renderDiff(value: unknown): value is RenderDiff {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "file" in value &&
+    typeof value.file === "string"
+  )
 }
 
 export function SessionSidePanel(props: {
   canReview: () => boolean
-  diffs: () => (SnapshotFileDiff | VcsFileDiff)[]
+  diffs: () => VcsFileDiff[]
   diffsReady: () => boolean
   empty: () => string
   hasReview: () => boolean

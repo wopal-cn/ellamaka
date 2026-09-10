@@ -498,9 +498,6 @@ export const dict = {
   "session.review.loadingChanges": "Indlæser ændringer...",
   "session.review.empty": "Ingen ændringer i denne session endnu",
   "session.review.noVcs": "Intet Git versionsstyringssystem fundet, ændringer vises ikke",
-  "session.review.noSnapshot":
-    "Snapshot-sporing er deaktiveret i konfigurationen, så sessionsændringer er ikke tilgængelige",
-  "session.review.noChanges": "Ingen ændringer",
   "session.files.selectToOpen": "Vælg en fil at åbne",
   "session.files.all": "Alle filer",
   "session.files.empty": "Ingen filer",

@@ -39,7 +39,6 @@ import { SessionV2 } from "../../src/v2/session"
 import { Skill } from "../../src/skill"
 import { SystemPrompt } from "../../src/session/system"
 import { Shell } from "../../src/shell/shell"
-import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import * as Log from "@wopal/ellamaka-core/util/log"
@@ -62,8 +61,6 @@ const summary = Layer.succeed(
   SessionSummary.Service,
   SessionSummary.Service.of({
     summarize: () => Effect.void,
-    diff: () => Effect.succeed([]),
-    computeDiff: () => Effect.succeed([]),
   }),
 )
 
@@ -167,7 +164,6 @@ const blockingProcessor = Layer.succeed(
 function makePrompt(input?: { processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
-    Snapshot.defaultLayer,
     LLM.defaultLayer,
     Env.defaultLayer,
     AgentSvc.defaultLayer,

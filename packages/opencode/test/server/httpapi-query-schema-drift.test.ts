@@ -84,9 +84,7 @@ const booleanSdkQueryParams = [
   { method: "get", path: "/api/session", name: "roots" },
 ] satisfies Array<{ method: Method; path: string; name: string }>
 
-const queryParamPatterns = [
-  { method: "get", path: SessionPaths.diff, name: "messageID", pattern: "^msg" },
-] satisfies Array<{ method: Method; path: string; name: string; pattern: string }>
+const queryParamPatterns: Array<{ method: Method; path: string; name: string; pattern: string }> = []
 
 const pathParamPatterns = [
   { method: "get", path: SessionPaths.get, name: "sessionID", pattern: "^ses" },

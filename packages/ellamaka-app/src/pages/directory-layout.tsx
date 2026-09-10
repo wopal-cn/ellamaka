@@ -31,7 +31,10 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
   return (
     <DataProvider
-      data={sync.data}
+      // session_diff was removed from the app sync state (snapshot mechanism
+      // deleted); the @wopal/ui Data contract still lists it and needs its own
+      // cleanup pass outside this change.
+      data={sync.data as typeof sync.data & { session_diff: Record<string, never> }}
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}

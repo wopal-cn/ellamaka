@@ -551,8 +551,6 @@ export const dict = {
   "session.review.noVcs.createGit.description": "Track, review, and undo changes in this project",
   "session.review.noVcs.createGit.actionLoading": "Creating Git repository...",
   "session.review.noVcs.createGit.action": "Create Git repository",
-  "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
-  "session.review.noChanges": "No changes",
   "session.review.noUncommittedChanges": "No uncommitted changes yet",
   "session.review.noBranchChanges": "No branch changes yet",
 

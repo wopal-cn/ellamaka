@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 
 import { Session } from "@/session/session"
+import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
 import { SessionStatus } from "../../src/session/status"
@@ -107,6 +108,80 @@ describe("Session.Info", () => {
   })
 })
 
+describe("MessageV2 historical snapshot parts", () => {
+  // The git-snapshot mechanism was removed (D-01), but historical sessions on
+  // disk still carry snapshot/patch parts, step-* snapshot fields and user
+  // summary.diffs. The schema must keep decoding them so old sessions load.
+  test("historical message with snapshot/patch parts decodes", () => {
+    const decode = decodeUnknown(MessageV2.WithParts)
+    const input: unknown = {
+      info: {
+        id: messageID,
+        role: "assistant" as const,
+        sessionID,
+        mode: "default",
+        agent: "default",
+        path: { cwd: "/tmp/proj", root: "/tmp/proj" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: "gpt-4",
+        providerID: "openai",
+        parentID: messageID,
+        time: { created: 1 },
+        finish: "stop",
+      },
+      parts: [
+        { id: partID, sessionID, messageID, type: "snapshot" as const, snapshot: "abc123" },
+        {
+          id: partID,
+          sessionID,
+          messageID,
+          type: "step-start" as const,
+          snapshot: "abc123",
+        },
+        {
+          id: partID,
+          sessionID,
+          messageID,
+          type: "step-finish" as const,
+          reason: "stop",
+          snapshot: "def456",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        },
+        {
+          id: partID,
+          sessionID,
+          messageID,
+          type: "patch" as const,
+          hash: "patch-1",
+          files: ["a.ts"],
+        },
+      ],
+    }
+    expect(decode(input) as unknown).toEqual(input as unknown)
+  })
+
+  test("historical user summary.diffs decodes", () => {
+    const decode = decodeUnknown(MessageV2.User)
+    const input: unknown = {
+      id: messageID,
+      role: "user" as const,
+      sessionID,
+      agent: "default",
+      model: { providerID: "openai", modelID: "gpt-4" },
+      time: { created: 1 },
+      summary: {
+        diffs: [
+          { file: "a.ts", patch: "--- a/a.ts", additions: 2, deletions: 1 },
+          { additions: 1, deletions: 0 },
+        ],
+      },
+    }
+    expect(decode(input) as unknown).toEqual(input as unknown)
+  })
+})
+
 describe("Session.ProjectInfo", () => {
   const decode = decodeUnknown(Session.ProjectInfo)
 
@@ -209,15 +284,6 @@ describe("SessionRevert.RevertInput", () => {
     expect(decode(noPart)).toEqual(noPart)
 
     expect(() => decode({ sessionID })).toThrow()
-  })
-})
-
-describe("SessionSummary.DiffInput", () => {
-  const decode = decodeUnknown(SessionSummary.DiffInput)
-
-  test("messageID optional", () => {
-    expect(decode({ sessionID })).toEqual({ sessionID })
-    expect(decode({ sessionID, messageID })).toEqual({ sessionID, messageID })
   })
 })
 

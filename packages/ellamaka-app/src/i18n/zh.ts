@@ -517,8 +517,6 @@ export const dict = {
   "session.review.loadingChanges": "正在加载更改...",
   "session.review.empty": "此会话暂无更改",
   "session.review.noVcs": "未检测到 Git 版本控制系统，无法显示更改",
-  "session.review.noSnapshot": "配置中已禁用快照跟踪，因此会话更改不可用",
-  "session.review.noChanges": "无更改",
   "session.files.selectToOpen": "选择要打开的文件",
   "session.files.all": "所有文件",
   "session.files.empty": "无文件",

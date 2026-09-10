@@ -534,8 +534,6 @@ export const dict = {
   "session.review.noVcs.createGit.description": "Відстежуйте, переглядайте та скасовуйте зміни в цьому проєкті",
   "session.review.noVcs.createGit.actionLoading": "Створення Git-репозиторію...",
   "session.review.noVcs.createGit.action": "Створити Git-репозиторій",
-  "session.review.noSnapshot": "Відстеження знімків вимкнено в конфігурації, тому зміни сесії недоступні",
-  "session.review.noChanges": "Немає змін",
   "session.review.noUncommittedChanges": "Ще немає незафіксованих змін",
   "session.review.noBranchChanges": "Ще немає змін у гілці",
 

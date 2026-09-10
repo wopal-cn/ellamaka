@@ -457,9 +457,6 @@ export const dict = {
   "session.review.loadingChanges": "Lade Änderungen...",
   "session.review.empty": "Noch keine Änderungen in dieser Sitzung",
   "session.review.noVcs": "Kein Git-Versionskontrollsystem erkannt, Änderungen werden nicht angezeigt",
-  "session.review.noSnapshot":
-    "Snapshot-Tracking ist in der Konfiguration deaktiviert, daher sind Sitzungsänderungen nicht verfügbar",
-  "session.review.noChanges": "Keine Änderungen",
   "session.files.selectToOpen": "Datei zum Öffnen auswählen",
   "session.files.all": "Alle Dateien",
   "session.files.empty": "Keine Dateien",

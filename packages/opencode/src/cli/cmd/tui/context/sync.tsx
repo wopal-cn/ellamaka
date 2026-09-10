@@ -25,7 +25,6 @@ import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@wopal/ellamaka-core/util/binary"
 import { mergeMessages, keyOf } from "./sync-merge"
 import { createSimpleContext } from "./helper"
-import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
@@ -57,9 +56,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       session: Session[]
       session_status: {
         [sessionID: string]: SessionStatus
-      }
-      session_diff: {
-        [sessionID: string]: Snapshot.FileDiff[]
       }
       todo: {
         [sessionID: string]: Todo[]
@@ -97,7 +93,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_default: {},
       session: [],
       session_status: {},
-      session_diff: {},
       todo: {},
       message: {},
       part: {},
@@ -213,10 +208,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
         case "todo.updated":
           setStore("todo", event.properties.sessionID, event.properties.todos)
-          break
-
-        case "session.diff":
-          setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break
 
         case "session.deleted": {
@@ -525,11 +516,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         },
         async sync(sessionID: string) {
           if (fullSyncedSessions.has(sessionID)) return
-          const [session, messages, todo, diff] = await Promise.all([
+          const [session, messages, todo] = await Promise.all([
             sdk.client.session.get({ sessionID }, { throwOnError: true }),
             sdk.client.session.messages({ sessionID, limit: 100 }),
             sdk.client.session.todo({ sessionID }),
-            sdk.client.session.diff({ sessionID }),
           ])
           setStore(
             produce((draft) => {
@@ -543,7 +533,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 draft.part[message.info.id] = message.parts
               }
               draft.message[sessionID] = mergeMessages(draft.message[sessionID] ?? [], infos)
-              draft.session_diff[sessionID] = diff.data ?? []
             }),
           )
           fullSyncedSessions.add(sessionID)

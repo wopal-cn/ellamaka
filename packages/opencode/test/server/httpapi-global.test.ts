@@ -16,6 +16,7 @@ import { controlHandlers } from "../../src/server/routes/instance/httpapi/handle
 import { globalHandlers } from "../../src/server/routes/instance/httpapi/handlers/global"
 import { wopalSpaceHandlers } from "../../src/server/routes/instance/httpapi/handlers/wopal-space"
 import { workbenchHandlers } from "../../src/server/routes/instance/httpapi/handlers/workbench"
+import { layer as workbenchDshUrlLayer } from "../../src/workbench/dsh-url"
 import { authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { schemaErrorLayer } from "../../src/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "../lib/effect"
@@ -23,6 +24,7 @@ import { testEffect } from "../lib/effect"
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
     Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers, workbenchHandlers]),
+    Layer.provide(workbenchDshUrlLayer),
     Layer.provide([authorizationLayer, schemaErrorLayer]),
   ),
   { disableListenLog: true, disableLogger: true },

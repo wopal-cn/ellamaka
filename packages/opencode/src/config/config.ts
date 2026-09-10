@@ -162,9 +162,16 @@ export const Info = Schema.Struct({
       ignore: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
     }),
   ),
+  /**
+   * The git-snapshot mechanism has been removed; this key has no effect.
+   * Kept as an optional field so legacy config files containing it still
+   * parse (ConfigParse rejects unknown top-level keys). Remove it from your
+   * opencode.json.
+   * @deprecated no-op; safe to delete from config files
+   */
   snapshot: Schema.optional(Schema.Boolean).annotate({
     description:
-      "Enable or disable snapshot tracking. When false, filesystem snapshots are not recorded and undoing or reverting will not undo/redo file changes. Defaults to true.",
+      "Deprecated no-op. The git-snapshot mechanism was removed; this key is accepted only for backwards compatibility with old config files.",
   }),
   // User-facing plugin config is stored as Specs; provenance gets attached later while configs are merged.
   plugin: Schema.optional(Schema.mutable(Schema.Array(ConfigPlugin.Spec))),

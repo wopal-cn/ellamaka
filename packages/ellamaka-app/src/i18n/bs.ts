@@ -501,9 +501,6 @@ export const dict = {
   "session.review.loadingChanges": "Učitavanje izmjena...",
   "session.review.empty": "Još nema izmjena u ovoj sesiji",
   "session.review.noVcs": "Nije detektovan Git sistem kontrole verzija, promjene se ne prikazuju",
-  "session.review.noSnapshot":
-    "Praćenje snimaka (snapshot) je onemogućeno u konfiguraciji, pa promjene sesije nisu dostupne",
-  "session.review.noChanges": "Nema izmjena",
 
   "session.files.selectToOpen": "Odaberi datoteku za otvaranje",
   "session.files.all": "Sve datoteke",

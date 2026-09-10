@@ -7,14 +7,13 @@ import * as path from "path"
 import { Effect, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
-import { createTwoFilesPatch, diffLines } from "diff"
+import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
 import { FileWatcher } from "../file/watcher"
 import { Bus } from "../bus"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
-import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import * as Bom from "@/util/bom"
@@ -168,23 +167,9 @@ export const EditTool = Tool.define(
             }).pipe(Effect.orDie),
           )
 
-          let additions = 0
-          let deletions = 0
-          for (const change of diffLines(contentOld, contentNew)) {
-            if (change.added) additions += change.count || 0
-            if (change.removed) deletions += change.count || 0
-          }
-          const filediff: Snapshot.FileDiff = {
-            file: filePath,
-            patch: diff,
-            additions,
-            deletions,
-          }
-
           yield* ctx.metadata({
             metadata: {
               diff,
-              filediff,
               diagnostics: {},
             },
           })
@@ -200,7 +185,6 @@ export const EditTool = Tool.define(
             metadata: {
               diagnostics,
               diff,
-              filediff,
             },
             title: `${path.relative(instance.worktree, filePath)}`,
             output,

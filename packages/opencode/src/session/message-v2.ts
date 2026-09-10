@@ -3,7 +3,6 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { LSP } from "@/lsp/lsp"
-import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "../sync"
 import { Database } from "@/storage/db"
 import { NotFoundError } from "@/storage/storage"
@@ -79,6 +78,24 @@ const partBase = {
   messageID: MessageID,
 }
 
+/**
+ * Historical file-diff entries attached to user `summary.diffs` by the
+ * removed git-snapshot mechanism (kept only for decoding old sessions).
+ * @deprecated no longer produced; retained solely to load historical data
+ */
+export const FileDiff = Schema.Struct({
+  file: Schema.optional(Schema.String),
+  patch: Schema.optional(Schema.String),
+  additions: Schema.Finite,
+  deletions: Schema.Finite,
+  status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
+}).annotate({ identifier: "SnapshotFileDiff" })
+export type FileDiff = typeof FileDiff.Type
+
+/**
+ * Historical part emitted by the removed git-snapshot mechanism.
+ * @deprecated no longer produced; retained solely to decode old sessions
+ */
 export const SnapshotPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("snapshot"),
@@ -86,6 +103,10 @@ export const SnapshotPart = Schema.Struct({
 }).annotate({ identifier: "SnapshotPart" })
 export type SnapshotPart = Types.DeepMutable<Schema.Schema.Type<typeof SnapshotPart>>
 
+/**
+ * Historical part emitted by the removed git-snapshot mechanism.
+ * @deprecated no longer produced; retained solely to decode old sessions
+ */
 export const PatchPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("patch"),
@@ -222,6 +243,10 @@ export type RetryPart = Omit<Types.DeepMutable<Schema.Schema.Type<typeof RetryPa
 export const StepStartPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("step-start"),
+  /**
+   * Historical snapshot hash captured by the removed git-snapshot mechanism.
+   * @deprecated no longer produced; retained solely to decode old sessions
+   */
   snapshot: Schema.optional(Schema.String),
 }).annotate({ identifier: "StepStartPart" })
 export type StepStartPart = Types.DeepMutable<Schema.Schema.Type<typeof StepStartPart>>
@@ -230,6 +255,10 @@ export const StepFinishPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("step-finish"),
   reason: Schema.String,
+  /**
+   * Historical snapshot hash captured by the removed git-snapshot mechanism.
+   * @deprecated no longer produced; retained solely to decode old sessions
+   */
   snapshot: Schema.optional(Schema.String),
   cost: Schema.Finite,
   tokens: Schema.Struct({
@@ -335,7 +364,11 @@ export const User = Schema.Struct({
     Schema.Struct({
       title: Schema.optional(Schema.String),
       body: Schema.optional(Schema.String),
-      diffs: Schema.Array(Snapshot.FileDiff),
+      /**
+       * Historical file diffs computed by the removed git-snapshot mechanism.
+       * @deprecated no longer produced; retained solely to decode old sessions
+       */
+      diffs: Schema.Array(FileDiff),
     }),
   ),
   agent: Schema.String,

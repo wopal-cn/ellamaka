@@ -1,5 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node"
-import { describe, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
 import { Context, Effect, Layer, Option } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -47,6 +47,12 @@ const apiLayer = HttpRouter.serve(
   Layer.provide(Layer.succeedContext(Context.empty() as Context.Context<unknown>)),
 )
 const it = testEffect(apiLayer)
+
+// `setDshStatus` mutates the process-wide holder; restore the safe default so
+// later files (e.g. httpapi-sdk's health assertion) see the pristine state.
+afterEach(() => {
+  setDshStatus("disabled")
+})
 
 describe("global health dsh field", () => {
   it.live("reports the dsh runtime status (disabled before any mount)", () =>

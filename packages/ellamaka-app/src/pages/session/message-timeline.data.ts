@@ -1,9 +1,7 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { AssistantMessage, Part, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
+import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { groupParts, PartGroup, renderable } from "@wopal/ui/message-part"
 import { Data, Equal } from "effect"
-
-export type SummaryDiff = SnapshotFileDiff & { file: string }
 
 export type TimelineRowMap = {
   CommentStrip: {
@@ -26,7 +24,6 @@ export type TimelineRowMap = {
   }
   Thinking: { userMessageID: string; reasoningHeading?: string }
   Retry: { userMessageID: string }
-  DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
   Error: { userMessageID: string; text: string }
   BottomSpacer: {}
 }
@@ -54,16 +51,12 @@ export namespace TimelineRow {
     userMessageID: string
     reasoningHeading?: string
   }> {}
-  export class DiffSummary extends Data.TaggedClass("DiffSummary")<{
+  export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
-    diffs: SummaryDiff[]
   }> {}
   export class Error extends Data.TaggedClass("Error")<{
     userMessageID: string
     text: string
-  }> {}
-  export class Retry extends Data.TaggedClass("Retry")<{
-    userMessageID: string
   }> {}
   export class BottomSpacer extends Data.TaggedClass("BottomSpacer")<{}> {}
 
@@ -73,7 +66,6 @@ export namespace TimelineRow {
     | TurnDivider
     | AssistantPart
     | Thinking
-    | DiffSummary
     | Error
     | Retry
     | BottomSpacer
@@ -90,8 +82,6 @@ export namespace TimelineRow {
         return `assistant-part:${row.userMessageID}:${row.group.key}`
       case "Thinking":
         return `thinking:${row.userMessageID}`
-      case "DiffSummary":
-        return `diff-summary:${row.userMessageID}`
       case "Error":
         return `error:${row.userMessageID}`
       case "Retry":
@@ -212,23 +202,6 @@ export namespace Timeline {
 
     if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 
-    const diffs = (userMessage.summary?.diffs ?? [])
-      .reduceRight<SummaryDiff[]>((result, diff) => {
-        if (!isSummaryDiff(diff)) return result
-        if (result.some((item) => item.file === diff.file)) return result
-        result.push(diff)
-        return result
-      }, [])
-      .reverse()
-    if (diffs.length > 0 && (status === "idle" || !isActive)) {
-      rows.push(
-        new TimelineRow.DiffSummary({
-          userMessageID: userMessage.id,
-          diffs,
-        }),
-      )
-    }
-
     if (error) {
       const data = error.data?.message
       rows.push(
@@ -242,10 +215,6 @@ export namespace Timeline {
     }
 
     return rows
-  }
-
-  function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
-    return typeof value.file === "string"
   }
 
   function reasoningHeading(text: string) {
