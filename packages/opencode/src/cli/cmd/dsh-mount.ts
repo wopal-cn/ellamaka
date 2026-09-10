@@ -37,6 +37,36 @@ export function trustedHostsFromCors(cors: readonly string[]): string[] {
   return hosts
 }
 
+const WILDCARD_HOSTNAMES = new Set(["0.0.0.0", "::", "[::]"])
+
+/**
+ * A ROUTABLE origin for the dsh launch-token entry. `server.url` carries the
+ * bind hostname verbatim, so a wildcard bind (`--hostname 0.0.0.0`, or
+ * `--mdns` which defaults it) yields `http://0.0.0.0:port` — an address a
+ * browser cannot meaningfully use, and whose minted dsh cookie authority
+ * every real request then fails. When the serving request carries a Host
+ * header, that is the origin the user's browser is actually talking to (LAN
+ * IP, mdns name, loopback), so it wins; a wildcard bind without a Host falls
+ * back to concrete `localhost`; a concrete bind keeps its own hostname (a
+ * request Host may still differ — NAT/proxy views — and wins the same way).
+ */
+export function routableDshOrigin(hostname: string, port: number, requestHost: string | undefined): string {
+  if (requestHost) {
+    try {
+      const url = new URL(`http://${requestHost}`)
+      url.port = String(port)
+      if (port === 80) url.port = ""
+      return url.origin
+    } catch {
+      // Malformed Host header — fall through to the bind-derived origin.
+    }
+  }
+  if (WILDCARD_HOSTNAMES.has(hostname)) {
+    return `http://localhost${port === 80 ? "" : `:${port}`}`
+  }
+  return `http://${hostname}${port === 80 ? "" : `:${port}`}`
+}
+
 export interface DshEngineMountOptions {
   /** Override the wopal home; defaults to `$WOPAL_HOME`. */
   wopalHome?: string
@@ -173,9 +203,14 @@ export async function mountDshEngine(
     // The Workbench iframe enters the DSH surface through the official rc.1
     // browser-auth launch token; publish the mount-computed entry getter so
     // the /workbench/dsh-url endpoint answers with it (undefined until now).
-    setDshUrlGetter(() => {
+    // The origin is resolved PER REQUEST from the Host header: a wildcard
+    // bind (`--hostname 0.0.0.0` / `--mdns`) makes server.url non-routable,
+    // and the minted cookie's authority must match the host the browser
+    // actually talks to (routableDshOrigin).
+    setDshUrlGetter((requestHost) => {
       try {
-        return new URL(dsh.authenticatedPath, server.url?.origin ?? "http://127.0.0.1").toString()
+        const origin = routableDshOrigin(server.hostname, server.port, requestHost)
+        return new URL(dsh.authenticatedPath, origin).toString()
       } catch {
         return undefined
       }
