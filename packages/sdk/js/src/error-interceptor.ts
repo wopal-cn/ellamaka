@@ -10,6 +10,8 @@
  * body unchanged so existing field-level reads (`.error.name`,
  * `JSON.stringify(error)`, etc.) are byte-for-byte identical to before.
  */
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+
 export function wrapClientError(
   error: unknown,
   response: Response | undefined,
@@ -37,7 +39,7 @@ export function wrapClientError(
 
   // Empty body / network failure / undefined / null / empty object.
   const reason = response ? "(empty response body)" : "network error (no response)"
-  return new Error(`opencode server ${describe(request, response)}: ${reason}`, {
+  return new Error(`${BINARY_NAME} server ${describe(request, response)}: ${reason}`, {
     cause: { body: error, status: response?.status },
   })
 }

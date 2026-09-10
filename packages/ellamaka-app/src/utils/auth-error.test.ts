@@ -3,7 +3,7 @@ import { createAuthToastGate, isUnauthorizedError } from "./auth-error"
 
 describe("isUnauthorizedError", () => {
   test("detects the SDK 401 wrap (cause.status)", () => {
-    const error = new Error("opencode server GET /x → 401", { cause: { body: "", status: 401 } })
+    const error = new Error("ellamaka server GET /x → 401", { cause: { body: "", status: 401 } })
     expect(isUnauthorizedError(error)).toBe(true)
   })
 
