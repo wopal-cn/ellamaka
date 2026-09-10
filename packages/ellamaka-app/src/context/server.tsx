@@ -2,6 +2,7 @@ import { createSimpleContext } from "@wopal/ui/context"
 import { type Accessor, batch, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
+import { authToastGate } from "@/utils/auth-error"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -266,6 +267,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       active: props.defaultServer,
       initialized: false,
       restoringSavedSelection: false,
+      // Bumped whenever saved credentials are rewritten in place. The app's
+      // remount gate (ServerKey) folds this into its key, so saving a new
+      // password rebuilds the provider tree — every store, SDK, and resource
+      // re-creates against the fresh credentials without a page reload.
+      credentialEpoch: 0,
     })
 
     createEffect(() => {
@@ -287,6 +293,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     function setActive(input: ServerConnection.Key) {
       const active = normalizeServerSelection({ fallback: props.defaultServer, key: input, servers: allServers() })
+      // A server (re)selection is a credential decision: the next 401 episode,
+      // if any, must notify again instead of being swallowed by the old gate.
+      authToastGate().reset()
       batch(() => {
         setState({ active, initialized: true, restoringSavedSelection: false })
         setStore("selected", active)
@@ -307,7 +316,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
       return batch(() => {
         const existing = store.list.findIndex((x) => url(x) === url_)
-        if (existing !== -1) {
+        const replaced = existing !== -1
+        if (replaced) {
           setStore("list", existing, conn)
         } else {
           setStore("list", store.list.length, conn)
@@ -317,6 +327,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           key: ServerConnection.key(conn),
           servers: allServers(),
         })
+        // Fresh credentials were just saved — re-arm the 401 toast gate, and
+        // when the entry was rewritten in place (same URL key) bump the
+        // credential epoch so the app remounts against the new credentials.
+        authToastGate().reset()
+        if (replaced) setState("credentialEpoch", (n) => n + 1)
         setState({ active, initialized: true, restoringSavedSelection: false })
         setStore("selected", active)
         return conn
@@ -357,6 +372,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       isLocal,
       get key() {
         return state.active
+      },
+      get credentialEpoch() {
+        return state.credentialEpoch
       },
       get name() {
         return serverName(current())

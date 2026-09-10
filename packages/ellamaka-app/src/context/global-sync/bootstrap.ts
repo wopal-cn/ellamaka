@@ -12,6 +12,7 @@ import type {
 import { showToast } from "@wopal/ui/toast"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { retry } from "@wopal/ellamaka-core/util/retry"
+import { authToastGate, isUnauthorizedError } from "@/utils/auth-error"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -308,6 +309,16 @@ export async function bootstrapDirectory(input: {
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk))),
       () =>
         input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
+          if (isUnauthorizedError(err)) {
+            authToastGate().unauthorized(() =>
+              showToast({
+                variant: "error",
+                title: input.translate("toast.project.reloadFailed.title", { project: getFilename(input.directory) }),
+                description: formatServerError(err, input.translate),
+              }),
+            )
+            return
+          }
           const project = getFilename(input.directory)
           showToast({
             variant: "error",
@@ -322,6 +333,16 @@ export async function bootstrapDirectory(input: {
     if (slowErrs.length > 0) {
       console.error("Failed to finish bootstrap instance", slowErrs[0])
       const project = getFilename(input.directory)
+      if (isUnauthorizedError(slowErrs[0])) {
+        authToastGate().unauthorized(() =>
+          showToast({
+            variant: "error",
+            title: input.translate("toast.project.reloadFailed.title", { project }),
+            description: formatServerError(slowErrs[0], input.translate),
+          }),
+        )
+        return
+      }
       showToast({
         variant: "error",
         title: input.translate("toast.project.reloadFailed.title", { project }),
