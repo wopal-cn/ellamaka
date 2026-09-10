@@ -81,10 +81,12 @@ describe("dsh-adapter visibility", () => {
 })
 
 describe("sandbox control visibility matrix (Issue #221)", () => {
-  const plugins = ["file:///x/plugins/dsh-adapter/index.ts"]
+  const plugins: Spec[] = [
+    ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: true, mode: "workspace-write" } }],
+  ]
   const base = { variant: "dock", plugins }
 
-  test("dock composer + ready runtime + dsh-adapter config shows the control", () => {
+  test("dock composer + ready runtime + sandbox-enabled dsh-adapter config shows the control", () => {
     expect(shouldShowSandboxControl({ ...base, dshStatus: "ready" })).toBe(true)
   })
 
@@ -113,6 +115,23 @@ describe("sandbox control visibility matrix (Issue #221)", () => {
   test("ready runtime but no dsh-adapter in the effective config hides the control", () => {
     expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: ["file:///x/other.ts"] })).toBe(false)
     expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: undefined })).toBe(false)
+  })
+
+  test("sandbox disabled hides the control: the adapter idles the tool projection", () => {
+    const off: Spec[] = [
+      ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: false, mode: "workspace-write" } }],
+    ]
+    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: off })).toBe(false)
+  })
+
+  test("dsh-adapter without a sandbox option hides the control (absent means off)", () => {
+    expect(
+      shouldShowSandboxControl({
+        variant: "dock",
+        dshStatus: "ready",
+        plugins: ["file:///x/plugins/dsh-adapter/index.ts"],
+      }),
+    ).toBe(false)
   })
 })
 
