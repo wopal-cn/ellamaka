@@ -128,6 +128,21 @@ space_rel_path() {
 
 is_running() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
+# The Workbench entry line comes straight from the backend's own output
+# (`serve` prints `workbench: <url>` — with ?auth_token= when a server
+# password is configured). The backend log is the single source of truth;
+# dev.sh only relays it, never re-derives the token.
+workbench_entry_url() {
+  local port="$1"
+  local line
+  line="$(grep -m1 '^workbench: ' "$BACKEND_LOG" 2>/dev/null)"
+  if [ -n "$line" ]; then
+    printf '%s' "${line#workbench: }"
+  else
+    printf 'http://127.0.0.1:%s/workbench' "$port"
+  fi
+}
+
 # The health/config probes ride the same Basic auth the backend enforces:
 # when a password is configured (ELLAMAKA_SERVER_PASSWORD), an anonymous
 # probe gets 401 and the wait loop would kill a perfectly healthy server.
@@ -856,7 +871,7 @@ cmd_tui() {
     warmup_config "$PORT"
     start_frontend "$APP_PORT" "$PORT" || { stop_service backend || true; return 1; }
     echo "  backend :$PORT, workbench :$APP_PORT"
-    echo "  → http://127.0.0.1:$APP_PORT/workbench"
+    echo "  → $(workbench_entry_url "$APP_PORT")"
     cd "$opencode_dir"
     exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
   fi
@@ -939,7 +954,7 @@ cmd_serve() {
   echo "  backend :$PORT, workbench :$APP_PORT"
   echo "  pidfile $(space_rel_path "$PIDFILE")"
   echo "  logs    $(space_rel_path "$BACKEND_LOG") / $(space_rel_path "$FRONTEND_LOG")"
-  echo "  → http://127.0.0.1:$APP_PORT/workbench"
+  echo "  → $(workbench_entry_url "$APP_PORT")"
 
   if $cdp_debug; then
     if is_running 9222; then
