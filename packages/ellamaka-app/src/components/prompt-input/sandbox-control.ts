@@ -117,13 +117,17 @@ export function drainPendingSessionSandbox(sessionKey: string): SandboxPreset | 
 }
 
 // The sandbox tri-state selector is visible only when the DSH sandbox is a
-// runtime fact, not a config string (Issue #221). All three must hold:
+// runtime fact, not a config string (Issue #221). All of these must hold:
 //   1. The composer is a dock composer (`variant === "dock"`).
 //   2. The DSH runtime is `ready` — the kill switch is open (`ELLAMAKA_DSH`
 //      not `0`, which maps to `disabled`) AND the runtime materialised and
 //      mounted successfully (not `degraded`). `ready` therefore implies the
 //      kill switch check; `dshEnabled` is kept explicit for clarity.
 //   3. The instance-level (directory) effective config loads dsh-adapter.
+//   4. The dsh-adapter spec enables the sandbox. `sandbox.enabled: false`
+//      idles the adapter's tool projection — no sandbox mode is in force, so
+//      there is nothing to select. Only `enabled: true` (with the mode as the
+//      space default) shows the control.
 // The DSH runtime status is the terminal status reported by /global/health.
 export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
 
@@ -138,22 +142,41 @@ export function shouldShowSandboxControl(input: {
   // switch is open. `ready` additionally proves the runtime actually works.
   if (input.dshStatus === "disabled") return false
   if (input.dshStatus !== "ready") return false
-  return hasDshAdapterPlugin(input.plugins)
+  if (!hasDshAdapterPlugin(input.plugins)) return false
+  // Sandbox off (or unconfigured) idles the adapter: no mode to choose.
+  return readDshAdapterSandbox(input.plugins)?.enabled === true
 }
 
 // "Allow always" on a sandbox-escalation approval card writes a standing
 // allow rule for the escalated mode, so the session effectively runs under
 // that mode from then on. The composer's tri-state selector must reflect
 // that — it is the only visible sandbox state. The approval dock publishes
-// the escalated mode here and the composer (which owns the persisted choice)
-// subscribes and applies it as if the user had picked it by hand.
-const escalationListeners = new Set<(preset: SandboxPreset) => void>()
+// the escalated mode here TOGETHER WITH the session the approval belongs to,
+// and the composer (which owns the persisted choice) applies it only when the
+// session matches its own. Escalation grants are session-scoped on the engine
+// side, so the linkage must not leak the mode into other sessions.
+const escalationListeners = new Map<string, Set<(preset: SandboxPreset) => void>>()
 
-export function publishEscalatedSandboxPreset(preset: SandboxPreset) {
-  for (const listener of escalationListeners) listener(preset)
+export function publishEscalatedSandboxPreset(sessionID: string, preset: SandboxPreset) {
+  const listeners = escalationListeners.get(sessionID)
+  if (!listeners) return
+  for (const listener of [...listeners]) listener(preset)
 }
 
-export function subscribeEscalatedSandboxPreset(listener: (preset: SandboxPreset) => void): () => void {
-  escalationListeners.add(listener)
-  return () => escalationListeners.delete(listener)
+export function subscribeEscalatedSandboxPreset(
+  sessionID: string,
+  listener: (preset: SandboxPreset) => void,
+): () => void {
+  let listeners = escalationListeners.get(sessionID)
+  if (!listeners) {
+    listeners = new Set()
+    escalationListeners.set(sessionID, listeners)
+  }
+  listeners.add(listener)
+  return () => {
+    const current = escalationListeners.get(sessionID)
+    if (!current) return
+    current.delete(listener)
+    if (current.size === 0) escalationListeners.delete(sessionID)
+  }
 }

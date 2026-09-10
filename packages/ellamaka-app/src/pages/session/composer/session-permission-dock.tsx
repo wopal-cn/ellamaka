@@ -51,7 +51,10 @@ export function SessionPermissionDock(props: {
   const decide = (response: "once" | "always" | "reject") => {
     if (response === "always" && props.request.permission === "sandbox_escalation") {
       const preset = escalationPreset(metadataString(props.request.metadata, "targetMode"))
-      if (preset) publishEscalatedSandboxPreset(preset)
+      // The grant is session-scoped on the engine side; the composer linkage
+      // must be too — publish carries the requesting session so no other
+      // session's selector picks it up.
+      if (preset) publishEscalatedSandboxPreset(props.request.sessionID, preset)
     }
     props.onDecide(response)
   }

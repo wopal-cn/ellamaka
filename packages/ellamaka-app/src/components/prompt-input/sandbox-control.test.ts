@@ -10,7 +10,10 @@ import {
   setPendingSessionSandbox,
   drainPendingSessionSandbox,
   shouldShowSandboxControl,
+  publishEscalatedSandboxPreset,
+  subscribeEscalatedSandboxPreset,
   type SandboxOptions,
+  type SandboxPreset,
 } from "./sandbox-control"
 
 type Spec = string | [string, Record<string, unknown>]
@@ -81,10 +84,12 @@ describe("dsh-adapter visibility", () => {
 })
 
 describe("sandbox control visibility matrix (Issue #221)", () => {
-  const plugins = ["file:///x/plugins/dsh-adapter/index.ts"]
+  const plugins: Spec[] = [
+    ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: true, mode: "workspace-write" } }],
+  ]
   const base = { variant: "dock", plugins }
 
-  test("dock composer + ready runtime + dsh-adapter config shows the control", () => {
+  test("dock composer + ready runtime + sandbox-enabled dsh-adapter config shows the control", () => {
     expect(shouldShowSandboxControl({ ...base, dshStatus: "ready" })).toBe(true)
   })
 
@@ -113,6 +118,23 @@ describe("sandbox control visibility matrix (Issue #221)", () => {
   test("ready runtime but no dsh-adapter in the effective config hides the control", () => {
     expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: ["file:///x/other.ts"] })).toBe(false)
     expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: undefined })).toBe(false)
+  })
+
+  test("sandbox disabled hides the control: the adapter idles the tool projection", () => {
+    const off: Spec[] = [
+      ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: false, mode: "workspace-write" } }],
+    ]
+    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: off })).toBe(false)
+  })
+
+  test("dsh-adapter without a sandbox option hides the control (absent means off)", () => {
+    expect(
+      shouldShowSandboxControl({
+        variant: "dock",
+        dshStatus: "ready",
+        plugins: ["file:///x/plugins/dsh-adapter/index.ts"],
+      }),
+    ).toBe(false)
   })
 })
 
@@ -214,5 +236,45 @@ describe("per-message sandbox mode", () => {
     expect(drainPendingSessionSandbox("composer:new-2")).toBeUndefined()
     expect(drainPendingSessionSandbox("composer:new-3")).toBe("full-access")
     expect(drainPendingSessionSandbox("composer:new-4")).toBeUndefined()
+  })
+})
+
+describe("escalation preset bus (session-scoped)", () => {
+  test("publish routes the preset only to listeners subscribed to the same session", () => {
+    const seenA: SandboxPreset[] = []
+    const seenB: SandboxPreset[] = []
+    const unA = subscribeEscalatedSandboxPreset("ses-a", (preset) => seenA.push(preset))
+    const unB = subscribeEscalatedSandboxPreset("ses-b", (preset) => seenB.push(preset))
+    try {
+      publishEscalatedSandboxPreset("ses-a", "workspace-write")
+      expect(seenA).toEqual(["workspace-write"])
+      expect(seenB).toEqual([])
+
+      publishEscalatedSandboxPreset("ses-b", "full-access")
+      expect(seenA).toEqual(["workspace-write"])
+      expect(seenB).toEqual(["full-access"])
+    } finally {
+      unA()
+      unB()
+    }
+  })
+
+  test("unsubscribed listeners no longer receive publishes", () => {
+    const seen: SandboxPreset[] = []
+    const unsubscribe = subscribeEscalatedSandboxPreset("ses-x", (preset) => seen.push(preset))
+    unsubscribe()
+    publishEscalatedSandboxPreset("ses-x", "read-only")
+    expect(seen).toEqual([])
+  })
+
+  test("publishing to a session with no subscriber is a no-op", () => {
+    const seen: SandboxPreset[] = []
+    const unsubscribe = subscribeEscalatedSandboxPreset("ses-x", (preset) => seen.push(preset))
+    try {
+      expect(() => publishEscalatedSandboxPreset("ses-unknown", "full-access")).not.toThrow()
+      expect(seen).toEqual([])
+    } finally {
+      unsubscribe()
+    }
   })
 })

@@ -378,7 +378,7 @@ ellamaka 通过工具容器采用 dsh 的工具能力。采用原则：**每个�
 
 dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影进 ellamaka ToolRegistry：
 
-- **映射白名单**：配置 `tools: [{source, target, enable}]`。同名 target 覆盖 ellamaka 内置工具；容器缺失时 adapter 挂 0 个工具，内置工具原样可用。
+- **固定投影集**：无 per-tool 映射表。开启沙箱即整套替换（`grep`/`glob`/`read`/`write`/`edit`/`str_replace_editor`/`bash`），同名覆盖 ellamaka 内置工具。dsh 工具不可部分替换——dsh 的 edit 依赖自身 read 的已读账本，内建 read 无法喂给它，混用即错乱，故全有或全无。容器缺失时 adapter 挂 0 个工具，内置工具原样可用。
 - **schema 投影**：把 dsh 的 JSON Schema 解包为 ellamaka 插件 SDK 的 ZodRawShape；不支持的类型降级 `z.unknown()`，dsh schema 扩展不破坏投影。
 - **参数映射**：dsh 蛇形参数（`file_path`）重命名为 ellamaka 驼峰（`filePath`），投影时重命名、execute 时转回。
 - **结果映射**：dsh 的 `meta.diffs` 映射为 ellamaka 的 `filediff`（`file`/`patch`/`additions`/`deletions`），hunk diff 算法在 adapter 内自持，不 import dsh 包。前端零改动。
@@ -393,10 +393,8 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 
 沙箱模式在运行时决议（见「配置与隔离 · 沙箱配置」）：
 
-- **启用沙箱**：注入 `sandbox/mode` 事件，`mode` 在 `read-only` 与 `workspace-write` 间选择。
-- **关闭沙箱**：注入 `danger-full-access`，工具在容器默认后端下运行。**不切换本地 fs/bash 后端**——工具始终走同一容器与已装配的沙箱后端，关沙箱只是放开有效模式。
-
-`danger-full-access` 保留为 dsh 内部一次性 escalation 目标，不作为空间级配置值暴露。
+- **启用沙箱**：adapter 挂载 `tool.provider` 投影整套 dsh 工具，并向每个 facade 注入 `sandbox/mode` 事件，`mode` 在 `read-only` 与 `workspace-write` 间选择。
+- **关闭沙箱**：adapter 空转工具投影——不注册 `tool.provider`、不建 facade、不注入任何 `sandbox/mode` 事件。ellamaka 内置工具原样运行，运行时行为与未加载 adapter 完全一致。空转只作用于工具投影；adapter 未来新增的非工具职责照常挂载。
 
 ### escalation 审批桥接与沙箱三态切换
 
@@ -421,9 +419,9 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 | 无 ask 闭包（TUI 等无 UI 入口） | `next()` 委托 waterfall 兜底 `unavailable`（fail-closed） |
 | abort | dsh 原生 `cancelled`（ApprovalService 与请求信号 race） |
 
-**escalation 策略**：`ellamaka.dsh.sandbox.escalation: "ask" | "never"`（默认 `ask`）。`never` 时 adapter 向每个 facade seed `approval/policy` session 事件（dsh 原生 fold 语义，LAST 优先），approval 服务在 waterfall 之前确定性拒绝，answerer 零调用。沙箱关闭（full-access）时 escalation 字段不广告，无需处理。
+**escalation 策略**：`ellamaka.dsh.sandbox.escalation: "ask" | "never"`（默认 `ask`）。`never` 时 adapter 向每个 facade seed `approval/policy` session 事件（dsh 原生 fold 语义，LAST 优先），approval 服务在 waterfall 之前确定性拒绝，answerer 零调用。沙箱关闭时 adapter 空转、无 escalation 语境，该字段不生效。
 
-**沙箱三态切换（per-session）**：Workbench chat composer 底栏 `ComposerSandboxControl` 下拉（只读 / 工作区写入 / 完全访问），选择按会话存浏览器 storage（workspace 存储，按 sessionID 分桶），不改写任何 settings 文件。选择随消息携带：提交时经 `FollowupDraft.sandboxMode` 进入 prompt payload，`UserMessage.sandboxMode` 持久化（fork/queue 继承），`SessionTools.resolve` 透传进 `Tool.Context.extra`；adapter 在每次 `tools.execute()` 读取 `extra.sandboxMode`，有值即 append `sandbox/mode` 事件（LAST-wins，立即生效）。无选择回落空间默认（「配置与隔离 · 沙箱配置」）。`full-access` 映射事件值 `danger-full-access`（见「沙箱语义」）。显示条件（运行时事实，非配置字符串）：dock composer 且 DSH 运行时状态为 `ready`（kill switch 开、非 `degraded`）且实例级（目录）生效配置含 dsh-adapter 插件；任一不满足即隐藏。运行时状态由 `/global/health` 的 `dsh` 字段提供（`disabled`/`ready`/`degraded`）。不使用 dsh permission-presets。
+**沙箱三态切换（per-session）**：Workbench chat composer 底栏 `ComposerSandboxControl` 下拉（只读 / 工作区写入 / 完全访问），选择按会话存浏览器 storage（workspace 存储，按 sessionID 分桶），不改写任何 settings 文件。选择随消息携带：提交时经 `FollowupDraft.sandboxMode` 进入 prompt payload，`UserMessage.sandboxMode` 持久化（fork/queue 继承），`SessionTools.resolve` 透传进 `Tool.Context.extra`；adapter 在每次 `tools.execute()` 读取 `extra.sandboxMode`，有值即 append `sandbox/mode` 事件（LAST-wins，立即生效）。无选择回落空间默认（「配置与隔离 · 沙箱配置」）。`full-access` 映射事件值 `danger-full-access`（见「沙箱语义」）。显示条件（运行时事实，非配置字符串）：dock composer 且 DSH 运行时状态为 `ready`（kill switch 开、非 `degraded`）且实例级（目录）生效配置含 dsh-adapter 插件且插件 spec 声明 `sandbox.enabled: true`（沙箱关闭即 adapter 空转，无模式可选，选择器隐藏）；任一不满足即隐藏。运行时状态由 `/global/health` 的 `dsh` 字段提供（`disabled`/`ready`/`degraded`）。不使用 dsh permission-presets。
 
 **fold 不变量**：显式选择必须总是追加事件，即使该值等于空间默认。事件日志按 LAST-wins 折叠，"恢复默认"只能靠显式写入默认值；把"等于默认"优化成"不追加"会让会话滞留在上一次的 override 上。`extra.sandboxMode` 缺失才是"沿用当前折叠值"的唯一信号。
 
@@ -435,7 +433,7 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 
 **容器装配是进程级共享能力池**：serve/TUI/desktop 各挂一个工具容器，进程内所有空间共用。容器载入完整工具链，禁用清单只管 agent-loop 基础设施，不管工具。装配一次，所有空间共用。
 
-**工具投影是空间级隔离点**：每个空间的 `.wopal/config/settings.jsonc` 声明自己的 adapter 映射白名单与沙箱策略。adapter 按空间加载，各带各的配置——空间 A 开 grep+glob，空间 B 开 grep+glob+bash，互不影响；未开映射的空间用 ellamaka 内置工具。
+**工具投影是空间级隔离点**：每个空间的 `.wopal/config/settings.jsonc` 声明自己的沙箱策略。adapter 按空间加载，各带各的配置——开沙箱的空间整套替换为 dsh 工具，关沙箱的空间用 ellamaka 内置工具，互不影响。
 
 **配置层级走 ellamaka 原生合并**：用户级 → 空间级 → 空间本地，逐层覆盖。
 
@@ -446,7 +444,7 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 | 配置 | 含义 |
 |------|------|
 | `enabled: true` | 启用沙箱，`mode` 在 `read-only` 与 `workspace-write` 间选择 |
-| `enabled: false` / 缺失 | 关闭沙箱，注入 `danger-full-access` |
+| `enabled: false` / 缺失 | 关闭沙箱，adapter 空转工具投影，ellamaka 内置工具原样运行 |
 
 进程级默认值只在尚未解析空间配置时兜底。**不用 `DSH_PERMISSION_MODE` 环境变量**——沙箱策略由空间配置拥有。
 

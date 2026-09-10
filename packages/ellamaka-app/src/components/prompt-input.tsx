@@ -414,9 +414,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   // "Allow always" on a sandbox-escalation approval applies the escalated
   // mode as the session's standing choice: the engine keeps silently allowing
-  // that mode from then on, so the selector must show it.
+  // that mode from then on, so the selector must show it. The bus is
+  // session-scoped — the publish carries the requesting session id, and this
+  // subscription re-arms on session switch so only the matching session's
+  // composer applies the preset.
   createEffect(() => {
-    const unsubscribe = subscribeEscalatedSandboxPreset((preset) => sandboxSelect(preset, { fromEscalation: true }))
+    const sessionID = params.id
+    if (!sessionID) return
+    const unsubscribe = subscribeEscalatedSandboxPreset(sessionID, (preset) => sandboxSelect(preset, { fromEscalation: true }))
     onCleanup(unsubscribe)
   })
 
