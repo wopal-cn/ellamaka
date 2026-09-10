@@ -35,14 +35,17 @@ export function SessionContextHeaderTrigger(props: {
   const providers = useProviders()
   const language = useLanguage()
 
-  // directory child store 是 project-scoped 数据真相（含 message）；global
-  // provider 列表足以解析 model limit（limit.context 是 provider 目录元数据）。
+  // Use serverSync.child() to obtain a reactive Solid Store proxy rather than
+  // the plain-object `children` dictionary. Direct `children[key]` access
+  // silently returns undefined when the store hasn't been created yet, which
+  // causes the memo to capture zero reactive dependencies and never re-fire.
+  // child({ bootstrap: false }) also normalises the directory key (trailing
+  // slashes, backslashes) and pins the store for the component's lifetime.
   const messages = createMemo(() => {
-    const key = props.directory
-    if (!key) return []
-    const child = serverSync.children[key]
-    if (!child) return []
-    return child[0].message[props.sessionId] ?? []
+    const dir = props.directory
+    if (!dir) return []
+    const [store] = serverSync.child(dir, { bootstrap: false })
+    return store.message[props.sessionId] ?? []
   })
 
   const metrics = createMemo<ContextMetricsSnapshot | undefined>(() => {
