@@ -27,9 +27,21 @@ const PUBLIC_UI_ROOT_FILES = new Set<string>([
   "/social-share-zen.png",
 ])
 
+// The Workbench HTML document itself. A reload (F5) re-navigates to
+// `/workbench` AFTER the SPA has stripped `?auth_token=` from the URL, so the
+// document request carries no credential and a 401 + `www-authenticate` pops
+// the browser's native login dialog — the exact document-level failure the
+// asset exemptions above prevent for `<script src>`. The shell carries no
+// server state (same argument as the assets): every data route underneath
+// (`/workbench/dsh-url`, `/workbench/locations`, …) stays authenticated, and
+// the SPA re-hydrates its persisted credentials once booted. `/` serves the
+// same embedded index through the UI catch-all.
+const PUBLIC_UI_DOCUMENTS = new Set<string>(["/", "/workbench"])
+
 export function isPublicUIPath(method: string, pathname: string) {
   if (method !== "GET") return false
   if (PUBLIC_UI_PATHS.has(pathname)) return true
+  if (PUBLIC_UI_DOCUMENTS.has(pathname)) return true
   if (PUBLIC_UI_PREFIXES.some((prefix) => pathname.startsWith(prefix))) return true
   return PUBLIC_UI_ROOT_FILES.has(pathname)
 }

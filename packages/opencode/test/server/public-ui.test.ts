@@ -31,14 +31,21 @@ describe("isPublicUIPath — hashed UI assets", () => {
     expect(isPublicUIPath("GET", "/site.webmanifest")).toBe(true)
   })
 
+  test("the Workbench HTML document is a public GET (reload has no auth_token)", () => {
+    expect(isPublicUIPath("GET", "/workbench")).toBe(true)
+    expect(isPublicUIPath("GET", "/")).toBe(true)
+  })
+
   test("non-GET methods never pass", () => {
     expect(isPublicUIPath("POST", "/assets/index-DLAvNuhk.js")).toBe(false)
     expect(isPublicUIPath("PUT", "/favicon-96x96.png")).toBe(false)
+    expect(isPublicUIPath("POST", "/workbench")).toBe(false)
   })
 
   test("API routes never pass", () => {
     expect(isPublicUIPath("GET", "/global/health")).toBe(false)
     expect(isPublicUIPath("GET", "/workbench/dsh-url")).toBe(false)
+    expect(isPublicUIPath("GET", "/workbench/locations")).toBe(false)
     expect(isPublicUIPath("GET", "/session")).toBe(false)
     expect(isPublicUIPath("GET", "/dsh/")).toBe(false)
     expect(isPublicUIPath("GET", "/global/event")).toBe(false)
