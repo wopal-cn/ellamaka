@@ -520,6 +520,18 @@ session-query / schedule / subagent / system prompt 注入等能力依赖 dsh �
 4. **ALS 上下文**：effect 体内发起的桥接调用沿传播链天然继承 Instance ALS；纯 async 侧发起的轮次须捕获-恢复 ALS。
 5. **取消语义**：interrupt 后 finalizer 按子先父后顺序确定性执行，`forkIn(scope)` 的并发子任务级联清理。Cordis 入口只启动不拥有中断权。
 
+### Bun 模块缓存键不含 query（2026-09-10，隔离探针实测）
+
+同一模块文件改写后，以三种身份重新 `import()`，探针 `.wopal-space/.tmp/hmr-probe/probe.mjs`/`probe4b.mjs`（bun 1.3.14 / node 22.22.2）：
+
+| 重新导入身份 | Node 22 | Bun 1.3.14 |
+|---|---|---|
+| 同一 URL（文件已改写） | 旧模块 | 旧模块 |
+| `?<hash>` query 附加 | **新模块** | **旧模块（query 被忽略）** |
+| 真实新文件名（候选副本） | 新模块 | **新模块**（相对依赖原样解析） |
+
+**推论**：Bun 宿主下"绕缓存"只有换真实路径一条路；URL query 内容寻址是 Node 专属语义，不能用于 bun-hmr 的 generation 替换（见「运行时机制 · 模块热换的 Bun 替代路径」第 4 步修订）。
+
 ### 插件供应链实测事实（2026-09-02，真实官方包）
 
 对真实 `@deepseek-ai/*` 包（cordis 4.0.2、cordis-plugin-loader 1.0.3、dsh-app-boot 0.1.1-rc.2）验证，实验记录 `.wopal-space/.tmp/dsh-plugin-spike/SPIKE-REPORT.md`：
@@ -871,7 +883,9 @@ Agent 配置单（`agent-presets`）与 Profile 容器（`profiles`）在 WopalS
 1. 插件或 profile patch 变更 → Bridge 组合完整候选补丁栈（现有 `startDshPluginService` 的组合逻辑）。
 2. 候选栈在隔离 Cordis context 中加载并激活校验（复用「插件供应链 · Bun 宿主兼容性预检」的隔离挂载实现）。
 3. 校验通过后等待该容器无进行中 agent 请求（空闲窗口），事务性执行 `includeEntry.update()`——由官方 Loader 按 entry id 插拔 fiber，失败自动回滚旧栈。
-4. Bun 模块缓存不需要清除：隔离候选使用内容寻址 URL（`file://...?<content-hash>`）加载变更模块，天然绕开缓存冲突；已运行容器的旧模块实例随旧 fiber dispose。
+4. 变更模块经**真实路径候选副本**加载，不用 URL query（2026-09-10 实证修订，见「已验证事实 · Bun 模块缓存键不含 query」）：Bun 的模块缓存以去 query 的真实路径为键，`file://...?<content-hash>` 不产生新模块身份；隔离候选必须落在**新文件名**（如 `<profile>/.dsh-hot/<name>-<hash>/` 候选目录）才被重新加载。已运行容器的旧模块实例随旧 fiber dispose。
+
+**落地状态（2026-09-10 审计）**：以上 generation 替换**尚未接线**。`bun-hmr.ts` 的 `watchCompositionFiles`（唯一 generation 候选入口）全仓库零生产调用点，且其实现同样是浅更新 `entry.update({ config })`，不含候选校验/副本挂载；生产重放路径（`runtime.ts` 的 `runReplay`）也只做浅 `config` 合并。因此**更新场景下旧模块继续被服务**——市场显示 `restart` 是当前唯一正确结论，不是误判。实现 candidate 替换需连带处理「插件入口 artifact 形态」（exports/main/index.js）与「空闲窗口」（市场端已有"更新拒绝有 agent 运行"守卫可对齐）。留待今后按本路径实现，不在本次范围。
 
 **Bun 下不伪造 `loader.internal`（拆雷）**：
 
@@ -898,7 +912,7 @@ Agent 配置单（`agent-presets`）与 Profile 容器（`profiles`）在 WopalS
 **Spike 实测结论（S-2，不可再走解析拦截）**：
 
 - `.wopal-space/.tmp/spike/s2-plugin.mjs` 实测：`Bun.plugin({ setup(build) { build.onResolve(...) } })` 注册成功、暴露 `onResolve` API，但**不影响运行时的 `await import()`**——`@wopal-spike/missing` 依旧 `ERR_MODULE_NOT_FOUND`。Bun 的 `Bun.plugin` 拦截只作用于构建期（bundle），运行时模块解析不在其内。
-- bun-hmr 不依赖此能力（走 include update + 内容寻址 URL），该结论仅作记录，防止将来再尝试用 `Bun.plugin` 做运行时解析拦截。
+- bun-hmr 的 generation 替换走「真实路径候选副本」而非解析拦截（见「模块热换的 Bun 替代路径」第 4 步），该结论仅作记录，防止将来再尝试用 `Bun.plugin` 做运行时解析拦截。
 
 **B3 传递的适配教训（B2 实现前必读）**：
 

@@ -239,6 +239,37 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     }
   }
 
+  /**
+   * The host acknowledgement: observe the CURRENT composition and answer for
+   * that observation, never for someone else's in-flight run.
+   *
+   * The service must not answer `{ ok: true }` from `activeReplay` alone. That
+   * run may have adopted its hash BEFORE the caller's change landed, so its
+   * `{ ok: true }` says nothing about the bytes the caller just wrote. When a
+   * replay is in flight, this waits for it to settle and then observes the
+   * composition once more — the observation the caller's verdict describes.
+   *
+   * A caller is never told "your change is live" on the strength of a run that
+   * could not have seen it.
+   */
+  const acknowledge = async (): Promise<DshPluginReplayResult> => {
+    // Observe the busy state BEFORE awaiting anything: awaiting the in-flight
+    // run clears `replaying`, so a check afterwards can no longer tell whether
+    // this caller's change was ever looked at.
+    if (!replaying) return runReplay()
+    // Settle the run that was already going, then observe the composition
+    // again. The second observation is the one the caller's verdict describes:
+    // the in-flight run read the hash before this caller's change landed.
+    //
+    // `pendingReplay` is deliberately NOT set here. That flag belongs to the
+    // watcher's coalescing contract (`runReplay(true).then(drainPending)`), and
+    // claiming it would make this call's outcome depend on whether a watcher
+    // event happened to arrive.
+    await activeReplay
+    if (stopped) return { ok: false, error: "dsh plugin runtime is stopped" }
+    return runReplay()
+  }
+
   lastHash = currentHash() // adopt the state observed at startup
   const watcher = watch(allWatched, {
     ignoreInitial: true,
@@ -250,7 +281,7 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   })
 
   return {
-    replay: () => runReplay(),
+    replay: acknowledge,
     stop: async () => {
       if (stopped) return
       stopped = true
