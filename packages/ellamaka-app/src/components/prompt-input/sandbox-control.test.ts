@@ -10,7 +10,10 @@ import {
   setPendingSessionSandbox,
   drainPendingSessionSandbox,
   shouldShowSandboxControl,
+  publishEscalatedSandboxPreset,
+  subscribeEscalatedSandboxPreset,
   type SandboxOptions,
+  type SandboxPreset,
 } from "./sandbox-control"
 
 type Spec = string | [string, Record<string, unknown>]
@@ -233,5 +236,45 @@ describe("per-message sandbox mode", () => {
     expect(drainPendingSessionSandbox("composer:new-2")).toBeUndefined()
     expect(drainPendingSessionSandbox("composer:new-3")).toBe("full-access")
     expect(drainPendingSessionSandbox("composer:new-4")).toBeUndefined()
+  })
+})
+
+describe("escalation preset bus (session-scoped)", () => {
+  test("publish routes the preset only to listeners subscribed to the same session", () => {
+    const seenA: SandboxPreset[] = []
+    const seenB: SandboxPreset[] = []
+    const unA = subscribeEscalatedSandboxPreset("ses-a", (preset) => seenA.push(preset))
+    const unB = subscribeEscalatedSandboxPreset("ses-b", (preset) => seenB.push(preset))
+    try {
+      publishEscalatedSandboxPreset("ses-a", "workspace-write")
+      expect(seenA).toEqual(["workspace-write"])
+      expect(seenB).toEqual([])
+
+      publishEscalatedSandboxPreset("ses-b", "full-access")
+      expect(seenA).toEqual(["workspace-write"])
+      expect(seenB).toEqual(["full-access"])
+    } finally {
+      unA()
+      unB()
+    }
+  })
+
+  test("unsubscribed listeners no longer receive publishes", () => {
+    const seen: SandboxPreset[] = []
+    const unsubscribe = subscribeEscalatedSandboxPreset("ses-x", (preset) => seen.push(preset))
+    unsubscribe()
+    publishEscalatedSandboxPreset("ses-x", "read-only")
+    expect(seen).toEqual([])
+  })
+
+  test("publishing to a session with no subscriber is a no-op", () => {
+    const seen: SandboxPreset[] = []
+    const unsubscribe = subscribeEscalatedSandboxPreset("ses-x", (preset) => seen.push(preset))
+    try {
+      expect(() => publishEscalatedSandboxPreset("ses-unknown", "full-access")).not.toThrow()
+      expect(seen).toEqual([])
+    } finally {
+      unsubscribe()
+    }
   })
 })
