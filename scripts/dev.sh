@@ -128,19 +128,27 @@ space_rel_path() {
 
 is_running() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
-# The Workbench entry line comes straight from the backend's own output
-# (`serve` prints `workbench: <url>` — with ?auth_token= when a server
-# password is configured). The backend log is the single source of truth;
-# dev.sh only relays it, never re-derives the token.
+# In `dev.sh serve` the Workbench UI is served by the Vite dev server, NOT by
+# the backend: the backend prints a `workbench: <backend-url>` line for its own
+# standalone serve mode, where the embedded UI exists. Relaying that line
+# verbatim (or pointing at the backend port at all) hands the user a 404. The
+# only part worth reusing is the credential token — the backend knows whether a
+# server password is configured, and the `?auth_token=` it prints is the
+# credential exchange the SPA already understands. Port the token onto the Vite
+# origin, which is the origin the user's browser actually talks to in dev.
 workbench_entry_url() {
   local port="$1"
-  local line
+  local url="http://127.0.0.1:$port/workbench"
+  local line token
   line="$(grep -m1 '^workbench: ' "$BACKEND_LOG" 2>/dev/null)"
-  if [ -n "$line" ]; then
-    printf '%s' "${line#workbench: }"
-  else
-    printf 'http://127.0.0.1:%s/workbench' "$port"
-  fi
+  case "$line" in
+    *auth_token=*)
+      token="${line#*auth_token=}"
+      token="${token%%[&[:space:]]*}"
+      url="$url?auth_token=$token"
+      ;;
+  esac
+  printf '%s' "$url"
 }
 
 # The health/config probes ride the same Basic auth the backend enforces:
@@ -1015,7 +1023,7 @@ EOF
       claim_port "$frontend_backend_port"
       choose_free_port workbench "$frontend_port"; local new_frontend_port="$SELECTED_PORT"
       start_frontend "$new_frontend_port" "$frontend_backend_port" || return 1
-      echo "  workbench :$new_frontend_port restarted  → http://127.0.0.1:$new_frontend_port/workbench"
+      echo "  workbench :$new_frontend_port restarted  → $(workbench_entry_url "$new_frontend_port")"
       ;;
     all)
       local restart_backend=false restart_frontend=false backend_port="" frontend_port=""
@@ -1039,7 +1047,7 @@ EOF
         claim_port "$backend_port"
         choose_free_port workbench "$frontend_port"; frontend_port="$SELECTED_PORT"
         start_frontend "$frontend_port" "$backend_port" || return 1
-        echo "  workbench :$frontend_port restarted  → http://127.0.0.1:$frontend_port/workbench"
+        echo "  workbench :$frontend_port restarted  → $(workbench_entry_url "$frontend_port")"
       fi
       echo "restarted dev services"
       ;;
