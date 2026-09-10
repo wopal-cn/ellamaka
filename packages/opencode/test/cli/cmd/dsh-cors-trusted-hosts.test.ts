@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { trustedHostsFromCors } from "../../../src/cli/cmd/dsh-mount"
+import { trustedHostsFromCors, trustedDshAuthorities } from "../../../src/cli/cmd/dsh-mount"
 
 /**
  * The DSH connection fence accepts `host:port` authorities, while the user
@@ -31,5 +31,22 @@ describe("trustedHostsFromCors", () => {
 
   test("returns the empty default for an empty list", () => {
     expect(trustedHostsFromCors([])).toEqual([])
+  })
+})
+
+describe("trustedDshAuthorities", () => {
+  test("merges cors-derived and self authorities with dedupe", () => {
+    const authorities = trustedDshAuthorities(
+      { hostname: "0.0.0.0", port: 9999 },
+      ["http://192.168.1.101:3000", "http://192.168.1.101:9999"],
+      ["192.168.1.101", "192.168.1.111"],
+    )
+    expect(authorities).toEqual(["192.168.1.101:3000", "192.168.1.101:9999", "192.168.1.111:9999"])
+  })
+
+  test("keeps cors authorities when self list is empty", () => {
+    expect(trustedDshAuthorities({ hostname: "127.0.0.1", port: 9999 }, ["http://192.168.1.5:3000"], [])).toEqual([
+      "192.168.1.5:3000",
+    ])
   })
 })

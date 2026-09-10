@@ -1,5 +1,6 @@
 import { Global } from "@wopal/ellamaka-core/global"
 import { join } from "node:path"
+import os from "node:os"
 import type { Listener } from "../../server/server"
 import { Effect } from "effect"
 import {
@@ -38,6 +39,83 @@ export function trustedHostsFromCors(cors: readonly string[]): string[] {
 }
 
 const WILDCARD_HOSTNAMES = new Set(["0.0.0.0", "::", "[::]"])
+
+/** True when the bind hostname is a wildcard address (`0.0.0.0` / `::`). */
+export function isWildcardBind(hostname: string): boolean {
+  return WILDCARD_HOSTNAMES.has(hostname)
+}
+
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"])
+
+function formatAuthority(hostname: string, port: number): string {
+  // Only bare IPv6 literals (two or more colons, not already bracketed) need
+  // brackets before the port is appended.
+  const isBareIpv6 = hostname.split(":").length > 2 && !hostname.startsWith("[")
+  const host = isBareIpv6 ? `[${hostname}]` : hostname
+  return `${host}:${port}`
+}
+
+/**
+ * The authorities the server itself serves on. This is the fence's baseline
+ * trust: whatever address a request reaches this process through IS this
+ * process, so it never needs a user configuration entry to be accepted.
+ * Loopback hostnames are skipped because the fence already trusts them. A
+ * wildcard bind has no single self name, so every local interface address is
+ * admitted for the bound port.
+ */
+export function selfDshAuthorities(
+  bind: { hostname: string; port: number },
+  localAddresses: readonly string[],
+): string[] {
+  const hosts: string[] = []
+  const push = (value: string) => {
+    if (!hosts.includes(value)) hosts.push(value)
+  }
+  if (WILDCARD_HOSTNAMES.has(bind.hostname)) {
+    for (const address of localAddresses) push(formatAuthority(address, bind.port))
+  } else if (!LOOPBACK_HOSTNAMES.has(bind.hostname)) {
+    push(formatAuthority(bind.hostname, bind.port))
+  }
+  return hosts
+}
+
+/**
+ * The complete fence allowlist: user CORS trust (cross-origin deployments)
+ * plus the server's own serving authorities (baseline self-trust). One trust
+ * decision for the user, and no way for the server to reject itself.
+ */
+export function trustedDshAuthorities(
+  bind: { hostname: string; port: number },
+  cors: readonly string[],
+  localAddresses: readonly string[],
+): string[] {
+  const hosts = trustedHostsFromCors(cors)
+  for (const authority of selfDshAuthorities(bind, localAddresses)) {
+    if (!hosts.includes(authority)) hosts.push(authority)
+  }
+  return hosts
+}
+
+/**
+ * Detect the non-internal interface addresses of this machine. The mount site
+ * feeds these to `selfDshAuthorities` so a wildcard bind (`*:9999`) admits the
+ * LAN addresses its browser clients actually use. Reads local interface state
+ * only — no network probing.
+ */
+export function localDshInterfaceAddresses(): string[] {
+  const addresses: string[] = []
+  for (const entries of Object.values(os.networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.internal) continue
+      const bare = entry.address.split("%")[0]
+      // Link-local IPv6 (fe80::/10) is scope-bound to one interface and never
+      // a browsing authority — skip it to keep the fence list predictable.
+      if (/^fe80:/i.test(bare)) continue
+      if (!addresses.includes(bare)) addresses.push(bare)
+    }
+  }
+  return addresses
+}
 
 /**
  * A ROUTABLE origin for the dsh launch-token entry. `server.url` carries the
@@ -187,9 +265,16 @@ export async function mountDshEngine(
       runtime,
       disableCodeRuntime: true,
       ellamakaCommand: resolveEllamakaCommand(),
-      // The CORS-derived LAN authorities ride the web-runtime row into the
-      // official webRuntime -> connection fence chain.
-      trustedHosts: trustedHostsFromCors(opts.cors ?? []),
+      // The fence allowlist rides the web-runtime row into the official
+      // webRuntime -> connection fence chain: user CORS trust for cross-origin
+      // deployments, plus the server's own serving authorities so it never
+      // rejects the address a client actually reaches it through (wildcard
+      // binds admit every local interface address on the bound port).
+      trustedHosts: trustedDshAuthorities(
+        { hostname: server.hostname, port: server.port },
+        opts.cors ?? [],
+        localDshInterfaceAddresses(),
+      ),
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,
