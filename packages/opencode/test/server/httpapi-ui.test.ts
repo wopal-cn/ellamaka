@@ -358,7 +358,7 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
-  it.live("requires server password for the web UI", () =>
+  it.live("serves the disabled-UI root without a credential challenge", () =>
     Effect.gen(function* () {
       const response = yield* uiApp({
         password: "secret",
@@ -366,8 +366,26 @@ describe("HttpApi UI fallback", () => {
         disableEmbeddedWebUi: true,
       }).request("/")
 
+      // The workbench-document exemption lets `/` through the auth layer
+      // (public-ui.test.ts asserts the policy); with no embedded UI and no
+      // upstream the handler itself answers 404. A 401 here would carry no
+      // `www-authenticate` either — the challenge is dropped by design so a
+      // fetch 401 can never pop the browser's native login dialog.
+      expect(response.status).toBe(404)
+      expect(response.headers.get("www-authenticate")).toBeNull()
+    }),
+  )
+
+  it.live("rejects wrong credentials on an authenticated API route", () =>
+    Effect.gen(function* () {
+      const response = yield* uiApp({
+        password: "secret",
+        username: "opencode",
+        disableEmbeddedWebUi: true,
+      }).request("/workbench/dsh-url")
+
       expect(response.status).toBe(401)
-      expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+      expect(response.headers.get("www-authenticate")).toBeNull()
     }),
   )
 
