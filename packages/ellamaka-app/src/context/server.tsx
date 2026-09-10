@@ -66,6 +66,53 @@ export function resolveServerList(input: {
 }
 
 /**
+ * The persisted credentials seed for startup-injected servers. Servers that
+ * arrive through props with a password (the `auth_token` URL exchange, the
+ * Desktop sidecar) must survive a page reload: the URL token is cleared right
+ * after the first load, so without a persisted copy every later request runs
+ * unauthenticated. Writes through the SAME storage the "manage servers" dialog
+ * uses (`Persist.global("server")` → `store.list`), so the security posture is
+ * identical to a server the user added by hand — one semantics for all
+ * credentials. A props server without a password never touches the store, and
+ * a fresh launch token overwrites the previous entry (the URL is the newest
+ * credential source).
+ */
+export function seedStoredServers(input: {
+  stored: StoredServer[]
+  props?: Array<ServerConnection.Any>
+}): StoredServer[] {
+  const list = [...(input.stored ?? [])]
+  let changed = false
+
+  for (const conn of input.props ?? []) {
+    if (conn.type !== "http") continue
+    const { username, password } = conn.http
+    if (!password) continue
+    // The authToken flag is a per-load marker, never persisted.
+    const entry: StoredServer = { type: "http", http: { url: conn.http.url, ...(username ? { username } : {}), password } }
+    const key = ServerConnection.key(conn)
+    const index = list.findIndex((x) => {
+      const normalized: ServerConnection.Http =
+        typeof x === "string" ? { type: "http", http: { url: x } } : "http" in x ? x : { type: "http", http: x }
+      return ServerConnection.key(normalized) === key
+    })
+    if (index !== -1) {
+      const existing = list[index]!
+      const existingHttp: ServerConnection.HttpBase =
+        typeof existing === "string" ? { url: existing } : "http" in existing ? existing.http : existing
+      if (existingHttp.password === password && existingHttp.username === username) continue
+      list[index] = entry
+    } else {
+      list.push(entry)
+    }
+    changed = true
+  }
+
+  return changed ? list : input.stored
+}
+
+
+/**
  * The local sidecar URL changes when the desktop process restarts. Persist the
  * symbolic fallback key instead so a prior generation can never become a
  * stale saved selection.
@@ -197,6 +244,17 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         selected: undefined as ServerConnection.Key | undefined,
       }),
     )
+
+    // Startup credential seed: servers injected through props that carry a
+    // password (auth_token exchange, Desktop sidecar) persist through the
+    // same store the "manage servers" dialog writes, so a page reload keeps
+    // working after the URL token is cleared. Runs once when the store is
+    // ready; a no-op seed returns the same array and skips the write.
+    createEffect(() => {
+      if (!ready()) return
+      const seeded = seedStoredServers({ stored: store.list ?? [], props: props.servers })
+      if (seeded !== (store.list ?? [])) setStore("list", seeded)
+    })
 
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
