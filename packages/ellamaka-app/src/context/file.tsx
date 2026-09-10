@@ -4,6 +4,7 @@ import { createSimpleContext } from "@wopal/ui/context"
 import { showToast } from "@wopal/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
+import { showServerToast } from "@/utils/server-toast"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
@@ -74,12 +75,15 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       scope,
       normalizeDir: path.normalizeDir,
       list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
-      onError: (message) => {
-        showToast({
-          variant: "error",
-          title: language.t("toast.file.listFailed.title"),
-          description: message,
-        })
+      onError: (message, error) => {
+        showServerToast(
+          {
+            variant: "error",
+            title: language.t("toast.file.listFailed.title"),
+            description: message,
+          },
+          error,
+        )
       },
     })
 
@@ -139,7 +143,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    const setLoadError = (file: string, message: string) => {
+    const setLoadError = (file: string, message: string, error?: unknown) => {
       setStore(
         "file",
         file,
@@ -148,11 +152,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           draft.error = message
         }),
       )
-      showToast({
-        variant: "error",
-        title: language.t("toast.file.loadFailed.title"),
-        description: message,
-      })
+      showServerToast(
+        {
+          variant: "error",
+          title: language.t("toast.file.loadFailed.title"),
+          description: message,
+        },
+        error,
+      )
     }
 
     const load = (input: string, options?: { force?: boolean }) => {
@@ -184,7 +191,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         })
         .catch((e) => {
           if (scope() !== directory) return
-          setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
+          setLoadError(file, errorMessage(e, language.t("error.chain.unknown")), e)
         })
         .finally(() => {
           inflight.delete(key)

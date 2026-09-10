@@ -1,7 +1,7 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@wopal/ui/toast"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
-import { authToastGate, isUnauthorizedError } from "@/utils/auth-error"
+import { showServerToast } from "@/utils/server-toast"
 import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
@@ -213,23 +213,14 @@ export function createServerSyncContext() {
           .command.list()
           .then((x) => setStore("command", x.data ?? [])),
       ).catch((err) => {
-        // A 401 burst is one credential episode, not one toast per request —
-        // the gate surfaces the first notice and swallows the echoes.
-        if (isUnauthorizedError(err)) {
-          authToastGate().unauthorized(() =>
-            showToast({
-              variant: "error",
-              title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
-              description: formatServerError(err, language.t),
-            }),
-          )
-          return
-        }
-        showToast({
-          variant: "error",
-          title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
-          description: formatServerError(err, language.t),
-        })
+        showServerToast(
+          {
+            variant: "error",
+            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+            description: formatServerError(err, language.t),
+          },
+          err,
+        )
       })
     },
     onDispose: (directory) => {
@@ -305,22 +296,14 @@ export function createServerSyncContext() {
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
-              const project = getFilename(directory)
-              if (isUnauthorizedError(err)) {
-                authToastGate().unauthorized(() =>
-                  showToast({
-                    variant: "error",
-                    title: language.t("toast.session.listFailed.title", { project }),
-                    description: formatServerError(err, language.t),
-                  }),
-                )
-                return
-              }
-              showToast({
-                variant: "error",
-                title: language.t("toast.session.listFailed.title", { project }),
-                description: formatServerError(err, language.t),
-              })
+              showServerToast(
+                {
+                  variant: "error",
+                  title: language.t("toast.session.listFailed.title", { project: getFilename(directory) }),
+                  description: formatServerError(err, language.t),
+                },
+                err,
+              )
             })
             .then(() => null),
       })
