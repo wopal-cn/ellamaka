@@ -7,6 +7,7 @@ import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+import { workbenchAuthUrl } from "./serve"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -66,7 +67,8 @@ export const WebCommand = effectCmd({
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
       const localhostUrl = `http://localhost:${server.port}`
-      UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
+      const localhostEntry = workbenchAuthUrl(localhostUrl, Flag.ELLAMAKA_SERVER_PASSWORD)
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostEntry)
 
       // Show network IPs for remote access
       const networkIPs = getNetworkIPs()
@@ -75,7 +77,7 @@ export const WebCommand = effectCmd({
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
             UI.Style.TEXT_NORMAL,
-            `http://${ip}:${server.port}`,
+            workbenchAuthUrl(`http://${ip}:${server.port}`, Flag.ELLAMAKA_SERVER_PASSWORD),
           )
         }
       }
@@ -84,14 +86,14 @@ export const WebCommand = effectCmd({
         UI.println(
           UI.Style.TEXT_INFO_BOLD + "  mDNS:              ",
           UI.Style.TEXT_NORMAL,
-          `${opts.mdnsDomain}:${server.port}`,
+          workbenchAuthUrl(`http://${opts.mdnsDomain}:${server.port}`, Flag.ELLAMAKA_SERVER_PASSWORD),
         )
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      open(localhostEntry).catch(() => {})
     } else {
-      const displayUrl = server.url.toString()
+      const displayUrl = workbenchAuthUrl(`http://${server.hostname}:${server.port}`, Flag.ELLAMAKA_SERVER_PASSWORD)
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
       open(displayUrl).catch(() => {})
     }
