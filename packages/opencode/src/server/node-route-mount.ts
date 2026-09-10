@@ -19,10 +19,21 @@
 import type { IncomingMessage, Server, ServerResponse } from "node:http"
 import type { Duplex } from "node:stream"
 
+/** Authentication policies a mounted route may declare. */
+export type NodeRouteAuth = "self" | "public"
+
 /** A mounted route: a prefix plus request/upgrade handlers. */
 export interface NodeRouteMount {
   /** The pathname prefix to match (`/dsh`). */
   readonly prefix: string
+  /**
+   * Declared authentication policy for the mounted prefix. Every mount bypasses
+   * the host's Effect HTTP auth stack, so the policy must be stated explicitly:
+   * `"self"` = the mount brings its own complete authentication (e.g. dsh
+   * browser-auth); `"public"` = deliberately unauthenticated (e.g. pure static
+   * assets). A missing or unknown value is rejected at mount time.
+   */
+  readonly auth: NodeRouteAuth
   /** Handle a matched request; `req.url` is stripped of the prefix. */
   request(req: IncomingMessage, res: ServerResponse): void | Promise<void>
   /** Handle a matched upgrade; `req.url` is stripped of the prefix. */
@@ -141,6 +152,15 @@ export function installDispatcher(server: Server): NodeRouteDispatcher {
 
   return {
     mount(mount) {
+      // Runtime re-check of the compile-time `auth` contract: JS callers and
+      // type-erased objects can bypass the interface, and an undeclared policy
+      // on an auth-bypassing prefix is a security gap, not a soft default.
+      const auth = (mount as { auth?: unknown }).auth
+      if (auth !== "self" && auth !== "public") {
+        throw new TypeError(
+          `node route mount "${mount.prefix}" must declare auth: "self" | "public" (got ${typeof auth === "string" ? `"${auth}"` : typeof auth}); a mounted prefix bypasses the host auth stack, so the policy must be explicit`,
+        )
+      }
       mounts.push(mount)
       return () => {
         const index = mounts.indexOf(mount)

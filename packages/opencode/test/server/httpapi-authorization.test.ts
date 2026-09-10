@@ -97,9 +97,12 @@ describe("HttpApi authorization middleware", () => {
       )
 
       expect(missing.status).toBe(401)
-      expect(missing.headers["www-authenticate"] ?? "").toContain("Basic")
+      // No www-authenticate challenge: a fetch-visible challenge makes the
+      // browser pop its native login dialog, which loops forever against a
+      // stale persisted credential the SPA keeps re-attaching.
+      expect(missing.headers["www-authenticate"] ?? "").not.toContain("Basic")
       expect(badPassword.status).toBe(401)
-      expect(badPassword.headers["www-authenticate"] ?? "").toContain("Basic")
+      expect(badPassword.headers["www-authenticate"] ?? "").not.toContain("Basic")
       expect(good.status).toBe(200)
     }),
   )
@@ -167,7 +170,7 @@ describe("HttpApi authorization middleware", () => {
       const body = yield* response.json
 
       expect(response.status).toBe(401)
-      expect(response.headers["www-authenticate"] ?? "").toContain("Basic")
+      expect(response.headers["www-authenticate"] ?? "").not.toContain("Basic")
       expect(body).toEqual({ _tag: "UnauthorizedError", message: "Authentication required" })
     }),
   )

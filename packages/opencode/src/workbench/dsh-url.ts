@@ -21,21 +21,30 @@ import { Context, Layer } from "effect"
  * through the typed service below.
  */
 
-const holder: { get: () => string | undefined } = { get: () => undefined }
+const holder: { get: (requestHost?: string) => string | undefined } = { get: () => undefined }
 
-/** Publish (or clear with `() => undefined`) the mount-computed entry getter. */
-export function setDshUrlGetter(get: () => string | undefined): void {
+/**
+ * Publish (or clear with `() => undefined`) the mount-computed entry getter.
+ * `requestHost` is the serving request's Host header — the routable view of
+ * the server the browser is actually talking to (a wildcard bind makes the
+ * bind hostname itself unroutable).
+ */
+export function setDshUrlGetter(get: (requestHost?: string) => string | undefined): void {
   holder.get = get
 }
 
 /** The authenticated entry path getter; undefined before a mount fills it. */
-export function getDshUrl(): string | undefined {
-  return holder.get()
+export function getDshUrl(requestHost?: string): string | undefined {
+  return holder.get(requestHost)
 }
 
 export class WorkbenchDshUrl extends Context.Service<WorkbenchDshUrl, {
-  /** The authenticated entry path getter; undefined before a mount fills it. */
-  readonly get: () => string | undefined
+  /**
+   * The authenticated entry path getter; undefined before a mount fills it.
+   * `requestHost` (the serving request's Host header) selects the routable
+   * origin the entry is composed on.
+   */
+  readonly get: (requestHost?: string) => string | undefined
 }>()("@opencode/WorkbenchDshUrl") {}
 
 /** Thin adapter over the module-level holder for Effect handlers. */

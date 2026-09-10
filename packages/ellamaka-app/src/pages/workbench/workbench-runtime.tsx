@@ -25,6 +25,7 @@ const WorkbenchRuntimeContext = createSimpleContext({
     const checkHealth = useCheckServerHealth()
     const [status, setStatus] = createSignal<WorkbenchRuntimeStatus>("recovering")
     const [cli, setCli] = createSignal<WopalCliHealth>()
+    const [unauthorized, setUnauthorized] = createSignal(false)
     const [repairingCli, setRepairingCli] = createSignal(false)
     let request = 0
     let lastHealthy = false
@@ -33,6 +34,7 @@ const WorkbenchRuntimeContext = createSimpleContext({
       const current = server.current
       if (!current) {
         setStatus("offline")
+        setUnauthorized(false)
         setCli(undefined)
         lastHealthy = false
         return false
@@ -43,6 +45,7 @@ const WorkbenchRuntimeContext = createSimpleContext({
       if (id !== request) return false
       lastHealthy = health.healthy
       setCli(health.cli)
+      setUnauthorized(health.unauthorized === true)
       const next = resolveWorkbenchRuntimeStatus(health.healthy, untrack(() => sdk.eventStatus))
       setStatus(next)
       return next === "online"
@@ -74,6 +77,9 @@ const WorkbenchRuntimeContext = createSimpleContext({
       },
       get cli() {
         return cli()
+      },
+      get unauthorized() {
+        return unauthorized()
       },
       get repairingCli() {
         return repairingCli()

@@ -6,6 +6,7 @@ import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
+import { ptyAvailable } from "../fixture/pty"
 import { Config, Effect, Layer, Queue, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
@@ -15,7 +16,9 @@ import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
 
-const testPty = process.platform === "win32" ? test.skip : test
+// PTY cases need a real `forkpty()`; hosts without spawn privileges (sandboxed
+// runners) can only skip — the capability probe fails fast and cached.
+const testPty = process.platform === "win32" || !ptyAvailable() ? test.skip : test
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -211,7 +214,7 @@ describe("pty HttpApi bridge", () => {
       message: `PTY session not found: ${missingID}`,
     })
   })
-  ;(process.platform === "win32" ? effectIt.live.skip : effectIt.live)(
+  ;(process.platform === "win32" || !ptyAvailable() ? effectIt.live.skip : effectIt.live)(
     "serves PTY websocket output and input through Effect routes",
     () =>
       Effect.gen(function* () {

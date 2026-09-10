@@ -5,6 +5,7 @@ import { Plugin } from "../../src/plugin"
 import { Pty } from "../../src/pty"
 import { Duration, Effect, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
+import { ptyAvailable } from "../fixture/pty"
 
 type Socket = Parameters<Pty.Interface["connect"]>[1]
 
@@ -15,7 +16,7 @@ const it = testEffect(
     Layer.provideMerge(Plugin.defaultLayer),
   ),
 )
-const ptyTest = process.platform === "win32" ? it.instance.skip : it.instance
+const ptyTest = process.platform === "win32" || !ptyAvailable() ? it.instance.skip : it.instance
 
 const createPty = Effect.fn("PtyOutputIsolationTest.createPty")(function* (input: Pty.CreateInput) {
   const pty = yield* Pty.Service

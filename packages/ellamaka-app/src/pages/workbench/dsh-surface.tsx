@@ -62,15 +62,110 @@ export function dshIframeSrc(
 }
 
 /**
+ * Whether a loaded iframe document is the official dsh bare 401 page. The
+ * dsh browser-auth failure responds `text/plain` with exactly this body
+ * (official BrowserAuth.writeUnauthorized), so the marker phrase is the
+ * fingerprint; same-origin access to `contentDocument` makes the read legal.
+ */
+export function looksLikeDsh401(body: string | null | undefined): boolean {
+  return typeof body === "string" && body.includes("dsh web authentication required")
+}
+
+/**
+ * The reload target for one self-heal attempt (B-01). The raw `/workbench/
+ * dsh-url` entry points at the backend origin, but the iframe's initial src
+ * was retargeted onto the serving page origin (vite dev proxy, Desktop
+ * dshProxyOrigin) so the SameSite=Strict cookie stays on the iframe's
+ * origin. The heal must land on that same retargeted URL — writing the raw
+ * entry would jump the frame cross-site and the cookie could never ride
+ * along. `dshIframeSrc` already implements this topology, so the heal rides
+ * the exact same derivation as the initial src.
+ */
+export function healTargetUrl(
+  serverUrl: string | undefined,
+  entryUrl: string | undefined,
+  pageOrigin: string | undefined,
+): string | undefined {
+  return dshIframeSrc(serverUrl, entryUrl, pageOrigin)
+}
+
+/**
+ * One self-heal attempt for a 401'd keep-alive iframe (auth-fix-2): re-fetch
+ * the authenticated entry from `/workbench/dsh-url` and reload the frame —
+ * the fresh launch token re-mints the cookie through the official 303
+ * exchange. Keep-alive contract: only the `src` attribute (or an in-place
+ * `contentWindow.location.reload()` when the token did not rotate) is
+ * touched, never the iframe element itself. The engine being unmounted (entry
+ * undefined) leaves the frame as-is; a single attempt never retries, so a
+ * persistent failure cannot storm the server.
+ *
+ * @param iframe - the keep-alive iframe element
+ * @param refetchEntry - resolves the retargeted reload target (undefined = engine not mounted)
+ * @param hooks - observability seam; `reload` overrides the in-place
+ *   `contentWindow.location.reload()` call (happy-dom cannot observe it)
+ */
+export function selfHealDshIframe(
+  iframe: HTMLIFrameElement,
+  refetchEntry: () => Promise<string | undefined>,
+  hooks?: { reload?: (iframe: HTMLIFrameElement) => void },
+): void {
+  void Promise.resolve()
+    .then(refetchEntry)
+    .then((entry) => {
+      if (entry === undefined) return
+      const current = iframe.getAttribute("src")
+      if (entry === current) {
+        // Same token: force the in-place reload so the frame re-runs the
+        // token/cookie exchange instead of a no-op src assignment.
+        if (hooks?.reload) hooks.reload(iframe)
+        else iframe.contentWindow?.location.reload()
+        return
+      }
+      iframe.setAttribute("src", entry)
+    })
+    .catch(() => {
+      // Self-heal is best-effort: a failed refetch leaves the current state.
+    })
+}
+
+/**
+ * The episode gate for the DshSurface load probe (auth-fix-2 anti-storm).
+ * A failure "episode" starts when a load probe reads the 401 fingerprint and
+ * ends at the first healthy load; within one episode exactly ONE heal
+ * attempt fires no matter how many 401 loads land, so a token that stays
+ * stale cannot storm `/workbench/dsh-url`. A healthy load re-arms the gate,
+ * so a later episode (cookie expiry weeks later, another engine restart)
+ * heals again.
+ */
+export function createDsh401Healer(input: {
+  getFrame: () => HTMLIFrameElement | undefined
+  refetchEntry: () => Promise<string | undefined>
+}): (body: string | null | undefined) => void {
+  let attempted = false
+  return (body) => {
+    if (!looksLikeDsh401(body)) {
+      // Healthy load: the previous episode resolved; re-arm for the next one.
+      attempted = false
+      return
+    }
+    if (attempted) return
+    attempted = true
+    const frame = input.getFrame()
+    if (frame) selfHealDshIframe(frame, input.refetchEntry)
+  }
+}
+
+/**
  * The DSH iframe: embeds the DSH web UI under the backend origin's `/dsh/`
  * path. Absent a DSH closure the iframe simply won't connect.
  */
-export function DshIframe(props: { src?: string }): JSX.Element {
+export function DshIframe(props: { src?: string; onLoad?: () => void }): JSX.Element {
   return (
     <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-v2-background-bg-deep">
       <iframe
         title="DSH"
         src={props.src}
+        onLoad={props.onLoad}
         class="h-full w-full border-0"
         allow="clipboard-write; clipboard-read"
       />
@@ -100,7 +195,7 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   const server = useServer()
   const sdk = useServerSDK()
   const platform = usePlatform()
-  const [entry] = createResource(
+  const [entry, { refetch }] = createResource(
     () => wb.dshVisible,
     (visible) => (visible ? sdk.client.workbench.dshUrl() : undefined),
   )
@@ -115,10 +210,39 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   }
   const src = () => dshIframeSrc(server.current?.http.url, entry()?.data?.url, pageOrigin())
   const visible = () => wb.dshVisible
+  // auth-fix-2 self-heal: a keep-alive iframe never reloads on tab switches,
+  // so a stale cookie (expiry or engine restart) would otherwise show the
+  // bare 401 page forever. The episode gate allows one attempt per failure
+  // episode (healthy load re-arms) — no storm on a persistent failure.
+  // B-01: the heal target goes through healTargetUrl so the reload lands on
+  // the page-origin (proxied) URL, never the raw backend entry.
+  let iframeEl: HTMLIFrameElement | undefined
+  let reloadCalls = 0
+  const heal = createDsh401Healer({
+    getFrame: () => iframeEl,
+    refetchEntry: async () => {
+      await refetch()
+      return healTargetUrl(server.current?.http.url, entry()?.data?.url, pageOrigin())
+    },
+  })
+  const onLoad = () => {
+    const frame = iframeEl
+    if (!frame) return
+    let body: string | null = null
+    try {
+      body = frame.contentDocument?.body?.textContent ?? null
+    } catch {
+      // Cross-origin frame: nothing to probe.
+      return
+    }
+    heal(body)
+  }
   return (
     <>
       <div style={dshSurfaceStyle(visible())}>
-        <DshIframe src={src()} />
+        <div ref={(el) => (iframeEl = el?.querySelector?.('iframe[title="DSH"]') ?? undefined)} class="contents">
+          <DshIframe src={src()} onLoad={onLoad} />
+        </div>
       </div>
       <div style={dshSurfaceStyle(!visible())}>{props.children}</div>
     </>

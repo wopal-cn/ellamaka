@@ -20,29 +20,29 @@ import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 void Log.init({ print: false })
 
 const original = {
-  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
-  envPassword: process.env.OPENCODE_SERVER_PASSWORD,
-  envUsername: process.env.OPENCODE_SERVER_USERNAME,
+  ELLAMAKA_SERVER_PASSWORD: Flag.ELLAMAKA_SERVER_PASSWORD,
+  ELLAMAKA_SERVER_USERNAME: Flag.ELLAMAKA_SERVER_USERNAME,
+  envPassword: process.env.ELLAMAKA_SERVER_PASSWORD,
+  envUsername: process.env.ELLAMAKA_SERVER_USERNAME,
 }
 const auth = { username: "opencode", password: "listen-secret" }
 
 afterEach(async () => {
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  if (original.envPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
-  else process.env.OPENCODE_SERVER_PASSWORD = original.envPassword
-  if (original.envUsername === undefined) delete process.env.OPENCODE_SERVER_USERNAME
-  else process.env.OPENCODE_SERVER_USERNAME = original.envUsername
+  Flag.ELLAMAKA_SERVER_PASSWORD = original.ELLAMAKA_SERVER_PASSWORD
+  Flag.ELLAMAKA_SERVER_USERNAME = original.ELLAMAKA_SERVER_USERNAME
+  if (original.envPassword === undefined) delete process.env.ELLAMAKA_SERVER_PASSWORD
+  else process.env.ELLAMAKA_SERVER_PASSWORD = original.envPassword
+  if (original.envUsername === undefined) delete process.env.ELLAMAKA_SERVER_USERNAME
+  else process.env.ELLAMAKA_SERVER_USERNAME = original.envUsername
   await disposeAllInstances()
   await resetDatabase()
 })
 
 async function startListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = auth.password
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  process.env.OPENCODE_SERVER_PASSWORD = auth.password
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
+  Flag.ELLAMAKA_SERVER_PASSWORD = auth.password
+  Flag.ELLAMAKA_SERVER_USERNAME = auth.username
+  process.env.ELLAMAKA_SERVER_PASSWORD = auth.password
+  process.env.ELLAMAKA_SERVER_USERNAME = auth.username
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 
@@ -95,6 +95,7 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
   })
   const unmount = listener.mountNodeRoute({
     prefix: dsh.mountPath,
+    auth: "self",
     request: (req, res) => dsh.webServer.request(req, res),
     upgrade: (req, socket, head) => dsh.webServer.upgrade(req, socket, head),
   })

@@ -252,6 +252,36 @@ describe("lifted patch builders snapshot equality", () => {
     ])
   })
 
+  test("webExtraPatches without trustedHosts keeps the empty default (auth-fix-1 default behavior unchanged)", () => {
+    const patches = webExtraPatches({ disableCodeRuntime: false })
+    const webRuntimeRow = patches.find((row) => (row as { id?: string }).id === "web-runtime")
+    expect(webRuntimeRow).toEqual({
+      id: "web-runtime",
+      config: { openBrowser: false, printUrl: false, surfaceContext: false, trustedHosts: [] },
+    })
+  })
+
+  test("webExtraPatches injects configured trustedHosts into the web-runtime row (auth-fix-1)", () => {
+    // The web-runtime row is the OFFICIAL fence source: the official bundle
+    // patch wires `connection.trustedHosts: !!js ctx.webRuntime.trustedHosts`,
+    // so configured authorities ride this row into the connection Host/Origin
+    // fence. No separate connection row is composed (the official bundle
+    // already owns that row; a second one would compete with it).
+    const patches = webExtraPatches({
+      trustedHosts: ["192.168.1.10:4096", "app.internal"],
+    })
+    const webRuntimeRow = patches.find((row) => (row as { id?: string }).id === "web-runtime")
+    expect(webRuntimeRow).toEqual({
+      id: "web-runtime",
+      config: {
+        openBrowser: false,
+        printUrl: false,
+        surfaceContext: false,
+        trustedHosts: ["192.168.1.10:4096", "app.internal"],
+      },
+    })
+  })
+
   test("toolsExtraPatches matches mountDshTools original shape exactly", () => {
     const patches = toolsExtraPatches({
       extraPatches: [{ id: "custom-tool", config: {} }],
@@ -382,6 +412,33 @@ describe("composeDshDumpProfileLayers overlay loading (loadOverlayPatches semant
     const last = layers[layers.length - 1]
     expect(last.label).toBe(overlayB)
     expect(last.patches).toEqual([{ id: "overlay-b", config: { note: "b" } }])
+  })
+})
+
+describe("dumpDshConfig trustedHosts injection (auth-fix-1)", () => {
+  test("web profile dump carries the configured trustedHosts in the bridge extra layer", async () => {
+    const home = tempHome()
+    const output = await dumpDshConfig({
+      dshHome: home,
+      profileName: "web",
+      trustedHosts: ["192.168.1.10:4096"],
+    })
+    // The bridge extra layer holds the web-runtime row whose trustedHosts
+    // feeds the official webRuntime -> connection fence chain.
+    expect(output).toContain("ellamaka bridge extra patches")
+    expect(output).toContain("192.168.1.10:4096")
+  })
+
+  test("web profile dump without configured trustedHosts emits the empty default only", async () => {
+    const home = tempHome()
+    const output = await dumpDshConfig({
+      dshHome: home,
+      profileName: "web",
+    })
+    expect(output).not.toContain("192.168.1.10:4096")
+    // The web-runtime row still shows its (empty) trustedHosts key so the
+    // dump reflects the effective value.
+    expect(output).toContain("trustedHosts")
   })
 })
 

@@ -100,8 +100,8 @@ wopal-space 模式**不加载**：
 
 | 变量 | 说明 |
 |------|------|
-| `OPENCODE_SERVER_PASSWORD` | 远程 server 的 basic auth 密码 |
-| `OPENCODE_SERVER_USERNAME` | 远程 server 的 basic auth 用户名，默认 `opencode` |
+| `ELLAMAKA_SERVER_PASSWORD` | 远程 server 的 basic auth 密码 |
+| `ELLAMAKA_SERVER_USERNAME` | 远程 server 的 basic auth 用户名，默认 `ellamaka` |
 | `OPENCODE_PERMISSION` | 权限默认策略（传给非 TUI 场景） |
 
 ### Provider 特有环境变量
@@ -341,7 +341,7 @@ Ellamaka 是 OpenCode 的定制 fork，通过 `WOPAL_HOME` 环境变量覆盖全
 | `opencode.json` `options.apiKey` | provider 级别 | 配置文件中直接指定 |
 | `ellamaka auth login <provider>` | OAuth provider | 交互式登录，凭证存入本地数据库 |
 | `--password` + `--attach` | 远程 server | HTTP Basic Auth 连接已有 server |
-| `OPENCODE_SERVER_PASSWORD` | 远程 server | 环境变量替代 `--password` |
+| `ELLAMAKA_SERVER_PASSWORD` | 远程 server | 环境变量替代 `--password` |
 
 ---
 

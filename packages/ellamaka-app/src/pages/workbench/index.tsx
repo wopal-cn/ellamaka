@@ -40,6 +40,7 @@ import { useCommand } from "@/context/command"
 import { useDialog } from "@wopal/ui/context/dialog"
 import { Toast } from "@wopal/ui/toast"
 import { isWorkbenchClosePanelShortcut, isWorkbenchTabCloseProtected } from "./workbench-keyboard"
+import { isUnauthorizedError } from "@/utils/auth-error"
 
 function WorkbenchShell() {
   const wb = useWorkbenchState()
@@ -289,10 +290,31 @@ function WorkbenchShell() {
           role="alertdialog"
           aria-modal="true"
         >
-          <div class="flex flex-col items-center gap-3 text-center">
-            <div class="workbench-spinner rounded-full h-6 w-6 border-2 border-v2-text-text-muted border-t-transparent" />
-            <p class="text-14-medium text-v2-text-text-primary">{t("workbench.runtime.offlineOverlay")}</p>
-          </div>
+          <Show
+            when={runtime.unauthorized}
+            fallback={
+              <div class="flex flex-col items-center gap-3 text-center">
+                <div class="workbench-spinner rounded-full h-6 w-6 border-2 border-v2-text-text-muted border-t-transparent" />
+                <p class="text-14-medium text-v2-text-text-primary">{t("workbench.runtime.offlineOverlay")}</p>
+              </div>
+            }
+          >
+            <div class="flex flex-col items-center gap-4 text-center max-w-sm px-6">
+              <p class="text-16-semibold text-v2-text-text-strong">{t("workbench.runtime.unauthorizedTitle")}</p>
+              <p class="text-14-regular text-v2-text-text-muted">{t("workbench.runtime.unauthorizedHint")}</p>
+              <button
+                type="button"
+                class="rounded-lg bg-v2-button-primary-base px-4 py-2 text-14-medium text-v2-text-on-brand-base hover:bg-v2-button-primary-hover"
+                onClick={() => {
+                  void import("@/components/dialog-select-server").then((x) => {
+                    dialog.show(() => <x.DialogSelectServer />)
+                  })
+                }}
+              >
+                {t("workbench.runtime.unauthorizedAction")}
+              </button>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
@@ -302,6 +324,11 @@ function WorkbenchShell() {
 function WorkbenchErrorFallback(props: { error: Error; reset: () => void }) {
   const language = useLanguage()
   const t: typeof language.t = (key, params) => language.t(key, params)
+  // A 401 that escapes a store is a stale-credentials episode, not a broken
+  // shell: "something went wrong / restart" is the wrong medicine. Offer the
+  // server-credentials dialog instead; saving fresh credentials remounts the
+  // tree and the boundary resets without a manual page reload.
+  const unauthorized = isUnauthorizedError(props.error)
   return (
     <div class="flex h-dvh flex-col items-center justify-center gap-6 bg-v2-background-bg-deep text-v2-text-text-base p-8">
       <div class="flex flex-col items-center max-w-md text-center gap-4">
@@ -310,20 +337,34 @@ function WorkbenchErrorFallback(props: { error: Error; reset: () => void }) {
           <img src="/ellamaka-text-logo.png?v=2" class="h-7 w-auto object-contain ellamaka-logo-invert" alt="Logo" />
         </div>
         <h2 class="text-20-semibold text-v2-text-text-strong">
-          {t("workbench.error.shellLoadFailed")}
+          {unauthorized ? t("workbench.runtime.unauthorizedTitle") : t("workbench.error.shellLoadFailed")}
         </h2>
         <p class="text-14-regular text-v2-text-text-muted break-words bg-v2-background-bg-base/60 border border-v2-border-border-base p-3.5 rounded-lg text-left w-full font-mono text-xs max-h-40 overflow-y-auto">
           {props.error.message || t("workbench.error.unknownError")}
         </p>
 
         <div class="flex items-center gap-3 mt-2">
-          <button
-            type="button"
-            class="rounded-md bg-v2-icon-icon-brand px-5 py-2 text-13-semibold text-white hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
-            onClick={() => props.reset()}
-          >
-            {t("workbench.error.retry")}
-          </button>
+          {unauthorized ? (
+            <button
+              type="button"
+              class="rounded-md bg-v2-icon-icon-brand px-5 py-2 text-13-semibold text-white hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
+              onClick={() => {
+                void import("@/components/dialog-select-server").then((x) => {
+                  useDialog().show(() => <x.DialogSelectServer />)
+                })
+              }}
+            >
+              {t("workbench.runtime.unauthorizedAction")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              class="rounded-md bg-v2-icon-icon-brand px-5 py-2 text-13-semibold text-white hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
+              onClick={() => props.reset()}
+            >
+              {t("workbench.error.retry")}
+            </button>
+          )}
           <a
             href="https://github.com/sampx/wopal-space/issues"
             target="_blank"

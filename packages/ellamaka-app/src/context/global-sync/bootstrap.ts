@@ -12,6 +12,7 @@ import type {
 import { showToast } from "@wopal/ui/toast"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { retry } from "@wopal/ellamaka-core/util/retry"
+import { showServerToast } from "@/utils/server-toast"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -308,12 +309,14 @@ export async function bootstrapDirectory(input: {
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk))),
       () =>
         input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
-          const project = getFilename(input.directory)
-          showToast({
-            variant: "error",
-            title: input.translate("toast.project.reloadFailed.title", { project }),
-            description: formatServerError(err, input.translate),
-          })
+          showServerToast(
+            {
+              variant: "error",
+              title: input.translate("toast.project.reloadFailed.title", { project: getFilename(input.directory) }),
+              description: formatServerError(err, input.translate),
+            },
+            err,
+          )
         }),
     ].filter(Boolean) as (() => Promise<any>)[]
 
@@ -321,12 +324,14 @@ export async function bootstrapDirectory(input: {
     const slowErrs = errors(await runAll(slow))
     if (slowErrs.length > 0) {
       console.error("Failed to finish bootstrap instance", slowErrs[0])
-      const project = getFilename(input.directory)
-      showToast({
-        variant: "error",
-        title: input.translate("toast.project.reloadFailed.title", { project }),
-        description: formatServerError(slowErrs[0], input.translate),
-      })
+      showServerToast(
+        {
+          variant: "error",
+          title: input.translate("toast.project.reloadFailed.title", { project: getFilename(input.directory) }),
+          description: formatServerError(slowErrs[0], input.translate),
+        },
+        slowErrs[0],
+      )
     }
 
     if (loading && slowErrs.length === 0) input.setStore("status", "complete")

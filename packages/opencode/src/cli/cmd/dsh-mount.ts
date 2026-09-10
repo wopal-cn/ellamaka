@@ -1,6 +1,8 @@
 import { Global } from "@wopal/ellamaka-core/global"
 import { join } from "node:path"
+import os from "node:os"
 import type { Listener } from "../../server/server"
+import { Effect } from "effect"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   initializeDshRuntime,
@@ -11,6 +13,138 @@ import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-co
 import { setDshUrlGetter } from "@/workbench/dsh-url"
 import { setDshStatus } from "@/workbench/dsh-status"
 
+/**
+ * The DSH connection-fence authorities derived from the user's CORS trust
+ * decision. The CORS surface (`server.cors` in settings.jsonc + `--cors`
+ * flags, merged in `resolveNetworkOptions`) is the ONE place a user declares
+ * "this remote origin is trusted"; the DSH fence follows that decision —
+ * full Origins (`http://192.168.1.5:3000`) are reduced to the `host:port`
+ * authority the fence compares, already-authority strings pass through, and
+ * entries that parse as neither are skipped (fail closed, same as an empty
+ * list).
+ */
+export function trustedHostsFromCors(cors: readonly string[]): string[] {
+  const hosts: string[] = []
+  for (const entry of cors) {
+    let authority: string | undefined
+    try {
+      const url = new URL(entry)
+      authority = url.host
+    } catch {
+      if (/^[a-z0-9._-]+(:\d+)?$/i.test(entry)) authority = entry
+    }
+    if (authority && !hosts.includes(authority)) hosts.push(authority)
+  }
+  return hosts
+}
+
+const WILDCARD_HOSTNAMES = new Set(["0.0.0.0", "::", "[::]"])
+
+/** True when the bind hostname is a wildcard address (`0.0.0.0` / `::`). */
+export function isWildcardBind(hostname: string): boolean {
+  return WILDCARD_HOSTNAMES.has(hostname)
+}
+
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1", "[::1]"])
+
+function formatAuthority(hostname: string, port: number): string {
+  // Only bare IPv6 literals (two or more colons, not already bracketed) need
+  // brackets before the port is appended.
+  const isBareIpv6 = hostname.split(":").length > 2 && !hostname.startsWith("[")
+  const host = isBareIpv6 ? `[${hostname}]` : hostname
+  return `${host}:${port}`
+}
+
+/**
+ * The authorities the server itself serves on. This is the fence's baseline
+ * trust: whatever address a request reaches this process through IS this
+ * process, so it never needs a user configuration entry to be accepted.
+ * Loopback hostnames are skipped because the fence already trusts them. A
+ * wildcard bind has no single self name, so every local interface address is
+ * admitted for the bound port.
+ */
+export function selfDshAuthorities(
+  bind: { hostname: string; port: number },
+  localAddresses: readonly string[],
+): string[] {
+  const hosts: string[] = []
+  const push = (value: string) => {
+    if (!hosts.includes(value)) hosts.push(value)
+  }
+  if (WILDCARD_HOSTNAMES.has(bind.hostname)) {
+    for (const address of localAddresses) push(formatAuthority(address, bind.port))
+  } else if (!LOOPBACK_HOSTNAMES.has(bind.hostname)) {
+    push(formatAuthority(bind.hostname, bind.port))
+  }
+  return hosts
+}
+
+/**
+ * The complete fence allowlist: user CORS trust (cross-origin deployments)
+ * plus the server's own serving authorities (baseline self-trust). One trust
+ * decision for the user, and no way for the server to reject itself.
+ */
+export function trustedDshAuthorities(
+  bind: { hostname: string; port: number },
+  cors: readonly string[],
+  localAddresses: readonly string[],
+): string[] {
+  const hosts = trustedHostsFromCors(cors)
+  for (const authority of selfDshAuthorities(bind, localAddresses)) {
+    if (!hosts.includes(authority)) hosts.push(authority)
+  }
+  return hosts
+}
+
+/**
+ * Detect the non-internal interface addresses of this machine. The mount site
+ * feeds these to `selfDshAuthorities` so a wildcard bind (`*:9999`) admits the
+ * LAN addresses its browser clients actually use. Reads local interface state
+ * only — no network probing.
+ */
+export function localDshInterfaceAddresses(): string[] {
+  const addresses: string[] = []
+  for (const entries of Object.values(os.networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.internal) continue
+      const bare = entry.address.split("%")[0]
+      // Link-local IPv6 (fe80::/10) is scope-bound to one interface and never
+      // a browsing authority — skip it to keep the fence list predictable.
+      if (/^fe80:/i.test(bare)) continue
+      if (!addresses.includes(bare)) addresses.push(bare)
+    }
+  }
+  return addresses
+}
+
+/**
+ * A ROUTABLE origin for the dsh launch-token entry. `server.url` carries the
+ * bind hostname verbatim, so a wildcard bind (`--hostname 0.0.0.0`, or
+ * `--mdns` which defaults it) yields `http://0.0.0.0:port` — an address a
+ * browser cannot meaningfully use, and whose minted dsh cookie authority
+ * every real request then fails. When the serving request carries a Host
+ * header, that is the origin the user's browser is actually talking to (LAN
+ * IP, mdns name, loopback), so it wins; a wildcard bind without a Host falls
+ * back to concrete `localhost`; a concrete bind keeps its own hostname (a
+ * request Host may still differ — NAT/proxy views — and wins the same way).
+ */
+export function routableDshOrigin(hostname: string, port: number, requestHost: string | undefined): string {
+  if (requestHost) {
+    try {
+      const url = new URL(`http://${requestHost}`)
+      url.port = String(port)
+      if (port === 80) url.port = ""
+      return url.origin
+    } catch {
+      // Malformed Host header — fall through to the bind-derived origin.
+    }
+  }
+  if (WILDCARD_HOSTNAMES.has(hostname)) {
+    return `http://localhost${port === 80 ? "" : `:${port}`}`
+  }
+  return `http://${hostname}${port === 80 ? "" : `:${port}`}`
+}
+
 export interface DshEngineMountOptions {
   /** Override the wopal home; defaults to `$WOPAL_HOME`. */
   wopalHome?: string
@@ -18,6 +152,12 @@ export interface DshEngineMountOptions {
   logFile?: string
   /** The entry name the runtime manager logs under; defaults to `serve`. */
   entry?: "serve" | "web"
+  /**
+   * The merged CORS origin list (`server.cors` + `--cors`, resolved by the
+   * network options before the server binds). The DSH fence derives its
+   * trusted authorities from this list — one trust decision, one surface.
+   */
+  cors?: readonly string[]
 }
 
 export interface DshEngineHandle {
@@ -125,18 +265,37 @@ export async function mountDshEngine(
       runtime,
       disableCodeRuntime: true,
       ellamakaCommand: resolveEllamakaCommand(),
+      // The fence allowlist rides the web-runtime row into the official
+      // webRuntime -> connection fence chain: user CORS trust for cross-origin
+      // deployments, plus the server's own serving authorities so it never
+      // rejects the address a client actually reaches it through (wildcard
+      // binds admit every local interface address on the bound port).
+      trustedHosts: trustedDshAuthorities(
+        { hostname: server.hostname, port: server.port },
+        opts.cors ?? [],
+        localDshInterfaceAddresses(),
+      ),
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,
+      // auth-fix-3: the dsh mount brings its own complete browser-auth
+      // (launch-token → signed cookie fence), so it declares "self" on the
+      // host auth stack it bypasses.
+      auth: "self",
       request: (req, res) => dsh.webServer.request(req, res),
       upgrade: (req, socket, head) => dsh.webServer.upgrade(req, socket, head),
     })
     // The Workbench iframe enters the DSH surface through the official rc.1
     // browser-auth launch token; publish the mount-computed entry getter so
     // the /workbench/dsh-url endpoint answers with it (undefined until now).
-    setDshUrlGetter(() => {
+    // The origin is resolved PER REQUEST from the Host header: a wildcard
+    // bind (`--hostname 0.0.0.0` / `--mdns`) makes server.url non-routable,
+    // and the minted cookie's authority must match the host the browser
+    // actually talks to (routableDshOrigin).
+    setDshUrlGetter((requestHost) => {
       try {
-        return new URL(dsh.authenticatedPath, server.url?.origin ?? "http://127.0.0.1").toString()
+        const origin = routableDshOrigin(server.hostname, server.port, requestHost)
+        return new URL(dsh.authenticatedPath, origin).toString()
       } catch {
         return undefined
       }

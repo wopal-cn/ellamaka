@@ -124,7 +124,7 @@ ellamaka Basic 认证与 dsh browser-auth 是**两个信任域各守各的门**�
 
 联盟的安全边界由四项机制固化（对应挂载边界，见「运行时机制 · 单端口分发」）：
 
-- **trustedHosts 配置化**：connection fence 的 `trustedHosts` 由 ellamaka 配置项 `ellamaka.dsh.trustedHosts`（默认 `[]`，默认值层进 `settings.jsonc`）经 profile 补丁层注入。非 loopback Host 必须命中该列表——LAN 部署经配置显式放行，认证机制本身仍归官方实现，零官方改动、零自造会话。
+- **围栏信任跟随 CORS 信任决策**：connection fence 的 `trustedHosts` 从宿主 CORS 信任决策自动派生（`server.cors` 配置 + `--cors` 参数合并后的 Origin 列表，按 `host:port` 规约为围栏 authority），经 profile 补丁层注入，无独立的 dsh 配置面。非 loopback Host 必须命中该列表——LAN 部署在 CORS 一处声明信任，CORS 放行与围栏放行同时生效；默认空列表行为不变（loopback-only）。认证机制本身仍归官方实现，零官方改动、零自造会话。
 - **iframe 401 自愈**：`DshSurface` 探测 iframe 内文档的 401 响应，命中即重取 `/workbench/dsh-url` 并重载 src——token URL 重载即重新 303 铸 cookie，无感恢复。单次失效只重试一轮，不引入新会话机制。
 - **挂载认证策略显式声明**：`NodeRouteMount` 强制声明 `auth`（`"self" | "public"`），dispatcher 校验该不变量——挂载要么自带完整认证（如 dsh browser-auth，声明 `self`），要么明确公开（如纯静态资源），不允许默认无认证。E 线实验 profile 是新的 self-auth 挂载前缀，遵循同一契约。
 - **WS upgrade 与 HTTP 共享认证路径**：WS downlink 握手与 `/api` HTTP 通道经同一道认证——connection 的 `requestRejection`（fence + cookie）守卫两条通道，官方实现，宿主不设独立 upgrade 认证。

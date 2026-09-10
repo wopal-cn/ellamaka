@@ -29,6 +29,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
+    "@wopal/ellamaka-brand": "workspace:*",
     "cross-spawn": "catalog:"
   }
 }

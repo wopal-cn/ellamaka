@@ -9,42 +9,45 @@ import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
+import { ptyAvailable } from "../fixture/pty"
 
 void Log.init({ print: false })
 
 const original = {
-  OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-  OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
-  envPassword: process.env.OPENCODE_SERVER_PASSWORD,
-  envUsername: process.env.OPENCODE_SERVER_USERNAME,
+  ELLAMAKA_SERVER_PASSWORD: Flag.ELLAMAKA_SERVER_PASSWORD,
+  ELLAMAKA_SERVER_USERNAME: Flag.ELLAMAKA_SERVER_USERNAME,
+  envPassword: process.env.ELLAMAKA_SERVER_PASSWORD,
+  envUsername: process.env.ELLAMAKA_SERVER_USERNAME,
 }
 const auth = { username: "opencode", password: "listen-secret" }
-const testPty = process.platform === "win32" ? test.skip : test
+// PTY cases need a real `forkpty()`; hosts without spawn privileges (sandboxed
+// runners) can only skip — the capability probe fails fast and cached.
+const testPty = process.platform === "win32" || !ptyAvailable() ? test.skip : test
 
 afterEach(async () => {
-  Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-  Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-  if (original.envPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
-  else process.env.OPENCODE_SERVER_PASSWORD = original.envPassword
-  if (original.envUsername === undefined) delete process.env.OPENCODE_SERVER_USERNAME
-  else process.env.OPENCODE_SERVER_USERNAME = original.envUsername
+  Flag.ELLAMAKA_SERVER_PASSWORD = original.ELLAMAKA_SERVER_PASSWORD
+  Flag.ELLAMAKA_SERVER_USERNAME = original.ELLAMAKA_SERVER_USERNAME
+  if (original.envPassword === undefined) delete process.env.ELLAMAKA_SERVER_PASSWORD
+  else process.env.ELLAMAKA_SERVER_PASSWORD = original.envPassword
+  if (original.envUsername === undefined) delete process.env.ELLAMAKA_SERVER_USERNAME
+  else process.env.ELLAMAKA_SERVER_USERNAME = original.envUsername
   await disposeAllInstances()
   await resetDatabase()
 })
 
 async function startListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = auth.password
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  process.env.OPENCODE_SERVER_PASSWORD = auth.password
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
+  Flag.ELLAMAKA_SERVER_PASSWORD = auth.password
+  Flag.ELLAMAKA_SERVER_USERNAME = auth.username
+  process.env.ELLAMAKA_SERVER_PASSWORD = auth.password
+  process.env.ELLAMAKA_SERVER_USERNAME = auth.username
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 
 async function startNoAuthListener() {
-  Flag.OPENCODE_SERVER_PASSWORD = undefined
-  Flag.OPENCODE_SERVER_USERNAME = auth.username
-  delete process.env.OPENCODE_SERVER_PASSWORD
-  process.env.OPENCODE_SERVER_USERNAME = auth.username
+  Flag.ELLAMAKA_SERVER_PASSWORD = undefined
+  Flag.ELLAMAKA_SERVER_USERNAME = auth.username
+  delete process.env.ELLAMAKA_SERVER_PASSWORD
+  process.env.ELLAMAKA_SERVER_USERNAME = auth.username
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 

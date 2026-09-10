@@ -25,18 +25,18 @@ void Log.init({ print: false })
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     const original = {
-      OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
-      OPENCODE_SERVER_USERNAME: Flag.OPENCODE_SERVER_USERNAME,
-      envPassword: process.env.OPENCODE_SERVER_PASSWORD,
-      envUsername: process.env.OPENCODE_SERVER_USERNAME,
+      ELLAMAKA_SERVER_PASSWORD: Flag.ELLAMAKA_SERVER_PASSWORD,
+      ELLAMAKA_SERVER_USERNAME: Flag.ELLAMAKA_SERVER_USERNAME,
+      envPassword: process.env.ELLAMAKA_SERVER_PASSWORD,
+      envUsername: process.env.ELLAMAKA_SERVER_USERNAME,
     }
 
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
-        Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
-        Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
-        restoreEnv("OPENCODE_SERVER_PASSWORD", original.envPassword)
-        restoreEnv("OPENCODE_SERVER_USERNAME", original.envUsername)
+        Flag.ELLAMAKA_SERVER_PASSWORD = original.ELLAMAKA_SERVER_PASSWORD
+        Flag.ELLAMAKA_SERVER_USERNAME = original.ELLAMAKA_SERVER_USERNAME
+        restoreEnv("ELLAMAKA_SERVER_PASSWORD", original.envPassword)
+        restoreEnv("ELLAMAKA_SERVER_USERNAME", original.envUsername)
       }),
     )
   }),
@@ -58,8 +58,8 @@ function app(input?: { password?: string; username?: string }) {
       Layer.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input?.password,
-            OPENCODE_SERVER_USERNAME: input?.username,
+            ELLAMAKA_SERVER_PASSWORD: input?.password,
+            ELLAMAKA_SERVER_USERNAME: input?.username,
           }),
         ),
       ),
@@ -105,8 +105,8 @@ function uiApp(input?: {
         HttpServer.layerServices,
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input?.password,
-            OPENCODE_SERVER_USERNAME: input?.username,
+            ELLAMAKA_SERVER_PASSWORD: input?.password,
+            ELLAMAKA_SERVER_USERNAME: input?.username,
           }),
         ),
       ]),
@@ -358,7 +358,7 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
-  it.live("requires server password for the web UI", () =>
+  it.live("serves the disabled-UI root without a credential challenge", () =>
     Effect.gen(function* () {
       const response = yield* uiApp({
         password: "secret",
@@ -366,10 +366,33 @@ describe("HttpApi UI fallback", () => {
         disableEmbeddedWebUi: true,
       }).request("/")
 
-      expect(response.status).toBe(401)
-      expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+      // The workbench-document exemption lets `/` through the auth layer
+      // (public-ui.test.ts asserts the policy); with no embedded UI and no
+      // upstream the handler itself answers 404. A 401 here would carry no
+      // `www-authenticate` either — the challenge is dropped by design so a
+      // fetch 401 can never pop the browser's native login dialog.
+      expect(response.status).toBe(404)
+      expect(response.headers.get("www-authenticate")).toBeNull()
     }),
   )
+
+  it.live("rejects wrong credentials on an authenticated API route", () =>
+    Effect.gen(function* () {
+      const response = yield* uiApp({
+        password: "secret",
+        username: "opencode",
+        disableEmbeddedWebUi: true,
+      }).request("/workbench/dsh-url")
+
+      expect(response.status).toBe(401)
+      expect(response.headers.get("www-authenticate")).toBeNull()
+    }),
+  )
+
+  // NOTE: the workbench-document public exemption (`/` and `/workbench` GETs)
+  // is asserted at the unit level in public-ui.test.ts; this harness resolves
+  // no embedded UI and no UI_UPSTREAM, so serveUIEffect answers 404 before the
+  // auth layer ever matters here.
 
   it.live("accepts auth token for the web UI", () =>
     Effect.gen(function* () {

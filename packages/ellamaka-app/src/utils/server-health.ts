@@ -13,7 +13,14 @@ export type WopalCliHealth = {
 
 export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
 
-export type ServerHealth = { healthy: boolean; version?: string; cli?: WopalCliHealth; dsh?: DshRuntimeStatus }
+export type ServerHealth = {
+  healthy: boolean
+  version?: string
+  cli?: WopalCliHealth
+  dsh?: DshRuntimeStatus
+  /** The server rejected the stored credentials (HTTP 401). */
+  unauthorized?: boolean
+}
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -85,8 +92,12 @@ export async function checkServerHealth(
   const signal = opts?.signal ?? timeout?.signal
   const retryCount = opts?.retryCount ?? defaultRetryCount
   const retryDelayMs = opts?.retryDelayMs ?? defaultRetryDelayMs
-  const next = (count: number, error: unknown) => {
-    if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false } as const)
+  const next = (count: number, error: unknown, response?: Response): Promise<ServerHealth> => {
+    // A 401 is a definitive credential rejection, never a transient network
+    // failure — report it immediately so the UI can ask for fresh credentials
+    // instead of spinning on retries.
+    if (response?.status === 401) return Promise.resolve({ healthy: false, unauthorized: true })
+    if (count >= retryCount || !retryable(error, signal)) return Promise.resolve({ healthy: false })
     return wait(retryDelayMs * (count + 1), signal)
       .then(() => attempt(count + 1))
       .catch(() => ({ healthy: false }))
@@ -99,7 +110,7 @@ export async function checkServerHealth(
     })
       .global.health()
       .then((x) => x.error
-        ? next(count, x.error)
+        ? next(count, x.error, x.response)
         : {
             healthy: x.data?.healthy === true,
             version: x.data?.version,

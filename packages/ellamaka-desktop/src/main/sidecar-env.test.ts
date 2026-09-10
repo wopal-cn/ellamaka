@@ -54,7 +54,7 @@ const OPENCODE_SWITCHES = [
   "OPENCODE_DISABLE_EMBEDDED_WEB_UI",
 ] as const
 
-const OPENCODE_KEYS = [...OPENCODE_SWITCHES, "OPENCODE_SERVER_USERNAME", "OPENCODE_SERVER_PASSWORD"] as const
+const OPENCODE_KEYS = [...OPENCODE_SWITCHES, "ELLAMAKA_SERVER_USERNAME", "ELLAMAKA_SERVER_PASSWORD"] as const
 
 function snapshotKeys(keys: readonly string[]): Map<string, string | undefined> {
   const saved = new Map<string, string | undefined>()
@@ -89,8 +89,8 @@ describe("createSidecarEnv", () => {
 
     const env = createSidecarEnv("secret")
 
-    expect(env.OPENCODE_SERVER_USERNAME).toBe("ellamaka")
-    expect(env.OPENCODE_SERVER_PASSWORD).toBe("secret")
+    expect(env.ELLAMAKA_SERVER_USERNAME).toBe("ellamaka")
+    expect(env.ELLAMAKA_SERVER_PASSWORD).toBe("secret")
     expect(env.OPENCODE_CLIENT).toBe("ellamaka-desktop")
     expect(env.OPENCODE_DISABLE_EMBEDDED_WEB_UI).toBe("true")
     expect(env.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY).toBe("true")
@@ -119,8 +119,8 @@ describe("createSidecarEnv", () => {
     try {
       createSidecarEnv("secret")
 
-      expect(process.env.OPENCODE_SERVER_USERNAME).toBeUndefined()
-      expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined()
+      expect(process.env.ELLAMAKA_SERVER_USERNAME).toBeUndefined()
+      expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
       for (const key of OPENCODE_SWITCHES) expect(process.env[key]).toBeUndefined()
     } finally {
       restoreKeys(saved)
@@ -202,8 +202,8 @@ describe("preferAppEnv", () => {
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
-      OPENCODE_SERVER_USERNAME: "ellamaka",
-      OPENCODE_SERVER_PASSWORD: "shell-secret",
+      ELLAMAKA_SERVER_USERNAME: "ellamaka",
+      ELLAMAKA_SERVER_PASSWORD: "shell-secret",
     }
     const saved = snapshotKeys([...OPENCODE_KEYS, "PATH"])
     clearOpencodeEnv()
@@ -227,7 +227,7 @@ describe("preferAppEnv", () => {
     clearOpencodeEnv()
     process.env.OPENCODE_CLIENT = "pre-existing"
     process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
-    process.env.OPENCODE_SERVER_PASSWORD = "pre-existing"
+    process.env.ELLAMAKA_SERVER_PASSWORD = "pre-existing"
 
     try {
       preferAppEnv()
@@ -320,17 +320,17 @@ describe("preferAppEnv", () => {
 
 describe("sidecar credentials cleanup", () => {
   test("clearSidecarCredentials deletes both credential keys from process.env", () => {
-    process.env.OPENCODE_SERVER_PASSWORD = "secret"
-    process.env.OPENCODE_SERVER_USERNAME = "ellamaka"
+    process.env.ELLAMAKA_SERVER_PASSWORD = "secret"
+    process.env.ELLAMAKA_SERVER_USERNAME = "ellamaka"
 
     try {
       clearSidecarCredentials()
 
-      expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined()
-      expect(process.env.OPENCODE_SERVER_USERNAME).toBeUndefined()
+      expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
+      expect(process.env.ELLAMAKA_SERVER_USERNAME).toBeUndefined()
     } finally {
-      delete process.env.OPENCODE_SERVER_PASSWORD
-      delete process.env.OPENCODE_SERVER_USERNAME
+      delete process.env.ELLAMAKA_SERVER_PASSWORD
+      delete process.env.ELLAMAKA_SERVER_USERNAME
     }
   })
 
@@ -338,8 +338,8 @@ describe("sidecar credentials cleanup", () => {
     const env = {
       PATH: "/usr/bin:/bin",
       OPENCODE_CLIENT: "x",
-      OPENCODE_SERVER_USERNAME: "ellamaka",
-      OPENCODE_SERVER_PASSWORD: "secret",
+      ELLAMAKA_SERVER_USERNAME: "ellamaka",
+      ELLAMAKA_SERVER_PASSWORD: "secret",
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
       OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true",
@@ -359,16 +359,16 @@ describe("sidecar credentials cleanup", () => {
     // Experimental flags are matched by prefix (isSidecarOnlyOpencodeKey), not
     // enumerated here; only the exact keys are expected.
     expect(SIDECAR_ONLY_OPENCODE_KEYS).toEqual([
-      "OPENCODE_SERVER_USERNAME",
-      "OPENCODE_SERVER_PASSWORD",
+      "ELLAMAKA_SERVER_USERNAME",
+      "ELLAMAKA_SERVER_PASSWORD",
       "OPENCODE_CLIENT",
       "OPENCODE_DISABLE_EMBEDDED_WEB_UI",
     ])
   })
 
   test("isSidecarOnlyOpencodeKey matches experimental prefix and root switch", () => {
-    expect(isSidecarOnlyOpencodeKey("OPENCODE_SERVER_USERNAME")).toBe(true)
-    expect(isSidecarOnlyOpencodeKey("OPENCODE_SERVER_PASSWORD")).toBe(true)
+    expect(isSidecarOnlyOpencodeKey("ELLAMAKA_SERVER_USERNAME")).toBe(true)
+    expect(isSidecarOnlyOpencodeKey("ELLAMAKA_SERVER_PASSWORD")).toBe(true)
     expect(isSidecarOnlyOpencodeKey("OPENCODE_CLIENT")).toBe(true)
     expect(isSidecarOnlyOpencodeKey("OPENCODE_DISABLE_EMBEDDED_WEB_UI")).toBe(true)
     expect(isSidecarOnlyOpencodeKey("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")).toBe(true)
@@ -386,8 +386,8 @@ describe("sidecar credentials cleanup", () => {
     // Regression for W-01: the mock listener must stay pending until we release
     // it, so a future buggy change that clears credentials before awaiting the
     // listen promise would be caught.
-    process.env.OPENCODE_SERVER_PASSWORD = "secret"
-    process.env.OPENCODE_SERVER_USERNAME = "ellamaka"
+    process.env.ELLAMAKA_SERVER_PASSWORD = "secret"
+    process.env.ELLAMAKA_SERVER_USERNAME = "ellamaka"
 
     let releaseListen!: () => void
     const pending = new Promise<void>((resolve) => {
@@ -403,26 +403,26 @@ describe("sidecar credentials cleanup", () => {
 
     // While listen is still pending, the credentials must be present so
     // ServerAuth (ConfigProvider.fromEnv()) can capture them during listen.
-    expect(process.env.OPENCODE_SERVER_PASSWORD).toBe("secret")
-    expect(process.env.OPENCODE_SERVER_USERNAME).toBe("ellamaka")
+    expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBe("secret")
+    expect(process.env.ELLAMAKA_SERVER_USERNAME).toBe("ellamaka")
 
     releaseListen()
     const result = await started
 
     expect(result).toEqual({ listener: "ok" })
     // Only after listen resolved were the credentials cleared.
-    expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined()
-    expect(process.env.OPENCODE_SERVER_USERNAME).toBeUndefined()
+    expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
+    expect(process.env.ELLAMAKA_SERVER_USERNAME).toBeUndefined()
   })
 
   test("listenThenClearCredentials clears even when listen rejects", async () => {
-    process.env.OPENCODE_SERVER_PASSWORD = "secret"
+    process.env.ELLAMAKA_SERVER_PASSWORD = "secret"
 
     try {
       await expect(listenThenClearCredentials(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom")
-      expect(process.env.OPENCODE_SERVER_PASSWORD).toBeUndefined()
+      expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
     } finally {
-      delete process.env.OPENCODE_SERVER_PASSWORD
+      delete process.env.ELLAMAKA_SERVER_PASSWORD
     }
   })
 })
