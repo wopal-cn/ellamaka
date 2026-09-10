@@ -1,6 +1,6 @@
 import { ServerAuth } from "@/server/auth"
 import { Effect, Encoding, Layer, Redacted } from "effect"
-import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiError, HttpApiMiddleware } from "effect/unstable/httpapi"
 import { hasPtyConnectTicketURL } from "@/server/shared/pty-ticket"
 import { isPublicUIPath } from "@/server/shared/public-ui"
@@ -8,7 +8,15 @@ import { UnauthorizedError } from "../errors"
 
 const AUTH_TOKEN_QUERY = "auth_token"
 const UNAUTHORIZED = 401
-const WWW_AUTHENTICATE = 'Basic realm="Secure Area"'
+// Deliberately NOT sent on 401s. `www-authenticate: Basic` makes the BROWSER
+// pop its native login dialog for fetch requests — a dialog the SPA cannot
+// intercept, and one that loops forever against a stale persisted credential:
+// the SPA re-attaches the old Authorization header on every request, overriding
+// whatever the user typed into the dialog. Stale credentials are recovered in
+// the application instead (the server-management dialog), which can actually
+// update the stored password.
+// CURL_AND_SCRIPTS_KEEP_WORKING: curl/CLI clients already send explicit
+// Basic headers or the auth_token query and never relied on the challenge.
 
 // Avoid HttpApiSecurity alternatives here: Effect security middleware wraps the
 // full handler, so a downstream failure can make the next auth alternative run
@@ -49,9 +57,6 @@ function validateCredential<A, E, R>(
   return Effect.gen(function* () {
     if (!ServerAuth.required(config)) return yield* effect
     if (!ServerAuth.authorized(credential, config)) {
-      yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-        Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
-      )
       return yield* new HttpApiError.Unauthorized({})
     }
     return yield* effect
@@ -93,12 +98,7 @@ function validateRawCredential<A, E, R>(
 ) {
   if (!ServerAuth.required(config)) return effect
   if (!ServerAuth.authorized(credential, config))
-    return Effect.succeed(
-      HttpServerResponse.empty({
-        status: UNAUTHORIZED,
-        headers: { "www-authenticate": WWW_AUTHENTICATE },
-      }),
-    )
+    return Effect.succeed(HttpServerResponse.empty({ status: UNAUTHORIZED }))
   return effect
 }
 
@@ -165,9 +165,6 @@ export const v2AuthorizationLayer = Layer.effect(
           Effect.flatMap((credential) =>
             Effect.gen(function* () {
               if (ServerAuth.authorized(credential, config)) return yield* effect
-              yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-                Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
-              )
               return yield* new UnauthorizedError({ message: "Authentication required" })
             }),
           ),

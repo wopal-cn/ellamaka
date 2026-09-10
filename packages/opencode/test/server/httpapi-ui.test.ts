@@ -371,6 +371,11 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
+  // NOTE: the workbench-document public exemption (`/` and `/workbench` GETs)
+  // is asserted at the unit level in public-ui.test.ts; this harness resolves
+  // no embedded UI and no UI_UPSTREAM, so serveUIEffect answers 404 before the
+  // auth layer ever matters here.
+
   it.live("accepts auth token for the web UI", () =>
     Effect.gen(function* () {
       const response = yield* uiApp({
