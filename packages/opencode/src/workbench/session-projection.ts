@@ -2,13 +2,14 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { realpath } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
+import { SessionID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import { SessionDirectoryHealth } from "./session-directory-health"
 import { SpaceRegistry } from "@/wopal/space-registry"
 import { CliContract } from "@/wopal/cli-contract"
 import type { SpaceEntry } from "@/wopal/cli-schema"
 import { SpaceControlUnavailable, CapabilityContractError } from "@/wopal/cli-schema"
-import { and, isNull } from "drizzle-orm"
+import { and, eq, isNull } from "drizzle-orm"
 import {
   buildWorkbenchSessionTree,
   isPathWithin,
@@ -36,6 +37,14 @@ export interface SessionSummary {
   timeArchived?: number
 }
 
+export interface WorkbenchSessionSummary {
+  id: SessionID
+  title: string
+  directory: string
+  parentID?: SessionID
+  agent?: string
+}
+
 export type WorkbenchLocation = {
   key: string
   kind: "space-root" | "project" | "recent" | "search"
@@ -52,11 +61,14 @@ export class WorkbenchSpaceNotFound extends Schema.TaggedErrorClass<WorkbenchSpa
 
 export interface SessionProjection {
   readonly getSessionGroups: () => Effect.Effect<SessionGroup[], SpaceControlUnavailable | CapabilityContractError>
-  readonly getSessionTree: (input?: { limitPerScope?: number }) => Effect.Effect<
-    WorkbenchSessionTree,
-    SpaceControlUnavailable | CapabilityContractError
-  >
-  readonly getLocations: (input: { spacePath: string; query?: string }) => Effect.Effect<
+  readonly getSessionSummary: (input: { sessionID: SessionID }) => Effect.Effect<WorkbenchSessionSummary | null>
+  readonly getSessionTree: (input?: {
+    limitPerScope?: number
+  }) => Effect.Effect<WorkbenchSessionTree, SpaceControlUnavailable | CapabilityContractError>
+  readonly getLocations: (input: {
+    spacePath: string
+    query?: string
+  }) => Effect.Effect<
     { scopePath: string; items: WorkbenchLocation[] },
     WorkbenchSpaceNotFound | SpaceControlUnavailable | CapabilityContractError
   >
@@ -102,23 +114,52 @@ const make = Effect.gen(function* () {
 
   const activeRows = () =>
     Effect.sync(() =>
-      Database.use((db) =>
+      Database.use(
+        (db) =>
+          db
+            .select({
+              id: SessionTable.id,
+              title: SessionTable.title,
+              directory: SessionTable.directory,
+              agent: SessionTable.agent,
+              parent_id: SessionTable.parent_id,
+              time_created: SessionTable.time_created,
+              time_updated: SessionTable.time_updated,
+              time_archived: SessionTable.time_archived,
+            })
+            .from(SessionTable)
+            .where(and(isNull(SessionTable.parent_id), isNull(SessionTable.time_archived)))
+            .all() as RawSessionRow[],
+      ),
+    )
+
+  const getSessionSummary = Effect.fn("SessionProjection.getSessionSummary")(function* (input: {
+    sessionID: SessionID
+  }) {
+    return yield* Effect.sync(() => {
+      const row = Database.use((db) =>
         db
           .select({
             id: SessionTable.id,
             title: SessionTable.title,
             directory: SessionTable.directory,
+            parentID: SessionTable.parent_id,
             agent: SessionTable.agent,
-            parent_id: SessionTable.parent_id,
-            time_created: SessionTable.time_created,
-            time_updated: SessionTable.time_updated,
-            time_archived: SessionTable.time_archived,
           })
           .from(SessionTable)
-          .where(and(isNull(SessionTable.parent_id), isNull(SessionTable.time_archived)))
-          .all() as RawSessionRow[],
-      ),
-    )
+          .where(eq(SessionTable.id, input.sessionID))
+          .get(),
+      )
+      if (!row) return null
+      return {
+        id: SessionID.make(row.id),
+        title: row.title,
+        directory: row.directory,
+        parentID: row.parentID ? SessionID.make(row.parentID) : undefined,
+        agent: row.agent ?? undefined,
+      }
+    })
+  })
 
   const spaces = () =>
     Effect.gen(function* () {
@@ -253,21 +294,31 @@ const make = Effect.gen(function* () {
         })
       }
       const cli = CliContract.executablePath()
-      const [projects, rows, searched] = yield* Effect.all([
-        registry.refreshProjects(cli, space.id),
-        activeRows(),
-        input.query?.trim() ? registry.searchSpace(cli, input.query.trim(), space.id, "dir") : Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-      ], { concurrency: 3 })
+      const [projects, rows, searched] = yield* Effect.all(
+        [
+          registry.refreshProjects(cli, space.id),
+          activeRows(),
+          input.query?.trim()
+            ? registry.searchSpace(cli, input.query.trim(), space.id, "dir")
+            : Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
+        ],
+        { concurrency: 3 },
+      )
       const candidates: Array<{ kind: WorkbenchLocation["kind"]; name: string; path: string; lastUsedAt?: number }> = [
         { kind: "space-root" as const, name: space.name, path: space.path },
         ...projects.items.map((item) => ({ kind: "project" as const, name: item.name, path: item.path })),
-        ...rows.map((row) => ({ kind: "recent" as const, name: path.basename(row.directory) || row.directory, path: row.directory, lastUsedAt: row.time_updated ?? 0 })),
+        ...rows.map((row) => ({
+          kind: "recent" as const,
+          name: path.basename(row.directory) || row.directory,
+          path: row.directory,
+          lastUsedAt: row.time_updated ?? 0,
+        })),
         ...searched.items.map((item) => ({ kind: "search" as const, name: item.name, path: item.path })),
       ]
       const resolved = yield* Effect.all(
         candidates.map((candidate) =>
           canonicalLocation(space.path, candidate.path).pipe(
-            Effect.map((resolvedPath) => resolvedPath ? { ...candidate, path: resolvedPath } : undefined),
+            Effect.map((resolvedPath) => (resolvedPath ? { ...candidate, path: resolvedPath } : undefined)),
           ),
         ),
         { concurrency: 16 },
@@ -276,7 +327,13 @@ const make = Effect.gen(function* () {
       const seen = new Set<string>()
       const items = resolved
         .filter((item): item is Exclude<typeof item, undefined> => item !== undefined)
-        .sort((a, b) => rank[a.kind] - rank[b.kind] || (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) || a.name.localeCompare(b.name) || a.path.localeCompare(b.path))
+        .sort(
+          (a, b) =>
+            rank[a.kind] - rank[b.kind] ||
+            (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0) ||
+            a.name.localeCompare(b.name) ||
+            a.path.localeCompare(b.path),
+        )
         .filter((item) => {
           if (seen.has(item.path)) return false
           seen.add(item.path)
@@ -294,7 +351,7 @@ const make = Effect.gen(function* () {
       return { scopePath: space.path, items: [...items.filter((item) => item.kind !== "recent"), ...recent] }
     })
 
-  return Service.of({ getSessionGroups, getSessionTree, getLocations })
+  return Service.of({ getSessionGroups, getSessionSummary, getSessionTree, getLocations })
 })
 
 function summaries(rows: RawSessionRow[], health: SessionDirectoryHealth) {
@@ -319,14 +376,18 @@ function summaries(rows: RawSessionRow[], health: SessionDirectoryHealth) {
 
 function canonicalSpaces(spaces: SpaceEntry[]) {
   return Effect.all(
-    spaces.map((space) => canonicalPath(space.path).pipe(Effect.map((resolved) => ({ id: space.id, name: space.name, path: resolved })))),
+    spaces.map((space) =>
+      canonicalPath(space.path).pipe(Effect.map((resolved) => ({ id: space.id, name: space.name, path: resolved }))),
+    ),
     { concurrency: 16 },
   )
 }
 
 function canonicalProjects(projects: Array<{ name: string; path: string }>) {
   return Effect.all(
-    projects.map((project) => canonicalPath(project.path).pipe(Effect.map((resolved) => ({ name: project.name, path: resolved })))),
+    projects.map((project) =>
+      canonicalPath(project.path).pipe(Effect.map((resolved) => ({ name: project.name, path: resolved }))),
+    ),
     { concurrency: 16 },
   )
 }
@@ -352,9 +413,7 @@ function relativeDirectory(root: string, target: string) {
   return value === "" ? "" : value
 }
 
-function canonicalWorktrees(
-  worktrees: Array<{ projectPath: string; path: string; branch?: string }>,
-) {
+function canonicalWorktrees(worktrees: Array<{ projectPath: string; path: string; branch?: string }>) {
   return Effect.all(
     worktrees.map((wt) =>
       Effect.all([canonicalPath(wt.projectPath), canonicalPath(wt.path)]).pipe(

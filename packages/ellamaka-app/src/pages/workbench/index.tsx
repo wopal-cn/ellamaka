@@ -1,4 +1,4 @@
-import { ErrorBoundary, Show, createEffect, onMount, onCleanup } from "solid-js"
+import { ErrorBoundary, Show, createEffect, createMemo, onMount, onCleanup, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SpaceStoreProvider } from "./space-store"
 import { WorkbenchStateProvider, useWorkbenchState } from "./view-store"
@@ -19,7 +19,12 @@ import {
 } from "./parts/inspector-adapter"
 import { Persist, persisted } from "@/utils/persist"
 import type { FileNode } from "@opencode-ai/sdk/v2"
-import { sessionRemovalReasonFromEvent, shouldNotifySessionRemoval, shouldSyncSessionTitle, workbenchSessionEvent } from "./parts/panel-session-lifecycle"
+import {
+  sessionRemovalReasonFromEvent,
+  shouldNotifySessionRemoval,
+  shouldSyncSessionTitle,
+  workbenchSessionEvent,
+} from "./parts/panel-session-lifecycle"
 import { useServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
 import { WorkbenchSingletonGuard } from "./singleton-guard"
@@ -29,7 +34,8 @@ import { WorkbenchRuntimeProvider, useWorkbenchRuntime } from "./workbench-runti
 import { WorkbenchDshFlagBinding } from "./workbench-dsh-flag-binding"
 import { WorkbenchPromptRegistryProvider } from "./workbench-prompt-registry"
 import { WorkbenchSidecarCleanupBinding } from "./workbench-sidecar-cleanup"
-import { WorkbenchActiveDirectoryProvider } from "./workbench-directory-provider"
+import { SessionActivityProvider } from "@/context/session-activity-context"
+import { ModelsCatalogDirectoryProvider } from "@/context/models"
 import { WorkbenchSessionDeepLink } from "./workbench-session-deep-link"
 import { DshSurface } from "./dsh-surface"
 import { WorkbenchSurfaceProvider } from "./workbench-surface-context"
@@ -40,6 +46,23 @@ import { useCommand } from "@/context/command"
 import { useDialog } from "@wopal/ui/context/dialog"
 import { Toast } from "@wopal/ui/toast"
 import { isWorkbenchClosePanelShortcut, isWorkbenchTabCloseProtected } from "./workbench-keyboard"
+import { selectWorkbenchDirectoryTarget } from "./workbench-directory-provider"
+import { sanitizeDirectory } from "./directory-utils"
+
+function WorkbenchModelCatalogProvider(props: ParentProps) {
+  const wb = useWorkbenchState()
+  const directory = createMemo(() => {
+    const target = selectWorkbenchDirectoryTarget({
+      spaces: wb.spaces,
+      tabs: wb.tabs,
+      activeTabPath: wb.activeTabPath,
+      activeSpaceName: wb.activeSpaceName,
+    })
+    const safe = sanitizeDirectory(target?.directory)
+    return safe || undefined
+  })
+  return <ModelsCatalogDirectoryProvider directory={directory}>{props.children}</ModelsCatalogDirectoryProvider>
+}
 
 function WorkbenchShell() {
   const wb = useWorkbenchState()
@@ -119,11 +142,12 @@ function WorkbenchShell() {
       wb.removeDiagnostic("wopal-cli-status")
       return
     }
-    const text = cli.state === "missing"
-      ? t("workbench.cli.missing", { required: cli.requiredVersion })
-      : cli.state === "incompatible"
-        ? t("workbench.cli.incompatible", { actual: cli.actualVersion ?? "unknown", required: cli.requiredVersion })
-        : t("workbench.cli.broken", { required: cli.requiredVersion })
+    const text =
+      cli.state === "missing"
+        ? t("workbench.cli.missing", { required: cli.requiredVersion })
+        : cli.state === "incompatible"
+          ? t("workbench.cli.incompatible", { actual: cli.actualVersion ?? "unknown", required: cli.requiredVersion })
+          : t("workbench.cli.broken", { required: cli.requiredVersion })
     wb.pushDiagnostic("error", text, {
       id: "wopal-cli-status",
       autoDismiss: false,
@@ -151,13 +175,21 @@ function WorkbenchShell() {
             .unbindSessionEverywhere(sessionID)
             .then((result) => {
               projection.remove(sessionID)
-              if (!shouldNotifySessionRemoval({ affectedPanelCount: result.affectedPanelCount, isBound: wb.isSessionBound(sessionID) })) return
-              wb.setStatusMessage(t(
-                removalReason === "archived"
-                  ? "workbench.status.sessionArchivedExternally"
-                  : "workbench.status.sessionDeletedExternally",
-                { title },
-              ))
+              if (
+                !shouldNotifySessionRemoval({
+                  affectedPanelCount: result.affectedPanelCount,
+                  isBound: wb.isSessionBound(sessionID),
+                })
+              )
+                return
+              wb.setStatusMessage(
+                t(
+                  removalReason === "archived"
+                    ? "workbench.status.sessionArchivedExternally"
+                    : "workbench.status.sessionDeletedExternally",
+                  { title },
+                ),
+              )
             })
             .catch((error) => reportWorkbenchError("release externally removed session", error))
         }
@@ -170,7 +202,14 @@ function WorkbenchShell() {
         actions.clearPtyEverywhere(e.details.properties.id)
         return
       }
-      if (shouldSyncSessionTitle({ type: session.type, sessionId: session.sessionId, title: session.title, localTitle: spaceStore.getSession(session.sessionId ?? "")?.title })) {
+      if (
+        shouldSyncSessionTitle({
+          type: session.type,
+          sessionId: session.sessionId,
+          title: session.title,
+          localTitle: spaceStore.getSession(session.sessionId ?? "")?.title,
+        })
+      ) {
         projection.patch(session.sessionId!, { title: session.title! })
       }
     })
@@ -187,7 +226,9 @@ function WorkbenchShell() {
         if (isWorkbenchTabCloseProtected(activeTab)) {
           e.preventDefault()
           e.stopPropagation()
-          wb.setStatusMessage(t("workbench.status.tabPinnedProtected", { default: "Pinned tab protected from closing" }))
+          wb.setStatusMessage(
+            t("workbench.status.tabPinnedProtected", { default: "Pinned tab protected from closing" }),
+          )
           return
         }
         // A blocked prompt surface stops bubbling before the document-level
@@ -243,43 +284,41 @@ function WorkbenchShell() {
               visible={() => wb.display().showFileViewer}
               toggleVisibility={() => wb.setDisplay("showFileViewer", !wb.display().showFileViewer)}
             >
-            <Show when={display().showTitlebar}>
-              <WorkbenchActiveDirectoryProvider>
-                {() => <WorkbenchTitlebar />}
-              </WorkbenchActiveDirectoryProvider>
-            </Show>
-          <DshSurface>
-            <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-              <SpaceRail onFileClick={handleFileClick} />
-              <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <Workspace />
-                <Show when={display().showFileViewer && surfaceTabs().length > 0 && surfaceActiveKey()}>
-                  <WorkbenchInspector
-                    tabs={surfaceTabs()}
-                    activeKey={surfaceActiveKey()!}
-                    onActiveKeyChange={(key) => setSurfaceStore("activeKey", key)}
-                    width={surfaceWidth()}
-                    onWidthChange={(width) => setSurfaceStore("width", width)}
-                    expanded={surfaceStore.expanded}
-                    onExpandedChange={(expanded) => setSurfaceStore("expanded", expanded)}
-                    pinned={surfaceStore.pinned}
-                    onPinnedChange={(pinned) => setSurfaceStore("pinned", pinned)}
-                    onCloseTab={closeSurfaceTabByKey}
-                    onClose={() => {
-                      setSurfaceStore("tabs", [])
-                      setSurfaceStore("activeKey", undefined)
-                    }}
-                    onDismiss={() => wb.setDisplay("showFileViewer", false)}
-                  />
-                </Show>
-              </div>
-            </div>
-          </DshSurface>
-          <Show when={display().showStatusbar}>
-            <StatusBar />
-          </Show>
-          <WorkbenchSessionDeepLink />
-          </WorkbenchSurfaceProvider>
+              <Show when={display().showTitlebar}>
+                <WorkbenchTitlebar />
+              </Show>
+              <DshSurface>
+                <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+                  <SpaceRail onFileClick={handleFileClick} />
+                  <div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <Workspace />
+                    <Show when={display().showFileViewer && surfaceTabs().length > 0 && surfaceActiveKey()}>
+                      <WorkbenchInspector
+                        tabs={surfaceTabs()}
+                        activeKey={surfaceActiveKey()!}
+                        onActiveKeyChange={(key) => setSurfaceStore("activeKey", key)}
+                        width={surfaceWidth()}
+                        onWidthChange={(width) => setSurfaceStore("width", width)}
+                        expanded={surfaceStore.expanded}
+                        onExpandedChange={(expanded) => setSurfaceStore("expanded", expanded)}
+                        pinned={surfaceStore.pinned}
+                        onPinnedChange={(pinned) => setSurfaceStore("pinned", pinned)}
+                        onCloseTab={closeSurfaceTabByKey}
+                        onClose={() => {
+                          setSurfaceStore("tabs", [])
+                          setSurfaceStore("activeKey", undefined)
+                        }}
+                        onDismiss={() => wb.setDisplay("showFileViewer", false)}
+                      />
+                    </Show>
+                  </div>
+                </div>
+              </DshSurface>
+              <Show when={display().showStatusbar}>
+                <StatusBar />
+              </Show>
+              <WorkbenchSessionDeepLink />
+            </WorkbenchSurfaceProvider>
           </WorkbenchPromptRegistryProvider>
         </Show>
       </div>
@@ -309,9 +348,7 @@ function WorkbenchErrorFallback(props: { error: Error; reset: () => void }) {
           <img src="/favicon-96x96.png" class="w-8 h-8 object-contain" alt="Icon" />
           <img src="/ellamaka-text-logo.png?v=2" class="h-7 w-auto object-contain ellamaka-logo-invert" alt="Logo" />
         </div>
-        <h2 class="text-20-semibold text-v2-text-text-strong">
-          {t("workbench.error.shellLoadFailed")}
-        </h2>
+        <h2 class="text-20-semibold text-v2-text-text-strong">{t("workbench.error.shellLoadFailed")}</h2>
         <p class="text-14-regular text-v2-text-text-muted break-words bg-v2-background-bg-base/60 border border-v2-border-border-base p-3.5 rounded-lg text-left w-full font-mono text-xs max-h-40 overflow-y-auto">
           {props.error.message || t("workbench.error.unknownError")}
         </p>
@@ -351,24 +388,28 @@ export default function Workbench() {
     // Actions and runtime status are local to this Workbench provider tree.
     <WorkbenchSingletonGuard>
       <SessionStoreProvider>
-        <WorkbenchStateProvider>
-          <WorkbenchRuntimeProvider>
-            <WorkbenchActionsProvider>
-              <WorkbenchSidecarCleanupBinding />
-              <WorkbenchDshFlagBinding />
-              <SpaceStoreProvider>
-                <ViewRegistryProvider>
-                  <ErrorBoundary
-                    fallback={(error, reset) => <WorkbenchErrorFallback error={error} reset={reset} />}
-                  >
-                    <WorkbenchShell />
-                  </ErrorBoundary>
-                  <Toast.Region />
-                </ViewRegistryProvider>
-              </SpaceStoreProvider>
-            </WorkbenchActionsProvider>
-          </WorkbenchRuntimeProvider>
-        </WorkbenchStateProvider>
+        <SessionActivityProvider>
+          <WorkbenchStateProvider>
+            <WorkbenchModelCatalogProvider>
+              <WorkbenchRuntimeProvider>
+                <WorkbenchActionsProvider>
+                  <WorkbenchSidecarCleanupBinding />
+                  <WorkbenchDshFlagBinding />
+                  <SpaceStoreProvider>
+                    <ViewRegistryProvider>
+                      <ErrorBoundary
+                        fallback={(error, reset) => <WorkbenchErrorFallback error={error} reset={reset} />}
+                      >
+                        <WorkbenchShell />
+                      </ErrorBoundary>
+                      <Toast.Region />
+                    </ViewRegistryProvider>
+                  </SpaceStoreProvider>
+                </WorkbenchActionsProvider>
+              </WorkbenchRuntimeProvider>
+            </WorkbenchModelCatalogProvider>
+          </WorkbenchStateProvider>
+        </SessionActivityProvider>
       </SessionStoreProvider>
     </WorkbenchSingletonGuard>
   )

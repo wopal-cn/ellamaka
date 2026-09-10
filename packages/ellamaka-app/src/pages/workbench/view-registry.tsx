@@ -26,7 +26,13 @@ interface WorkbenchViewSdk {
   url: string
   client: {
     pty: {
-      create(params: { command?: string; args?: string[]; cwd?: string; title?: string; env?: Record<string, string> }): Promise<{ data?: { id: string } }>
+      create(params: {
+        command?: string
+        args?: string[]
+        cwd?: string
+        title?: string
+        env?: Record<string, string>
+      }): Promise<{ data?: { id: string } }>
     }
   }
 }
@@ -38,6 +44,8 @@ export type PanelViewCtx = {
   sdk: WorkbenchViewSdk
   spaceName: string
   spacePath: string
+  /** Whether the owning Space is currently visible. */
+  isVisible: () => boolean
   onPromptReady?: (editor: HTMLDivElement) => void
   canRestorePromptFocus?: () => boolean
 }
@@ -65,8 +73,12 @@ export function createViewRegistry() {
         views.push(def)
       }
     },
-    get(id: string): PanelViewDef | undefined { return views.find((v) => v.id === id) },
-    all(): PanelViewDef[] { return views },
+    get(id: string): PanelViewDef | undefined {
+      return views.find((v) => v.id === id)
+    },
+    all(): PanelViewDef[] {
+      return views
+    },
   }
 }
 
@@ -113,6 +125,7 @@ export function registerDefaultViews(registry: ViewRegistry) {
       const server = useServer()
       const [ptyId, setPtyId] = createSignal<string | undefined>(undefined)
       const [ptyError, setPtyError] = createSignal<string | undefined>(undefined)
+      const [pendingRecovery, setPendingRecovery] = createSignal<string | undefined>(undefined)
       let disposed = false
       onCleanup(() => {
         disposed = true
@@ -120,6 +133,7 @@ export function registerDefaultViews(registry: ViewRegistry) {
 
       createEffect(() => {
         if (ctx.panel.slotState !== "bound") return
+        if (!ctx.isVisible()) return
 
         // Maintain local ptyId signal synchronized with store tuiPtyId regardless of viewMode.
         // This keeps the <Terminal> component mounted in hidden DOM state (display: none) when
@@ -137,34 +151,68 @@ export function registerDefaultViews(registry: ViewRegistry) {
         const sessionId = ctx.session?.id
         const auth = resolveTuiAttachAuth(server.current)
 
-        void actions.ensurePanelPty({
-          scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
-          panelID: ctx.panel.id,
-          kind: "tui",
-          create: async () => {
-            const res = await ctx.sdk.client.pty.create(
-              createTuiAttachRequest({
-                serverUrl: ctx.sdk.url,
-                sessionID: sessionId,
-                directory: ctx.directory,
-                panelID: ctx.panel.id,
-                auth,
-              }),
-            )
-            if (!res.data?.id) throw new Error("No PTY ID returned")
-            return res.data.id
-          },
-        }).then((result) => {
-          if (disposed) return
-          if (result.ptyID) setPtyId(result.ptyID)
-        }).catch((e) => {
-          reportWorkbenchError("ensure tui pty", e)
-          setPtyError("Failed to start TUI terminal")
-          actions.fallbackToChat({
+        void actions
+          .ensurePanelPty({
             scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
             panelID: ctx.panel.id,
+            kind: "tui",
+            create: async () => {
+              const res = await ctx.sdk.client.pty.create(
+                createTuiAttachRequest({
+                  serverUrl: ctx.sdk.url,
+                  sessionID: sessionId,
+                  directory: ctx.directory,
+                  panelID: ctx.panel.id,
+                  auth,
+                }),
+              )
+              if (!res.data?.id) throw new Error("No PTY ID returned")
+              return res.data.id
+            },
           })
-        })
+          .then((result) => {
+            if (disposed) return
+            if (result.ptyID) setPtyId(result.ptyID)
+          })
+          .catch((e) => {
+            reportWorkbenchError("ensure tui pty", e)
+            setPtyError("Failed to start TUI terminal")
+            actions.fallbackToChat({
+              scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
+              panelID: ctx.panel.id,
+            })
+          })
+      })
+
+      const recoverTui = (ptyID: string) => {
+        if (!ctx.isVisible()) {
+          setPendingRecovery(ptyID)
+          return
+        }
+        void actions
+          .recoverPanelPty({
+            scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
+            panelID: ctx.panel.id,
+            kind: "tui",
+            ptyID,
+          })
+          .then((result) => {
+            if (result.status === "committed") {
+              setPtyId(undefined)
+              setPendingRecovery(undefined)
+            }
+          })
+          .catch((error) => {
+            reportWorkbenchError("recover tui pty", error)
+            setPtyError("TUI terminal connection lost")
+          })
+      }
+
+      createEffect(() => {
+        const ptyID = pendingRecovery()
+        if (!ptyID || !ctx.isVisible()) return
+        setPendingRecovery(undefined)
+        recoverTui(ptyID)
       })
 
       return (
@@ -195,18 +243,9 @@ export function registerDefaultViews(registry: ViewRegistry) {
               class="w-full h-full"
               noPadding={true}
               isTui={true}
+              shouldReconnect={ctx.isVisible}
               onConnectError={() => {
-                void actions.recoverPanelPty({
-                  scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
-                  panelID: ctx.panel.id,
-                  kind: "tui",
-                  ptyID: id,
-                }).then((result) => {
-                  if (result.status === "committed") setPtyId(undefined)
-                }).catch((e) => {
-                  reportWorkbenchError("recover tui pty", e)
-                  setPtyError("TUI terminal connection lost")
-                })
+                recoverTui(id)
               }}
               onClose={() => {
                 // TUI process exited (WS code 1000). Delete the backend PTY,
@@ -215,13 +254,15 @@ export function registerDefaultViews(registry: ViewRegistry) {
                 // the session binding intact so the user sees the conversation
                 // they just left.
                 setPtyId(undefined)
-                void actions.exitTui({
-                  scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
-                  panelID: ctx.panel.id,
-                  ptyID: id,
-                }).catch((e) => {
-                  reportWorkbenchError("exit tui", e)
-                })
+                void actions
+                  .exitTui({
+                    scope: scopeFromTab({ name: ctx.spaceName, path: ctx.spacePath }),
+                    panelID: ctx.panel.id,
+                    ptyID: id,
+                  })
+                  .catch((e) => {
+                    reportWorkbenchError("exit tui", e)
+                  })
               }}
             />
           )}
@@ -252,6 +293,7 @@ export function registerDefaultViews(registry: ViewRegistry) {
           directory={ctx.directory}
           spacePath={ctx.spacePath}
           spaceName={ctx.spaceName}
+          isVisible={ctx.isVisible}
           onPromptReady={ctx.onPromptReady}
           canRestorePromptFocus={ctx.canRestorePromptFocus}
         />

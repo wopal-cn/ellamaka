@@ -47,6 +47,8 @@ export function Panel(props: {
   spaceName: string
   spacePath: string
   isActive: boolean
+  /** The whole Space is visible, including its non-focused split Panels. */
+  isSpaceActive: boolean
   panelCount: number
   panelIndex?: number
   onActivate: () => void
@@ -76,11 +78,10 @@ export function Panel(props: {
     }
   })
 
-
-
   const [mountedViews, setMountedViews] = createSignal(new Set<string>())
   const [terminalTitle, setTerminalTitle] = createSignal<string>()
   const [isTerminalMaximized, setIsTerminalMaximized] = createSignal(false)
+  const [pendingSplitRecovery, setPendingSplitRecovery] = createSignal<string>()
   const [panelMenu, setPanelMenu] = createSignal<{ x: number; y: number } | undefined>(undefined)
 
   const canAddPanel = () => {
@@ -108,13 +109,15 @@ export function Panel(props: {
     on(
       () => [props.panel.boundSessionId, props.panel.slotState, props.panel.viewMode, props.panel.tuiPtyId] as const,
       ([nextBoundSessionId, slotState, viewMode, tuiPtyId], previous) => {
-        setMountedViews((prev) => reconcileMountedViews(prev, {
-          prevBoundSessionId: previous?.[0],
-          nextBoundSessionId,
-          slotState,
-          viewMode,
-          hasTuiPtyId: !!tuiPtyId,
-        }))
+        setMountedViews((prev) =>
+          reconcileMountedViews(prev, {
+            prevBoundSessionId: previous?.[0],
+            nextBoundSessionId,
+            slotState,
+            viewMode,
+            hasTuiPtyId: !!tuiPtyId,
+          }),
+        )
       },
     ),
   )
@@ -171,28 +174,31 @@ export function Panel(props: {
         ] as const,
       ([panelActive, tabActive, viewMode], previous) => {
         if (!panelActive || !tabActive || viewMode !== "chat") return
-        if (shouldSkipPanelPromptFocusForActivation({
-          previousPanelActive: previous?.[0],
-          panelActive,
-          tabActive,
-          lastPreservedPointerAt,
-          now: Date.now(),
-        })) return
-        onCleanup(startPanelPromptFocus({
-          root: () => panelContainerRef,
-          shouldFocus: () =>
-            canRestorePromptFocus(),
-          isPointerDown: () => isPanelPointerDown,
-        }))
+        if (
+          shouldSkipPanelPromptFocusForActivation({
+            previousPanelActive: previous?.[0],
+            panelActive,
+            tabActive,
+            lastPreservedPointerAt,
+            now: Date.now(),
+          })
+        )
+          return
+        onCleanup(
+          startPanelPromptFocus({
+            root: () => panelContainerRef,
+            shouldFocus: () => canRestorePromptFocus(),
+            isPointerDown: () => isPanelPointerDown,
+          }),
+        )
       },
     ),
   )
 
-
   const directoryHealth = () => {
     if (props.panel.slotState !== "bound") return "healthy" as const
     const session = sessionStore.getSession(props.panel.boundSessionId ?? "")
-    return session?.directoryHealth ?? "healthy" as const
+    return session?.directoryHealth ?? ("healthy" as const)
   }
   const isDirUnhealthy = () => directoryHealth() !== "healthy"
   const splitTitle = () => splitTerminalTitle(terminalTitle(), t("terminal.title"))
@@ -200,22 +206,25 @@ export function Panel(props: {
 
   createEffect(() => {
     const sessionID = props.panel.boundSessionId
-    if (!shouldRestoreBoundSession({
-      slotState: props.panel.slotState,
-      boundSessionId: sessionID,
-      hasLocalSession: !!(sessionID && sessionStore.getSession(sessionID)),
-    })) {
+    if (
+      !shouldRestoreBoundSession({
+        slotState: props.panel.slotState,
+        boundSessionId: sessionID,
+        hasLocalSession: !!(sessionID && sessionStore.getSession(sessionID)),
+      })
+    ) {
       return
     }
     if (!sessionID || restoringSessionIDs.has(sessionID)) return
 
     restoringSessionIDs.add(sessionID)
-    void actions.refreshSession({
-      scope: panelScope(),
-      panelID: props.panel.id,
-      sessionID,
-      directory: props.panel.directory,
-    })
+    void actions
+      .refreshSession({
+        scope: panelScope(),
+        panelID: props.panel.id,
+        sessionID,
+        directory: props.panel.directory,
+      })
       .then((result) => {
         if (result.unavailableReason === "archived") {
           wb.setStatusMessage(t("workbench.status.restoredSessionArchived"))
@@ -229,7 +238,8 @@ export function Panel(props: {
           // Session no longer exists on the sidecar (database reset, sidecar
           // restart with fresh DB, or external deletion). Unbind the panel so
           // it returns to a clean state instead of retrying on every render.
-          void actions.unbindSession({ scope: panelScope(), panelID: props.panel.id })
+          void actions
+            .unbindSession({ scope: panelScope(), panelID: props.panel.id })
             .then(() => wb.setStatusMessage(t("workbench.status.boundSessionGone")))
             .catch((err) => reportWorkbenchError("unbind stale session", err))
           return
@@ -242,79 +252,118 @@ export function Panel(props: {
   })
 
   createEffect(() => {
+    if (!props.isSpaceActive) return
     const splitOpen = props.panel.splitTerminal
     const directory = props.panel.directory
     const existingId = props.panel.splitPtyId
 
     if (splitOpen) {
       if (!existingId) setTerminalTitle(undefined)
-      void actions.ensurePanelPty({
+      void actions
+        .ensurePanelPty({
+          scope: panelScope(),
+          panelID: props.panel.id,
+          kind: "split",
+          create: async () => {
+            // Defense-in-depth: reject path-traversal / relative cwd before
+            // asking the backend to spawn a PTY in it. The directory normally
+            // comes from server projections or drag payloads, neither of which
+            // should ever contain ".." or be relative — if they do, refuse
+            // rather than forward the unsafe value.
+            const cwd = sanitizeDirectory(directory)
+            if (cwd === undefined) throw new Error(`Refusing to create PTY with unsafe directory: ${directory}`)
+            const res = await sdk.client.pty.create({
+              cwd,
+              title: t("terminal.title"),
+            })
+            if (!res.data?.id) throw new Error("No PTY ID returned")
+            return res.data.id
+          },
+        })
+        .then((result) => {
+          if (result.status === "stale" || !props.panel.splitTerminal) return
+        })
+        .catch((err) => reportWorkbenchError("create split pty", err))
+    }
+  })
+
+  const recoverSplitTerminal = (ptyID: string) => {
+    if (!props.isSpaceActive) {
+      setPendingSplitRecovery(ptyID)
+      return
+    }
+    void actions
+      .recoverPanelPty({
         scope: panelScope(),
         panelID: props.panel.id,
         kind: "split",
-        create: async () => {
-          // Defense-in-depth: reject path-traversal / relative cwd before
-          // asking the backend to spawn a PTY in it. The directory normally
-          // comes from server projections or drag payloads, neither of which
-          // should ever contain ".." or be relative — if they do, refuse
-          // rather than forward the unsafe value.
-          const cwd = sanitizeDirectory(directory)
-          if (cwd === undefined) throw new Error(`Refusing to create PTY with unsafe directory: ${directory}`)
-          const res = await sdk.client.pty.create({
-            cwd,
-            title: t("terminal.title"),
-          })
-          if (!res.data?.id) throw new Error("No PTY ID returned")
-          return res.data.id
-        },
-      }).then((result) => {
-        if (result.status === "stale" || !props.panel.splitTerminal) return
-      }).catch((err) => reportWorkbenchError("create split pty", err))
-    }
+        ptyID,
+      })
+      .then((result) => {
+        if (result.status === "committed") {
+          setTerminalTitle(undefined)
+          setPendingSplitRecovery(undefined)
+        }
+      })
+      .catch((error) => reportWorkbenchError("recover split pty", error))
+  }
+
+  createEffect(() => {
+    const ptyID = pendingSplitRecovery()
+    if (!ptyID || !props.isSpaceActive) return
+    setPendingSplitRecovery(undefined)
+    recoverSplitTerminal(ptyID)
   })
   const handleToggleSplit = () => {
     const spacePath = props.spacePath
     if (spacePath === undefined || spacePath === null) return
-    const next = reconcileSplitTerminalState({
-      open: !!props.panel.splitTerminal,
-      ptyId: props.panel.splitPtyId,
-    }, props.panel.splitTerminal ? "hide" : "show")
+    const next = reconcileSplitTerminalState(
+      {
+        open: !!props.panel.splitTerminal,
+        ptyId: props.panel.splitPtyId,
+      },
+      props.panel.splitTerminal ? "hide" : "show",
+    )
     setPanelSplitTerminal(spacePath, props.panel.id, next.open)
   }
 
   const handleCloseSplit = () => {
-    void actions.closeSplitTerminal({ scope: panelScope(), panelID: props.panel.id })
+    void actions
+      .closeSplitTerminal({ scope: panelScope(), panelID: props.panel.id })
       .then(() => setTerminalTitle(undefined))
       .catch((error) => reportWorkbenchError("close split terminal", error))
   }
 
   const handleDrop = (e: DragEvent) => {
-    handlePanelDrop(e, {
-      panel: props.panel,
-      spaceName: props.spaceName,
-      spacePath: props.spacePath,
-      wb,
-      actions,
-      panelScope,
-      dialog,
-      t,
-      showToast,
-    }, (panelIndex, onConfirm) => {
-      void dialog.show(() => (
-        <DialogOverwritePanel
-          panelIndex={panelIndex}
-          onConfirm={() => {
-            void onConfirm()
-              .then(() => dialog.close())
-              .catch((error) => reportWorkbenchError("replace session", error))
-          }}
-        />
-      ))
-    }, (dragSpace, targetSpace) => {
-      void dialog.show(() => (
-        <DialogCrossSpaceWarning dragSpace={dragSpace} targetSpace={targetSpace} />
-      ))
-    })
+    handlePanelDrop(
+      e,
+      {
+        panel: props.panel,
+        spaceName: props.spaceName,
+        spacePath: props.spacePath,
+        wb,
+        actions,
+        panelScope,
+        dialog,
+        t,
+        showToast,
+      },
+      (panelIndex, onConfirm) => {
+        void dialog.show(() => (
+          <DialogOverwritePanel
+            panelIndex={panelIndex}
+            onConfirm={() => {
+              void onConfirm()
+                .then(() => dialog.close())
+                .catch((error) => reportWorkbenchError("replace session", error))
+            }}
+          />
+        ))
+      },
+      (dragSpace, targetSpace) => {
+        void dialog.show(() => <DialogCrossSpaceWarning dragSpace={dragSpace} targetSpace={targetSpace} />)
+      },
+    )
   }
 
   const splitHeight = () => props.panel.splitHeight ?? 180
@@ -388,15 +437,18 @@ export function Panel(props: {
             <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 9v2m0 4h.01M12 3l9.66 16.5H2.34L12 3z" />
             </svg>
-            <span>工作目录{directoryHealth() === "missing" ? "不存在" : "不可用"} — 终端和 Shell 操作不可用，聊天历史仍可查看</span>
+            <span>
+              工作目录{directoryHealth() === "missing" ? "不存在" : "不可用"} — 终端和 Shell
+              操作不可用，聊天历史仍可查看
+            </span>
           </div>
         </Show>
         <div
           class="flex-1 min-h-[200px] min-w-0 overflow-hidden relative"
-          classList={{ "hidden": isTerminalMaximized() }}
+          classList={{ hidden: isTerminalMaximized() }}
         >
           {/* 1. PanelLoader wrapper container (physically kept but visually toggled via hidden class) */}
-          <div class="w-full h-full" classList={{ "hidden": props.panel.slotState !== "empty" }}>
+          <div class="w-full h-full" classList={{ hidden: props.panel.slotState !== "empty" }}>
             <PanelLoader panel={props.panel} spaceName={props.spaceName} spacePath={props.spacePath} />
           </div>
 
@@ -412,7 +464,8 @@ export function Panel(props: {
                     class="absolute inset-0 flex flex-col min-h-0 min-w-0 overflow-hidden"
                     style={{
                       display: props.panel.slotState !== "empty" && props.panel.viewMode === vm ? "flex" : "none",
-                      visibility: props.panel.slotState !== "empty" && props.panel.viewMode === vm ? "visible" : "hidden",
+                      visibility:
+                        props.panel.slotState !== "empty" && props.panel.viewMode === vm ? "visible" : "hidden",
                     }}
                   >
                     <Show when={props.panel.boundSessionId} keyed>
@@ -424,6 +477,7 @@ export function Panel(props: {
                               panel={props.panel}
                               spaceName={props.spaceName}
                               spacePath={props.spacePath}
+                              isVisible={() => props.isSpaceActive}
                               onPromptReady={handlePromptReady}
                               canRestorePromptFocus={() => canRestorePromptFocus()}
                             />
@@ -453,7 +507,7 @@ export function Panel(props: {
             <div
               class="min-w-0 flex flex-col relative overflow-hidden bg-v2-background-bg-deep flex-shrink-0"
               classList={{
-                "hidden": !props.panel.splitTerminal,
+                hidden: !props.panel.splitTerminal,
                 "flex-1 h-full": isTerminalMaximized(),
               }}
               style={{ height: isTerminalMaximized() ? undefined : `${splitHeight()}px` }}
@@ -466,9 +520,7 @@ export function Panel(props: {
                   setIsTerminalMaximized((prev) => !prev)
                 }}
               >
-                <span class="tracking-wider flex items-center gap-1.5">
-                  {splitTitle()}
-                </span>
+                <span class="tracking-wider flex items-center gap-1.5">{splitTitle()}</span>
                 <div class="flex items-center gap-1">
                   <button
                     type="button"
@@ -482,7 +534,15 @@ export function Panel(props: {
                     <Show
                       when={isTerminalMaximized()}
                       fallback={
-                        <svg class="size-3 shrink-0 text-v2-text-text-muted hover:text-v2-text-text-base" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg
+                          class="size-3 shrink-0 text-v2-text-text-muted hover:text-v2-text-text-base"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
                           <path d="M10 2h4v4" />
                           <path d="M14 2L9.5 6.5" />
                           <path d="M6 14H2v-4" />
@@ -490,7 +550,15 @@ export function Panel(props: {
                         </svg>
                       }
                     >
-                      <svg class="size-3 shrink-0 text-v2-text-text-muted hover:text-v2-text-text-base" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <svg
+                        class="size-3 shrink-0 text-v2-text-text-muted hover:text-v2-text-text-base"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
                         <path d="M14 6h-4V2" />
                         <path d="M10 6l4.5-4.5" />
                         <path d="M2 10h4v4" />
@@ -509,7 +577,15 @@ export function Panel(props: {
                     }}
                     onDblClick={(e) => e.stopPropagation()}
                   >
-                    <svg class="size-3 shrink-0 text-v2-text-text-muted hover:text-v2-text-text-base" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <svg
+                      class="size-3 shrink-0 text-v2-text-text-muted hover:text-v2-text-text-base"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
                       <path d="M4 4l8 8M12 4l-8 8" />
                     </svg>
                   </button>
@@ -519,26 +595,13 @@ export function Panel(props: {
                 <Terminal
                   pty={{ id: ptyId, title: splitTitle(), titleNumber: 3 }}
                   class="w-full h-full"
+                  shouldReconnect={() => props.isSpaceActive}
                   onConnectError={() => {
-                    void actions.recoverPanelPty({
-                      scope: panelScope(),
-                      panelID: props.panel.id,
-                      kind: "split",
-                      ptyID: ptyId,
-                    }).then((result) => {
-                      if (result.status === "committed") setTerminalTitle(undefined)
-                    }).catch((e) => reportWorkbenchError("recover split pty", e))
+                    recoverSplitTerminal(ptyId)
                   }}
                   onTitleChange={(title) => setTerminalTitle(title)}
                   onClose={() => {
-                    void actions.recoverPanelPty({
-                      scope: panelScope(),
-                      panelID: props.panel.id,
-                      kind: "split",
-                      ptyID: ptyId,
-                    }).then((result) => {
-                      if (result.status === "committed") setTerminalTitle(undefined)
-                    }).catch((e) => reportWorkbenchError("recover split pty", e))
+                    recoverSplitTerminal(ptyId)
                   }}
                 />
               </div>
@@ -581,6 +644,7 @@ function PanelViewContainer(props: {
   panel: WorkbenchPanel
   spaceName: string
   spacePath: string
+  isVisible: () => boolean
   onPromptReady: (editor: HTMLDivElement) => void
   canRestorePromptFocus: () => boolean
 }) {
@@ -616,6 +680,7 @@ function PanelViewContainer(props: {
       sdk,
       spaceName: props.spaceName,
       spacePath: props.spacePath,
+      isVisible: props.isVisible,
       onPromptReady: handlePromptReady,
       canRestorePromptFocus: () => props.canRestorePromptFocus(),
     })
@@ -639,6 +704,7 @@ function PanelViewContainer(props: {
           sdk,
           spaceName: props.spaceName,
           spacePath: props.spacePath,
+          isVisible: props.isVisible,
           onPromptReady: handlePromptReady,
           canRestorePromptFocus: () => props.canRestorePromptFocus(),
         })

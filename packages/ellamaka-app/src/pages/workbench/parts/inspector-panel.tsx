@@ -1,17 +1,6 @@
 import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
 import { Tabs } from "@wopal/ui/tabs"
-import {
-  For,
-  Match,
-  Show,
-  Switch,
-  createEffect,
-  createMemo,
-  createSignal,
-  on,
-  onCleanup,
-  onMount,
-} from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup, onMount } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileSearchHandle } from "@wopal/ui/file"
 import { useFileComponent } from "@wopal/ui/context/file"
@@ -20,15 +9,14 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { sampledChecksum } from "@wopal/ellamaka-core/util/encode"
 import { previewSelectedLines } from "@wopal/ui/pierre/selection-bridge"
 import { findFileLineNumber, readShadowLineSelection } from "@wopal/ui/pierre/file-selection"
-import { FileProvider, useFile, type SelectedLineRange } from "@/context/file"
+import { useFile, type SelectedLineRange } from "@/context/file"
+import { WorkbenchSpaceFileProvider } from "../workbench-space-file-provider"
 import { selectionFromLines } from "@/context/file/types"
 import { useLanguage } from "@/context/language"
-import { WorkbenchPanelDirectoryProvider } from "../workbench-directory-provider"
 import { useWorkbenchPromptRegistry } from "../workbench-prompt-registry"
 import {
   clampInspectorWidth,
   createFileScroller,
-  fileViewerRoute,
   resolveFileViewerState,
   surfaceTabKey,
   type FileScroller,
@@ -184,12 +172,9 @@ function FileViewerInner(props: FileViewerInnerProps) {
   }
 
   createEffect(
-    on(
-      path,
-      () => {
-        void file.load(path())
-      },
-    ),
+    on(path, () => {
+      void file.load(path())
+    }),
   )
 
   createEffect(() => {
@@ -343,7 +328,16 @@ function FileViewerInner(props: FileViewerInnerProps) {
               size="small"
               class="size-6 shrink-0"
               icon={
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
                 </svg>
               }
@@ -359,19 +353,10 @@ function FileViewerInner(props: FileViewerInnerProps) {
 }
 
 function FileViewerTabContent(props: { entry: OpenedFileEntry }) {
-  const route = createMemo(() => fileViewerRoute(props.entry.directory, props.entry.filePath))
-
   return (
-    <WorkbenchPanelDirectoryProvider panelID={route().key} directory={props.entry.directory}>
-      {() => (
-        <FileProvider>
-          <FileViewerInner
-            filePath={props.entry.filePath}
-            name={props.entry.name ?? props.entry.filePath}
-          />
-        </FileProvider>
-      )}
-    </WorkbenchPanelDirectoryProvider>
+    <WorkbenchSpaceFileProvider spacePath={props.entry.directory}>
+      <FileViewerInner filePath={props.entry.filePath} name={props.entry.name ?? props.entry.filePath} />
+    </WorkbenchSpaceFileProvider>
   )
 }
 
@@ -387,9 +372,7 @@ function SurfaceTabContent(props: { tab: SurfaceTab }) {
   const fileTab = createMemo(() => (isFileTab(props.tab) ? props.tab : undefined))
   return (
     <Switch>
-      <Match when={fileTab()}>
-        {(tab) => <FileViewerTabContent entry={tab()} />}
-      </Match>
+      <Match when={fileTab()}>{(tab) => <FileViewerTabContent entry={tab()} />}</Match>
     </Switch>
   )
 }
@@ -515,7 +498,16 @@ export function WorkbenchInspector(props: {
                           size="small"
                           class="size-4 flex items-center justify-center p-0 shrink-0"
                           icon={
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                            <svg
+                              width="10"
+                              height="10"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.4"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
                               <path d="M6 6l12 12M18 6L6 18" />
                             </svg>
                           }
@@ -539,11 +531,17 @@ export function WorkbenchInspector(props: {
               style={{ color: pinned() ? "var(--v2-icon-icon-accent)" : undefined }}
               state={pinned() ? "pressed" : undefined}
               icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <Show
-                    when={pinned()}
-                    fallback={<path d="M12 17v5M9 3h6l1 7 3 3H5l3-3z" />}
-                  >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <Show when={pinned()} fallback={<path d="M12 17v5M9 3h6l1 7 3 3H5l3-3z" />}>
                     <path d="M12 17v5M9 3h6l1 7 3 3H5l3-3zM12 17v5" />
                   </Show>
                 </svg>
@@ -557,11 +555,17 @@ export function WorkbenchInspector(props: {
               size="small"
               class="size-5 flex items-center justify-center p-0 shrink-0"
               icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <Show
-                    when={expanded()}
-                    fallback={<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />}
-                  >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <Show when={expanded()} fallback={<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />}>
                     <path d="M9 3H3v6M15 21h6v-6M3 3l6 6M21 21l-7-7" />
                   </Show>
                 </svg>
@@ -575,7 +579,16 @@ export function WorkbenchInspector(props: {
               size="small"
               class="size-5 flex items-center justify-center p-0 shrink-0"
               icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               }
@@ -600,51 +613,41 @@ export function WorkbenchInspector(props: {
   )
 }
 
-export function FileViewerPanel(props: {
-  directory: string
-  filePath: string
-  name?: string
-  onClose: () => void
-}) {
-  const route = createMemo(() => fileViewerRoute(props.directory, props.filePath))
+export function FileViewerPanel(props: { directory: string; filePath: string; name?: string; onClose: () => void }) {
   const language = useLanguage()
 
   return (
-    <WorkbenchPanelDirectoryProvider panelID={route().key} directory={props.directory}>
-      {() => (
-        <FileProvider>
-          <div class="flex flex-col h-full min-h-0 bg-v2-background-bg-base border-l border-v2-border-border-base">
-            <header class="flex h-7 shrink-0 items-center justify-between px-3 border-b border-v2-border-border-base bg-v2-background-bg-base">
-              <span class="text-11-medium text-v2-text-text-strong truncate">{props.name ?? props.filePath}</span>
-              <IconButtonV2
-                variant="ghost-muted"
-                size="small"
-                class="size-5 flex items-center justify-center p-0 shrink-0"
-                icon={
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                }
-                aria-label={language.t("workbench.fileViewer.close")}
-                title={language.t("workbench.fileViewer.close")}
-                onClick={props.onClose}
-              />
-            </header>
-            <div class="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-              <FileViewerInner filePath={props.filePath} name={props.name ?? props.filePath} />
-            </div>
-          </div>
-        </FileProvider>
-      )}
-    </WorkbenchPanelDirectoryProvider>
+    <WorkbenchSpaceFileProvider spacePath={props.directory}>
+      <div class="flex flex-col h-full min-h-0 bg-v2-background-bg-base border-l border-v2-border-border-base">
+        <header class="flex h-7 shrink-0 items-center justify-between px-3 border-b border-v2-border-border-base bg-v2-background-bg-base">
+          <span class="text-11-medium text-v2-text-text-strong truncate">{props.name ?? props.filePath}</span>
+          <IconButtonV2
+            variant="ghost-muted"
+            size="small"
+            class="size-5 flex items-center justify-center p-0 shrink-0"
+            icon={
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            }
+            aria-label={language.t("workbench.fileViewer.close")}
+            title={language.t("workbench.fileViewer.close")}
+            onClick={props.onClose}
+          />
+        </header>
+        <div class="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+          <FileViewerInner filePath={props.filePath} name={props.name ?? props.filePath} />
+        </div>
+      </div>
+    </WorkbenchSpaceFileProvider>
   )
 }

@@ -9,8 +9,7 @@ import { useWorkbenchSurface } from "../workbench-surface-context"
 import { useDialog } from "@wopal/ui/context/dialog"
 import { useSessionStore } from "../session-store"
 import { DialogCloseTab } from "./workspace"
-import { useSync } from "@/context/sync"
-import { useServerSync } from "@/context/server-sync"
+import { useSessionActivity } from "@/context/session-activity-context"
 import { useNotification } from "@/context/notification"
 import { pathKey } from "@/utils/path-key"
 import { SpaceIcon } from "./session-tree-space"
@@ -38,7 +37,15 @@ function PinIcon(props: { class?: string }) {
 // 文件查看面板图标 (Panel Right style)
 function FileViewerPanelIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-4"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-4"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <line x1="15" y1="3" x2="15" y2="21" />
     </svg>
@@ -47,7 +54,15 @@ function FileViewerPanelIcon(props: { class?: string }) {
 
 function CheckIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-3.5 shrink-0"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-3.5 shrink-0"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   )
@@ -55,7 +70,7 @@ function CheckIcon(props: { class?: string }) {
 
 type TabContextMenu = { x: number; y: number; tab: { name: string; path: string; pinned?: boolean } }
 
-const displaySpaceName = (name: string) => /^[\x00-\x7F]+$/.test(name) ? name.toUpperCase() : name
+const displaySpaceName = (name: string) => (/^[\x00-\x7F]+$/.test(name) ? name.toUpperCase() : name)
 
 export function WorkbenchTitlebar() {
   const wb = useWorkbenchState()
@@ -67,14 +82,7 @@ export function WorkbenchTitlebar() {
   const notification = useNotification()
   const t = (k: string, params?: Record<string, string | number | boolean>) => language.t(k, params)
 
-  let sync: ReturnType<typeof useSync> | undefined
-  let serverSync: ReturnType<typeof useServerSync> | undefined
-  try {
-    sync = useSync()
-    serverSync = useServerSync()
-  } catch {
-    // Safe fallback when rendered outside SyncProvider
-  }
+  const activity = useSessionActivity()
 
   const activePath = () => wb.activeTabPath
 
@@ -94,17 +102,8 @@ export function WorkbenchTitlebar() {
   }
 
   const isSpaceWorking = (tabPath: string, _tabName?: string) => {
-    if (!serverSync) return false
     const targetPath = tabPath ?? ""
-
-    for (const [rawKey, [childStore]] of Object.entries(serverSync.children)) {
-      if (getTabForDirectory(rawKey) === targetPath) {
-        if (Object.keys(childStore.session_status).some((id) => childStore.session_working(id))) {
-          return true
-        }
-      }
-    }
-    return false
+    return activity.entries().some((entry) => getTabForDirectory(entry.directory) === targetPath)
   }
 
   // 未读蓝点：严格由本空间在 SessionStore 中是否存在【未读会话 (unseenCount > 0)】动态计算。
@@ -124,10 +123,7 @@ export function WorkbenchTitlebar() {
           isMatch = true
         }
       } else {
-        if (
-          (targetPath && keyLower === targetPath) ||
-          (targetName && keyLower === targetName)
-        ) {
+        if ((targetPath && keyLower === targetPath) || (targetName && keyLower === targetName)) {
           isMatch = true
         }
       }
@@ -185,7 +181,10 @@ export function WorkbenchTitlebar() {
   return (
     <header class="relative z-50 flex shrink-0 flex-col bg-v2-background-bg-base border-b border-v2-border-border-base select-none">
       <div data-tauri-drag-region class="workbench-macos-window-chrome shrink-0" />
-      <div data-tauri-drag-region class="workbench-titlebar-toolbar relative flex h-10 items-center justify-between px-3">
+      <div
+        data-tauri-drag-region
+        class="workbench-titlebar-toolbar relative flex h-10 items-center justify-between px-3"
+      >
         {/* Brand Logo - Left side */}
         <div class="flex items-center gap-6 text-v2-text-text-strong [font-weight:530] text-14-regular shrink-0 z-20">
           <div class="flex items-center gap-2">
@@ -244,7 +243,9 @@ export function WorkbenchTitlebar() {
 
                   <span class="flex size-4 items-center justify-center">
                     <Show when={isPinned()}>
-                      <PinIcon class={`size-3.5 ${isActive() ? "text-v2-text-text-strong" : "text-v2-text-text-muted"}`} />
+                      <PinIcon
+                        class={`size-3.5 ${isActive() ? "text-v2-text-text-strong" : "text-v2-text-text-muted"}`}
+                      />
                     </Show>
                   </span>
 
@@ -260,7 +261,6 @@ export function WorkbenchTitlebar() {
                       <div class="size-2 rounded-full bg-v2-icon-icon-accent" />
                     </Show>
                   </span>
-
                 </div>
               )
             }}
@@ -272,7 +272,9 @@ export function WorkbenchTitlebar() {
           {/* 选择空间 下拉选择框：悬停展开，移出延迟收起 */}
           <div
             class="relative"
-            ref={(el) => { spaceMenuRef = el }}
+            ref={(el) => {
+              spaceMenuRef = el
+            }}
             onMouseEnter={() => spaceMenuFlyout.onTriggerEnter("sessions")}
             onMouseLeave={() => spaceMenuFlyout.onTriggerLeave()}
           >
@@ -300,9 +302,7 @@ export function WorkbenchTitlebar() {
                 onMouseEnter={() => spaceMenuFlyout.onFlyoutEnter()}
                 onMouseLeave={() => spaceMenuFlyout.onFlyoutLeave()}
               >
-                <div class="px-2 py-1 text-11-medium text-v2-text-text-muted">
-                  {t("workbench.topbar.selectSpace")}
-                </div>
+                <div class="px-2 py-1 text-11-medium text-v2-text-text-muted">{t("workbench.topbar.selectSpace")}</div>
                 <For each={spaceStore.spaces()}>
                   {(sp) => {
                     const isOpen = () => wb.tabs.some((t) => t.path === sp.path)
@@ -314,8 +314,10 @@ export function WorkbenchTitlebar() {
                         classList={{
                           "w-full flex items-center justify-between px-2.5 py-1.5 text-left text-11-medium rounded transition-colors": true,
                           "bg-v2-overlay-simple-overlay-hover text-v2-text-text-strong font-semibold": isActive(),
-                          "text-v2-text-text-strong font-medium hover:bg-v2-overlay-simple-overlay-hover": isOpen() && !isActive(),
-                          "text-v2-text-text-muted hover:text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover": !isOpen(),
+                          "text-v2-text-text-strong font-medium hover:bg-v2-overlay-simple-overlay-hover":
+                            isOpen() && !isActive(),
+                          "text-v2-text-text-muted hover:text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover":
+                            !isOpen(),
                         }}
                         onClick={() => {
                           wb.openTab(sp)
@@ -354,8 +356,12 @@ export function WorkbenchTitlebar() {
             state={surface.visible() ? "pressed" : undefined}
             data-inspector-toggle="true"
             icon={<FileViewerPanelIcon class="size-4" />}
-            aria-label={t(wb.display().showFileViewer ? "workbench.topbar.fileViewer.hide" : "workbench.topbar.fileViewer.show")}
-            title={t(wb.display().showFileViewer ? "workbench.topbar.fileViewer.hide" : "workbench.topbar.fileViewer.show")}
+            aria-label={t(
+              wb.display().showFileViewer ? "workbench.topbar.fileViewer.hide" : "workbench.topbar.fileViewer.show",
+            )}
+            title={t(
+              wb.display().showFileViewer ? "workbench.topbar.fileViewer.hide" : "workbench.topbar.fileViewer.show",
+            )}
             onClick={() => surface.toggleVisibility()}
           />
         </div>

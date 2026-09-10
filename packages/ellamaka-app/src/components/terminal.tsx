@@ -14,7 +14,12 @@ import { terminalFontFamily, useSettings } from "@/context/settings"
 import type { LocalPTY } from "@/context/terminal"
 import { fitTerminalToContainer, resetTerminalViewport } from "@/components/terminal-fit"
 import { getTerminalImeFrame, updateTerminalImeComposition } from "@/components/terminal-ime-frame"
-import { disableTerminalScrollbar, terminalColumnsWithoutScrollbar, terminalRowsForContainer, type TerminalFitMode } from "@/components/terminal-scrollbar"
+import {
+  disableTerminalScrollbar,
+  terminalColumnsWithoutScrollbar,
+  terminalRowsForContainer,
+  type TerminalFitMode,
+} from "@/components/terminal-scrollbar"
 import { isEllamakaTuiTitle, shouldUseTuiTerminalMode } from "@/components/terminal-tui-mode"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
@@ -30,6 +35,8 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
   onClose?: () => void
+  /** Defer retrying a broken connection until its owning surface is visible. */
+  shouldReconnect?: () => boolean
   onTitleChange?: (title: string) => void
   noPadding?: boolean
   isTui?: boolean
@@ -184,6 +191,7 @@ export const Terminal = (props: TerminalProps) => {
     "onConnect",
     "onConnectError",
     "onClose",
+    "shouldReconnect",
     "onTitleChange",
     "noPadding",
     "isTui",
@@ -571,7 +579,7 @@ export const Terminal = (props: TerminalProps) => {
             paddingLeft,
             paddingTop,
           })
-          
+
           textarea.style.left = frame.left
           textarea.style.top = frame.top
           textarea.style.width = frame.width
@@ -585,17 +593,17 @@ export const Terminal = (props: TerminalProps) => {
           textarea.style.outline = "none"
           textarea.style.border = "none"
           textarea.style.boxShadow = "none"
-          
+
           overlay.style.left = frame.left
           overlay.style.top = frame.top
           overlay.style.minWidth = frame.width
           overlay.style.height = frame.height
           overlay.style.lineHeight = frame.height
         }
-        
+
         let composition = updateTerminalImeComposition(undefined, { type: "blur" })
         const renderComposition = () => {
-          const text = composition.active ? (composition.text || textarea.value) : ""
+          const text = composition.active ? composition.text || textarea.value : ""
           overlay.textContent = text
           overlay.style.display = text ? "block" : "none"
         }
@@ -605,7 +613,10 @@ export const Terminal = (props: TerminalProps) => {
           renderComposition()
         }
         const handleCompositionUpdate = (event: CompositionEvent) => {
-          composition = updateTerminalImeComposition(composition, { type: "update", data: event.data || textarea.value })
+          composition = updateTerminalImeComposition(composition, {
+            type: "update",
+            data: event.data || textarea.value,
+          })
           renderComposition()
         }
         const handleCompositionEnd = (event: CompositionEvent) => {
@@ -631,7 +642,7 @@ export const Terminal = (props: TerminalProps) => {
         const handlePointerDownSync = () => {
           requestAnimationFrame(syncImeTextarea)
         }
-        
+
         textarea.addEventListener("compositionstart", handleCompositionStart)
         textarea.addEventListener("compositionupdate", handleCompositionUpdate)
         textarea.addEventListener("compositionend", handleCompositionEnd)
@@ -639,7 +650,7 @@ export const Terminal = (props: TerminalProps) => {
         textarea.addEventListener("input", handleInput)
         textarea.addEventListener("focus", handleFocus)
         container.addEventListener("pointerdown", handlePointerDownSync)
-        
+
         cleanups.push(() => {
           textarea.removeEventListener("compositionstart", handleCompositionStart)
           textarea.removeEventListener("compositionupdate", handleCompositionUpdate)
@@ -651,7 +662,7 @@ export const Terminal = (props: TerminalProps) => {
           overlay.remove()
           if (imeOverlay === overlay) imeOverlay = undefined
         })
-        
+
         syncImeTextarea()
         const cursorSub = t.onCursorMove(syncImeTextarea)
         cleanups.push(() => disposeIfDisposable(cursorSub))
@@ -775,11 +786,19 @@ export const Terminal = (props: TerminalProps) => {
       const retry = (err: unknown) => {
         if (disposed) return
         if (reconn !== undefined) return
+        if (local.shouldReconnect && !local.shouldReconnect()) {
+          fail(err)
+          return
+        }
 
         const ms = Math.min(250 * 2 ** Math.min(tries, 4), 4_000)
         reconn = setTimeout(async () => {
           reconn = undefined
           if (disposed) return
+          if (local.shouldReconnect && !local.shouldReconnect()) {
+            fail(err)
+            return
+          }
           if (await gone()) {
             if (disposed) return
             fail(err)
@@ -874,8 +893,10 @@ export const Terminal = (props: TerminalProps) => {
           socket.removeEventListener("error", handleError)
           socket.removeEventListener("close", handleClose)
           if (disposed) return
-          local.onClose?.()
-          if (event.code === 1000) return
+          if (event.code === 1000) {
+            local.onClose?.()
+            return
+          }
           retry(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
         }
 

@@ -16,42 +16,63 @@ const persisted = (): PersistedWorkbench => ({
   spaces: {
     "": {
       activePanelID: WORKBENCH_SCENARIO.panels.general,
-      panels: [{
-        id: WORKBENCH_SCENARIO.panels.general,
-        slotState: "bound",
-        boundSessionId: WORKBENCH_SCENARIO.sessions.general.id,
-        mode: "chat",
-        directory: WORKBENCH_SCENARIO.sessions.general.directory,
-        width: 1,
-      }],
+      panels: [
+        {
+          id: WORKBENCH_SCENARIO.panels.general,
+          slotState: "bound",
+          boundSessionId: WORKBENCH_SCENARIO.sessions.general.id,
+          mode: "chat",
+          directory: WORKBENCH_SCENARIO.sessions.general.directory,
+          width: 1,
+        },
+      ],
     },
     [WORKBENCH_FIXTURES.spaceA.path]: {
       activePanelID: WORKBENCH_SCENARIO.panels.spaceA,
-      panels: [{
-        id: WORKBENCH_SCENARIO.panels.spaceA,
-        slotState: "bound",
-        boundSessionId: WORKBENCH_SCENARIO.sessions.spaceA.id,
-        mode: "chat",
-        directory: WORKBENCH_SCENARIO.sessions.spaceA.directory,
-        width: 1,
-      }],
+      panels: [
+        {
+          id: WORKBENCH_SCENARIO.panels.spaceA,
+          slotState: "bound",
+          boundSessionId: WORKBENCH_SCENARIO.sessions.spaceA.id,
+          mode: "chat",
+          directory: WORKBENCH_SCENARIO.sessions.spaceA.directory,
+          width: 1,
+        },
+      ],
     },
     [WORKBENCH_FIXTURES.spaceB.path]: {
       activePanelID: WORKBENCH_SCENARIO.panels.spaceB,
-      panels: [{
-        id: WORKBENCH_SCENARIO.panels.spaceB,
-        slotState: "bound",
-        boundSessionId: WORKBENCH_SCENARIO.sessions.spaceB.id,
-        mode: "chat",
-        directory: WORKBENCH_SCENARIO.sessions.spaceB.directory,
-        width: 1,
-      }],
+      panels: [
+        {
+          id: WORKBENCH_SCENARIO.panels.spaceB,
+          slotState: "bound",
+          boundSessionId: WORKBENCH_SCENARIO.sessions.spaceB.id,
+          mode: "chat",
+          directory: WORKBENCH_SCENARIO.sessions.spaceB.directory,
+          width: 1,
+        },
+      ],
     },
   },
   tabs: [
-    { id: WORKBENCH_FIXTURES.general.name, name: WORKBENCH_FIXTURES.general.name, path: WORKBENCH_FIXTURES.general.path, type: "general" },
-    { id: WORKBENCH_FIXTURES.spaceA.name, name: WORKBENCH_FIXTURES.spaceA.name, path: WORKBENCH_FIXTURES.spaceA.path, type: "space" },
-    { id: WORKBENCH_FIXTURES.spaceB.name, name: WORKBENCH_FIXTURES.spaceB.name, path: WORKBENCH_FIXTURES.spaceB.path, type: "space" },
+    {
+      id: WORKBENCH_FIXTURES.general.name,
+      name: WORKBENCH_FIXTURES.general.name,
+      path: WORKBENCH_FIXTURES.general.path,
+      type: "general",
+    },
+    {
+      id: WORKBENCH_FIXTURES.spaceA.name,
+      name: WORKBENCH_FIXTURES.spaceA.name,
+      path: WORKBENCH_FIXTURES.spaceA.path,
+      type: "space",
+    },
+    {
+      id: WORKBENCH_FIXTURES.spaceB.name,
+      name: WORKBENCH_FIXTURES.spaceB.name,
+      path: WORKBENCH_FIXTURES.spaceB.path,
+      type: "space",
+    },
   ],
   activeSpaceName: WORKBENCH_FIXTURES.general.name,
 })
@@ -60,6 +81,25 @@ const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string")
 
 describe("Workbench directory status", () => {
+  test("does not select a runtime directory for an empty Panel or a tab without Panels", () => {
+    const store = createWorkbenchStore(persisted())
+    store.unbindSessionFromPanel("", WORKBENCH_SCENARIO.panels.general)
+    expect(
+      selectWorkbenchDirectoryTarget({
+        spaces: store.spaces,
+        tabs: store.tabs,
+        activeTabPath: "",
+      }),
+    ).toBeUndefined()
+    expect(
+      selectWorkbenchDirectoryTarget({
+        spaces: {},
+        tabs: store.tabs,
+        activeTabPath: WORKBENCH_FIXTURES.spaceA.path,
+      }),
+    ).toBeUndefined()
+  })
+
   test("changes the Panel SDK boundary when a bound Session changes directory", () => {
     const panel = { id: "panel-general", directory: "/fixtures/general/old" }
     const before = selectWorkbenchPanelDirectoryTarget(panel)
@@ -115,10 +155,12 @@ describe("Workbench directory status", () => {
       observed.push({ directory: target.directory, sources })
     }
 
-    expect(observed).toEqual(order.map((fixture) => ({
-      directory: fixture.directory,
-      sources: fixture.capabilitySources,
-    })))
+    expect(observed).toEqual(
+      order.map((fixture) => ({
+        directory: fixture.directory,
+        sources: fixture.capabilitySources,
+      })),
+    )
   })
 
   test("keeps a late Space A response in the Space A cache while Space B stays visible", async () => {

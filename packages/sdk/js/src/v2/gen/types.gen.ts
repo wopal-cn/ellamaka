@@ -1339,6 +1339,54 @@ export type CapabilityContractError = {
   detail?: string
 }
 
+export type FileNode = {
+  name: string
+  path: string
+  absolute: string
+  type: "file" | "directory"
+  ignored: boolean
+}
+
+export type WorkbenchSpaceNotFound = {
+  _tag: "WorkbenchSpaceNotFound"
+  message: string
+  spacePath: string
+}
+
+export type WorkbenchSpaceFileNotFound = {
+  _tag: "WorkbenchSpaceFileNotFound"
+  message: string
+  path: string
+}
+
+export type WorkbenchSpaceFileAccessDenied = {
+  _tag: "WorkbenchSpaceFileAccessDenied"
+  message: string
+  path: string
+}
+
+export type FileContent = {
+  type: "text" | "binary"
+  content: string
+  diff?: string
+  patch?: {
+    oldFileName: string
+    newFileName: string
+    oldHeader?: string
+    newHeader?: string
+    hunks: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: Array<string>
+    }>
+    index?: string
+  }
+  encoding?: "base64"
+  mimeType?: string
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -1567,36 +1615,6 @@ export type Symbol = {
     uri: string
     range: Range
   }
-}
-
-export type FileNode = {
-  name: string
-  path: string
-  absolute: string
-  type: "file" | "directory"
-  ignored: boolean
-}
-
-export type FileContent = {
-  type: "text" | "binary"
-  content: string
-  diff?: string
-  patch?: {
-    oldFileName: string
-    newFileName: string
-    oldHeader?: string
-    newHeader?: string
-    hunks: Array<{
-      oldStart: number
-      oldLines: number
-      newStart: number
-      newLines: number
-      lines: Array<string>
-    }>
-    index?: string
-  }
-  encoding?: "base64"
-  mimeType?: string
 }
 
 export type File = {
@@ -1996,12 +2014,6 @@ export type WorkspaceWarpError = {
   data: {
     message: string
   }
-}
-
-export type WorkbenchSpaceNotFound = {
-  _tag: "WorkbenchSpaceNotFound"
-  message: string
-  spacePath: string
 }
 
 export type InvalidSpaceTarget = {
@@ -4284,6 +4296,157 @@ export type WorkbenchSessionGroupsResponses = {
 }
 
 export type WorkbenchSessionGroupsResponse = WorkbenchSessionGroupsResponses[keyof WorkbenchSessionGroupsResponses]
+
+export type WorkbenchSessionStatusesData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/workbench/session-statuses"
+}
+
+export type WorkbenchSessionStatusesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type WorkbenchSessionStatusesError = WorkbenchSessionStatusesErrors[keyof WorkbenchSessionStatusesErrors]
+
+export type WorkbenchSessionStatusesResponses = {
+  /**
+   * Running Workbench session statuses
+   */
+  200: Array<{
+    directory: string
+    sessionID: string
+    status: SessionStatus
+  }>
+}
+
+export type WorkbenchSessionStatusesResponse =
+  WorkbenchSessionStatusesResponses[keyof WorkbenchSessionStatusesResponses]
+
+export type WorkbenchSessionSummaryData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/workbench/session-summaries/{sessionID}"
+}
+
+export type WorkbenchSessionSummaryErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type WorkbenchSessionSummaryError = WorkbenchSessionSummaryErrors[keyof WorkbenchSessionSummaryErrors]
+
+export type WorkbenchSessionSummaryResponses = {
+  /**
+   * Workbench session notification metadata
+   */
+  200: {
+    id: string
+    title: string
+    directory: string
+    parentID?: string
+    agent?: string
+  } | null
+}
+
+export type WorkbenchSessionSummaryResponse = WorkbenchSessionSummaryResponses[keyof WorkbenchSessionSummaryResponses]
+
+export type WorkbenchFilesData = {
+  body?: never
+  path?: never
+  query: {
+    spacePath: string
+    path?: string
+  }
+  url: "/workbench/files"
+}
+
+export type WorkbenchFilesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * WorkbenchSpaceFileAccessDenied
+   */
+  403: WorkbenchSpaceFileAccessDenied
+  /**
+   * WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+   */
+  404: WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+  /**
+   * CapabilityContractError
+   */
+  502: CapabilityContractError
+  /**
+   * SpaceControlUnavailable
+   */
+  503: SpaceControlUnavailable
+}
+
+export type WorkbenchFilesError = WorkbenchFilesErrors[keyof WorkbenchFilesErrors]
+
+export type WorkbenchFilesResponses = {
+  /**
+   * Files and directories in a registered Space
+   */
+  200: Array<FileNode>
+}
+
+export type WorkbenchFilesResponse = WorkbenchFilesResponses[keyof WorkbenchFilesResponses]
+
+export type WorkbenchFileContentData = {
+  body?: never
+  path?: never
+  query: {
+    spacePath: string
+    path: string
+  }
+  url: "/workbench/file-content"
+}
+
+export type WorkbenchFileContentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * WorkbenchSpaceFileAccessDenied
+   */
+  403: WorkbenchSpaceFileAccessDenied
+  /**
+   * WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+   */
+  404: WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+  /**
+   * CapabilityContractError
+   */
+  502: CapabilityContractError
+  /**
+   * SpaceControlUnavailable
+   */
+  503: SpaceControlUnavailable
+}
+
+export type WorkbenchFileContentError = WorkbenchFileContentErrors[keyof WorkbenchFileContentErrors]
+
+export type WorkbenchFileContentResponses = {
+  /**
+   * File content in a registered Space
+   */
+  200: FileContent
+}
+
+export type WorkbenchFileContentResponse = WorkbenchFileContentResponses[keyof WorkbenchFileContentResponses]
 
 export type WorkbenchDshUrlData = {
   body?: never

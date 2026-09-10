@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { preserveServerSdkEventStatus, createServerSdkEventResync } from "./server-sdk"
+import { createRoot } from "solid-js"
+import { preserveServerSdkEventStatus, createDirSdkMode, createServerSdkEventResync } from "./server-sdk"
 
 describe("preserveServerSdkEventStatus", () => {
   test("keeps eventStatus reactive after preparing the provider value", () => {
@@ -45,5 +46,41 @@ describe("createServerSdkEventResync", () => {
     resync.notifyConnected()
     resync.notifyDisconnected()
     expect(seen).toEqual([])
+  })
+})
+
+describe("createDirSdkMode", () => {
+  test("does not request mode until a shared directory context is activated", async () => {
+    let loads = 0
+    let resolveLoad: ((value: boolean) => void) | undefined
+    let mode: ReturnType<typeof createDirSdkMode> | undefined
+
+    const dispose = createRoot((dispose) => {
+      mode = createDirSdkMode({
+        load: () => {
+          loads += 1
+          return new Promise<boolean>((resolve) => {
+            resolveLoad = resolve
+          })
+        },
+      })
+      return dispose
+    })
+
+    try {
+      if (!mode) throw new Error("mode required")
+      expect(loads).toBe(0)
+      expect(mode.isWopalSpaceLoading).toBe(false)
+
+      mode.activate()
+      expect(loads).toBe(1)
+      expect(mode.isWopalSpaceLoading).toBe(true)
+
+      resolveLoad?.(true)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(mode.isWopalSpace).toBe(true)
+    } finally {
+      dispose()
+    }
   })
 })

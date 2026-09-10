@@ -105,6 +105,7 @@ export const loadProjectsQuery = (sdk: OpencodeClient) =>
   })
 
 export async function bootstrapGlobal(input: {
+  instanceBootstrap?: boolean
   serverSDK: OpencodeClient
   requestFailedTitle: string
   translate: (key: string, vars?: Record<string, string | number>) => string
@@ -114,13 +115,15 @@ export async function bootstrapGlobal(input: {
 }) {
   const slow = [
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.serverSDK)),
-    () => input.queryClient.fetchQuery(loadProvidersQuery(null, input.serverSDK)),
-    () => input.queryClient.fetchQuery(loadPathQuery(null, input.serverSDK)),
-    () =>
-      input.queryClient
-        .fetchQuery(loadProjectsQuery(input.serverSDK))
-        .then((data) => input.setGlobalStore("project", data)),
-  ]
+    input.instanceBootstrap !== false &&
+      (() => input.queryClient.fetchQuery(loadProvidersQuery(null, input.serverSDK))),
+    input.instanceBootstrap !== false && (() => input.queryClient.fetchQuery(loadPathQuery(null, input.serverSDK))),
+    input.instanceBootstrap !== false &&
+      (() =>
+        input.queryClient
+          .fetchQuery(loadProjectsQuery(input.serverSDK))
+          .then((data) => input.setGlobalStore("project", data))),
+  ].filter(Boolean) as Array<() => Promise<unknown>>
   await runAll(slow)
   // showErrors({
   //   errors: errors(),

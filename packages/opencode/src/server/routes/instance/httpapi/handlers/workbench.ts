@@ -11,6 +11,15 @@ import {
 import { SessionProjection, WorkbenchSpaceNotFound } from "@/workbench/session-projection"
 import { SessionDirectoryHealth } from "@/workbench/session-directory-health"
 import { WorkbenchDshUrl } from "@/workbench/dsh-url"
+import {
+  SpaceFiles,
+  SpaceFilesAccessDenied,
+  SpaceFilesNotFound,
+  SpaceFilesSpaceNotFound,
+  type SpaceFilesError,
+} from "@/workbench/space-files"
+import { SessionStatus } from "@/session/status"
+import { SessionID } from "@/session/schema"
 import { CapabilityContractError as CapabilityContractFailure, SpaceControlUnavailable } from "@/wopal/cli-schema"
 import {
   CapabilityContractError,
@@ -18,6 +27,8 @@ import {
   SessionDirectoryUnavailableError,
   SpaceControlUnavailableError,
   WorkbenchRequestConflictError,
+  WorkbenchSpaceFileAccessDeniedError,
+  WorkbenchSpaceFileNotFoundError,
   WorkbenchSpaceNotFoundError,
 } from "../groups/workbench"
 
@@ -25,10 +36,12 @@ export const workbenchHandlers = HttpApiBuilder.group(RootHttpApi, "workbench", 
   Effect.gen(function* () {
     const projection = yield* SessionProjection.Service
     const dshUrl = yield* WorkbenchDshUrl
+    const status = yield* SessionStatus.Service
+    const spaceFiles = yield* SpaceFiles.Service
     const sessionGroups = Effect.fn("WorkbenchHttpApi.sessionGroups")(function* () {
-      const groups = yield* projection.getSessionGroups().pipe(
-        Effect.catch((error) => Effect.fail(controlApiError(error))),
-      )
+      const groups = yield* projection
+        .getSessionGroups()
+        .pipe(Effect.catch((error) => Effect.fail(controlApiError(error))))
       return {
         groups: groups.map((group) => ({
           id: group.id,
@@ -42,9 +55,29 @@ export const workbenchHandlers = HttpApiBuilder.group(RootHttpApi, "workbench", 
     const dshUrlHandler = Effect.fn("WorkbenchHttpApi.dshUrl")(function* () {
       return { url: dshUrl.get() }
     })
+    const sessionStatuses = Effect.fn("WorkbenchHttpApi.sessionStatuses")(function* () {
+      return yield* status.snapshot()
+    })
+    const sessionSummary = Effect.fn("WorkbenchHttpApi.sessionSummary")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      return yield* projection.getSessionSummary(ctx.params)
+    })
+    const files = Effect.fn("WorkbenchHttpApi.files")(function* (ctx: { query: { spacePath: string; path?: string } }) {
+      return yield* spaceFiles.list(ctx.query).pipe(Effect.catch((error) => Effect.fail(spaceFilesApiError(error))))
+    })
+    const fileContent = Effect.fn("WorkbenchHttpApi.fileContent")(function* (ctx: {
+      query: { spacePath: string; path: string }
+    }) {
+      return yield* spaceFiles.read(ctx.query).pipe(Effect.catch((error) => Effect.fail(spaceFilesApiError(error))))
+    })
     return handlers
       .handle("sessionGroups", sessionGroups)
       .handle("dshUrl", dshUrlHandler)
+      .handle("sessionStatuses", sessionStatuses)
+      .handle("sessionSummary", sessionSummary)
+      .handle("files", files)
+      .handle("fileContent", fileContent)
   }),
 )
 
@@ -65,20 +98,21 @@ export const workbenchInstanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "
         agent?: string
       }
     }) {
-      const create = ctx.payload.target.type === "general"
-        ? provisioner.provisionGeneral({
-          requestID: ctx.payload.requestID,
-          title: ctx.payload.title,
-          agent: ctx.payload.agent,
-        })
-        : provisioner.provisionSpace({
-          requestID: ctx.payload.requestID,
-          spacePath: "spacePath" in ctx.payload.target ? ctx.payload.target.spacePath : undefined,
-          spaceName: "space" in ctx.payload.target ? ctx.payload.target.space : undefined,
-          relativeDirectory: ctx.payload.target.directory,
-          title: ctx.payload.title,
-          agent: ctx.payload.agent,
-        })
+      const create =
+        ctx.payload.target.type === "general"
+          ? provisioner.provisionGeneral({
+              requestID: ctx.payload.requestID,
+              title: ctx.payload.title,
+              agent: ctx.payload.agent,
+            })
+          : provisioner.provisionSpace({
+              requestID: ctx.payload.requestID,
+              spacePath: "spacePath" in ctx.payload.target ? ctx.payload.target.spacePath : undefined,
+              spaceName: "space" in ctx.payload.target ? ctx.payload.target.space : undefined,
+              relativeDirectory: ctx.payload.target.directory,
+              title: ctx.payload.title,
+              agent: ctx.payload.agent,
+            })
       const result = yield* create.pipe(Effect.catch((error) => Effect.fail(provisionApiError(error))))
       return {
         id: result.id,
@@ -91,16 +125,20 @@ export const workbenchInstanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "
       }
     })
 
-    const sessionTree = Effect.fn("WorkbenchHttpApi.sessionTree")(function* (ctx: { query: { limitPerScope?: number } }) {
-      return yield* projection.getSessionTree(ctx.query).pipe(
-        Effect.catch((error) => Effect.fail(controlApiError(error))),
-      )
+    const sessionTree = Effect.fn("WorkbenchHttpApi.sessionTree")(function* (ctx: {
+      query: { limitPerScope?: number }
+    }) {
+      return yield* projection
+        .getSessionTree(ctx.query)
+        .pipe(Effect.catch((error) => Effect.fail(controlApiError(error))))
     })
 
-    const locations = Effect.fn("WorkbenchHttpApi.locations")(function* (ctx: { query: { spacePath: string; query?: string } }) {
-      return yield* projection.getLocations(ctx.query).pipe(
-        Effect.catch((error) => Effect.fail(locationApiError(error))),
-      )
+    const locations = Effect.fn("WorkbenchHttpApi.locations")(function* (ctx: {
+      query: { spacePath: string; query?: string }
+    }) {
+      return yield* projection
+        .getLocations(ctx.query)
+        .pipe(Effect.catch((error) => Effect.fail(locationApiError(error))))
     })
 
     return handlers
@@ -137,6 +175,19 @@ function provisionApiError(error: ProvisionError) {
 function locationApiError(error: WorkbenchSpaceNotFound | SpaceControlUnavailable | CapabilityContractFailure) {
   if (error._tag === "WorkbenchSpaceNotFound") {
     return new WorkbenchSpaceNotFoundError({ message: error.message, spacePath: error.spacePath })
+  }
+  return controlApiError(error)
+}
+
+function spaceFilesApiError(error: SpaceFilesError) {
+  if (error._tag === "SpaceFilesSpaceNotFound") {
+    return new WorkbenchSpaceNotFoundError({ message: error.message, spacePath: error.spacePath })
+  }
+  if (error._tag === "SpaceFilesAccessDenied") {
+    return new WorkbenchSpaceFileAccessDeniedError({ message: error.message, path: error.path })
+  }
+  if (error._tag === "SpaceFilesNotFound") {
+    return new WorkbenchSpaceFileNotFoundError({ message: error.message, path: error.path })
   }
   return controlApiError(error)
 }

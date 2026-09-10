@@ -12,10 +12,10 @@ import { createRefCountMap } from "@/utils/refcount"
 const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
-export function preserveServerSdkEventStatus<
-  T extends { readonly eventStatus: string },
-  TExtra extends object,
->(sdk: T, extra: TExtra) {
+export function preserveServerSdkEventStatus<T extends { readonly eventStatus: string }, TExtra extends object>(
+  sdk: T,
+  extra: TExtra,
+) {
   return {
     ...sdk,
     ...extra,
@@ -332,6 +332,32 @@ type SDKEventMap = {
   [key in Event["type"]]: Extract<Event, { type: key }>
 }
 
+export function createDirSdkMode(input: { load: () => Promise<boolean> }) {
+  const [active, setActive] = createSignal(false)
+  const [resource] = createResource(
+    () => (active() ? true : undefined),
+    async () => {
+      try {
+        return await input.load()
+      } catch {
+        return false
+      }
+    },
+  )
+
+  return {
+    activate() {
+      setActive(true)
+    },
+    get isWopalSpace() {
+      return resource() ?? false
+    },
+    get isWopalSpaceLoading() {
+      return active() && resource.loading
+    },
+  }
+}
+
 function createDirSdkContext(directory: string, serverSDK: ReturnType<typeof createServerSdkContext>) {
   const client = serverSDK.createClient({
     directory,
@@ -345,27 +371,26 @@ function createDirSdkContext(directory: string, serverSDK: ReturnType<typeof cre
   })
   onCleanup(unsub)
 
-  const [modeResource] = createResource(async () => {
-    try {
+  const mode = createDirSdkMode({
+    load: async () => {
       const res = await client.wopalSpace.mode()
       return res.data?.isWopalSpace ?? false
-    } catch {
-      return false
-    }
+    },
   })
 
   return {
     directory,
     client,
     event: emitter,
+    activate: mode.activate,
     get url() {
       return serverSDK.url
     },
     get isWopalSpace() {
-      return modeResource() ?? false
+      return mode.isWopalSpace
     },
     get isWopalSpaceLoading() {
-      return modeResource.loading
+      return mode.isWopalSpaceLoading
     },
     createClient(opts: Parameters<typeof serverSDK.createClient>[0]) {
       return serverSDK.createClient(opts)

@@ -10,6 +10,7 @@ import { Panel } from "./panel"
 import { useWorkbenchActions } from "../workbench-actions"
 import { scopeFromTab, GENERAL_SCOPE_NAME } from "../workbench-scope"
 import { WorkbenchPanelDirectoryProvider } from "../workbench-directory-provider"
+import { createSpaceMount } from "./space-mount"
 
 import type { WorkbenchPanel } from "../view-store"
 
@@ -38,7 +39,7 @@ export function Workspace() {
     e: MouseEvent & { currentTarget: HTMLDivElement },
     leftIndex: number,
     path: string,
-    tabPanels: WorkbenchPanel[]
+    tabPanels: WorkbenchPanel[],
   ) => {
     e.preventDefault()
     e.stopPropagation()
@@ -137,6 +138,7 @@ export function Workspace() {
         <For each={wb.tabs}>
           {(tab) => {
             const isTabActive = () => tab.path === activePath()
+            const mounted = createSpaceMount(isTabActive)
             const tabSpace = () => wb.spaceState(tab.path)
             const tabPanels = () => tabSpace()?.panels ?? []
             const tabActivePanelID = () => tabSpace()?.activePanelID ?? tabPanels()[0]?.id ?? ""
@@ -150,42 +152,47 @@ export function Workspace() {
                 }`}
                 inert={!isTabActive()}
               >
-                <For each={tabPanels()}>
-                  {(panel, index) => (
-                    <div class="contents">
-                      <Suspense>
-                        <WorkbenchPanelDirectoryProvider panelID={panel.id} directory={panel.directory}>
-                          {() => (
-                            <ErrorBoundary
-                              fallback={(error, reset) => (
-                                <PanelErrorFallback error={error} reset={reset} />
-                              )}
-                            >
-                              <Panel
-                                panel={panel}
-                                spaceName={tab.name}
-                                spacePath={tab.path}
-                                isActive={panel.id === tabActivePanelID()}
-                                panelCount={tabPanels().length}
-                                panelIndex={index()}
-                                onActivate={() => wb.setActivePanel(tab.path, panel.id)}
-                                onModeChange={(mode) => wb.setPanelMode(tab.path, panel.id, mode)}
-                              />
-                            </ErrorBoundary>
-                          )}
-                        </WorkbenchPanelDirectoryProvider>
-                      </Suspense>
-                      <Show when={index() < tabPanels().length - 1}>
-                        <div
-                          class="w-px z-20 cursor-col-resize bg-v2-border-border-base hover:bg-v2-icon-icon-brand/30 transition-colors flex-shrink-0"
-                          onMouseDown={(e) => handlePanelResizeStart(e, index(), tab.path, tabPanels())}
-                          onDblClick={() => wb.resetPanelWidths(tab.path)}
-                          title="双击恢复等宽"
-                        />
-                      </Show>
-                    </div>
-                  )}
-                </For>
+                <Show when={mounted()}>
+                  <For each={tabPanels()}>
+                    {(panel, index) => (
+                      <div class="contents">
+                        <Suspense>
+                          <WorkbenchPanelDirectoryProvider
+                            panelID={panel.id}
+                            directory={panel.directory}
+                            runtime={panel.slotState === "bound" && !!panel.boundSessionId}
+                          >
+                            {() => (
+                              <ErrorBoundary
+                                fallback={(error, reset) => <PanelErrorFallback error={error} reset={reset} />}
+                              >
+                                <Panel
+                                  panel={panel}
+                                  spaceName={tab.name}
+                                  spacePath={tab.path}
+                                  isActive={isTabActive() && panel.id === tabActivePanelID()}
+                                  isSpaceActive={isTabActive()}
+                                  panelCount={tabPanels().length}
+                                  panelIndex={index()}
+                                  onActivate={() => wb.setActivePanel(tab.path, panel.id)}
+                                  onModeChange={(mode) => wb.setPanelMode(tab.path, panel.id, mode)}
+                                />
+                              </ErrorBoundary>
+                            )}
+                          </WorkbenchPanelDirectoryProvider>
+                        </Suspense>
+                        <Show when={index() < tabPanels().length - 1}>
+                          <div
+                            class="w-px z-20 cursor-col-resize bg-v2-border-border-base hover:bg-v2-icon-icon-brand/30 transition-colors flex-shrink-0"
+                            onMouseDown={(e) => handlePanelResizeStart(e, index(), tab.path, tabPanels())}
+                            onDblClick={() => wb.resetPanelWidths(tab.path)}
+                            title="双击恢复等宽"
+                          />
+                        </Show>
+                      </div>
+                    )}
+                  </For>
+                </Show>
               </div>
             )
           }}
@@ -194,8 +201,6 @@ export function Workspace() {
     </main>
   )
 }
-
-
 
 export function DialogCloseTab(props: { name: string; path: string }) {
   const wb = useWorkbenchState()
@@ -206,8 +211,7 @@ export function DialogCloseTab(props: { name: string; path: string }) {
 
   const spaceName = () => props.name
   const panelCount = () => wb.spaceState(props.path)?.panels.length ?? 0
-  const boundCount = () =>
-    wb.spaceState(props.path)?.panels.filter((p) => p.slotState === "bound").length ?? 0
+  const boundCount = () => wb.spaceState(props.path)?.panels.filter((p) => p.slotState === "bound").length ?? 0
 
   const handleConfirm = async () => {
     await actions.closeSpace(scopeFromTab({ name: props.name, path: props.path }))
@@ -222,16 +226,10 @@ export function DialogCloseTab(props: { name: string; path: string }) {
             {t("workbench.tabClose.confirm", { name: spaceName() })}
           </span>
           <div class="flex flex-col gap-2 rounded-lg border border-v2-border-border-base bg-v2-background-bg-deep p-3 text-12-regular text-v2-text-text-muted">
-            <span class="text-12-medium text-v2-text-text-base mb-1">
-              {t("workbench.tabClose.desc")}
-            </span>
-            <span>
-              {t("workbench.tabClose.consequencePanels", { count: panelCount() })}
-            </span>
+            <span class="text-12-medium text-v2-text-text-base mb-1">{t("workbench.tabClose.desc")}</span>
+            <span>{t("workbench.tabClose.consequencePanels", { count: panelCount() })}</span>
             <Show when={boundCount() > 0}>
-              <span>
-                {t("workbench.tabClose.consequenceSessions", { count: boundCount() })}
-              </span>
+              <span>{t("workbench.tabClose.consequenceSessions", { count: boundCount() })}</span>
             </Show>
             <span class="text-amber-500/95 dark:text-amber-400/90 font-medium">
               {t("workbench.tabClose.consequenceTerminals")}

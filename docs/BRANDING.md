@@ -895,6 +895,7 @@ Space
 
 #### 数据来源
 
+- **被动读取边界**：Workbench 会话状态指示使用 Root 状态快照及 SSE，通知摘要从数据库读取；空间文件树与预览使用注册 Space 内的 Root 文件接口。它们不创建 directory instance，也不加载插件。会话目录能力由 Panel 会话按需加载，非当前恢复 Tab 首次访问后再保活。
 - **session**：Workbench Session Projection 用 `session.directory` 归组（不用 `session.project_id`），并在数据库查询边界只选择 `time_archived IS NULL` 且 `parent_id IS NULL` 的会话。已归档会话和子会话不进入任何归组、`sessionCount` 或左侧树
 - **project name**：`Project.Service.list()` 仅用于取 project.name（opencode project 表记录），归组逻辑不依赖它
 - **一级 git repo**：扫描 `spaceRealPath` 下一层目录（不含 spaceRealPath 本身），`git -C <child> rev-parse --show-toplevel` 检测是否 git repo

@@ -42,6 +42,8 @@ export function createChildStoreManager(input: {
   const disposers = new Map<string, () => void>()
   const mcpDirectories = new Set<string>()
   const mcpToggles = new Map<string, (enabled: boolean) => void>()
+  const runtimeDirectories = new Set<string>()
+  const runtimeToggles = new Map<string, (enabled: boolean) => void>()
 
   const markKey = (key: DirectoryKey) => {
     if (key === undefined || key === null) return
@@ -115,6 +117,8 @@ export function createChildStoreManager(input: {
     lifecycle.delete(key)
     mcpDirectories.delete(key)
     mcpToggles.delete(key)
+    runtimeDirectories.delete(key)
+    runtimeToggles.delete(key)
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -179,12 +183,13 @@ export function createChildStoreManager(input: {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
           const [mcpEnabled, setMcpEnabled] = createSignal(false)
+          const [runtimeEnabled, setRuntimeEnabled] = createSignal(false)
 
           const [pathQuery, lspQuery, providerQuery] = useQueries(() => ({
             queries: [
-              input.queryOptions.path(key),
-              input.queryOptions.lsp(key),
-              input.queryOptions.providers(key),
+              { ...input.queryOptions.path(key), enabled: runtimeEnabled() },
+              { ...input.queryOptions.lsp(key), enabled: runtimeEnabled() },
+              { ...input.queryOptions.providers(key), enabled: runtimeEnabled() },
             ],
           }))
           const mcpQuery = useQuery(() => ({
@@ -246,6 +251,7 @@ export function createChildStoreManager(input: {
           children[key] = child
           disposers.set(key, dispose)
           mcpToggles.set(key, setMcpEnabled)
+          runtimeToggles.set(key, setRuntimeEnabled)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -284,26 +290,30 @@ export function createChildStoreManager(input: {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
     pinForOwner(key)
-    if (options.mcp) enableMcp(directory, key, childStore)
-    const shouldBootstrap = options.bootstrap ?? true
-    if (shouldBootstrap && childStore[0].status === "loading") {
-      input.onBootstrap(directory)
+    if (options.mcp && directory) enableMcp(directory, key, childStore)
+    const shouldBootstrap = (options.bootstrap ?? true) && !!directory
+    if (shouldBootstrap) {
+      activate(directory)
+      if (childStore[0].status === "loading") input.onBootstrap(directory)
     }
     return childStore
   }
 
-  function peek(directory: string, options: ChildOptions = {}) {
+  function peek(directory: string) {
     const key = directoryKey(directory)
-    const childStore = ensureChild(directory)
-    if (options.mcp) enableMcp(directory, key, childStore)
-    const shouldBootstrap = options.bootstrap ?? true
-    if (shouldBootstrap && childStore[0].status === "loading") {
-      input.onBootstrap(directory)
-    }
-    return childStore
+    return children[key]
+  }
+
+  function activate(directory: string) {
+    if (!directory) return
+    const key = directoryKey(directory)
+    if (key === undefined || key === null || runtimeDirectories.has(key)) return
+    runtimeDirectories.add(key)
+    runtimeToggles.get(key)?.(true)
   }
 
   function enableMcp(directory: string, key: DirectoryKey, childStore: [Store<State>, SetStoreFunction<State>]) {
+    if (!directory) return
     if (mcpDirectories.has(key)) return
     mcpDirectories.add(key)
     mcpToggles.get(key)?.(true)
@@ -349,6 +359,8 @@ export function createChildStoreManager(input: {
     ensureChild,
     child,
     peek,
+    activate,
+    isRuntime: (directory: string) => runtimeDirectories.has(directoryKey(directory)),
     projectMeta,
     projectIcon,
     mark,

@@ -84,8 +84,7 @@ function PanelChatInner(props: {
   const wb = useWorkbenchState()
   const local = useLocal()
   const providers = useProviders()
-  const modelName = (providerID: string, modelID: string) =>
-    providers.all().get(providerID)?.models[modelID]?.name
+  const modelName = (providerID: string, modelID: string) => providers.all().get(providerID)?.models[modelID]?.name
   const scope = createMemo(() => scopeFromTab({ name: props.spaceName, path: props.spacePath }))
 
   // Expose this Panel's prompt/comments to the workbench-wide registry so the
@@ -165,11 +164,13 @@ function PanelChatInner(props: {
       }),
     unregisterAction: (id) => actions.unregisterPanelAction(scope(), props.panel.id, id),
     onForked: (newSessionID) => {
-      void actions.bindForkedSession({
-        scope: scope(),
-        sourcePanelID: props.panel.id,
-        sessionID: newSessionID,
-      }).catch((error) => reportWorkbenchError("bind forked session", error))
+      void actions
+        .bindForkedSession({
+          scope: scope(),
+          sourcePanelID: props.panel.id,
+          sessionID: newSessionID,
+        })
+        .catch((error) => reportWorkbenchError("bind forked session", error))
     },
   })
 
@@ -391,7 +392,9 @@ function PanelChatInner(props: {
 
   const busy = (sessionID: string) => sync.data.session_working(sessionID)
   const halt = (sessionID: string) =>
-    busy(sessionID) ? sdk.client.session.abort({ sessionID }).catch((e) => reportWorkbenchError("abort", e, { silent: true })) : Promise.resolve()
+    busy(sessionID)
+      ? sdk.client.session.abort({ sessionID }).catch((e) => reportWorkbenchError("abort", e, { silent: true }))
+      : Promise.resolve()
 
   const followupMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; id: string; manual?: boolean }) => {
@@ -719,11 +722,12 @@ function PanelChatRoute(props: {
   directory: string
   spacePath: string
   spaceName: string
+  isVisible: () => boolean
   onPromptReady?: (editor: HTMLDivElement) => void
   canRestorePromptFocus?: () => boolean
 }) {
   return (
-    <PanelChatDataProvider session={props.session} directory={props.directory}>
+    <PanelChatDataProvider session={props.session} directory={props.directory} isVisible={props.isVisible}>
       <TerminalProvider>
         <FileProvider>
           <PromptProvider>
@@ -753,6 +757,7 @@ export function PanelChat(props: {
   directory: string
   spacePath: string
   spaceName: string
+  isVisible: () => boolean
   onPromptReady?: (editor: HTMLDivElement) => void
   canRestorePromptFocus?: () => boolean
 }) {
@@ -774,6 +779,7 @@ export function PanelChat(props: {
                   directory={props.directory}
                   spacePath={props.spacePath}
                   spaceName={props.spaceName}
+                  isVisible={props.isVisible}
                   onPromptReady={props.onPromptReady}
                   canRestorePromptFocus={props.canRestorePromptFocus}
                 />
@@ -786,8 +792,16 @@ export function PanelChat(props: {
   )
 }
 
-function PanelChatDataProvider(props: { session: Session; directory: string; children: JSX.Element }) {
+function PanelChatDataProvider(props: {
+  session: Session
+  directory: string
+  isVisible: () => boolean
+  children: JSX.Element
+}) {
   const sync = useSync()
+  const unregisterReconnect = sync.session.registerReconnect(props.session.id, props.isVisible)
+  onCleanup(unregisterReconnect)
+  let reconciledVersion = 0
 
   // createResource only fires its fetcher when the returned signal is read.
   // PanelChatInner reads sync.data.message[id], but nothing consumed the
@@ -799,13 +813,17 @@ function PanelChatDataProvider(props: { session: Session; directory: string; chi
     void sync.session.sync(id)
   })
 
+  // A background Panel retains its draft and DOM after a server restart, but
+  // only the Panel the user is viewing may recreate its directory runtime.
+  createEffect(() => {
+    const version = sync.session.reconnectVersion
+    if (version === 0 || version === reconciledVersion || !props.isVisible()) return
+    reconciledVersion = version
+    void sync.session.sync(props.session.id, { force: true })
+  })
+
   return (
-    <DataProvider
-      data={sync.data}
-      directory={props.directory}
-      onNavigateToSession={() => {}}
-      onSessionHref={() => ""}
-    >
+    <DataProvider data={sync.data} directory={props.directory} onNavigateToSession={() => {}} onSessionHref={() => ""}>
       <LocalProvider sessionID={props.session.id}>{props.children}</LocalProvider>
     </DataProvider>
   )

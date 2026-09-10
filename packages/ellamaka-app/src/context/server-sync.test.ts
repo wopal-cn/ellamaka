@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { shouldEnableInstanceQuery } from "./global-sync/instance-policy"
+
+describe("instance query policy", () => {
+  test("keeps global provider and path queries disabled for Workbench while allowing directory-scoped demand", () => {
+    expect(shouldEnableInstanceQuery({ directory: null, instanceBootstrap: false })).toBe(false)
+    expect(shouldEnableInstanceQuery({ directory: "", instanceBootstrap: false })).toBe(false)
+    expect(shouldEnableInstanceQuery({ directory: "/workspace/active-panel", instanceBootstrap: false })).toBe(true)
+  })
+})
 
 describe("pickDirectoriesToEvict", () => {
   test("keeps pinned stores and evicts idle stores", () => {

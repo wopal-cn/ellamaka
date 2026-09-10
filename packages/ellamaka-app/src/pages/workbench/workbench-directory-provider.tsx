@@ -2,7 +2,7 @@ import { SDKProvider } from "@/context/sdk"
 import { Show, createMemo, type JSX } from "solid-js"
 import { selectActiveWorkbenchContext, type ActiveWorkbenchSnapshot } from "./active-workbench-context"
 import { useWorkbenchState } from "./view-store"
-import { scopeFromTab, scopeKey, type SpaceScope } from "./workbench-scope"
+import { scopeKey, type SpaceScope } from "./workbench-scope"
 import { sanitizeDirectory } from "./directory-utils"
 
 export type WorkbenchDirectoryTarget = {
@@ -24,17 +24,14 @@ export function selectWorkbenchPanelDirectoryTarget(input: {
   }
 }
 
-export function readWorkbenchDirectoryMode(input: {
-  isWopalSpaceLoading: boolean
-  isWopalSpace: boolean
-}) {
+export function readWorkbenchDirectoryMode(input: { isWopalSpaceLoading: boolean; isWopalSpace: boolean }) {
   if (input.isWopalSpaceLoading) return false
   return input.isWopalSpace
 }
 
 export function selectWorkbenchDirectoryTarget(input: ActiveWorkbenchSnapshot): WorkbenchDirectoryTarget | undefined {
   const active = selectActiveWorkbenchContext(input)
-  if (active) {
+  if (active && active.panel.slotState === "bound" && active.sessionID) {
     return {
       key: `${scopeKey(active.scope)}\n${active.panel.id}\n${active.directory}`,
       scope: active.scope,
@@ -42,30 +39,24 @@ export function selectWorkbenchDirectoryTarget(input: ActiveWorkbenchSnapshot): 
       directory: active.directory,
     }
   }
-  const tab = input.activeTabPath !== undefined
-    ? input.tabs.find((candidate) => candidate.path === input.activeTabPath)
-    : input.tabs.find((candidate) => candidate.name === input.activeSpaceName)
-  if (!tab) return undefined
-  const scope = scopeFromTab(tab)
-  return {
-    key: `${scopeKey(scope)}\n${tab.path}`,
-    scope,
-    directory: tab.path,
-  }
+  return undefined
 }
 
 export function WorkbenchActiveDirectoryProvider(props: {
   children: (target: WorkbenchDirectoryTarget) => JSX.Element
+  fallback?: JSX.Element
 }) {
   const wb = useWorkbenchState()
-  const target = createMemo(() => selectWorkbenchDirectoryTarget({
-    spaces: wb.spaces,
-    tabs: wb.tabs,
-    activeTabPath: wb.activeTabPath,
-  }))
+  const target = createMemo(() =>
+    selectWorkbenchDirectoryTarget({
+      spaces: wb.spaces,
+      tabs: wb.tabs,
+      activeTabPath: wb.activeTabPath,
+    }),
+  )
 
   return (
-    <Show when={target()} keyed>
+    <Show when={target()} keyed fallback={props.fallback}>
       {(current) => {
         // Sanitize before handing the directory to SDKProvider: a malicious
         // or corrupted path must not become the x-opencode-directory header.
@@ -89,12 +80,15 @@ export function WorkbenchActiveDirectoryProvider(props: {
 export function WorkbenchPanelDirectoryProvider(props: {
   panelID: string
   directory: string
+  runtime?: boolean
   children: (target: WorkbenchPanelDirectoryTarget) => JSX.Element
 }) {
-  const target = createMemo(() => selectWorkbenchPanelDirectoryTarget({
-    id: props.panelID,
-    directory: props.directory,
-  }))
+  const target = createMemo(() =>
+    selectWorkbenchPanelDirectoryTarget({
+      id: props.panelID,
+      directory: props.directory,
+    }),
+  )
 
   return (
     <Show when={target()} keyed>
@@ -105,7 +99,7 @@ export function WorkbenchPanelDirectoryProvider(props: {
         }
         const safeDirectory = sanitized ?? ""
         return (
-          <SDKProvider directory={safeDirectory}>
+          <SDKProvider directory={safeDirectory} runtime={props.runtime}>
             {props.children({ ...current, directory: safeDirectory })}
           </SDKProvider>
         )

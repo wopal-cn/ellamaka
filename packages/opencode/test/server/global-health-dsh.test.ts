@@ -10,6 +10,9 @@ import { ServerAuth } from "../../src/server/auth"
 import { CliContract } from "../../src/wopal/cli-contract"
 import { SpaceRegistry } from "../../src/wopal/space-registry"
 import { SessionProjection } from "../../src/workbench/session-projection"
+import { SessionStatus } from "../../src/session/status"
+import { SpaceFiles } from "../../src/workbench/space-files"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { layer as workbenchDshUrlLayer } from "../../src/workbench/dsh-url"
 import { setDshStatus } from "../../src/workbench/dsh-status"
 import { RootHttpApi } from "../../src/server/routes/instance/httpapi/api"
@@ -41,8 +44,11 @@ const apiLayer = HttpRouter.serve(
   ),
   Layer.provide(ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })),
   Layer.provide(CliContract.defaultLayer),
-  Layer.provide(SpaceRegistry.defaultLayer),
   Layer.provide(SessionProjection.defaultLayer),
+  Layer.provide(SpaceFiles.layer),
+  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(SpaceRegistry.defaultLayer),
+  Layer.provide(SessionStatus.defaultLayer),
   Layer.provide(workbenchDshUrlLayer),
   Layer.provide(Layer.succeedContext(Context.empty() as Context.Context<unknown>)),
 )

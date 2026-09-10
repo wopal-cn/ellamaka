@@ -189,8 +189,10 @@ Workbench Chat 的模型选择按 Session 隔离。用户显式选择是当前 S
 
 - **派生状态不另存副本**：TUI 存活标记、Split Terminal 进程高亮、Session 绑定状态、目录健康指示等均从权威字段派生（如 `panel.tuiPtyId`、`panel.splitPtyId`、`boundSessionId`），不得在 UI 层另存重复标记。
 - **视图切换不释放 PTY**：TUI ↔ Chat ↔ Context 切换、Split Terminal 收起/展开，只切换可见性，不销毁 PTY 进程或 WebSocket subscriber。PTY 释放只发生在 Panel 关闭、Space Tab 关闭或 Session 解绑场景。
-- **水合门控**：`wb.ready()` 是唯一的 Workbench Bootstrap Gate。水合完成前不渲染 Workspace、不创建 PTY、不处理副作用事件；水合完成后一次性挂载恢复的布局并探测持久化的 PTY ID。
-- **Space Keep-Alive**：所有已打开的 Space Tab 保持挂载，非当前 Space 用 `position: absolute; visibility: hidden; inert` 隐藏，**禁止 `display: none`**（Ghostty 尺寸会归零）。切换 Tab 只改变可见性，不销毁子组件。
+- **水合门控**：`wb.ready()` 是唯一的 Workbench Bootstrap Gate。水合完成前不渲染 Workspace、不创建 PTY、不处理副作用事件；水合完成后挂载当前 Space 并探测其持久化的 PTY ID。其他恢复的 Space 在首次访问时按需挂载。
+- **按需 Space Keep-Alive**：恢复 Tab 布局不代表需要加载运行环境。首次只挂载当前 Space；其他 Space 首次访问时挂载，此后保留其 Panel，直到用户显式关闭。非当前已挂载 Space 用 `position: absolute; visibility: hidden; inert` 隐藏，禁止 `display: none`（Ghostty 尺寸会归零）。已激活 Panel 切到后台必须保留草稿、滚动位置与终端连接。
+- **运行环境加载条件**：只有 Panel 中已打开或新建的会话才加载目录能力。空 Panel、Tab 布局、会话树行、运行/未读指示及通知元数据均为被动读取，不得创建会发出请求的目录状态或加载插件。空间文件浏览与预览使用 Root 级文件读取，不使用会话 instance。空 Panel 不提供目录能力状态，但服务健康状态始终独立可用。
+- **重连加载边界**：从 `localStorage` 恢复时只挂载并恢复当前 Space。页面不刷新而后端/sidecar 重启时，只允许当前可见 Space（其中正在显示的所有 Panel）对账会话并恢复 PTY 连接；隐藏 keep-alive Space 只保留 DOM、草稿和重连提示，不得重新创建 directory instance、加载插件或重连 PTY，直到用户切回该 Space。
 - **SSE 事件分级**：高频属性变更（标题、消息流）由对应组件局部处理；结构性事件（`session.created`/`session.deleted`/带 `timeArchived` 的 `session.updated`）才触发 SessionTree 刷新。`message.part.*` 只更新对应 PanelChat。
 - **CLI 不可用降级**：CLI 缺失/损坏/版本不兼容时，保留 General Session、Chat、TUI 和 PTY，暂停 Space Control；修复操作由用户在诊断中心点击确认，恢复后自动重新探测，不重启 sidecar。
 - **离线输入隔离**：`runtime.status === "offline"` 时，Shell 在顶层显示连接保护遮罩并将工作台表面设为 `inert`，阻断所有用户输入。恢复连接后自动解除隔离并保留当前现场。

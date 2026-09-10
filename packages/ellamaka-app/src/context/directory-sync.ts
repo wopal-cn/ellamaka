@@ -1,4 +1,4 @@
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { Binary } from "@wopal/ellamaka-core/util/binary"
 import { retry } from "@wopal/ellamaka-core/util/retry"
@@ -106,10 +106,13 @@ export function reconcileActiveSessions(input: {
   loading: Record<string, boolean | undefined>
   keyFor: (directory: string, sessionID: string) => string
   directory: string
+  /** Limits reconciliation to explicitly visible sessions when supplied. */
+  sessionIDs?: Iterable<string>
   fetchLatest: (sessionID: string) => Promise<string | undefined>
   sync: (sessionID: string, opts: { force: true }) => Promise<unknown> | unknown
 }) {
-  for (const sessionID of Object.keys(input.store.message)) {
+  const ids = input.sessionIDs ? [...input.sessionIDs] : Object.keys(input.store.message)
+  for (const sessionID of ids) {
     const cached = input.store.message[sessionID] ?? []
     if (cached.length === 0) continue
     const newestCached = cached[cached.length - 1]!
@@ -251,6 +254,12 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
   const optimistic = new Map<string, Map<string, OptimisticItem>>()
   const maxDirs = 30
   const seen = new Map<string, Set<string>>()
+  // Workbench keeps previously visited Panels mounted. Registering their
+  // visibility here lets an SSE reconnect defer reconciliation for background
+  // Panels until the user returns, while ordinary directory pages preserve
+  // their existing eager reconnect behavior.
+  const reconnectRegistrations = new Map<string, Set<Accessor<boolean>>>()
+  const [reconnectVersion, setReconnectVersion] = createSignal(0)
   const [meta, setMeta] = createStore({
     limit: {} as Record<string, number>,
     cursor: {} as Record<string, string | undefined>,
@@ -451,6 +460,25 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
     },
     session: {
       get: getSession,
+      /** Opt into visibility-aware reconnect recovery for an embedded Panel. */
+      registerReconnect(sessionID: string, isVisible: Accessor<boolean>) {
+        let entries = reconnectRegistrations.get(sessionID)
+        if (!entries) {
+          entries = new Set()
+          reconnectRegistrations.set(sessionID, entries)
+        }
+        entries.add(isVisible)
+        return () => {
+          const current = reconnectRegistrations.get(sessionID)
+          if (!current) return
+          current.delete(isVisible)
+          if (current.size === 0) reconnectRegistrations.delete(sessionID)
+        }
+      },
+      /** Increments after a server reconnect for registered Workbench Panels. */
+      get reconnectVersion() {
+        return reconnectVersion()
+      },
       optimistic: {
         add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
           const _directory = input.directory ?? directory
@@ -670,17 +698,28 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
     },
   }
 
-  const unsubResync = serverSDK.event.onResync(() =>
+  const reconcileOnReconnect = (sessionIDs?: Iterable<string>) =>
     reconcileActiveSessions({
       store: current()[0],
       loading: meta.loading,
       keyFor,
       directory,
+      sessionIDs,
       fetchLatest: (sessionID) =>
         client.session.messages({ sessionID, limit: 1 }).then((res) => res.data?.[0]?.info?.id),
       sync: context.session.sync,
-    }),
-  )
+    })
+
+  const unsubResync = serverSDK.event.onResync(() => {
+    // A registered Workbench Panel owns its own recovery. It will read the
+    // version above only while visible; keeping the Panel mounted in a hidden
+    // Space therefore cannot recreate an instance after the backend restarts.
+    if (reconnectRegistrations.size > 0) {
+      setReconnectVersion((value) => value + 1)
+      return
+    }
+    reconcileOnReconnect()
+  })
   onCleanup(unsubResync)
 
   return context

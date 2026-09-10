@@ -93,6 +93,7 @@ import { SessionProvisioner } from "@/workbench/session-provisioner"
 import { SessionProjection } from "@/workbench/session-projection"
 import { SessionDirectoryHealth } from "@/workbench/session-directory-health"
 import { WorkbenchDshUrl, layer as workbenchDshUrlLayer } from "@/workbench/dsh-url"
+import { SpaceFiles } from "@/workbench/space-files"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
@@ -127,11 +128,15 @@ const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Co
 const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers, workbenchHandlers]),
-  Layer.provide(SpaceRegistry.defaultLayer),
   Layer.provide(CliContract.defaultLayer),
   Layer.provide(SessionProvisioner.defaultLayer),
   Layer.provide(SessionProjection.defaultLayer),
   Layer.provide(SessionDirectoryHealth.defaultLayer),
+  // Uses the process-wide AppFileSystem below and the same SpaceRegistry
+  // snapshot as other root Workbench projections. Do not provide a nested
+  // SessionStatus layer here: status snapshots must share the canonical state.
+  Layer.provide(SpaceFiles.layer),
+  Layer.provide(SpaceRegistry.defaultLayer),
   Layer.provide(workbenchDshUrlLayer),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),

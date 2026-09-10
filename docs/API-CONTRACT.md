@@ -1,7 +1,7 @@
 # Ellamaka API 与 SDK 契约
 
 > **状态**：Active
-> **更新时间**：2026-08-03
+> **更新时间**：2026-09-10
 > **上级架构**：`../../../docs/products/wopal-space/DESIGN-wopalspace.md` §1.1
 
 ## 1. 目的
@@ -39,7 +39,18 @@ HTTP 路径表达领域资源与自然从属关系。集合使用复数名词，
 
 `GET /workbench/session-groups` 是 Workbench 左侧会话列表的 Root 级读模型。它按 Space/General 分组，只返回数据库中 `time_archived IS NULL` 且 `parent_id IS NULL` 的 Session；归档会话和子会话不得进入响应、`sessionCount` 或客户端 Session Projection。
 
-当前 Workbench 的主读模型和创建接口属于 Instance API，均通过现有 Authorization、Instance Context 与 Workspace Routing：
+以下 Workbench Root 级读模型仅继承 Authorization，绝不经由 Instance Context、Workspace Routing 或按目录创建 Instance：
+
+| Endpoint                                       | 语义                              | 关键约束                                                                                                                                                                                                                                 |
+| ---------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /workbench/session-statuses`              | 已初始化 Session 的运行状态快照   | 仅返回非 idle 的 `busy` / `retry` 状态，`{ directory, sessionID, status }` 与 `SessionStatus` 的每实例 canonical 状态共享同一写入者；状态变更先更新快照再发布事件，实例 dispose 时删除快照。查询不能初始化目录，重连客户端读取当前快照。 |
+| `GET /workbench/session-summaries/{sessionID}` | 通知筛选所需的 Session 元数据     | 直接读取 canonical `SessionTable`，返回 `{ id, title, directory, parentID?, agent? }` 或不存在时 `null`；子 Session 与归档 Session 均可读取，不调用 `Session.get` 或创建 Instance。                                                      |
+| `GET /workbench/files?spacePath=&path=`        | 已注册 Space 根或相对目录的文件树 | `spacePath` 必须是注册 Space 根；`path` 为可选的相对路径，默认根目录。直接使用受限文件系统读取，保持 `File.Node[]` 的隐藏文件、`.git` / `.DS_Store` 排除、ignore 标记及目录优先排序语义；不创建 File runtime 或 Instance。               |
+| `GET /workbench/file-content?spacePath=&path=` | 已注册 Space 内文件的预览内容     | `path` 必须为相对文件路径；复用 `File.Content` 的文本、二进制、图片 base64 和 MIME payload 语义，但不为预览运行 git diff、LSP 或 Instance 服务。                                                                                         |
+
+文件树和文件内容的 `spacePath` 都先在 `SpaceRegistry` 中解析；空快照时可刷新同一根能力快照。服务端拒绝未知根、绝对或 `..` 路径、非目录/非文件目标和 realpath 后越出 Space 的符号链接（`WorkbenchSpaceNotFound` 404、`WorkbenchSpaceFileNotFound` 404 或 `WorkbenchSpaceFileAccessDenied` 403）。这两个端点不是通用任意文件系统表面。
+
+下列 Workbench 接口目前编排在 `WorkbenchInstanceApi` 组中，但该组仅声明 Authorization，不挂载 Instance Context 或 Workspace Routing。树与候选位置读取不初始化目录；创建会话时由 provisioner 按已验证的目标目录获取运行环境：
 
 | Endpoint | 语义 | 关键约束 |
 |---|---|---|

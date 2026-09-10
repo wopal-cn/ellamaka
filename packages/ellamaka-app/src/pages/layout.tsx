@@ -131,11 +131,11 @@ export default function Layout(props: ParentProps) {
     if (!slug) return { slug, dir: "" }
     const dir = decode64(slug)
     if (!dir) return { slug, dir: "" }
-    const store = serverSync.peek(dir, { bootstrap: false })
+    const store = serverSync.peek(dir)
     return {
       slug,
       store,
-      dir: store[0].path.directory || dir,
+      dir: store?.[0].path.directory || dir,
     }
   })
   const availableThemeEntries = createMemo(() => theme.ids().map((id) => [id, theme.themes()[id]] as const))
@@ -1770,10 +1770,7 @@ export default function Layout(props: ParentProps) {
   )
 
   createEffect(() => {
-    document.documentElement.style.setProperty(
-      "--dialog-left-margin",
-      "0px",
-    )
+    document.documentElement.style.setProperty("--dialog-left-margin", "0px")
   })
 
   const side = createMemo(() => Math.max(layout.sidebar.width(), 244))
@@ -2312,7 +2309,7 @@ export default function Layout(props: ParentProps) {
         mobile ? <SidebarPanel project={currentProject} mobile /> : <SidebarPanel project={currentProject} merged />
       }
     />
- )
+  )
 
   return (
     <div class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
