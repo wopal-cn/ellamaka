@@ -6,6 +6,7 @@ import { Pty } from "../../src/pty"
 import type { PtyID } from "../../src/pty/schema"
 import { Cause, Effect, Exit, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
+import { ptyAvailable } from "../fixture/pty"
 
 type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
 
@@ -16,7 +17,7 @@ const it = testEffect(
     Layer.provideMerge(Plugin.defaultLayer),
   ),
 )
-const ptyTest = process.platform === "win32" ? it.instance.skip : it.instance
+const ptyTest = process.platform === "win32" || !ptyAvailable() ? it.instance.skip : it.instance
 
 const subscribePtyEvents = Effect.fn("PtySessionTest.subscribePtyEvents")(function* () {
   const bus = yield* Bus.Service
@@ -161,7 +162,8 @@ describe("pty grace reaping", () => {
       Layer.provideMerge(Plugin.defaultLayer),
     ),
   )
-  const graceTest = process.platform === "win32" ? graceIt.instance.skip : graceIt.instance
+  const graceTest =
+    process.platform === "win32" || !ptyAvailable() ? graceIt.instance.skip : graceIt.instance
 
   graceTest(
     "auto-deletes PTY when no subscriber connects within first-connect grace",

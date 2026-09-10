@@ -7,6 +7,7 @@ import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Effect, Layer } from "effect"
 import { testEffect, pollWithTimeout } from "../lib/effect"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
+import { ptyAvailable } from "../fixture/pty"
 import * as ptyNode from "../../src/pty/pty.node"
 
 const it = testEffect(
@@ -18,7 +19,7 @@ const it = testEffect(
   ),
 )
 
-const ptyTest = process.platform === "win32" ? it.live.skip : it.live
+const ptyTest = process.platform === "win32" || !ptyAvailable() ? it.live.skip : it.live
 
 // A child that ignores SIGHUP. `trap '' HUP` sets SIG_IGN, which persists across
 // exec, so the resulting `sleep` ignores SIGHUP. The default kill signal (SIGHUP

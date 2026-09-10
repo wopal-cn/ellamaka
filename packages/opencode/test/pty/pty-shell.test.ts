@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { Pty } from "../../src/pty"
 import { Shell } from "../../src/shell/shell"
 import { testEffect } from "../lib/effect"
+import { ptyAvailable } from "../fixture/pty"
 
 Shell.preferred.reset()
 
@@ -54,8 +55,9 @@ describe("pty shell args", () => {
 
 describe("pty configured shell", () => {
   const configured = process.platform === "win32" ? Bun.which("pwsh") || Bun.which("powershell") : Bun.which("bash")
+  const shellIt = !ptyAvailable() ? it.instance.skip : it.instance
 
-  it.instance(
+  shellIt(
     "uses configured shell for default PTY command",
     () =>
       Effect.gen(function* () {
