@@ -397,9 +397,10 @@ export interface DshHostOptions {
    */
   ellamakaCommand?: readonly string[]
   /**
-   * `ellamaka.dsh.trustedHosts` (auth-fix-1): non-loopback authorities the
-   * connection Host/Origin fence accepts. Rides the web-runtime extra row
-   * into the official webRuntime -> connection fence chain (see
+   * Non-loopback authorities the connection Host/Origin fence accepts,
+   * derived from the host's CORS trust decision (`trustedHostsFromCors` over
+   * the merged `server.cors` + `--cors` list). Rides the web-runtime extra
+   * row into the official webRuntime -> connection fence chain (see
    * `webExtraPatches`). Defaults to `[]` (loopback-only).
    */
   trustedHosts?: readonly string[]

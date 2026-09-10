@@ -37,7 +37,6 @@ import { ConfigPlugin } from "./plugin"
 import { ConfigProvider } from "./provider"
 import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
-import { ConfigDsh } from "./dsh"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@wopal/ellamaka-core/npm"
@@ -150,9 +149,6 @@ export const Info = Schema.Struct({
   logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
   server: Schema.optional(ConfigServer.Server).annotate({
     description: "Server configuration for opencode serve and web commands",
-  }),
-  dsh: Schema.optional(ConfigDsh.Settings).annotate({
-    description: "DSH (DeepSeek Harness) engine configuration",
   }),
   command: Schema.optional(Schema.Record(Schema.String, ConfigCommand.Info)).annotate({
     description: "Command configuration, see https://opencode.ai/docs/commands",

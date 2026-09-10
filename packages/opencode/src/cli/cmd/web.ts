@@ -57,7 +57,7 @@ export const WebCommand = effectCmd({
     let dshDispose: (() => Promise<void>) | undefined
     {
       const { mountDshEngine } = yield* Effect.promise(() => import("./dsh-mount"))
-      const handle = yield* Effect.promise(() => mountDshEngine(server, { entry: "web" }))
+      const handle = yield* Effect.promise(() => mountDshEngine(server, { entry: "web", cors: opts.cors }))
       if (handle) {
         dshDispose = () => handle.dispose()
       }

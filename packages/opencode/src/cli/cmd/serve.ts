@@ -29,7 +29,7 @@ export const ServeCommand = effectCmd({
     // only ELLAMAKA_DSH-enabled CLI runs load it.
     {
       const { mountDshEngine: engine } = yield* Effect.promise(() => import("./dsh-mount"))
-      const handle = yield* Effect.promise(() => engine(server))
+      const handle = yield* Effect.promise(() => engine(server, { cors: opts.cors }))
       yield* Effect.never.pipe(
         Effect.ensuring(Effect.promise(() => handle?.dispose() ?? Promise.resolve())),
       )

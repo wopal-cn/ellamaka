@@ -8,7 +8,9 @@ import {
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { dumpDshConfig } from "@wopal/ellamaka-cordis/diagnostics/dump-config"
 import { CliError, effectCmd } from "../effect-cmd"
-import { readDshTrustedHosts } from "./dsh-mount"
+import { trustedHostsFromCors } from "./dsh-mount"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Config } from "@/config/config"
 
 /**
  * `ellamaka dsh dump-config` — the ellamaka COMPATIBILITY extension form
@@ -84,8 +86,16 @@ export const runDshDump = (options: {
       dshHome: join(wopalHome, "dsh"),
       installAnchor: anchorPath,
       overlayPatches: options.overlayPatches,
-      // auth-fix-1: the dump must reflect the EFFECTIVE fence value.
-      trustedHosts: yield* Effect.promise(() => readDshTrustedHosts()),
+      // The dump reflects the EFFECTIVE fence value, derived from the same
+      // CORS trust decision (server.cors + --cors) the server binds with.
+      // `runDshDump` also serves the light root-flag form, which has no
+      // AppRuntime, so the global config is read through a self-contained
+      // AppRuntime run (same pattern as the previous readDshTrustedHosts).
+      trustedHosts: trustedHostsFromCors(
+        (yield* Effect.promise(() =>
+          AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())),
+        )).server?.cors ?? [],
+      ),
     } as const
 
     const dumped = yield* Effect.tryPromise({

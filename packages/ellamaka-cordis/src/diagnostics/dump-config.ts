@@ -216,9 +216,10 @@ export interface DumpDshConfigOptions {
    */
   overlayPatches?: string[]
   /**
-   * `ellamaka.dsh.trustedHosts` (auth-fix-1): non-loopback authorities the
-   * connection fence accepts. Rendered into the web-runtime extra row so the
-   * dump shows the effective fence value. Defaults to `[]`.
+   * Non-loopback authorities the connection fence accepts, derived from the
+   * host's CORS trust decision (`trustedHostsFromCors` over the merged
+   * `server.cors` + `--cors` list). Rendered into the web-runtime extra row
+   * so the dump shows the effective fence value. Defaults to `[]`.
    */
   trustedHosts?: readonly string[]
 }

@@ -2,8 +2,6 @@ import { Global } from "@wopal/ellamaka-core/global"
 import { join } from "node:path"
 import type { Listener } from "../../server/server"
 import { Effect } from "effect"
-import { AppRuntime } from "@/effect/app-runtime"
-import { Config } from "@/config/config"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   initializeDshRuntime,
@@ -14,6 +12,31 @@ import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-co
 import { setDshUrlGetter } from "@/workbench/dsh-url"
 import { setDshStatus } from "@/workbench/dsh-status"
 
+/**
+ * The DSH connection-fence authorities derived from the user's CORS trust
+ * decision. The CORS surface (`server.cors` in settings.jsonc + `--cors`
+ * flags, merged in `resolveNetworkOptions`) is the ONE place a user declares
+ * "this remote origin is trusted"; the DSH fence follows that decision —
+ * full Origins (`http://192.168.1.5:3000`) are reduced to the `host:port`
+ * authority the fence compares, already-authority strings pass through, and
+ * entries that parse as neither are skipped (fail closed, same as an empty
+ * list).
+ */
+export function trustedHostsFromCors(cors: readonly string[]): string[] {
+  const hosts: string[] = []
+  for (const entry of cors) {
+    let authority: string | undefined
+    try {
+      const url = new URL(entry)
+      authority = url.host
+    } catch {
+      if (/^[a-z0-9._-]+(:\d+)?$/i.test(entry)) authority = entry
+    }
+    if (authority && !hosts.includes(authority)) hosts.push(authority)
+  }
+  return hosts
+}
+
 export interface DshEngineMountOptions {
   /** Override the wopal home; defaults to `$WOPAL_HOME`. */
   wopalHome?: string
@@ -21,33 +44,12 @@ export interface DshEngineMountOptions {
   logFile?: string
   /** The entry name the runtime manager logs under; defaults to `serve`. */
   entry?: "serve" | "web"
-}
-
-/**
- * Read `ellamaka.dsh.trustedHosts` from the global settings.jsonc
- * (auth-fix-1, D-02: the official config surface, default-value layer).
- * Goes through the standard Config loader (`getGlobal`) so the value gets
- * the SAME variable substitution (`{env:VAR}`, `{file:path}`) and schema
- * acceptance as every other settings key (W-01); the loader already degrades
- * a broken settings file to `{}`, and a missing key yields the fail-closed
- * `[]` default — a broken settings file must not take down the dsh mount.
- *
- * This runs once per engine mount at startup, before any request can arrive,
- * so the loader's cached global snapshot is fresh by construction; reading
- * live instead of through the cache would risk a mid-run settings edit
- * half-applying to a running fence. A settings file that is unparsable or
- * schema-invalid dies inside the loader (sync throw, not a failed Effect),
- * so the catch below is the fail-closed backstop — matching the loader's own
- * broken-file semantics (log + `{}`) one layer up.
- */
-export async function readDshTrustedHosts(): Promise<readonly string[]> {
-  try {
-    const config = await AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal()))
-    return [...(config.dsh?.trustedHosts ?? [])]
-  } catch (error) {
-    console.error("failed to read dsh.trustedHosts from global settings; using the empty default", error)
-    return []
-  }
+  /**
+   * The merged CORS origin list (`server.cors` + `--cors`, resolved by the
+   * network options before the server binds). The DSH fence derives its
+   * trusted authorities from this list — one trust decision, one surface.
+   */
+  cors?: readonly string[]
 }
 
 export interface DshEngineHandle {
@@ -155,9 +157,9 @@ export async function mountDshEngine(
       runtime,
       disableCodeRuntime: true,
       ellamakaCommand: resolveEllamakaCommand(),
-      // auth-fix-1: the configured LAN authorities ride the web-runtime row
-      // into the official webRuntime -> connection fence chain.
-      trustedHosts: await readDshTrustedHosts(),
+      // The CORS-derived LAN authorities ride the web-runtime row into the
+      // official webRuntime -> connection fence chain.
+      trustedHosts: trustedHostsFromCors(opts.cors ?? []),
     })
     unmountDsh = server.mountNodeRoute({
       prefix: dsh.mountPath,
