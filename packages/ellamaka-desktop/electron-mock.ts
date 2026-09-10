@@ -124,3 +124,12 @@ mock.module("drizzle-orm/node-sqlite/driver", () => ({
     $client: null,
   }),
 }))
+
+// The desktop bundle resolves `virtual:opencode-server` to the compiled
+// opencode node bundle (electron.vite.config.ts). Tests run against source, so
+// the module resolves to the real cordis implementation the CLI mount also
+// uses — the point of these tests is the shared decision table, and a stub
+// would pin the copy instead of the contract.
+mock.module("virtual:opencode-server", () =>
+  import("../ellamaka-cordis/src/plugins/install-command"),
+)

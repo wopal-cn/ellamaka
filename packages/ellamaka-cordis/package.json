@@ -21,6 +21,7 @@
     "./plugins/compose": "./src/plugins/compose.ts",
     "./plugins/resolve-specifiers": "./src/plugins/resolve-specifiers.ts",
     "./plugins/installer": "./src/plugins/installer.ts",
+    "./plugins/install-command": "./src/plugins/install-command.ts",
     "./plugins/resolver": "./src/plugins/resolver.ts",
     "./plugins/runtime": "./src/plugins/runtime.ts",
     "./diagnostics/dump-config": "./src/diagnostics/dump-config.ts",

@@ -24,6 +24,13 @@ export type {
   DshPluginServiceHandle,
   DshPluginServiceOptions,
 } from "@wopal/ellamaka-cordis/plugins/runtime"
+// The install-command decision table is shared with the CLI mount
+// (`dsh-mount.ts`), so the Desktop sidecar resolves its launcher through the
+// same rules instead of keeping a second, drifting copy. The sidecar is the
+// one host that sets `allowEngineFallback`, because neither its `execPath`
+// (Electron's helper) nor its `argv[1]` (this bundle) can run `dsh plugin`.
+export { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-command"
+export type { InstallCommandProbe } from "@wopal/ellamaka-cordis/plugins/install-command"
 // The sidecar publishes the mount-computed authenticated entry on the same
 // process-singleton holder the CLI mount uses, so the `/workbench/dsh-url`
 // endpoint answers with the launch-token URL in Desktop mode too.

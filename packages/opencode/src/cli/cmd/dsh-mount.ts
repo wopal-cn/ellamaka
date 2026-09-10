@@ -7,6 +7,7 @@ import {
   resolveInstallAnchor,
 } from "@wopal/ellamaka-cordis/runtime"
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
+import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-command"
 import { setDshUrlGetter } from "@/workbench/dsh-url"
 import { setDshStatus } from "@/workbench/dsh-status"
 
@@ -27,21 +28,24 @@ export interface DshEngineHandle {
 
 /**
  * The launch command the dsh install worker re-launches for `dsh plugin`
- * operations — [executable, ...prefix-args-to-reach-the-CLI-entry]. This is
- * the ONE place that knows the runtime mode:
- * - compiled binary (CLI serve/web, Desktop sidecar): `execPath` IS the
- *   ellamaka CLI, so the command is `[process.execPath]`;
- * - bun dev (`dev.sh` runs `bun --preload <preload> <opencode_entry> serve`):
- *   `execPath` is bun, not ellamaka, so the command is
- *   `[bun, <opencode_entry>]` — `process.argv[1]` is the CLI source entry
- *   (`dsh plugin` is an engine-free shim, no `--preload` needed).
+ * operations. The decision table lives in the cordis package's
+ * `install-command` module so every host agrees on it; this call site supplies
+ * the facts of THIS process.
+ *
+ * `allowEngineFallback: false`: a CLI host can always name its own launcher,
+ * and consulting `<WOPAL_HOME>/bin` would let a stale binary left by an older
+ * install win over the one actually running.
  */
 function resolveEllamakaCommand(): string[] {
-  if (process.versions.bun === undefined) {
-    return [process.execPath]
-  }
-  const entry = process.argv[1]
-  return entry && entry.length > 0 ? [process.execPath, entry] : [process.execPath]
+  return (
+    resolveInstallCommand({
+      argv: process.argv,
+      execPath: process.execPath,
+      isBun: process.versions.bun !== undefined,
+      env: process.env,
+      allowEngineFallback: false,
+    }) ?? [process.execPath]
+  )
 }
 
 /**
