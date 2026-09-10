@@ -289,10 +289,31 @@ function WorkbenchShell() {
           role="alertdialog"
           aria-modal="true"
         >
-          <div class="flex flex-col items-center gap-3 text-center">
-            <div class="workbench-spinner rounded-full h-6 w-6 border-2 border-v2-text-text-muted border-t-transparent" />
-            <p class="text-14-medium text-v2-text-text-primary">{t("workbench.runtime.offlineOverlay")}</p>
-          </div>
+          <Show
+            when={runtime.unauthorized}
+            fallback={
+              <div class="flex flex-col items-center gap-3 text-center">
+                <div class="workbench-spinner rounded-full h-6 w-6 border-2 border-v2-text-text-muted border-t-transparent" />
+                <p class="text-14-medium text-v2-text-text-primary">{t("workbench.runtime.offlineOverlay")}</p>
+              </div>
+            }
+          >
+            <div class="flex flex-col items-center gap-4 text-center max-w-sm px-6">
+              <p class="text-16-semibold text-v2-text-text-strong">{t("workbench.runtime.unauthorizedTitle")}</p>
+              <p class="text-14-regular text-v2-text-text-muted">{t("workbench.runtime.unauthorizedHint")}</p>
+              <button
+                type="button"
+                class="rounded-lg bg-v2-button-primary-base px-4 py-2 text-14-medium text-v2-text-on-brand-base hover:bg-v2-button-primary-hover"
+                onClick={() => {
+                  void import("@/components/dialog-select-server").then((x) => {
+                    dialog.show(() => <x.DialogSelectServer />)
+                  })
+                }}
+              >
+                {t("workbench.runtime.unauthorizedAction")}
+              </button>
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
