@@ -152,8 +152,9 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 ## 5. Testing & Verification
 
 - Code changes follow TDD: write a failing test first, then implement code to make it pass.
+- Run `bun run lint` before committing (repo-wide pre-existing warnings are tolerated as a baseline). Every file you touch must pass `bunx oxlint --deny-warnings <files>` (`<files>` = your changed files, e.g. `git diff --name-only HEAD~1 | grep -E '\.tsx?$' | xargs bunx oxlint --deny-warnings`): no new warning in any changed file, regardless of the repo-wide warning count.
+- Format touched files with `bunx prettier --write <files>`; `bunx prettier --check --ignore-unknown <files>` must pass.
 - 在修改任何 TypeScript 代码或添加新文件后，必须自动运行 `bun run typecheck`（或对应 package 的 typecheck），确保零 TypeScript 类型错误。
-- Run `bun run lint` before committing and leave zero lint errors. Oxlint errors fail the command, so keep the tree at `Found N warnings and 0 errors`; pre-existing config-level failures (e.g. a package tsconfig referencing a type package that is never installed) must be fixed, not worked around in individual files.
 - Avoid mocks as much as possible; test real implementations, do not duplicate logic into tests.
 - Tests must run from the corresponding package directory, never from repo root.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.

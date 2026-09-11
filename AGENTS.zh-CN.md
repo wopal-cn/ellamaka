@@ -147,6 +147,8 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 ## 5. Testing
 
 - 代码类变更遵循 TDD：先写能失败的测试，再实现代码使其通过。
+- 提交前运行 `bun run lint`（全仓存量 warning 作为 baseline 容忍）。**本次改动到的文件必须通过 `bunx oxlint --deny-warnings <files>`**（`<files>` 传改动文件列表，如 `git diff --name-only HEAD~1 \| grep -E '\.tsx?$' \| xargs bunx oxlint --deny-warnings`）：不得为改动文件新增任何 warning，与全仓 warning 总数无关。
+- 改动文件用 `bunx prettier --write <files>` 格式化；`bunx prettier --check --ignore-unknown <files>` 必须通过。
 - 尽量避免 mocks；测试真实实现，不要把实现逻辑复制进测试。
 - 测试从对应 package 目录运行，不要从 repo root 运行。
 - 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明：`WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
