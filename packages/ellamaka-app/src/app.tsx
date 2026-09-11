@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
+  type Accessor,
   createEffect,
   createMemo,
   createResource,
@@ -107,18 +108,16 @@ function BodyDesignClass() {
   return null
 }
 
-function AppShellProviders(props: ParentProps) {
+function AppShellProviders(props: ParentProps<{ instanceBootstrap?: boolean | Accessor<boolean> }>) {
   return (
     <SettingsProvider>
       <BodyDesignClass />
       <PermissionProvider>
-        <LayoutProvider>
+        <LayoutProvider instanceBootstrap={props.instanceBootstrap}>
           <NotificationProvider>
             <ModelsProvider>
               <CommandProvider>
-                <HighlightsProvider>
-                  {props.children}
-                </HighlightsProvider>
+                <HighlightsProvider>{props.children}</HighlightsProvider>
               </CommandProvider>
             </ModelsProvider>
           </NotificationProvider>
@@ -153,12 +152,14 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const isWorkbench = () => location.pathname.startsWith("/workbench")
 
   return (
-    <AppShellProviders>
-      {props.appChildren}
-      <Show when={isWorkbench()} fallback={<Layout>{props.children}</Layout>}>
-        {props.children}
-      </Show>
-    </AppShellProviders>
+    <ServerSyncProvider instanceBootstrap={() => !isWorkbench()}>
+      <AppShellProviders instanceBootstrap={() => !isWorkbench()}>
+        {props.appChildren}
+        <Show when={isWorkbench()} fallback={<Layout>{props.children}</Layout>}>
+          {props.children}
+        </Show>
+      </AppShellProviders>
+    </ServerSyncProvider>
   )
 }
 
@@ -247,7 +248,8 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
     onCleanup(() => clearTimeout(timer))
   })
 
-  const showSplash = () => !server.ready() || (checkMode() === "blocking" && (!minSplashDone() || startupHealthCheck.loading))
+  const showSplash = () =>
+    !server.ready() || (checkMode() === "blocking" && (!minSplashDone() || startupHealthCheck.loading))
 
   return (
     <Show
@@ -293,7 +295,11 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
   return (
     <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base gap-6 p-6">
       <div class="flex flex-col items-center max-w-md text-center">
-        <img src="/ellamaka-text-logo.png?v=2" class="h-16 w-auto object-contain mb-6 ellamaka-logo-invert" alt="Logo" />
+        <img
+          src="/ellamaka-text-logo.png?v=2"
+          class="h-16 w-auto object-contain mb-6 ellamaka-logo-invert"
+          alt="Logo"
+        />
         <p class="text-14-regular text-text-base">
           {unreachable()[0]}
           <span class="text-text-strong font-medium">{name()}</span>
@@ -359,19 +365,17 @@ export function AppInterface(props: {
           <ServerKey>
             <QueryProvider>
               <ServerSDKProvider>
-                <ServerSyncProvider>
-                  <Dynamic
-                    component={props.router ?? Router}
-                    root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                  >
-                    <Route path="/" component={HomeRoute} />
-                    <Route path="/workbench" component={WorkbenchPage} />
-                    <Route path="/:dir" component={DirectoryLayout}>
-                      <Route path="/" component={() => <Navigate href="session" />} />
-                      <Route path="/session/:id?" component={SessionRoute} />
-                    </Route>
-                  </Dynamic>
-                </ServerSyncProvider>
+                <Dynamic
+                  component={props.router ?? Router}
+                  root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
+                >
+                  <Route path="/" component={HomeRoute} />
+                  <Route path="/workbench" component={WorkbenchPage} />
+                  <Route path="/:dir" component={DirectoryLayout}>
+                    <Route path="/" component={() => <Navigate href="session" />} />
+                    <Route path="/session/:id?" component={SessionRoute} />
+                  </Route>
+                </Dynamic>
               </ServerSDKProvider>
             </QueryProvider>
           </ServerKey>

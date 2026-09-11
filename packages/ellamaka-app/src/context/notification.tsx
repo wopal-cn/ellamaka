@@ -210,13 +210,18 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
 
     const lookup = async (directory: string, sessionID?: string) => {
       if (!sessionID) return undefined
-      const [syncStore] = serverSync.child(directory, { bootstrap: false })
-      const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
-      if (match.found) return syncStore.session[match.index]
-      return serverSDK.client.session
-        .get({ directory, sessionID })
+      const syncStore = serverSync.peek(directory)?.[0]
+      if (syncStore) {
+        const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
+        if (match.found) return syncStore.session[match.index]
+      }
+      return serverSDK.client.workbench
+        .sessionSummary({ sessionID })
         .then((x) => x.data)
-        .catch(() => undefined)
+        .catch((error) => {
+          console.warn("Failed to read notification session summary", error)
+          return undefined
+        })
     }
 
     const viewedInCurrentSession = (directory: string, sessionID?: string) => {
@@ -253,7 +258,10 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
           const relativeTime = getRelativeTime(new Date(time).toISOString(), language.t)
           void platform.notify(
             language.t("notification.session.responseReady.title", { session: session.title ?? sessionID }),
-            language.t("notification.session.responseReady.description", { agent: session.agent ?? "agent", time: relativeTime }),
+            language.t("notification.session.responseReady.description", {
+              agent: session.agent ?? "agent",
+              time: relativeTime,
+            }),
             href,
           )
         }
@@ -278,9 +286,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         errDetail && typeof errDetail === "object" && "message" in errDetail
           ? (errDetail as any).message
           : JSON.stringify(errDetail)
-      console.warn(
-        `[Session Error Event Received] directory=${directory} sessionID=${sessionID} error=${errMsg}`,
-      )
+      console.warn(`[Session Error Event Received] directory=${directory} sessionID=${sessionID} error=${errMsg}`)
       void lookup(directory, sessionID).then((session) => {
         if (meta.disposed) return
         if (session?.parentID) return

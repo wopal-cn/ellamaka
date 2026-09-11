@@ -93,6 +93,10 @@ export function pruneSessionKeys(input: {
     .slice(input.max)
 }
 
+export function shouldStartLayoutSessionPreload(input: { instanceBootstrap: boolean; alreadyStarted: boolean }) {
+  return input.instanceBootstrap && !input.alreadyStarted
+}
+
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
   if (tab === "review") return { all: all.filter((x) => x !== "review"), active: tab }
@@ -135,11 +139,15 @@ const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
-  init: () => {
+  init: (props: { instanceBootstrap?: boolean | Accessor<boolean> } = {}) => {
     const globalSdk = useServerSDK()
     const serverSync = useServerSync()
     const server = useServer()
     const platform = usePlatform()
+    const instanceBootstrap = () => {
+      const value = props.instanceBootstrap
+      return typeof value === "function" ? value() : (value ?? true)
+    }
 
     const isRecord = (value: unknown): value is Record<string, unknown> =>
       typeof value === "object" && value !== null && !Array.isArray(value)
@@ -509,26 +517,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       }
     })
 
-    let sessionFrame: number | undefined
-    let sessionTimer: number | undefined
+    let sessionPreloadStarted = false
+    createEffect(() => {
+      if (
+        !shouldStartLayoutSessionPreload({
+          instanceBootstrap: instanceBootstrap(),
+          alreadyStarted: sessionPreloadStarted,
+        })
+      )
+        return
 
-    onMount(() => {
-      sessionFrame = requestAnimationFrame(() => {
-        sessionFrame = undefined
+      let sessionTimer: number | undefined
+      const sessionFrame = requestAnimationFrame(() => {
         sessionTimer = window.setTimeout(() => {
-          sessionTimer = undefined
-          void Promise.all(
-            server.projects.list().map((project) => {
-              return serverSync.project.loadSessions(project.worktree)
-            }),
-          )
+          if (!instanceBootstrap()) return
+          sessionPreloadStarted = true
+          void Promise.all(server.projects.list().map((project) => serverSync.project.loadSessions(project.worktree)))
         }, 0)
       })
-    })
 
-    onCleanup(() => {
-      if (sessionFrame !== undefined) cancelAnimationFrame(sessionFrame)
-      if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
+      onCleanup(() => {
+        cancelAnimationFrame(sessionFrame)
+        if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
+      })
     })
 
     return {

@@ -130,6 +130,8 @@ Ellamaka 的 HTTP API 是 Workbench 和外部集成使用运行时能力的唯�
 
 Workbench Session Projection 是左侧会话列表的服务端只读模型，只返回 `time_archived IS NULL` 且 `parent_id IS NULL` 的 Session。归档会话和子会话不属于可直接装载的根会话资源。
 
+Workbench 的被动读取不拥有会话运行环境：会话运行状态快照来自已初始化 instance 的规范状态，通知摘要直接读取 Session 数据库，空间文件树与预览使用注册 Space 范围内的 Root 文件读取。以上读取均不触发 directory bootstrap。只有 Panel 中的会话需要目录能力；恢复的非当前 Space 首次访问时才挂载，访问后保持后台会话与终端连接。
+
 Wopal CLI adapter 作为 Runtime 的领域服务使用 `wopal ... --api-version` capability。它维护非权威空间快照，并将稳定的 CLI 结果映射为 Ellamaka 领域资源和错误。adapter 位于 sidecar 内，直接 spawn wopal 进程；wopal 调用是无状态进程边界，不引入专门的常驻 worker。消费侧 schema 从 wopal 共享契约包导入，与 wopal 的 TypeBox 契约同源。浏览器只使用 Ellamaka API。
 
 `CliContract` 将 CLI 安装状态与能力调用分开处理。`/global/health` 公开最低版本、已检测版本与兼容状态。CLI 不可用时，Ellamaka 保持 Session Runtime，Workbench 将 Space Control 降级为可恢复状态。用户确认修复后，Runtime 使用已安装 CLI 的更新命令或第一方 installer 修复二进制，并重新探测状态；sidecar 与已有 Workbench 现场继续运行。
@@ -143,7 +145,6 @@ Wopal CLI adapter 作为 Runtime 的领域服务使用 `wopal ... --api-version`
 PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间根。字段缺失表示非 WopalSpace。插件使用该字段定位空间级资源，普通 Engine 运行时保持上游环境与子进程行为。
 
 `WOPAL_HOME` 是 sidecar 的进程级安装根。它拥有全局配置、全局能力和运行时存储。`WOPAL_SPACE` 与 `WOPAL_SPACE_ROOT` 只服务单目录 CLI 兼容边界，不承担 server request routing 或 plugin context 所有权。
-
 
 ## 8. Unified Reload & Lifecycle
 

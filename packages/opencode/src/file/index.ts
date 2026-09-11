@@ -292,6 +292,55 @@ function shouldEncode(mimeType: string) {
   return ["image", "audio", "video", "font", "model", "multipart"].includes(top)
 }
 
+/**
+ * Read the content representation shared by the instance File API and the
+ * root Workbench Space reader. Callers own authorization and path containment;
+ * this function intentionally only preserves File.Content's payload policy.
+ */
+export function readFileContent(appFs: AppFileSystem.Interface, file: string, full: string): Effect.Effect<Content> {
+  return Effect.gen(function* () {
+    if (isImageByExtension(file)) {
+      const exists = yield* appFs.existsSafe(full)
+      if (exists) {
+        const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+        return {
+          type: "text" as const,
+          content: Buffer.from(bytes).toString("base64"),
+          mimeType: getImageMimeType(file),
+          encoding: "base64" as const,
+        }
+      }
+      return { type: "text" as const, content: "" }
+    }
+
+    const knownText = isTextByExtension(file) || isTextByName(file)
+    if (isBinaryByExtension(file) && !knownText) return { type: "binary" as const, content: "" }
+
+    const exists = yield* appFs.existsSafe(full)
+    if (!exists) return { type: "text" as const, content: "" }
+
+    const mimeType = AppFileSystem.mimeType(full)
+    const encode = knownText ? false : shouldEncode(mimeType)
+    if (encode && !isImage(mimeType)) return { type: "binary" as const, content: "", mimeType }
+
+    if (encode) {
+      const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
+      return {
+        type: "text" as const,
+        content: Buffer.from(bytes).toString("base64"),
+        mimeType,
+        encoding: "base64" as const,
+      }
+    }
+
+    const content = yield* appFs.readFileString(full).pipe(
+      Effect.map((s) => s.trim()),
+      Effect.catch(() => Effect.succeed("")),
+    )
+    return { type: "text" as const, content }
+  })
+}
+
 const hidden = (item: string) => {
   const normalized = item.replaceAll("\\", "/").replace(/\/+$/, "")
   return normalized.split("/").some((part) => part.startsWith(".") && part.length > 1)
@@ -507,46 +556,13 @@ export const layer = Layer.effect(
         throw new Error("Access denied: path escapes project directory")
       }
 
-      if (isImageByExtension(file)) {
-        const exists = yield* appFs.existsSafe(full)
-        if (exists) {
-          const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
-          return {
-            type: "text" as const,
-            content: Buffer.from(bytes).toString("base64"),
-            mimeType: getImageMimeType(file),
-            encoding: "base64" as const,
-          }
-        }
-        return { type: "text" as const, content: "" }
-      }
+      const result = yield* readFileContent(appFs, file, full)
+      // Existing instance reads attach a git diff only to a present, plain-text
+      // file. The root Workbench reader shares the content payload above but
+      // deliberately does not acquire an instance or Git service.
+      if (result.type === "binary" || result.encoding || !(yield* appFs.existsSafe(full))) return result
 
-      const knownText = isTextByExtension(file) || isTextByName(file)
-
-      if (isBinaryByExtension(file) && !knownText) return { type: "binary" as const, content: "" }
-
-      const exists = yield* appFs.existsSafe(full)
-      if (!exists) return { type: "text" as const, content: "" }
-
-      const mimeType = AppFileSystem.mimeType(full)
-      const encode = knownText ? false : shouldEncode(mimeType)
-
-      if (encode && !isImage(mimeType)) return { type: "binary" as const, content: "", mimeType }
-
-      if (encode) {
-        const bytes = yield* appFs.readFile(full).pipe(Effect.catch(() => Effect.succeed(new Uint8Array())))
-        return {
-          type: "text" as const,
-          content: Buffer.from(bytes).toString("base64"),
-          mimeType,
-          encoding: "base64" as const,
-        }
-      }
-
-      const content = yield* appFs.readFileString(full).pipe(
-        Effect.map((s) => s.trim()),
-        Effect.catch(() => Effect.succeed("")),
-      )
+      const content = result.content
 
       if (ctx.project.vcs === "git") {
         let diff = yield* gitText(["-c", "core.fsmonitor=false", "diff", "--", file])
@@ -561,10 +577,10 @@ export const layer = Layer.effect(
           })
           return { type: "text" as const, content, patch, diff: formatPatch(patch) }
         }
-        return { type: "text" as const, content }
+        return result
       }
 
-      return { type: "text" as const, content }
+      return result
     })
 
     const list = Effect.fn("File.list")(function* (dir?: string) {

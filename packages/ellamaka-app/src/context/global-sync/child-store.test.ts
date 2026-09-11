@@ -132,6 +132,85 @@ describe("createChildStoreManager", () => {
     }
   })
 
+  test("keeps cache-only children cold and makes peek genuinely noncreating", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+    const queryOffset = queryGroups.length
+    const bootstraps: string[] = []
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap(directory) {
+          bootstraps.push(directory)
+        },
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+
+      expect(manager.peek("/missing")).toBeUndefined()
+      expect(queryGroups).toHaveLength(queryOffset)
+
+      manager.child("/project", { bootstrap: false })
+      const group = queryGroups[queryOffset]
+      if (!group) throw new Error("directory query group required")
+      expect(group().queries.map((query) => query.enabled)).toEqual([false, false])
+      expect(bootstraps).toEqual([])
+
+      manager.child("/project")
+      expect(group().queries.map((query) => query.enabled)).toEqual([true, true])
+      expect(bootstraps).toEqual(["/project"])
+    } finally {
+      dispose()
+    }
+  })
+
+  test("keeps an unscoped child cold even through the default active API", () => {
+    let manager: ReturnType<typeof createChildStoreManager> | undefined
+    const queryOffset = queryGroups.length
+    const mcpOffset = mcpQueries.length
+    const bootstrapCalls: string[] = []
+
+    const dispose = createOwner((owner) => {
+      manager = createChildStoreManager({
+        owner,
+        isBooting: () => false,
+        isLoadingSessions: () => false,
+        onBootstrap(directory) {
+          bootstrapCalls.push(directory)
+        },
+        onMcp() {},
+        onDispose() {},
+        translate: (key) => key,
+        queryOptions: queryOptionsApi,
+        global: { provider },
+      })
+    })
+
+    try {
+      if (!manager) throw new Error("manager required")
+
+      manager.child("", { mcp: true })
+      const group = queryGroups[queryOffset]
+      if (!group) throw new Error("unscoped query group required")
+      expect(group().queries.map((query) => query.enabled)).toEqual([false, false])
+      const mcpQuery = mcpQueries[mcpOffset]
+      if (!mcpQuery) throw new Error("unscoped MCP query required")
+      expect(mcpQuery().enabled).toBe(false)
+      expect(bootstrapCalls).toEqual([])
+    } finally {
+      dispose()
+    }
+  })
+
   test("enables MCP only when requested for the directory", () => {
     let manager: ReturnType<typeof createChildStoreManager> | undefined
     const offset = mcpQueries.length

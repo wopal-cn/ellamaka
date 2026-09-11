@@ -284,10 +284,18 @@ import type {
   WorkbenchCreateSessionResponses,
   WorkbenchDshUrlErrors,
   WorkbenchDshUrlResponses,
+  WorkbenchFileContentErrors,
+  WorkbenchFileContentResponses,
+  WorkbenchFilesErrors,
+  WorkbenchFilesResponses,
   WorkbenchLocationsErrors,
   WorkbenchLocationsResponses,
   WorkbenchSessionGroupsErrors,
   WorkbenchSessionGroupsResponses,
+  WorkbenchSessionStatusesErrors,
+  WorkbenchSessionStatusesResponses,
+  WorkbenchSessionSummaryErrors,
+  WorkbenchSessionSummaryResponses,
   WorkbenchSessionTreeErrors,
   WorkbenchSessionTreeResponses,
   WorktreeCreateErrors,
@@ -689,6 +697,106 @@ export class Workbench extends HeyApiClient {
       WorkbenchSessionGroupsErrors,
       ThrowOnError
     >({ url: "/workbench/session-groups", ...options })
+  }
+
+  /**
+   * List status snapshots for initialized sessions
+   *
+   * Returns non-idle busy or retry status snapshots from already initialized instances without loading a directory.
+   */
+  public sessionStatuses<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      WorkbenchSessionStatusesResponses,
+      WorkbenchSessionStatusesErrors,
+      ThrowOnError
+    >({ url: "/workbench/session-statuses", ...options })
+  }
+
+  /**
+   * Read Workbench session notification metadata
+   *
+   * Reads canonical session metadata without loading a directory. Returns null when the session does not exist.
+   */
+  public sessionSummary<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<
+      WorkbenchSessionSummaryResponses,
+      WorkbenchSessionSummaryErrors,
+      ThrowOnError
+    >({
+      url: "/workbench/session-summaries/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List files in a registered Space
+   *
+   * Lists a registered Space root or relative child directory without loading an instance. Traversal and symlink escapes are rejected.
+   */
+  public files<ThrowOnError extends boolean = false>(
+    parameters: {
+      spacePath: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "spacePath" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<WorkbenchFilesResponses, WorkbenchFilesErrors, ThrowOnError>({
+      url: "/workbench/files",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Read a file in a registered Space
+   *
+   * Reads a relative file from a registered Space without loading an instance. Traversal and symlink escapes are rejected.
+   */
+  public fileContent<ThrowOnError extends boolean = false>(
+    parameters: {
+      spacePath: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "spacePath" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      WorkbenchFileContentResponses,
+      WorkbenchFileContentErrors,
+      ThrowOnError
+    >({
+      url: "/workbench/file-content",
+      ...options,
+      ...params,
+    })
   }
 
   /**

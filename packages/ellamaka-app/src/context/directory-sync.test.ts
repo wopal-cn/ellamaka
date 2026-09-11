@@ -59,6 +59,33 @@ describe("reconcileActiveSessions", () => {
     expect(synced).toEqual([])
   })
 
+  test("can limit a reconnect to the visible Panel's session", async () => {
+    const checked: string[] = []
+    const synced: string[] = []
+    reconcileActiveSessions({
+      store: {
+        message: {
+          ses_visible: [message("m1", "ses_visible")],
+          ses_hidden: [message("m1", "ses_hidden")],
+        },
+      },
+      loading: {},
+      keyFor: (dir, id) => `${dir}\\n${id}`,
+      directory: "dir",
+      sessionIDs: ["ses_visible"],
+      fetchLatest: async (id) => {
+        checked.push(id)
+        return "m2"
+      },
+      sync: (id) => {
+        synced.push(id)
+      },
+    })
+    await Promise.resolve()
+    expect(checked).toEqual(["ses_visible"])
+    expect(synced).toEqual(["ses_visible"])
+  })
+
   test("ignores empty caches and missing latest id", async () => {
     const synced: string[] = []
     reconcileActiveSessions({

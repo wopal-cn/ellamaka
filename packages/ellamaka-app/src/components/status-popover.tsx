@@ -118,7 +118,7 @@ function DirectoryStatusPopover() {
   return <StatusPopoverView state={state()} />
 }
 
-function ServerStatusPopover() {
+function ServerStatusPopover(props: { statusBar?: boolean }) {
   const language = useLanguage()
   const server = useServer()
   const servers = useServers()
@@ -138,7 +138,11 @@ function ServerStatusPopover() {
     ),
   }))
 
-  return <StatusPopoverView state={state()} />
+  return props.statusBar ? <StatusBarStatusPopoverView state={state()} /> : <StatusPopoverView state={state()} />
+}
+
+export function StatusBarServerStatusPopover() {
+  return <ServerStatusPopover statusBar />
 }
 
 type StatusPopoverState = {
@@ -210,7 +214,6 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
     </Popover>
   )
 }
-
 
 export function StatusBarStatusPopover() {
   const language = useLanguage()
@@ -292,9 +295,10 @@ function StatusBarStatusPopoverView(props: { state: StatusPopoverState }) {
       onOpenChange={props.state.onOpenChange}
       triggerAs="button"
       triggerProps={{
-        class: "relative flex items-center justify-center size-5 shrink-0 rounded hover:bg-v2-overlay-simple-overlay-hover text-v2-text-text-muted hover:text-v2-text-text-base transition-colors duration-150 focus-visible:outline-none",
+        class:
+          "relative flex items-center justify-center size-5 shrink-0 rounded hover:bg-v2-overlay-simple-overlay-hover text-v2-text-text-muted hover:text-v2-text-text-base transition-colors duration-150 focus-visible:outline-none",
         classList: {
-          "bg-[var(--v2-overlay-simple-overlay-pressed)] text-[var(--v2-text-text-base)]": props.state.shown
+          "bg-[var(--v2-overlay-simple-overlay-pressed)] text-[var(--v2-text-text-base)]": props.state.shown,
         },
         "aria-label": props.state.label,
       }}

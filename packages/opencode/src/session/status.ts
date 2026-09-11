@@ -51,7 +51,14 @@ export const Event = {
 export interface Interface {
   readonly get: (sessionID: SessionID) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Map<SessionID, Info>>
+  readonly snapshot: () => Effect.Effect<Snapshot[]>
   readonly set: (sessionID: SessionID, status: Info) => Effect.Effect<void>
+}
+
+export interface Snapshot {
+  readonly directory: string
+  readonly sessionID: SessionID
+  readonly status: Info
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStatus") {}
@@ -60,9 +67,19 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const snapshots = new Map<string, Map<SessionID, Info>>()
 
     const state = yield* InstanceState.make(
-      Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
+      Effect.fn("SessionStatus.state")(function* (ctx) {
+        const data = new Map<SessionID, Info>()
+        snapshots.set(ctx.directory, data)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (snapshots.get(ctx.directory) === data) snapshots.delete(ctx.directory)
+          }),
+        )
+        return data
+      }),
     )
 
     const get = Effect.fn("SessionStatus.get")(function* (sessionID: SessionID) {
@@ -74,18 +91,28 @@ export const layer = Layer.effect(
       return new Map(yield* InstanceState.get(state))
     })
 
+    const snapshot = Effect.fn("SessionStatus.snapshot")(() =>
+      Effect.sync(() =>
+        [...snapshots].flatMap(([directory, statuses]) =>
+          [...statuses].flatMap(([sessionID, status]) =>
+            status.type === "idle" ? [] : [{ directory, sessionID, status }],
+          ),
+        ),
+      ),
+    )
+
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
       const data = yield* InstanceState.get(state)
-      yield* bus.publish(Event.Status, { sessionID, status })
       if (status.type === "idle") {
-        yield* bus.publish(Event.Idle, { sessionID })
         data.delete(sessionID)
-        return
+      } else {
+        data.set(sessionID, status)
       }
-      data.set(sessionID, status)
+      yield* bus.publish(Event.Status, { sessionID, status })
+      if (status.type === "idle") yield* bus.publish(Event.Idle, { sessionID })
     })
 
-    return Service.of({ get, list, set })
+    return Service.of({ get, list, snapshot, set })
   }),
 )
 

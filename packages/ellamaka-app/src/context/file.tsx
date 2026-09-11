@@ -1,7 +1,6 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@wopal/ui/context"
-import { showToast } from "@wopal/ui/toast"
 import { useParams } from "@solidjs/router"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { showServerToast } from "@/utils/server-toast"
@@ -23,6 +22,7 @@ import {
 } from "./file/content-cache"
 import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
+import type { Event, FileContent, FileNode } from "@opencode-ai/sdk/v2/client"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
   selectionFromLines,
@@ -50,17 +50,38 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+/** File browsing can be backed by a root-scoped reader without a session runtime. */
+export type FileSource = {
+  directory: string
+  list: (path: string) => Promise<FileNode[]>
+  read: (path: string) => Promise<FileContent | undefined>
+  search?: (query: string, dirs: "true" | "false") => Promise<string[]>
+  listen: (receive: (event: Event) => void) => () => void
+}
+
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
   gate: false,
-  init: () => {
-    const sdk = useSDK()
-    useSync()
+  init: (props: { source?: FileSource }) => {
+    const source =
+      props.source ??
+      (() => {
+        const sdk = useSDK()
+        useSync()
+        return {
+          directory: sdk.directory,
+          list: (path: string) => sdk.client.file.list({ path }).then((x) => x.data ?? []),
+          read: (path: string) => sdk.client.file.read({ path }).then((x) => x.data),
+          search: (query: string, dirs: "true" | "false") =>
+            sdk.client.find.files({ query, dirs }).then((x) => x.data ?? []),
+          listen: (receive: (event: Event) => void) => sdk.event.listen((event) => receive(event.details)),
+        } satisfies FileSource
+      })()
     const params = useParams()
     const language = useLanguage()
     const layout = useLayout()
 
-    const scope = createMemo(() => sdk.directory)
+    const scope = createMemo(() => source.directory)
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
@@ -74,7 +95,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tree = createFileTreeStore({
       scope,
       normalizeDir: path.normalizeDir,
-      list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
+      list: source.list,
       onError: (message, error) => {
         showServerToast(
           {
@@ -178,11 +199,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      const promise = sdk.client.file
-        .read({ path: file })
-        .then((x) => {
+      const promise = source
+        .read(file)
+        .then((content) => {
           if (scope() !== directory) return
-          const content = x.data
           setLoaded(file, content)
 
           if (!content) return
@@ -202,13 +222,13 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
-        (x) => (x.data ?? []).map(path.normalize),
+      (source.search?.(query, dirs) ?? Promise.resolve([])).then(
+        (items) => items.map(path.normalize),
         () => [],
       )
 
-    const stop = sdk.event.listen((e) => {
-      invalidateFromWatcher(e.details, {
+    const stop = source.listen((event) => {
+      invalidateFromWatcher(event, {
         normalize: path.normalize,
         hasFile: (file) => Boolean(store.file[file]),
         isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),

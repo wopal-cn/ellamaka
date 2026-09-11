@@ -539,7 +539,7 @@ Workbench Chat 达到以下目标状态：
 Workbench 状态管理的核心目标：
 
 1. **全局刷新不丢失面板布局与绑定状态**，并在宽限期内重新连接仍然存活的 PTY。
-2. **切换 Space Tab 不销毁 Panel 子树**——所有已打开 Tab 的 Panel、Chat 草稿、终端进程保持挂载，只是切换可见性。
+2. **访问后保活，未访问不预加载**——当前应用生命周期中访问过的 Tab 保留 Panel、Chat 草稿和终端连接；仅从布局恢复、尚未访问的 Tab 不加载会话目录。
 3. **切换视图模式不释放 PTY**——TUI PTY、Split Terminal PTY 在视图切换时保持运行。
 4. **高频对话生成期间左侧导航树保持绝对稳定**。
 
@@ -577,22 +577,32 @@ const allStoresReady = () => wb.ready()
 > - 不处理任何可能引发布局或生命周期副作用的事件。
 >
 > **水合完成后**：
-> - 一次性挂载并渲染恢复的布局。
-> - PTY Manager 对持久化的 PTY ID 发起探测，存活的重连，已死的标记为待重建。视图挂载时通过 `ptyManager.ensure()` 按需创建或复用。
+> - 渲染恢复的布局，并只挂载当前 Space 的 Panel；其他 Space 首次访问时挂载。
+> - PTY Manager 对已挂载 Panel 的持久化 PTY ID 发起探测，存活的重连，已死的标记为待重建。视图挂载时通过 `ptyManager.ensure()` 按需创建或复用。
 
 这消除了刷新后"先显示空 Panel 再跳变到恢复布局"的闪烁问题。
 
 ### 5.3 Space Keep-Alive 容器
 
-`Workspace` 不再只渲染当前激活的 Space，而是为**每个已打开的 Tab** 建立稳定的 `SpaceWorkspace` 容器：
+`Workspace` 为每个已打开 Tab 建立稳定容器，但布局恢复与会话运行环境加载分离：
 
-- 所有已打开的 Space Tab 保持挂载，Panel、PTY、Chat 草稿、滚动位置全部在内存中存活。
+- 首次加载仅挂载当前 Space 的 Panel；其他恢复的 Tab 等首次切换到它时才挂载。访问记录只存在于当前页面生命周期，不持久化。
+- 当前 Space 中已绑定会话的 Panel 加载对应会话目录；空 Panel 仅展示创建入口，不因记住旧目录而加载能力。
+- 已访问 Space 的 Panel、PTY 连接、Chat 草稿、滚动位置在内存中保活；后续切换不卸载。
 - 当前 Space 可见。非当前 Space 使用 `position: absolute; visibility: hidden; inert` 隐藏。
+- 浏览器或 Renderer 刷新会从 `localStorage` 恢复布局，但仍只挂载并恢复当前 Space；保存的后台 Tab 不因布局恢复而创建会话 instance、加载插件或重连 PTY。
+- 后端或 sidecar 重启而页面仍在运行时，当前可见 Space 可以对账会话并恢复其 PTY；已访问但隐藏的 Space 只保留 DOM、草稿和重连提示，不主动请求 directory instance 或重连 PTY，直到用户切回该 Space。
 - **禁止使用 `display: none`** 隐藏终端容器（Ghostty 尺寸会归零，恢复时触发 reflow 和 fit）。
 - 切换 Tab 只改变可见性，不销毁任何子组件或 PTY。
 - 用户显式关闭 Tab 时才销毁该 Space 的全部 DOM、Chat 状态和 PTY。
 
 每个 `SpaceWorkspace` 接收固定的 `spacePath` 作为身份，不读取动态的 `activeTab()` 作为自身 key。
+
+#### 被动读取与目录运行环境
+
+会话树、Tab 运行指示和通知不得为历史会话创建 directory instance。运行状态使用 Root 级会话状态快照与 SSE 增量投影；重连仅补读轻量快照，不重新挂载 Panel。会话消息对账和 Terminal/PTY 重连只对当前可见 Space 进行，隐藏 keep-alive Space 必须等用户返回后才恢复。通知标题与父会话关系从数据库读模型获取。缓存读取不隐式创建或启动目录状态。
+
+左侧文件树与右侧文件预览属于注册 Space 的文件浏览能力，通过 Root 级受控文件接口读取，不创建会话 instance，不加载插件、MCP 或 LSP。隐藏文件树不预加载；首次展示后保留展开状态。没有绑定会话时，状态栏显示服务器状态，不把空间根或旧 Panel 目录当作能力加载目标。
 
 ### 5.4 PTY 运行时管理器
 
@@ -631,7 +641,8 @@ Renderer 中的 PTY 关联由 `pty-manager.tsx` 统一管理，后台进程生�
 | Split Terminal 收起 | **不释放 PTY**。只隐藏渲染区域并保持 WebSocket subscriber，终端上下文保留。再次展开复用同一连接。 |
 | Panel 关闭 | `disposePanel()`：释放该面板所有 PTY，清除持久化 ID。 |
 | Space Tab 关闭 | `disposeSpace()`：释放该 Space 全部 PTY，清除持久化 ID。 |
-| 浏览器或 Electron Renderer 刷新 | `pagehide` 只 flush 布局和 PTY ID 提示。WebSocket 断开后进入 Grace，新 Renderer 探测并重连原 PTY，取消回收任务。 |
+| 浏览器或 Electron Renderer 刷新 | `pagehide` 只 flush 布局和 PTY ID 提示。WebSocket 断开后进入 Grace；新 Renderer 只为当前 Space 探测并重连其原 PTY，取消回收任务。保存的后台 Space 等首次切回才恢复。 |
+| 后端或 sidecar 重启（页面未刷新） | 当前可见 Space 对账会话并按需恢复 PTY；隐藏 keep-alive Space 不自动创建 instance 或 PTY 连接，保留现场并等用户切回。 |
 | 浏览器 Tab 或桌面窗口关闭 | WebSocket 断开后进入 Grace。没有新连接时，sidecar 在 10 秒后自动终止 PTY。 |
 | Electron 应用退出 | Main Process 停止 sidecar，Instance finalizer 立即终止全部 PTY。 |
 | Panel 绑定到新 Session | 释放旧 Session 的 TUI PTY，清除旧 ID，为新 Session 创建新 PTY。 |

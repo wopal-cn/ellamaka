@@ -1,8 +1,17 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@wopal/ui/toast"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { showServerToast } from "@/utils/server-toast"
-import { batch, createContext, getOwner, onCleanup, onMount, type ParentProps, untrack, useContext } from "solid-js"
+import {
+  batch,
+  createContext,
+  getOwner,
+  onCleanup,
+  onMount,
+  type Accessor,
+  type ParentProps,
+  untrack,
+  useContext,
+} from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
@@ -18,7 +27,12 @@ import {
   loadProvidersQuery,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
-import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches, requiresGlobalReconciliation } from "./global-sync/event-reducer"
+import {
+  applyDirectoryEvent,
+  applyGlobalEvent,
+  cleanupDroppedSessionCaches,
+  requiresGlobalReconciliation,
+} from "./global-sync/event-reducer"
 import { clearSessionPrefetchDirectory } from "./global-sync/session-prefetch"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
 import { trimSessions } from "./global-sync/session-trim"
@@ -33,6 +47,7 @@ import { createDirSyncContext } from "./directory-sync"
 import { createSimpleContext, NormalizedProviderListResponse } from "@wopal/ui/context"
 import { createRefCountMap } from "@/utils/refcount"
 import { retry } from "@wopal/ellamaka-core/util/retry"
+import { shouldEnableInstanceQuery } from "./global-sync/instance-policy"
 
 type GlobalStore = {
   ready: boolean
@@ -60,26 +75,49 @@ export const loadLspQuery = (directory: string, sdk: OpencodeClient) =>
     queryFn: () => sdk.lsp.status().then((r) => r.data ?? []),
   })
 
-function makeQueryOptionsApi(serverSDK: () => OpencodeClient, sdkFor: (dir: PathKey) => OpencodeClient) {
+export type QueryOptionsApi = {
+  globalConfig: () => ReturnType<typeof loadGlobalConfigQuery>
+  projects: () => ReturnType<typeof loadProjectsQuery>
+  providers: (directory: PathKey | null) => ReturnType<typeof loadProvidersQuery> & { enabled: boolean }
+  path: (directory: PathKey | null) => ReturnType<typeof loadPathQuery> & { enabled: boolean }
+  agents: (directory: PathKey) => ReturnType<typeof loadAgentsQuery>
+  mcp: (directory: PathKey) => ReturnType<typeof loadMcpQuery>
+  lsp: (directory: PathKey) => ReturnType<typeof loadLspQuery>
+  sessions: (directory: PathKey) => { queryKey: readonly [PathKey, "loadSessions"] }
+}
+
+function makeQueryOptionsApi(
+  serverSDK: () => OpencodeClient,
+  sdkFor: (dir: PathKey) => OpencodeClient,
+  instanceBootstrap: Accessor<boolean> = () => true,
+): QueryOptionsApi {
   return {
     globalConfig: () => loadGlobalConfigQuery(serverSDK()),
     projects: () => loadProjectsQuery(serverSDK()),
-    providers: (directory: PathKey | null) =>
-      loadProvidersQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
-    path: (directory: PathKey | null) => loadPathQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
+    providers: (directory: PathKey | null) => ({
+      ...loadProvidersQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
+      enabled: shouldEnableInstanceQuery({ directory, instanceBootstrap: instanceBootstrap() }),
+    }),
+    path: (directory: PathKey | null) => ({
+      ...loadPathQuery(directory, directory === null ? serverSDK() : sdkFor(directory)),
+      enabled: shouldEnableInstanceQuery({ directory, instanceBootstrap: instanceBootstrap() }),
+    }),
     agents: (directory: PathKey) => loadAgentsQuery(directory, sdkFor(directory)),
     mcp: (directory: PathKey) => loadMcpQuery(directory, sdkFor(directory)),
     lsp: (directory: PathKey) => loadLspQuery(directory, sdkFor(directory)),
     sessions: (directory: PathKey) => ({ queryKey: [directory, "loadSessions"] as const }),
   }
 }
-export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContext() {
+export function createServerSyncContext(input: { instanceBootstrap?: boolean | Accessor<boolean> } = {}) {
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
+  const instanceBootstrap = () => {
+    const value = input.instanceBootstrap
+    return typeof value === "function" ? value() : (value ?? true)
+  }
 
   const sdkCache = new Map<string, OpencodeClient>()
   const booting = new Map<string, Promise<void>>()
@@ -98,11 +136,18 @@ export function createServerSyncContext() {
     return sdk
   }
 
-  const queryOptionsApi = makeQueryOptionsApi(() => serverSDK.client, sdkFor)
+  const queryOptionsApi = makeQueryOptionsApi(() => serverSDK.client, sdkFor, instanceBootstrap)
 
-  const [configQuery, providerQuery, pathQuery] = useQueries(() => ({
-    queries: [queryOptionsApi.globalConfig(), queryOptionsApi.providers(null), queryOptionsApi.path(null)],
-  }))
+  const [configQuery, providerQuery, pathQuery] = useQueries(() => {
+    const enabled = instanceBootstrap()
+    return {
+      queries: [
+        queryOptionsApi.globalConfig(),
+        { ...queryOptionsApi.providers(null), enabled },
+        { ...queryOptionsApi.path(null), enabled },
+      ],
+    }
+  })
 
   const [globalStore, setGlobalStore] = createStore<GlobalStore>({
     get ready() {
@@ -113,12 +158,12 @@ export function createServerSyncContext() {
     provider_auth: {},
     get path() {
       const EMPTY = { state: "", config: "", worktree: "", directory: "", home: "" }
-      if (pathQuery.isLoading) return EMPTY
+      if (!instanceBootstrap() || pathQuery.isLoading) return EMPTY
       return pathQuery.data ?? EMPTY
     },
     get provider() {
       const EMPTY = { all: new Map(), connected: [], default: {} }
-      if (providerQuery.isLoading) return EMPTY
+      if (!instanceBootstrap() || providerQuery.isLoading) return EMPTY
       return providerQuery.data ?? EMPTY
     },
     get config() {
@@ -154,9 +199,11 @@ export function createServerSyncContext() {
   }) as typeof setGlobalStore
 
   const bootstrap = useQuery(() => ({
-    queryKey: ["bootstrap"],
+    queryKey: ["bootstrap", instanceBootstrap()],
+    enabled: instanceBootstrap(),
     queryFn: async () => {
       await bootstrapGlobal({
+        instanceBootstrap: instanceBootstrap(),
         serverSDK: serverSDK.client,
         requestFailedTitle: language.t("common.requestFailed"),
         translate: language.t,
@@ -196,7 +243,7 @@ export function createServerSyncContext() {
   const queue = createRefreshQueue({
     paused,
     key: directoryKey,
-    bootstrap: () => queryClient.fetchQuery({ queryKey: ["bootstrap"] }),
+    bootstrap: () => bootstrap.refetch().then(() => {}),
     bootstrapInstance,
   })
 
@@ -239,6 +286,7 @@ export function createServerSyncContext() {
   })
 
   async function loadSessions(directory: string) {
+    if (!directory) return
     const key = directoryKey(directory)
     const pending = sessionLoads.get(key)
     if (pending) return pending
@@ -318,6 +366,7 @@ export function createServerSyncContext() {
   }
 
   async function bootstrapInstance(directory: string) {
+    if (!directory) return
     const key = directoryKey(directory)
     if (key === undefined || key === null) return
     const pending = booting.get(key)
@@ -325,6 +374,7 @@ export function createServerSyncContext() {
 
     children.pin(key)
     const promise = Promise.resolve().then(async () => {
+      children.activate(directory)
       const child = children.ensureChild(directory)
       const cache = children.vcsCache.get(key)
       if (!cache) return
@@ -375,6 +425,7 @@ export function createServerSyncContext() {
       if (requiresGlobalReconciliation(event.type)) {
         if (recent) return
         for (const directory of Object.keys(children.children)) {
+          if (!children.isRuntime(directory)) continue
           queue.push(directory)
         }
       }
@@ -383,6 +434,7 @@ export function createServerSyncContext() {
 
     const existing = children.children[key]
     if (!existing) return
+    if (!children.isRuntime(key)) return
     children.mark(key)
     const [store, setStore] = existing
     applyDirectoryEvent({
@@ -472,8 +524,8 @@ export function createServerSyncContext() {
 
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
-  init: () => {
-    const sync = createServerSyncContext()
+  init: (props: { instanceBootstrap?: boolean | Accessor<boolean> }) => {
+    const sync = createServerSyncContext(props)
 
     return {
       ...sync,

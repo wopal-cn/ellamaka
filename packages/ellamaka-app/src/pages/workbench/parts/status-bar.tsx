@@ -3,7 +3,7 @@ import { useServer } from "@/context/server"
 import { useLanguage } from "@/context/language"
 import { useWorkbenchState } from "../view-store"
 import { useSessionStore } from "../session-store"
-import { StatusBarStatusPopover } from "@/components/status-popover"
+import { StatusBarStatusPopover, StatusBarServerStatusPopover } from "@/components/status-popover"
 import { getStatusBarSegments } from "./status-bar-segments"
 import { WorkbenchActiveDirectoryProvider } from "../workbench-directory-provider"
 import { useWorkbenchRuntime } from "../workbench-runtime"
@@ -70,10 +70,7 @@ export function StatusBar() {
               <Show when={idx() > 0}>
                 <span class="text-v2-text-text-faint select-none">/</span>
               </Show>
-              <span
-                class="truncate text-v2-text-text-muted"
-                title={seg.type === "path" ? "/" + seg.text : seg.text}
-              >
+              <span class="truncate text-v2-text-text-muted" title={seg.type === "path" ? "/" + seg.text : seg.text}>
                 {seg.text}
               </span>
             </>
@@ -86,7 +83,7 @@ export function StatusBar() {
 
       {/* 右区：Server 状态控制按钮 + 名字，带有左边框分割 */}
       <div class="flex max-w-48 shrink-0 items-center gap-1 border-l border-v2-border-border-base pl-2">
-        <WorkbenchActiveDirectoryProvider>
+        <WorkbenchActiveDirectoryProvider fallback={<StatusBarServerStatusPopover />}>
           {() => <StatusBarStatusPopover />}
         </WorkbenchActiveDirectoryProvider>
         <span class="truncate select-none ml-1">{server.name}</span>

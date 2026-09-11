@@ -19,7 +19,6 @@ import { coerceSidebarNav } from "./sidebar-nav"
 import { FileTreePanel } from "./file-tree-panel"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
-
 const MIN_WIDTH = 200
 const MAX_WIDTH = 500
 const DEFAULT_WIDTH = 300
@@ -27,7 +26,15 @@ const COLLAPSED_WIDTH = 44
 
 function MaintenanceIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-4"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-4"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   )
@@ -35,7 +42,15 @@ function MaintenanceIcon(props: { class?: string }) {
 
 function FileTreeIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-4"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-4"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <path d="M4 6h8" />
       <path d="M4 12h8" />
       <path d="M4 18h8" />
@@ -158,7 +173,14 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
     }
     if (sessionSpacePath !== "") {
       const space = store.spaces().find((candidate) => normalizeSpacePath(candidate.path) === sessionSpacePath)
-      wb.openTab(space ?? { id: sessionSpacePath, name: session.spaceName ?? sessionSpacePath, path: sessionSpacePath, type: "space" })
+      wb.openTab(
+        space ?? {
+          id: sessionSpacePath,
+          name: session.spaceName ?? sessionSpacePath,
+          path: sessionSpacePath,
+          type: "space",
+        },
+      )
       wb.ensureSpace(sessionSpacePath)
     }
   }
@@ -204,21 +226,20 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
   const [flyoutTop, setFlyoutTop] = createSignal(8)
   const [flyoutBottom, setFlyoutBottom] = createSignal(8)
   createEffect(
-    on(
-      flyoutOpen,
-      () => {
-        if (!asideRef) return
-        const rect = asideRef.getBoundingClientRect()
-        setFlyoutTop(Math.max(rect.top + 8, 8))
-        setFlyoutBottom(Math.max(window.innerHeight - rect.bottom + 8, 8))
-      },
-    ),
+    on(flyoutOpen, () => {
+      if (!asideRef) return
+      const rect = asideRef.getBoundingClientRect()
+      setFlyoutTop(Math.max(rect.top + 8, 8))
+      setFlyoutBottom(Math.max(window.innerHeight - rect.bottom + 8, 8))
+    }),
   )
 
   return (
     <>
       <aside
-        ref={(el) => { asideRef = el }}
+        ref={(el) => {
+          asideRef = el
+        }}
         class="flex shrink-0 border-r border-v2-border-border-base bg-v2-background-bg-deep overflow-hidden select-none"
         style={{ width: `${sidebarWidth()}px`, transition: resizing ? "none" : "width 0.15s" }}
       >
@@ -226,10 +247,7 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
         <div class="w-11 shrink-0 flex flex-col items-center py-2.5 border-r border-v2-border-border-base bg-v2-background-bg-deep h-full z-10">
           <div class="flex flex-col gap-2.5 items-center">
             {/* 会话 Icon：折叠时悬停以浮层临时展开会话树，点击固定展开/收起 */}
-            <div
-              onMouseEnter={() => flyout.onTriggerEnter("sessions")}
-              onMouseLeave={() => flyout.onTriggerLeave()}
-            >
+            <div onMouseEnter={() => flyout.onTriggerEnter("sessions")} onMouseLeave={() => flyout.onTriggerLeave()}>
               <IconButtonV2
                 variant={activeNav() === "sessions" && expanded() ? "neutral" : "ghost-muted"}
                 size="normal"
@@ -249,10 +267,7 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
               />
             </div>
             {/* 文件树 Icon：折叠时悬停以浮层临时展开文件树，点击固定展开/收起 */}
-            <div
-              onMouseEnter={() => flyout.onTriggerEnter("files")}
-              onMouseLeave={() => flyout.onTriggerLeave()}
-            >
+            <div onMouseEnter={() => flyout.onTriggerEnter("files")} onMouseLeave={() => flyout.onTriggerLeave()}>
               <IconButtonV2
                 variant={activeNav() === "files" && expanded() ? "neutral" : "ghost-muted"}
                 size="normal"
@@ -283,7 +298,11 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
           <header class="flex h-7 shrink-0 items-center justify-between px-3 border-b border-v2-border-border-base bg-v2-background-bg-base">
             <div class="flex items-center gap-1.5 min-w-0 flex-1">
               <span class="text-11-medium text-v2-text-text-strong truncate">
-                {activeNav() === "sessions" ? t("workbench.sidebar.spaces") : activeNav() === "files" ? t("workbench.sidebar.files") : t("workbench.sidebar.maintenance")}
+                {activeNav() === "sessions"
+                  ? t("workbench.sidebar.spaces")
+                  : activeNav() === "files"
+                    ? t("workbench.sidebar.files")
+                    : t("workbench.sidebar.maintenance")}
               </span>
               <IconButtonV2
                 variant="ghost-muted"
@@ -312,40 +331,48 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
             </div>
           </header>
 
-            <div class={`flex-1 min-h-0 flex flex-col min-w-0 py-1 ${activeNav() === "sessions" ? "" : "hidden"}`}>
-              <Show
-                when={store.spaces() !== undefined}
-                fallback={<div class="px-3 py-6 text-12-regular text-v2-text-text-muted">{t("common.loading")}</div>}
-              >
-                <SessionTree
-                  spaces={activeSpaces()}
-                  activeSpacePath={wb.activeTabPath}
-                  onSpaceClick={handleSpaceClick}
-                  onSessionClick={handleSessionClick}
-                />
-              </Show>
-            </div>
+          <div class={`flex-1 min-h-0 flex flex-col min-w-0 py-1 ${activeNav() === "sessions" ? "" : "hidden"}`}>
+            <Show
+              when={store.spaces() !== undefined}
+              fallback={<div class="px-3 py-6 text-12-regular text-v2-text-text-muted">{t("common.loading")}</div>}
+            >
+              <SessionTree
+                spaces={activeSpaces()}
+                activeSpacePath={wb.activeTabPath}
+                onSpaceClick={handleSpaceClick}
+                onSessionClick={handleSessionClick}
+              />
+            </Show>
+          </div>
 
-            <div class={`flex-1 min-h-0 flex flex-col min-w-0 overflow-y-auto ${activeNav() === "files" ? "" : "hidden"}`}>
-              <FileTreePanel directory={wb.activeTabPath} onFileClick={props.onFileClick ?? (() => {})} />
-            </div>
+          <div
+            class={`flex-1 min-h-0 flex flex-col min-w-0 overflow-y-auto ${activeNav() === "files" ? "" : "hidden"}`}
+          >
+            <FileTreePanel
+              active={expanded() && activeNav() === "files"}
+              directory={wb.activeTabPath}
+              onFileClick={props.onFileClick ?? (() => {})}
+            />
+          </div>
 
-            <div class={`flex-1 min-h-0 flex flex-col min-w-0 ${activeNav() === "maintenance" ? "" : "hidden"}`}>
-              <div class="p-3 text-12-regular text-v2-text-text-muted">
-                <div class="flex items-center gap-1.5 font-medium text-v2-text-text-base mb-1">
-                  <MaintenanceIcon class="size-4" />
-                  <span>{t("workbench.sidebar.maintenance")}</span>
-                </div>
-                <p>{t("workbench.sidebar.activeSpace", { name: wb.activeSpaceName })}</p>
-                <p class="mt-2 text-11-regular text-v2-text-text-faint">{t("workbench.sidebar.maintenanceDesc")}</p>
+          <div class={`flex-1 min-h-0 flex flex-col min-w-0 ${activeNav() === "maintenance" ? "" : "hidden"}`}>
+            <div class="p-3 text-12-regular text-v2-text-text-muted">
+              <div class="flex items-center gap-1.5 font-medium text-v2-text-text-base mb-1">
+                <MaintenanceIcon class="size-4" />
+                <span>{t("workbench.sidebar.maintenance")}</span>
               </div>
+              <p>{t("workbench.sidebar.activeSpace", { name: wb.activeSpaceName })}</p>
+              <p class="mt-2 text-11-regular text-v2-text-text-faint">{t("workbench.sidebar.maintenanceDesc")}</p>
             </div>
+          </div>
         </div>
       </aside>
 
       <Show when={expanded()}>
         <div
-          ref={(el) => { resizeHandleRef = el }}
+          ref={(el) => {
+            resizeHandleRef = el
+          }}
           class="absolute top-0 bottom-0 w-2 cursor-col-resize bg-transparent hover:bg-v2-icon-icon-brand/30 z-30"
           style={{ left: `${sidebarWidth()}px` }}
           onMouseDown={startResize}
@@ -358,7 +385,12 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
         <div
           data-component="space-rail-flyout"
           class={`fixed z-40 flex flex-col min-h-0 rounded-lg border border-v2-border-border-base bg-v2-background-bg-base shadow-[var(--v2-elevation-floating)] overflow-hidden transition-opacity duration-150 ${flyoutVisibilityClass(flyoutOpen())}`}
-          style={{ left: `${COLLAPSED_WIDTH}px`, width: `${widthStore.width}px`, top: `${flyoutTop()}px`, bottom: `${flyoutBottom()}px` }}
+          style={{
+            left: `${COLLAPSED_WIDTH}px`,
+            width: `${widthStore.width}px`,
+            top: `${flyoutTop()}px`,
+            bottom: `${flyoutBottom()}px`,
+          }}
           onMouseEnter={() => flyout.onFlyoutEnter()}
           onMouseLeave={() => flyout.onFlyoutLeave()}
         >
@@ -387,6 +419,7 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
             class={`flex-1 min-h-0 flex flex-col min-w-0 overflow-y-auto ${flyoutMode() === "files" ? "" : "hidden"}`}
           >
             <FileTreePanel
+              active={flyoutOpen() && flyoutMode() === "files"}
               directory={wb.activeTabPath}
               onFileClick={(file) => {
                 flyout.close()

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys, shouldStartLayoutSessionPreload } from "./layout"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {
@@ -65,5 +65,16 @@ describe("pruneSessionKeys", () => {
     })
 
     expect(drop).toEqual([])
+  })
+})
+
+describe("layout session preload policy", () => {
+  test("does not restore saved legacy projects while Workbench instance bootstrap is disabled", () => {
+    expect(shouldStartLayoutSessionPreload({ instanceBootstrap: false, alreadyStarted: false })).toBe(false)
+  })
+
+  test("starts once when entering a legacy route and never schedules the saved-project scan twice", () => {
+    expect(shouldStartLayoutSessionPreload({ instanceBootstrap: true, alreadyStarted: false })).toBe(true)
+    expect(shouldStartLayoutSessionPreload({ instanceBootstrap: true, alreadyStarted: true })).toBe(false)
   })
 })

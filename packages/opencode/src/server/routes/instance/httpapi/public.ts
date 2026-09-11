@@ -143,6 +143,13 @@ function matchLegacyOpenApi(input: Record<string, unknown>) {
           if (content.schema) content.schema = stripOptionalNull(structuredClone(content.schema))
         }
       }
+      if (path === "/workbench/session-summaries/{sessionID}" && method === "get") {
+        const content = operation.responses?.["200"]?.content?.["application/json"]
+        // The endpoint's missing-resource value is a top-level JSON null, not
+        // an optional object property. Restore it after legacy optional-null
+        // normalization so generated SDK consumers retain the real contract.
+        if (content?.schema) content.schema = nullable(content.schema)
+      }
       if (!isV2Api) {
         // Auth is still runtime middleware outside the legacy public OpenAPI
         // metadata, so the legacy SDK should not expose auth schemes or

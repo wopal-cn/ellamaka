@@ -9,9 +9,8 @@ import { DialogOverwritePanel } from "./session-tree-dialogs"
 import { openSessionInPanel, getSessionMarker, type GroupSession } from "./session-tree-services"
 import { Icon as IconV2 } from "@wopal/ui/v2/components/icon.jsx"
 import { Spinner } from "@wopal/ui/spinner"
-import { useServerSync } from "@/context/server-sync"
+import { useSessionActivity } from "@/context/session-activity-context"
 import { useNotification } from "@/context/notification"
-import { directoryKey } from "@/context/global-sync/utils"
 import type { WopalSpace } from "../space-store"
 
 type MergedSession = {
@@ -38,15 +37,25 @@ export function SessionMarkerIcon(props: {
               <Show
                 when={markerInfo().text !== undefined}
                 fallback={
-                  <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg
+                    class="size-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    <path d="M12 6.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z" fill="currentColor" stroke="none" />
+                    <path
+                      d="M12 6.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z"
+                      fill="currentColor"
+                      stroke="none"
+                    />
                   </svg>
                 }
               >
-                <span class="text-[11px] font-semibold font-mono leading-none">
-                  {markerInfo().text}
-                </span>
+                <span class="text-[11px] font-semibold font-mono leading-none">{markerInfo().text}</span>
               </Show>
             }
           >
@@ -54,7 +63,15 @@ export function SessionMarkerIcon(props: {
           </Show>
         }
       >
-        <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          class="size-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <line x1="6" y1="3" x2="6" y2="15" />
           <circle cx="18" cy="6" r="3" />
           <circle cx="6" cy="18" r="3" />
@@ -84,34 +101,13 @@ export function SessionTreeRow(props: {
   const wb = useWorkbenchState()
   const actions = useWorkbenchActions()
   const dialog = useDialog()
-  const serverSync = useServerSync()
+  const activity = useSessionActivity()
   const notification = useNotification()
 
   const sessionData = () => props.sessions.find((s) => s.id === props.session.id)
-  const dirHealth = () =>
-    props.spacePath === "" ? "healthy" : (sessionData()?.directoryHealth ?? "healthy")
+  const dirHealth = () => (props.spacePath === "" ? "healthy" : (sessionData()?.directoryHealth ?? "healthy"))
 
-  const sessionStatusType = createMemo(() => {
-    const sessionID = props.session.id
-    if (!sessionID) return "idle"
-
-    const dir = sessionData()?.directory || props.spacePath
-    if (dir) {
-      const key = directoryKey(dir)
-      const child = (key ? serverSync.children[key] : undefined) ?? serverSync.peek(dir)
-      if (child && child[0].session_status[sessionID]?.type) {
-        return child[0].session_status[sessionID].type
-      }
-    }
-
-    for (const [_, [childStore]] of Object.entries(serverSync.children)) {
-      if (childStore.session_status[sessionID]?.type) {
-        return childStore.session_status[sessionID].type
-      }
-    }
-
-    return "idle"
-  })
+  const sessionStatusType = createMemo(() => activity.status(props.session.id).type)
 
   const isWorking = () => sessionStatusType() !== "idle"
 
@@ -197,11 +193,7 @@ export function SessionTreeRow(props: {
       onDblClick={handleSessionDblClick}
       onContextMenu={props.onContextMenu}
     >
-      <SessionMarkerIcon
-        marker={sessionData()?.marker ?? ""}
-        status={props.session.status}
-        dirHealth={dirHealth()}
-      />
+      <SessionMarkerIcon marker={sessionData()?.marker ?? ""} status={props.session.status} dirHealth={dirHealth()} />
       <span class="flex-1 truncate">{props.session.title}</span>
 
       <Show when={isWorking()}>

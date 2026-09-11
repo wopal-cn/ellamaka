@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
 import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
 import type { NormalizedProviderListResponse } from "@wopal/ui/context"
-import { bootstrapDirectory } from "./bootstrap"
+import { bootstrapDirectory, bootstrapGlobal } from "./bootstrap"
 import type { State, VcsCache } from "./types"
 
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
@@ -86,5 +86,52 @@ describe("bootstrapDirectory", () => {
 
     expect(store.status).toBe("complete")
     expect(mcpReads).toEqual([])
+  })
+})
+
+describe("bootstrapGlobal", () => {
+  test("loads only root-safe config when instance bootstrap is disabled", async () => {
+    const calls: string[] = []
+    const [store, setStore] = createStore({ project: [] as Project[] })
+
+    await bootstrapGlobal({
+      instanceBootstrap: false,
+      serverSDK: {
+        global: {
+          config: {
+            get: async () => {
+              calls.push("config")
+              return { data: {} }
+            },
+          },
+        },
+        provider: {
+          list: async () => {
+            calls.push("provider")
+            return { data: { all: [], connected: [], default: {} } }
+          },
+        },
+        path: {
+          get: async () => {
+            calls.push("path")
+            return { data: { state: "", config: "", worktree: "", directory: "", home: "" } }
+          },
+        },
+        project: {
+          list: async () => {
+            calls.push("project")
+            return { data: [] }
+          },
+        },
+      } as unknown as OpencodeClient,
+      requestFailedTitle: "request failed",
+      translate: (key) => key,
+      formatMoreCount: (count) => String(count),
+      setGlobalStore: setStore as never,
+      queryClient: new QueryClient(),
+    })
+
+    expect(calls).toEqual(["config"])
+    expect(store.project).toEqual([])
   })
 })
