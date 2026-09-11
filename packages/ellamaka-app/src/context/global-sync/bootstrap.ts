@@ -310,14 +310,20 @@ export async function bootstrapDirectory(input: {
       () => Promise.resolve(input.loadSessions(input.directory)),
       input.mcp && (() => input.queryClient.fetchQuery(loadMcpQuery(input.directory, input.sdk))),
       () =>
-        input.queryClient.fetchQuery(loadProvidersQuery(input.directory, input.sdk)).catch((err) => {
-          const project = getFilename(input.directory)
-          showToast({
-            variant: "error",
-            title: input.translate("toast.project.reloadFailed.title", { project }),
-            description: formatServerError(err, input.translate),
+        input.queryClient
+          .fetchQuery(loadProvidersQuery(input.directory, input.sdk))
+          .then((data) => {
+            input.setStore("provider", reconcile(data, { merge: false }))
+            input.setStore("provider_ready", true)
           })
-        }),
+          .catch((err) => {
+            const project = getFilename(input.directory)
+            showToast({
+              variant: "error",
+              title: input.translate("toast.project.reloadFailed.title", { project }),
+              description: formatServerError(err, input.translate),
+            })
+          }),
     ].filter(Boolean) as (() => Promise<any>)[]
 
     await waitForPaint()

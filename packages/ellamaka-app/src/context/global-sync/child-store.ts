@@ -185,11 +185,12 @@ export function createChildStoreManager(input: {
           const [mcpEnabled, setMcpEnabled] = createSignal(false)
           const [runtimeEnabled, setRuntimeEnabled] = createSignal(false)
 
-          const [pathQuery, lspQuery, providerQuery] = useQueries(() => ({
+          // Provider data is published by bootstrapDirectory into the child
+          // store, so the child does not observe a providers query here.
+          const [pathQuery, lspQuery] = useQueries(() => ({
             queries: [
               { ...input.queryOptions.path(key), enabled: runtimeEnabled() },
               { ...input.queryOptions.lsp(key), enabled: runtimeEnabled() },
-              { ...input.queryOptions.providers(key), enabled: runtimeEnabled() },
             ],
           }))
           const mcpQuery = useQuery(() => ({
@@ -201,15 +202,8 @@ export function createChildStoreManager(input: {
             project: "",
             projectMeta: initialMeta,
             icon: initialIcon,
-            get provider_ready() {
-              return !providerQuery.isLoading
-            },
-            get provider() {
-              const EMPTY = { all: new Map(), connected: [], default: {} }
-              if (providerQuery.isLoading) return EMPTY
-              if (providerQuery.data?.all.size === 0 && input.global.provider.all.size > 0) return input.global.provider
-              return providerQuery.data ?? EMPTY
-            },
+            provider_ready: false,
+            provider: { all: new Map(), connected: [], default: {} },
             config: {},
             get path() {
               if (pathQuery.isLoading || !pathQuery.data)

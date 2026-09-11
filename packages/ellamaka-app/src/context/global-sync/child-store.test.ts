@@ -162,11 +162,11 @@ describe("createChildStoreManager", () => {
       manager.child("/project", { bootstrap: false })
       const group = queryGroups[queryOffset]
       if (!group) throw new Error("directory query group required")
-      expect(group().queries.map((query) => query.enabled)).toEqual([false, false, false])
+      expect(group().queries.map((query) => query.enabled)).toEqual([false, false])
       expect(bootstraps).toEqual([])
 
       manager.child("/project")
-      expect(group().queries.map((query) => query.enabled)).toEqual([true, true, true])
+      expect(group().queries.map((query) => query.enabled)).toEqual([true, true])
       expect(bootstraps).toEqual(["/project"])
     } finally {
       dispose()
@@ -201,7 +201,7 @@ describe("createChildStoreManager", () => {
       manager.child("", { mcp: true })
       const group = queryGroups[queryOffset]
       if (!group) throw new Error("unscoped query group required")
-      expect(group().queries.map((query) => query.enabled)).toEqual([false, false, false])
+      expect(group().queries.map((query) => query.enabled)).toEqual([false, false])
       const mcpQuery = mcpQueries[mcpOffset]
       if (!mcpQuery) throw new Error("unscoped MCP query required")
       expect(mcpQuery().enabled).toBe(false)
