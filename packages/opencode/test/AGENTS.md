@@ -111,6 +111,22 @@ describe("my service", () => {
 - Use `it.instance(...)` for live Effect tests that need a scoped temporary directory and instance context.
 - Most integration-style tests in this package use `it.live(...)`.
 
+### Keep the unit layer fast
+
+`test:unit` is the daily feedback loop and must stay fast and deterministic. A test belongs to the unit layer only if it runs entirely in-process against in-memory or temp-directory state.
+
+Do **not** put these in the unit layer — they belong in an integration directory (see `INTEGRATION_DIRS` in `script/run-tests.ts`), which runs on demand via `test:integration`:
+
+- Forking subprocesses (`Process.run`, `Bun.spawn`, `spawnSync`, `execSync`)
+- Watching the filesystem (`fs.watch`, watcher services) or waiting on OS events
+- Running real `git` operations
+- Making network requests (even to `localhost` servers)
+- Relying on real clocks or wall-clock delays via `it.live(...)`
+
+If a file needs live behavior and lives in a unit directory, move it into the matching integration directory (or add its directory to `INTEGRATION_DIRS`) instead of leaving it to slow down every unit pass. A test that only needs a temp directory (`tmpdir` / `it.instance`) is still a unit test — the temp directory itself is not an integration concern.
+
+Prefer event-driven assertions over hard waits. Avoid `"5 seconds"`-style timeouts as a synchronization mechanism; wait on the actual signal (a `Deferred`, a callback) and keep the timeout only as a failure backstop.
+
 ### Effect Fixtures
 
 Prefer the Effect-aware helpers from `fixture/fixture.ts` instead of building a manual runtime in each test.

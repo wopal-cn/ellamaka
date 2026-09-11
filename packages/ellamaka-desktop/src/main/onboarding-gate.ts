@@ -26,16 +26,10 @@ export function probeWopalHomeFromShell(): string | null {
   }
 }
 
-export function resolveOnboardingMode(
-  homePath?: string,
-  env: Record<string, string | undefined> = process.env,
-): AppMode {
-  // Allow explicit override flag for testing/dev commands
-  if (env.ELLAMAKA_TEST_ONBOARDING === "1" || env.OPENCODE_TEST_ONBOARDING === "1") {
-    return "onboarding"
-  }
-
-  // Purely driven by whether state.json in WOPAL_HOME is completed
+export function resolveOnboardingMode(homePath?: string): AppMode {
+  // Mode is driven purely by whether onboarding.json in WOPAL_HOME is
+  // completed. No env override: a completed wizard always opens the workbench,
+  // and resetting onboarding means clearing/removing the state file.
   const state = readOnboardingState(homePath)
   if (!state || !state.completed) {
     return "onboarding"

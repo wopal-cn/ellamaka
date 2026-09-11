@@ -1116,11 +1116,6 @@ cmd_desktop() {
   if [ -n "$WOPAL_HOME" ]; then
     desktop_env+=(WOPAL_HOME="$WOPAL_HOME")
     echo "📌 Using Custom WOPAL_HOME: ${WOPAL_HOME}"
-  elif [ -n "$ELLAMAKA_TEST_ONBOARDING" ] || [ -n "$OPENCODE_TEST_ONBOARDING" ]; then
-    export WOPAL_HOME="/tmp/wopal-onboarding-sandbox"
-    desktop_env+=(WOPAL_HOME="/tmp/wopal-onboarding-sandbox" ELLAMAKA_TEST_ONBOARDING=1)
-    mkdir -p "/tmp/wopal-onboarding-sandbox"
-    echo "🧪 Onboarding Sandbox Active: WOPAL_HOME=/tmp/wopal-onboarding-sandbox"
   fi
   if $debug; then
     plugin_modules="$(plugin_debug_modules "$debug_modules")"

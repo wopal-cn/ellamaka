@@ -19,6 +19,6 @@ export function createOnboardingTestEnv() {
       const state = markCompleted(createDefaultOnboardingState())
       writeOnboardingState(state, testHome)
     },
-    getMode: () => resolveOnboardingMode(testHome, {}),
+    getMode: () => resolveOnboardingMode(testHome),
   }
 }

@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, beforeEach, afterEach } from "bun:test"
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
-import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
+import { isNushell, mergeShellEnv, parseShellEnv, persistWopalHomeEnv, resolveUserShell } from "./shell-env"
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
@@ -46,5 +49,60 @@ describe("shell env", () => {
     expect(isNushell("/opt/homebrew/bin/nu")).toBe(true)
     expect(isNushell("C:\\Program Files\\nu.exe")).toBe(true)
     expect(isNushell("/bin/zsh")).toBe(false)
+  })
+})
+
+describe("persistWopalHomeEnv", () => {
+  let home: string
+  let profilePath: string
+  let originalShell: string | undefined
+  let originalDev: string | undefined
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), "wopal-shell-env-"))
+    profilePath = join(home, ".zshrc")
+    originalShell = process.env.SHELL
+    originalDev = process.env.WOPAL_DEV
+    process.env.SHELL = "/bin/zsh"
+  })
+
+  afterEach(() => {
+    if (originalShell === undefined) delete process.env.SHELL
+    else process.env.SHELL = originalShell
+    if (originalDev === undefined) delete process.env.WOPAL_DEV
+    else process.env.WOPAL_DEV = originalDev
+    rmSync(home, { recursive: true, force: true })
+  })
+
+  test("skips shell profile update when WOPAL_DEV=1", () => {
+    process.env.WOPAL_DEV = "1"
+
+    const result = persistWopalHomeEnv(join(home, "dev-home"))
+
+    expect(result.success).toBe(true)
+    expect(result.message).toContain("dev")
+    expect(existsSync(profilePath)).toBe(false)
+  })
+
+  test("still sets WOPAL_HOME in dev mode", () => {
+    process.env.WOPAL_DEV = "1"
+    const target = join(home, "dev-home")
+
+    persistWopalHomeEnv(target)
+
+    expect(process.env.WOPAL_HOME).toBe(target)
+  })
+
+  test("writes shell profile when not in dev mode", () => {
+    delete process.env.WOPAL_DEV
+
+    const result = persistWopalHomeEnv(join(home, "prod-home"), {
+      homeDir: () => home,
+      platform: "darwin",
+    })
+
+    expect(result.success).toBe(true)
+    expect(existsSync(profilePath)).toBe(true)
+    expect(readFileSync(profilePath, "utf-8")).toContain("WOPAL_HOME")
   })
 })

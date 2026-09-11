@@ -161,6 +161,21 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - After upstream merges, distinguish upstream known failures, environment issues, and newly-introduced ellamaka issues.
 - Test safety rules (preventing hangs and orphan processes) are in the space `REGULATIONS.md`.
 
+### 5.1 Manual Verification Entry Points
+
+Behaviors an agent cannot verify automatically (GUI interaction, onboarding flow, desktop shell) are handed to the user for manual verification through the entries below.
+
+| Entry | Command | Isolation |
+|-------|---------|-----------|
+| Desktop (onboarding sandbox) | `ELLAMAKA_TEST_ONBOARDING=1 ./scripts/dev.sh desktop` | `WOPAL_HOME` → `/tmp/wopal-onboarding-sandbox`; forces the onboarding flow and never touches the real `~/.wopal`; the sandbox starts empty, so no sidecar build is needed |
+| Desktop (regular) | `./scripts/dev.sh desktop` | Uses the real environment; first run needs `--rebuild` to build the sidecar |
+| Workbench / backend | `./scripts/dev.sh serve` | Port 4096; `--cdp-debug` opens 9222 CDP |
+| TUI | `./scripts/dev.sh tui` | In-process backend by default |
+| Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
+
+- Logs: `.wopal-space/logs/dev/<scope>/ellamaka-dev-{desktop,sidecar}.log` (`<scope>` is derived from the worktree path).
+- A Plan's User Validation must reference this table and give a command the user can copy and run directly; generic wording such as "start the app" is not acceptable.
+
 ## 6. User-Supplied Rules
 
 - JS SDK regeneration: `./packages/sdk/js/script/build.ts`.

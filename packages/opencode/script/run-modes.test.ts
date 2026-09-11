@@ -4,8 +4,24 @@ import { join } from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
 import { buildCommand, E2E_PATTERN, INTEGRATION_DIRS, planning } from "./run-tests"
 
-const INTEGRATION = ["server", "session", "cli", "snapshot", "project", "tool", "control-plane"]
-const FAST = ["acp", "config", "mcp", "util"]
+const INTEGRATION = [
+  "server",
+  "session",
+  "cli",
+  "snapshot",
+  "project",
+  "tool",
+  "control-plane",
+  "plugin",
+  "file",
+  "pty",
+  "skill",
+  "reference",
+  "share",
+  "mcp",
+  "lsp",
+]
+const FAST = ["acp", "config", "provider", "util"]
 
 const roots: string[] = []
 
@@ -62,13 +78,13 @@ describe("planning mode expansion", () => {
 
   test("e2e returns only *-e2e.test.ts files, recursively", () => {
     const root = makeTestRoot([...FAST], ["flow-e2e.test.ts"])
-    mkdirSync(join(root, "provider"))
-    writeFileSync(join(root, "provider", "cf-ai-gateway-e2e.test.ts"), "test('x', () => {})")
-    writeFileSync(join(root, "provider", "normal.test.ts"), "test('x', () => {})")
+    mkdirSync(join(root, "nested"))
+    writeFileSync(join(root, "nested", "cf-ai-gateway-e2e.test.ts"), "test('x', () => {})")
+    writeFileSync(join(root, "nested", "normal.test.ts"), "test('x', () => {})")
     const files = planning("e2e", root)
     expect(files).toContain("test/flow-e2e.test.ts")
-    expect(files).toContain("test/provider/cf-ai-gateway-e2e.test.ts")
-    expect(files).not.toContain("test/provider/normal.test.ts")
+    expect(files).toContain("test/nested/cf-ai-gateway-e2e.test.ts")
+    expect(files).not.toContain("test/nested/normal.test.ts")
   })
 
   test("all returns an empty directory array (bun runs everything)", () => {

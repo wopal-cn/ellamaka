@@ -155,6 +155,21 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - 上游合并后区分 upstream known failures、环境问题和 ellamaka 新引入问题。
 - 测试安全运行规则（防挂起与孤儿进程）见空间 `REGULATIONS.md`。
 
+### 5.1 手动验证入口
+
+Agent 无法自动验证的行为（GUI 交互、引导流程、桌面壳）通过以下入口交给用户手动验证。
+
+| 入口 | 命令 | 环境隔离 |
+|------|------|----------|
+| Desktop（引导沙箱） | `ELLAMAKA_TEST_ONBOARDING=1 ./scripts/dev.sh desktop` | `WOPAL_HOME` → `/tmp/wopal-onboarding-sandbox`；强制进入引导流程，不触碰真实 `~/.wopal`；沙箱为空，无需构建 sidecar |
+| Desktop（常规） | `./scripts/dev.sh desktop` | 使用真实环境；首次需加 `--rebuild` 构建 sidecar |
+| Workbench / 后端 | `./scripts/dev.sh serve` | 端口 4096；`--cdp-debug` 开启 9222 CDP |
+| TUI | `./scripts/dev.sh tui` | 默认内嵌后端 |
+| 停止 | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
+
+- 日志：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{desktop,sidecar}.log`（`<scope>` 由 worktree 路径派生）。
+- Plan 的 User Validation 必须引用本表并给出用户可直接复制执行的命令，不得只写"启动应用"之类的泛指。
+
 ## 6. User-Supplied Rules
 
 - JS SDK 重新生成：`./packages/sdk/js/script/build.ts`。

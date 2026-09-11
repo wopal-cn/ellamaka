@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { tmpdir } from "node:os"
 import * as setupMachineClient from "./setup-machine-client"
 import {
+  asRecord,
   buildMemoryOperationInput,
   createOnboardingIpcHandlers,
   detectMemoryConfig,
@@ -11,6 +12,7 @@ import {
   loginGhWithToken,
   probeGithubAuthentication,
   probeLocalCli,
+  writeMemoryEnvFile,
 } from "./onboarding-ipc"
 import { readOnboardingState } from "./onboarding-state"
 import { getOnboardingLogger } from "./onboarding-logger"
@@ -185,7 +187,10 @@ describe("onboarding-ipc", () => {
   })
 
   test("onboardingProbe does not create onboarding.json or advance state", async () => {
-    const handlers = createOnboardingIpcHandlers({ homePath: testHome })
+    const handlers = createOnboardingIpcHandlers({
+      homePath: testHome,
+      probeGhCli: () => ({ installed: true, authenticated: true, account: "sam" }),
+    })
     await handlers["onboarding-probe"]({}, "github-auth")
 
     const state = readOnboardingState(testHome)
@@ -326,7 +331,10 @@ describe("onboarding-ipc", () => {
   })
 
   test("onboardingProbe github-auth returns detected info", async () => {
-    const handlers = createOnboardingIpcHandlers({ homePath: testHome })
+    const handlers = createOnboardingIpcHandlers({
+      homePath: testHome,
+      probeGhCli: () => ({ installed: true, authenticated: true, account: "sam" }),
+    })
     const result = await handlers["onboarding-probe"]({}, "github-auth")
     expect(result).toHaveProperty("detected")
     expect(result).toHaveProperty("source")
@@ -873,6 +881,23 @@ describe("onboarding-ipc", () => {
     })
   })
 
+  test("writeMemoryEnvFile skips non-string llm fields instead of writing [object Object]", () => {
+    const envPath = join(testHome, "memory.env")
+    const written = writeMemoryEnvFile(envPath, {
+      enabled: true,
+      llmEndpoint: { host: "api.example.com" },
+      llmModel: ["bge-m3"],
+      embeddingEndpoint: 42,
+    })
+    expect(written).toBe(true)
+    const content = readFileSync(envPath, "utf-8")
+    expect(content).not.toContain("[object Object]")
+    expect(content).not.toContain("WOPAL_LLM_BASE_URL=")
+    expect(content).not.toContain("WOPAL_LLM_MODEL=")
+    expect(content).not.toContain("WOPAL_EMBEDDING_BASE_URL=")
+    expect(content).toContain("WOPAL_MEMORY_ENABLED=true")
+  })
+
   test("space memory inherit when global is disabled clears space file and does not modify global file", async () => {
     const spaceDir = join(testHome, "space1")
     const spaceWopalDir = join(spaceDir, ".wopal")
@@ -1370,5 +1395,37 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
         (e) => e.step === "create-space" && e.phase === "initialize-space" && e.message?.includes("space worktree"),
       ),
     ).toBe(true)
+  })
+})
+
+describe("asRecord", () => {
+  test("returns undefined for undefined", () => {
+    expect(asRecord(undefined)).toBeUndefined()
+  })
+
+  test("returns undefined for null", () => {
+    expect(asRecord(null)).toBeUndefined()
+  })
+
+  test("returns the original empty object reference", () => {
+    const value = {}
+    expect(asRecord(value)).toBe(value)
+  })
+
+  test("returns the original object reference with entries", () => {
+    const value = { a: 1 }
+    expect(asRecord(value)).toBe(value)
+  })
+
+  test("returns undefined for a string", () => {
+    expect(asRecord("str")).toBeUndefined()
+  })
+
+  test("returns undefined for a number", () => {
+    expect(asRecord(42)).toBeUndefined()
+  })
+
+  test("returns undefined for an array", () => {
+    expect(asRecord([])).toBeUndefined()
   })
 })

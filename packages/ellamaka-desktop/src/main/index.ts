@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
-import { homedir, tmpdir } from "node:os"
+import { homedir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
@@ -67,7 +66,6 @@ const APP_IDS: Record<string, string> = {
   beta: "ai.ellamaka.desktop.beta",
   prod: "ai.ellamaka.desktop",
 }
-const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
@@ -206,7 +204,7 @@ interface StartWorkbenchOpts {
 // env vars are preserved across the transition.
 const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
   Effect.gen(function* () {
-    if (!TEST_ONBOARDING) migrate()
+    migrate()
     app.setAsDefaultProtocolClient("ellamaka")
     registerRendererProtocol()
     setDockIcon()
@@ -361,28 +359,17 @@ const main = Effect.gen(function* () {
   } catch {}
 
   const appId = app.isPackaged ? APP_IDS[CHANNEL] : `ai.ellamaka.desktop.${CHANNEL}`
-  const onboardingTestRoot = ((): string | undefined => {
-    if (!TEST_ONBOARDING) return
-
-    const root = join(tmpdir(), `ellamaka-onboarding-${randomUUID()}`)
-    rmSync(root, { recursive: true, force: true })
-    ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
-      mkdirSync(join(root, dir), { recursive: true }),
-    )
-    process.env.OPENCODE_DB = ":memory:"
-    process.env.XDG_DATA_HOME = join(root, "data")
-    process.env.XDG_CONFIG_HOME = join(root, "config")
-    process.env.XDG_CACHE_HOME = join(root, "cache")
-    process.env.XDG_STATE_HOME = join(root, "state")
-    return root
-  })()
+  // Electron userData (electron-store) does not follow WOPAL_HOME. When
+  // WOPAL_HOME is customized (dev.sh desktop sandbox), isolate userData under
+  // it so dev runs never mutate the real app's settings.
+  const devUserDataRoot = process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "ellamaka", "desktop") : undefined
   app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "Ellamaka Dev")
   app.setAppUserModelId(appId)
   app.setPath(
     "userData",
-    onboardingTestRoot ? join(onboardingTestRoot, "desktop") : join(app.getPath("appData"), appId),
+    devUserDataRoot ?? join(app.getPath("appData"), appId),
   )
-  if (onboardingTestRoot) app.setPath("sessionData", join(onboardingTestRoot, "session"))
+  if (devUserDataRoot) app.setPath("sessionData", join(devUserDataRoot, "session"))
   logger = initLogging()
   initCrashReporter()
 
@@ -404,7 +391,6 @@ const main = Effect.gen(function* () {
   logger.log("app starting", {
     version: app.getVersion(),
     packaged: app.isPackaged,
-    onboardingTest: Boolean(onboardingTestRoot),
   })
 
   ensureLoopbackNoProxy()

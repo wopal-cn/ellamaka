@@ -23,6 +23,26 @@ import { statfsSync } from "node:fs"
 import { getOnboardingLogger } from "./onboarding-logger"
 import { getReleaseInfo } from "./release-info"
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return isRecord(value) ? value : undefined
+}
+
+export function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined
+}
+
+export function readBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined
+}
+
+export function isOnboardingStepName(value: string): value is OnboardingStepName {
+  return ONBOARDING_STEPS.some((step) => step === value)
+}
+
 export function resolveSystemUserName(): string {
   try {
     const res = spawnSync("git", ["config", "user.name"], { encoding: "utf8" })
@@ -207,8 +227,8 @@ export async function verifyGithubTokenViaApi(token: string): Promise<{ account:
       signal: AbortSignal.timeout(5000),
     })
     if (!res.ok) return { account: null, valid: false }
-    const data = (await res.json()) as { login?: string }
-    const account = data.login?.trim()
+    const data = asRecord(await res.json())
+    const account = readString(data?.login)?.trim()
     return { account: account || null, valid: Boolean(account) }
   } catch {
     return { account: null, valid: false }
@@ -365,10 +385,12 @@ export function detectProviderAuth(homePath?: string, providerId = "opencode-go"
       if (parsed && parsed[providerId]?.key) return parsed[providerId].key
     } catch {}
   }
+
+  return undefined
 }
 
 export function normalizeSetupResult(opRes: OnboardingStepResult): OnboardingStepResult {
-  const raw = opRes.status as string
+  const raw = opRes.status
   if (raw === "completed") {
     return { status: "completed", result: opRes.result, error: opRes.error }
   }
@@ -656,22 +678,28 @@ export function writeMemoryEnvFile(
     } else {
       envVars["WOPAL_MEMORY_ENABLED"] = "true"
       envVars["WOPAL_MEMORY_INJECTION_ENABLED"] = payload.memoryInjectionEnabled === false ? "false" : "true"
-      if (payload.llmEndpoint) envVars["WOPAL_LLM_BASE_URL"] = String(payload.llmEndpoint)
-      if (payload.llmModel) envVars["WOPAL_LLM_MODEL"] = String(payload.llmModel)
+      const llmEndpoint = readString(payload.llmEndpoint)
+      if (llmEndpoint) envVars["WOPAL_LLM_BASE_URL"] = llmEndpoint
+      const llmModel = readString(payload.llmModel)
+      if (llmModel) envVars["WOPAL_LLM_MODEL"] = llmModel
 
       // LLM Key: use typed key -> or existing key in file -> or inherit from global env
-      if (payload.llmKey) {
-        envVars["WOPAL_LLM_API_KEY"] = String(payload.llmKey)
+      const llmKey = readString(payload.llmKey)
+      if (llmKey) {
+        envVars["WOPAL_LLM_API_KEY"] = llmKey
       } else if (!envVars["WOPAL_LLM_API_KEY"] && globalEnvVars["WOPAL_LLM_API_KEY"]) {
         envVars["WOPAL_LLM_API_KEY"] = globalEnvVars["WOPAL_LLM_API_KEY"]
       }
 
-      if (payload.embeddingEndpoint) envVars["WOPAL_EMBEDDING_BASE_URL"] = String(payload.embeddingEndpoint)
-      if (payload.embeddingModel) envVars["WOPAL_EMBEDDING_MODEL"] = String(payload.embeddingModel)
+      const embeddingEndpoint = readString(payload.embeddingEndpoint)
+      if (embeddingEndpoint) envVars["WOPAL_EMBEDDING_BASE_URL"] = embeddingEndpoint
+      const embeddingModel = readString(payload.embeddingModel)
+      if (embeddingModel) envVars["WOPAL_EMBEDDING_MODEL"] = embeddingModel
 
       // Embedding Key: use typed key -> or existing key in file -> or reuse llm key -> or inherit from global
-      if (payload.embeddingKey) {
-        envVars["WOPAL_EMBEDDING_API_KEY"] = String(payload.embeddingKey)
+      const embeddingKey = readString(payload.embeddingKey)
+      if (embeddingKey) {
+        envVars["WOPAL_EMBEDDING_API_KEY"] = embeddingKey
       } else if (payload.reuseEmbedding || !envVars["WOPAL_EMBEDDING_API_KEY"]) {
         const fallbackKey =
           envVars["WOPAL_LLM_API_KEY"] || globalEnvVars["WOPAL_EMBEDDING_API_KEY"] || globalEnvVars["WOPAL_LLM_API_KEY"]
@@ -707,7 +735,7 @@ export function resolveTargetEnvPath(homePath: string, scope?: string, spacePath
 }
 
 export function buildMemoryOperationInput(input?: unknown, homePath?: string): Record<string, unknown> {
-  const payload = (input as Record<string, unknown> | undefined) ?? {}
+  const payload = asRecord(input) ?? {}
   const result: Record<string, unknown> = {}
 
   if (typeof payload.enabled === "boolean") result.enabled = payload.enabled
@@ -813,15 +841,15 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
       return { result: null, error: inspectSnapshotError, fromSnapshot: false }
     }
-    inspectSnapshot = (res.result ?? {}) as Record<string, unknown>
+    inspectSnapshot = res.result ?? {}
     inspectSnapshotError = null
     return { result: inspectSnapshot, error: null, fromSnapshot: false }
   }
 
   const updateInspectionFromStep = (stepName: string, input: unknown, result: unknown) => {
     if (!inspectSnapshot) return
-    const data = (result ?? {}) as Record<string, unknown>
-    const stepInput = (input ?? {}) as Record<string, unknown>
+    const data = asRecord(result) ?? {}
+    const stepInput = asRecord(input) ?? {}
     const snap = inspectSnapshot
     switch (stepName) {
       case "install-cli": {
@@ -835,17 +863,17 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
         break
       }
       case "github-auth": {
-        const security = (snap.security ?? {}) as Record<string, unknown>
-        const github = (security.github ?? {}) as Record<string, unknown>
+        const security = asRecord(snap.security) ?? {}
+        const github = asRecord(security.github) ?? {}
         github.tokenConfigured = true
         security.github = github
         snap.security = security
         break
       }
       case "ai-provider": {
-        const security = (snap.security ?? {}) as Record<string, unknown>
-        const providers = (security.providers ?? {}) as Record<string, unknown>
-        const providerId = (data.providerId as string) || "opencode-go"
+        const security = asRecord(snap.security) ?? {}
+        const providers = asRecord(security.providers) ?? {}
+        const providerId = readString(data.providerId) || "opencode-go"
         providers[providerId] = { configured: true, type: "api" }
         security.providers = providers
         snap.security = security
@@ -864,7 +892,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
         if (Array.isArray(data.availableTypes)) {
           snap.availableTypes = data.availableTypes
         }
-        const runtime = (snap.runtime ?? {}) as Record<string, unknown>
+        const runtime = asRecord(snap.runtime) ?? {}
         runtime.ready = true
         snap.runtime = runtime
         break
@@ -885,7 +913,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
       case "memory-config": {
         // configure-memory result: state/enabled/injectionEnabled/envPath/llm/embedding
-        const memory = (snap.memory ?? {}) as Record<string, unknown>
+        const memory = asRecord(snap.memory) ?? {}
         for (const key of ["state", "enabled", "injectionEnabled", "envPath", "llm", "embedding"]) {
           if (data[key] !== undefined) memory[key] = data[key]
         }
@@ -918,7 +946,11 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
     const isWin = process.platform === "win32"
     const binPath = join(homePath, "bin", isWin ? "wopal.exe" : "wopal")
 
-    switch (step as string) {
+    // Runtime dispatch covers sub-steps beyond the OnboardingStepName union
+    // (install-wopal-cli, install-ellamaka-cli, star-guide); widen for the
+    // switch and let `default` reject unknown step names.
+    const stepId: string = step
+    switch (stepId) {
       case "inspect":
         return normalizeSetupResult(
           await runSetupOperation({
@@ -930,7 +962,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
         )
 
       case "system-check": {
-        const inputHome = (input as Record<string, unknown> | undefined)?.customHomePath as string | undefined
+        const inputHome = readString(asRecord(input)?.customHomePath)
         const targetHome = inputHome?.trim() ? inputHome.trim() : homePath
         const resolvedHome = targetHome.startsWith("~") ? join(homedir(), targetHome.slice(1)) : targetHome
         deps.homePath = resolvedHome
@@ -944,7 +976,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
 
       case "install-cli": {
-        const subStep = (input as Record<string, unknown> | undefined)?.subStep
+        const subStep = asRecord(input)?.subStep
         // Ensure the inspect snapshot exists before deciding what to install.
         // Both wopal and ellamaka short-circuit from it when already present.
         if (!inspectSnapshot) {
@@ -954,9 +986,9 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
         // installed — no need to spawn wopal or hit the network again.
         if (subStep === "wopal") {
           const snapshot = inspectSnapshot
-          const products = snapshot?.products as Record<string, unknown> | undefined
-          const wopalCliInfo = products?.wopalCli as { installed?: boolean; version?: string | null } | undefined
-          const cliInfo = products?.cli as { installed?: boolean; version?: string | null } | undefined
+          const products = asRecord(snapshot?.products)
+          const wopalCliInfo = asRecord(products?.wopalCli)
+          const cliInfo = asRecord(products?.cli)
           if (wopalCliInfo?.installed) {
             return {
               status: "reused",
@@ -973,7 +1005,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
           }
           const res = await installWopalCli({
             homePath,
-            forceUpgrade: (input as Record<string, unknown> | undefined)?.forceUpgrade as boolean | undefined,
+            forceUpgrade: readBoolean(asRecord(input)?.forceUpgrade),
             onProgress,
             abortSignal,
           })
@@ -981,7 +1013,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
           if (res.status !== "failed" && cliProbe.version) {
             return {
               ...res,
-              result: { ...(res.result ?? {}), version: cliProbe.version },
+              result: { ...res.result, version: cliProbe.version },
             }
           }
           return res
@@ -995,7 +1027,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
               result: { version: inspectSnapshot.engineVersion ?? undefined, upgraded: false },
             }
           }
-          const payload = { ...((input as Record<string, unknown>) ?? {}) }
+          const payload = { ...asRecord(input) }
           delete payload.homePath
           delete payload.forkUrl
           delete payload.subStep
@@ -1015,13 +1047,13 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
 
         const wopalRes = await installWopalCli({
           homePath,
-          forceUpgrade: (input as Record<string, unknown> | undefined)?.forceUpgrade as boolean | undefined,
+          forceUpgrade: readBoolean(asRecord(input)?.forceUpgrade),
           onProgress,
           abortSignal,
         })
         if (wopalRes.status === "failed") return wopalRes
 
-        const payload = { ...((input as Record<string, unknown>) ?? {}) }
+        const payload = { ...asRecord(input) }
         delete payload.homePath
         delete payload.forkUrl
         if (!payload.requirements || typeof payload.requirements !== "object") {
@@ -1050,13 +1082,13 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       case "install-wopal-cli":
         return installWopalCli({
           homePath,
-          forceUpgrade: (input as Record<string, unknown> | undefined)?.forceUpgrade as boolean | undefined,
+          forceUpgrade: readBoolean(asRecord(input)?.forceUpgrade),
           onProgress,
           abortSignal,
         })
 
       case "install-ellamaka-cli": {
-        const payload = (input as Record<string, unknown>) ?? {}
+        const payload = asRecord(input) ?? {}
         delete payload.homePath
         delete payload.forkUrl
         return normalizeSetupResult(
@@ -1071,11 +1103,11 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
 
       case "github-auth": {
-        const payload = (input as Record<string, unknown>) ?? {}
+        const payload = asRecord(input) ?? {}
         if (payload.skip) {
           return { status: "skipped" }
         }
-        const token = (payload.token as string | undefined)?.trim() || detectGithubToken(homePath)?.token
+        const token = (readString(payload.token)?.trim() || detectGithubToken(homePath)?.token) ?? undefined
         if (!token) {
           return { status: "skipped" }
         }
@@ -1124,10 +1156,10 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
 
       case "ai-provider": {
-        const payload = (input as Record<string, unknown>) ?? {}
-        const providerId = (payload.provider as string) || (payload.providerId as string) || "opencode-go"
+        const payload = asRecord(input) ?? {}
+        const providerId = readString(payload.provider) || readString(payload.providerId) || "opencode-go"
 
-        const apiKey = (payload.apiKey as string | undefined)?.trim() || detectProviderAuth(homePath, providerId)
+        const apiKey = (readString(payload.apiKey)?.trim() || detectProviderAuth(homePath, providerId)) ?? undefined
 
         if (payload.skip || !apiKey) {
           return { status: "skipped" }
@@ -1145,9 +1177,9 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
 
       case "ontology-setup": {
-        const payload = (input as Record<string, unknown>) ?? {}
-        const mode = (payload.mode as string) === "fork" ? "fork" : "clone"
-        const source = payload.source as string | undefined
+        const payload = asRecord(input) ?? {}
+        const mode = readString(payload.mode) === "fork" ? "fork" : "clone"
+        const source = readString(payload.source)
         const opInput: Record<string, unknown> = { mode }
         if (source) opInput.source = source
         const ontRes = normalizeSetupResult(
@@ -1201,7 +1233,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
 
       case "create-space": {
-        const payload = (input as Record<string, unknown>) ?? {}
+        const payload = asRecord(input) ?? {}
         if (payload.skip) {
           // Verify existing spaces before allowing skip
           const inspectRes = await runSetupOperation({
@@ -1209,7 +1241,8 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
             operation: "inspect",
             input: {},
           })
-          const spaces = (inspectRes.result as any)?.spaces ?? []
+          const spacesRaw = asRecord(inspectRes.result)?.spaces
+          const spaces = Array.isArray(spacesRaw) ? spacesRaw : []
           if (spaces.length === 0) {
             return {
               status: "failed",
@@ -1221,7 +1254,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
           }
           return { status: "skipped" }
         }
-        const path = payload.path as string
+        const path = readString(payload.path)
         if (!path) {
           return { status: "failed", error: { code: "INVALID_INPUT", message: "Space path is required." } }
         }
@@ -1229,7 +1262,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
           await runSetupOperation({
             binaryPath: binPath,
             operation: "initialize-space",
-            input: { path, type: (payload.type as string) || undefined },
+            input: { path, type: readString(payload.type) || undefined },
             onProgress,
             abortSignal,
           }),
@@ -1237,7 +1270,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
       }
 
       case "memory-config": {
-        const isSkip = Boolean((input as Record<string, unknown> | undefined)?.skip)
+        const isSkip = Boolean(asRecord(input)?.skip)
         if (isSkip) {
           // Skip = "don't configure memory", not "disable memory".
           // No env file is written and no space env file is cleared.
@@ -1254,9 +1287,9 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
 
         const memInput = buildMemoryOperationInput(input, homePath)
         const isSpaceScope = memInput.scope === "space"
-        const spaceMode = (memInput.spaceMode as string) || (isSpaceScope ? "custom" : undefined)
+        const spaceMode = readString(memInput.spaceMode) || (isSpaceScope ? "custom" : undefined)
         const spacePath = typeof memInput.spacePath === "string" ? memInput.spacePath : undefined
-        const targetEnvPath = resolveTargetEnvPath(homePath, memInput.scope as string, spacePath)
+        const targetEnvPath = resolveTargetEnvPath(homePath, readString(memInput.scope), spacePath)
 
         if (isSpaceScope && spaceMode === "inherit") {
           clearSpaceMemoryEnvFile(targetEnvPath)
@@ -1302,19 +1335,19 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
             llmEndpoint:
               isSpaceScope && spaceMode === "inherit"
                 ? (globalConfig?.llmEndpoint ?? "")
-                : (memInput.llmEndpoint ?? (cliResult?.result?.llmEndpoint as string | undefined) ?? ""),
+                : (memInput.llmEndpoint ?? readString(cliResult?.result?.llmEndpoint) ?? ""),
             llmModel:
               isSpaceScope && spaceMode === "inherit"
                 ? (globalConfig?.llmModel ?? "")
-                : (memInput.llmModel ?? (cliResult?.result?.llmModel as string | undefined) ?? ""),
+                : (memInput.llmModel ?? readString(cliResult?.result?.llmModel) ?? ""),
             embeddingEndpoint:
               isSpaceScope && spaceMode === "inherit"
                 ? (globalConfig?.embeddingEndpoint ?? "")
-                : (memInput.embeddingEndpoint ?? (cliResult?.result?.embeddingEndpoint as string | undefined) ?? ""),
+                : (memInput.embeddingEndpoint ?? readString(cliResult?.result?.embeddingEndpoint) ?? ""),
             embeddingModel:
               isSpaceScope && spaceMode === "inherit"
                 ? (globalConfig?.embeddingModel ?? "")
-                : (memInput.embeddingModel ?? (cliResult?.result?.embeddingModel as string | undefined) ?? ""),
+                : (memInput.embeddingModel ?? readString(cliResult?.result?.embeddingModel) ?? ""),
             llmKeyConfigured:
               isSpaceScope && spaceMode === "inherit"
                 ? Boolean(globalConfig?.hasLlmKey)
@@ -1331,7 +1364,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
 
       case "done":
       case "star-guide": {
-        const payload = (input as Record<string, unknown>) ?? {}
+        const payload = asRecord(input) ?? {}
         if (payload.skip) return { status: "skipped" }
         return normalizeSetupResult(
           await runSetupOperation({
@@ -1454,7 +1487,10 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
         case "ellamaka-cli":
           return probeLocalCli(join(homePath, "bin", isWin ? "ellamaka.exe" : "ellamaka"))
         case "github-auth": {
-          return await probeGithubAuthentication(homePath, { broadcastProgress: deps.broadcastProgress })
+          return await probeGithubAuthentication(homePath, {
+            broadcastProgress: deps.broadcastProgress,
+            probeGhCli: deps.probeGhCli,
+          })
         }
         case "ai-provider": {
           const existingKey = detectProviderAuth(homePath, "opencode-go")
@@ -1570,8 +1606,13 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
                 // stays clickable even when the CLI query fails.
                 const { result: inspection } = await getInspection(homePath)
                 const spaces = Array.isArray(inspection?.spaces) ? inspection.spaces : []
-                if (spaces.length > 0) {
-                  detected.effectiveSpace = spaces[0] as { name: string; path: string; type?: string | null }
+                for (const entry of spaces) {
+                  const name = readString(asRecord(entry)?.name)
+                  const path = readString(asRecord(entry)?.path)
+                  if (name && path) {
+                    detected.effectiveSpace = { name, path, type: readString(asRecord(entry)?.type) ?? null }
+                    break
+                  }
                 }
               }
               if (detected.effectiveSpace && !detected.spaceMemory) {
@@ -1596,7 +1637,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
                 error: inspectionError?.message ?? "无法检查记忆配置。",
               }
             }
-            const memory = (inspection.memory ?? {}) as Record<string, unknown>
+            const memory = asRecord(inspection.memory) ?? {}
             const spaces = Array.isArray(inspection.spaces) ? inspection.spaces : []
             const effectiveSpace = memory.effectiveSpace ?? spaces[0] ?? null
             return effectiveSpace ? { ...memory, effectiveSpace } : memory
@@ -1628,13 +1669,13 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
     ): Promise<OnboardingStepResult> => {
       // github-auth is a sub-operation of the ontology-setup step (no longer a
       // wizard step itself): it may be invoked directly with a token payload.
-      const isKnownStep = ONBOARDING_STEPS.includes(stepName as OnboardingStepName) || stepName === "github-auth"
+      const isKnownStep = isOnboardingStepName(stepName) || stepName === "github-auth"
       if (!isKnownStep) {
         return {
           status: "failed",
           error: {
             code: "ONBOARDING_STEP_INVALID",
-            message: `Invalid step name: ${stepName}`,
+            message: `Invalid step name: ${String(stepName)}`,
           },
         }
       }
@@ -1661,11 +1702,11 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
         })
         // github-auth is a sub-operation of the ontology-setup step, not a
         // wizard step — it must not pollute the onboarding state's steps map.
-        const isWizardStep = ONBOARDING_STEPS.includes(stepName as OnboardingStepName)
+        const isWizardStep = isOnboardingStepName(stepName)
         let state = readOnboardingState(deps.homePath) ?? createDefaultOnboardingState()
         state = markStarted(state)
         if (isWizardStep) {
-          state = updateStep(state, stepName as OnboardingStepName, "in-progress")
+          state = updateStep(state, stepName, "in-progress")
           writeOnboardingState(state, deps.homePath)
         }
 
@@ -1684,17 +1725,12 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
           state = readOnboardingState(deps.homePath) ?? state
           if (isWizardStep) {
             if (res.status === "completed" || res.status === "reused") {
-              state = updateStep(state, stepName as OnboardingStepName, "done")
+              state = updateStep(state, stepName, "done")
               updateInspectionFromStep(stepName, input, res.result)
             } else if (res.status === "skipped") {
-              state = updateStep(state, stepName as OnboardingStepName, "skipped")
+              state = updateStep(state, stepName, "skipped")
             } else {
-              state = updateStep(
-                state,
-                stepName as OnboardingStepName,
-                "failed",
-                res.error?.message ?? "Execution failed",
-              )
+              state = updateStep(state, stepName, "failed", res.error?.message ?? "Execution failed")
             }
             writeOnboardingState(state, deps.homePath)
           } else if (res.status === "completed" || res.status === "reused") {
@@ -1741,7 +1777,9 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
             message: failureMessage,
             details,
           })
-          state = updateStep(state, stepName as OnboardingStepName, "failed", msg)
+          if (isOnboardingStepName(stepName)) {
+            state = updateStep(state, stepName, "failed", msg)
+          }
           if (isWizardStep) writeOnboardingState(state, deps.homePath)
           return {
             status: "failed",
@@ -1785,7 +1823,7 @@ export function createOnboardingIpcHandlers(deps: OnboardingIpcDeps = {}) {
 
       // Derive readiness from the snapshot: engine + ontology installed,
       // runtime prepared, and at least one registered space.
-      const runtime = (inspection.runtime ?? {}) as Record<string, unknown>
+      const runtime = asRecord(inspection.runtime) ?? {}
       const ready =
         Boolean(inspection.engineInstalled) &&
         Boolean(inspection.ontologyInstalled) &&

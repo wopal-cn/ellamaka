@@ -171,11 +171,27 @@ function ensureShellBlock(profilePath: string, shellName: string, wopalHome: str
   writeFileSync(profilePath, content.endsWith("\n") ? content : `${content}\n`, "utf-8")
 }
 
-export function persistWopalHomeEnv(wopalHome: string): { success: boolean; message?: string } {
-  const log = getLogger()
+export interface PersistWopalHomeEnvDeps {
+  homeDir?: () => string
+  platform?: NodeJS.Platform
+}
+
+export function persistWopalHomeEnv(
+  wopalHome: string,
+  deps: PersistWopalHomeEnvDeps = {},
+): { success: boolean; message?: string } {
   try {
     process.env.WOPAL_HOME = wopalHome
-    const isWin = process.platform === "win32"
+    const log = getLogger()
+
+    // Dev mode (dev.sh desktop) must never mutate the user's real shell
+    // profile. We still set WOPAL_HOME for the current process above.
+    if (process.env.WOPAL_DEV === "1") {
+      log?.info("[shell-env] Dev mode: skipping shell profile update")
+      return { success: true, message: "Skipped shell profile update (dev mode)." }
+    }
+
+    const isWin = (deps.platform ?? process.platform) === "win32"
 
     if (isWin) {
       // Windows: use .NET API via PowerShell to avoid setx's 1024-char PATH truncation.
@@ -185,7 +201,7 @@ export function persistWopalHomeEnv(wopalHome: string): { success: boolean; mess
       })
       if (res.error || res.status !== 0) {
         const errMsg = res.error?.message || res.stderr?.toString() || `PowerShell exited with code ${res.status}`
-        log.error("[shell-env] Failed to set WOPAL_HOME via PowerShell:", errMsg)
+        log?.error("[shell-env] Failed to set WOPAL_HOME via PowerShell:", errMsg)
         return { success: false, message: `Failed to set Windows environment variable: ${errMsg}` }
       }
       return { success: true, message: "Windows WOPAL_HOME user environment variable set." }
@@ -193,7 +209,7 @@ export function persistWopalHomeEnv(wopalHome: string): { success: boolean; mess
       // POSIX (macOS & Linux): idempotent managed block in shell profile(s).
       const userShell = getUserShell()
       const shellName = basename(userShell).toLowerCase()
-      const home = homedir()
+      const home = (deps.homeDir ?? homedir)()
 
       const targetProfiles: string[] = []
       if (shellName === "zsh") {
@@ -215,7 +231,7 @@ export function persistWopalHomeEnv(wopalHome: string): { success: boolean; mess
           if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
           ensureShellBlock(profilePath, shellName, wopalHome)
         } catch (err) {
-          log.error(`[shell-env] Error updating profile ${profilePath}:`, err)
+          log?.error(`[shell-env] Error updating profile ${profilePath}:`, err)
         }
       }
 
@@ -226,4 +242,3 @@ export function persistWopalHomeEnv(wopalHome: string): { success: boolean; mess
     return { success: false, message }
   }
 }
-

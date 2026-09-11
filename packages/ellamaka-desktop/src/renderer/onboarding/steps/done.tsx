@@ -1,11 +1,26 @@
 import { createSignal, onMount, Show, For } from "solid-js"
 
-export function DoneStep() {
+interface DoneStepProps {
+  onLaunchingChange?: (launching: boolean) => void
+  onErrorChange?: (err: string | null) => void
+}
+
+export function DoneStep(props: DoneStepProps = {}) {
   const [isLaunching, setIsLaunching] = createSignal<boolean>(false)
   const [warnings, setWarnings] = createSignal<string[]>([])
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null)
   const [starred, setStarred] = createSignal<boolean>(false)
   const [runtimeCheckFinished, setRuntimeCheckFinished] = createSignal<boolean>(false)
+
+  const setLaunching = (val: boolean) => {
+    setIsLaunching(val)
+    props.onLaunchingChange?.(val)
+  }
+
+  const setError = (msg: string | null) => {
+    setErrorMsg(msg)
+    props.onErrorChange?.(msg)
+  }
 
   onMount(async () => {
     try {
@@ -39,24 +54,24 @@ export function DoneStep() {
   }
 
   const handleLaunch = async () => {
-    setIsLaunching(true)
-    setErrorMsg(null)
+    setLaunching(true)
+    setError(null)
     try {
       // 3. Final Gatekeeper: Validate onboarding completion readiness
       const result = await window.api.onboardingComplete()
       if (result.status === "failed") {
-        setErrorMsg(result.error?.message ?? "运行时健康检查未通过，请返回前置步骤检查配置。")
-        setIsLaunching(false)
+        setError(result.error?.message ?? "运行时健康检查未通过，请返回前置步骤检查配置。")
+        setLaunching(false)
         return
       }
       const transition = await window.api.onboardingTransitionToWorkbench()
       if (transition.status === "error") {
-        setErrorMsg(transition.message ?? "启动工作台失败，请手动重启应用。")
-        setIsLaunching(false)
+        setError(transition.message ?? "启动工作台失败，请手动重启应用。")
+        setLaunching(false)
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "启动工作台失败，请手动重启应用。")
-      setIsLaunching(false)
+      setError(err instanceof Error ? err.message : "启动工作台失败，请手动重启应用。")
+      setLaunching(false)
     }
   }
 
@@ -77,7 +92,8 @@ export function DoneStep() {
           <span>💖</span> 感谢你使用 WopalSpace
         </div>
         <div class="ob-done-body">
-          每一位创作者与超级个体都是时代独特的闪耀星光。全套 AI 智能助手与能力工具链已把关完毕，愿 WopalSpace 伴你构建卓越产品，享受纯粹的创作与构建乐趣。
+          每一位创作者与超级个体都是时代独特的闪耀星光。全套 AI 智能助手与能力工具链已把关完毕，愿 WopalSpace
+          伴你构建卓越产品，享受纯粹的创作与构建乐趣。
         </div>
       </div>
 
@@ -85,9 +101,7 @@ export function DoneStep() {
       <div class="ob-done-card ob-done-support-card">
         <div>
           <div class="ob-done-support-title">⭐ 支持 WopalSpace 开源项目</div>
-          <div class="ob-done-support-desc">
-            点亮 GitHub Star，支持团队持续交付下一代 AI 智能助手与工具链。
-          </div>
+          <div class="ob-done-support-desc">点亮 GitHub Star，支持团队持续交付下一代 AI 智能助手与工具链。</div>
         </div>
         <button
           type="button"
@@ -104,9 +118,7 @@ export function DoneStep() {
         <div class="ob-done-warning">
           <div class="ob-done-warning-title">⚠️ 检查提醒</div>
           <ul class="ob-done-warning-list">
-            <For each={warnings()}>
-              {(w) => <li>{w}</li>}
-            </For>
+            <For each={warnings()}>{(w) => <li>{w}</li>}</For>
           </ul>
         </div>
       </Show>
@@ -118,11 +130,7 @@ export function DoneStep() {
 
       {/* Launch Workbench Button */}
       <div class="ob-done-launch">
-        <button
-          class="ob-button ob-done-launch-button"
-          onClick={handleLaunch}
-          disabled={isLaunching()}
-        >
+        <button class="ob-button ob-done-launch-button" onClick={handleLaunch} disabled={isLaunching()}>
           <Show when={isLaunching()} fallback={<span>🚀 启动工作台</span>}>
             <span class="ob-spinner" style={{ width: "18px", height: "18px", "border-width": "2px" }} />
             <span>正在启动…</span>

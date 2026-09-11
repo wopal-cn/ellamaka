@@ -20,7 +20,7 @@ describe("onboarding-gate", () => {
   })
 
   test("resolveOnboardingMode returns 'onboarding' when state file does not exist", () => {
-    const mode = resolveOnboardingMode(testHome, {})
+    const mode = resolveOnboardingMode(testHome)
     expect(mode).toBe("onboarding")
   })
 
@@ -28,7 +28,7 @@ describe("onboarding-gate", () => {
     const state = createDefaultOnboardingState()
     writeOnboardingState(state, testHome)
 
-    const mode = resolveOnboardingMode(testHome, {})
+    const mode = resolveOnboardingMode(testHome)
     expect(mode).toBe("onboarding")
   })
 
@@ -37,17 +37,8 @@ describe("onboarding-gate", () => {
     const completed = markCompleted(state)
     writeOnboardingState(completed, testHome)
 
-    const mode = resolveOnboardingMode(testHome, {})
+    const mode = resolveOnboardingMode(testHome)
     expect(mode).toBe("workbench")
-  })
-
-  test("resolveOnboardingMode respects OPENCODE_TEST_ONBOARDING env flag", () => {
-    const state = createDefaultOnboardingState()
-    const completed = markCompleted(state)
-    writeOnboardingState(completed, testHome)
-
-    const mode = resolveOnboardingMode(testHome, { OPENCODE_TEST_ONBOARDING: "1" })
-    expect(mode).toBe("onboarding")
   })
 })
 

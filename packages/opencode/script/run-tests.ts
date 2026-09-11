@@ -3,9 +3,29 @@ import { join } from "node:path"
 
 export type RunMode = "unit" | "integration" | "e2e" | "all"
 
-// Directories that exercise real I/O (git/PTY/HTTP/subprocess) and are excluded
-// from the default unit subset. Kept as a source constant so the list is explicit.
-export const INTEGRATION_DIRS = ["server", "session", "cli", "snapshot", "project", "tool", "control-plane"]
+// Directories that exercise real I/O (git/PTY/HTTP/subprocess/fs-watch) and are
+// excluded from the default unit subset. Kept as a source constant so the list
+// is explicit. A directory belongs here when its tests predominantly need live
+// OS behavior (subprocess, git, fs watching, real HTTP) — those tests are slow
+// and non-deterministic, so they run on demand via test:integration instead of
+// on every unit pass.
+export const INTEGRATION_DIRS = [
+  "server",
+  "session",
+  "cli",
+  "snapshot",
+  "project",
+  "tool",
+  "control-plane",
+  "plugin",
+  "file",
+  "pty",
+  "skill",
+  "reference",
+  "share",
+  "mcp",
+  "lsp",
+]
 
 // e2e files follow the `*-e2e.test.ts` naming convention and are isolated from
 // unit/integration runs via pathIgnorePatterns; they run only under the e2e mode.
