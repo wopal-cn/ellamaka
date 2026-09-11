@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { NamedError } from "@wopal/ellamaka-core/util/error"
 import { APICallError } from "ai"
+import * as net from "node:net"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Layer, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
@@ -351,38 +352,40 @@ describe("session.message-v2.fromError", () => {
   test.concurrent(
     "converts ECONNRESET socket errors to retryable APIError",
     async () => {
-      using server = Bun.serve({
-        port: 0,
-        idleTimeout: 8,
-        async fetch(_req) {
-          return new Response(
-            new ReadableStream({
-              async pull(controller) {
-                controller.enqueue("Hello,")
-                await sleep(10000)
-                controller.enqueue(" World!")
-                controller.close()
-              },
-            }),
-            { headers: { "Content-Type": "text/plain" } },
-          )
-        },
+      let serverPort = 0
+      const server = net.createServer((socket) => {
+        socket.once("data", () => {
+          socket.write("HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nHello,")
+          setTimeout(() => {
+            socket.destroy()
+          }, 10)
+        })
       })
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", () => {
+          serverPort = (server.address() as net.AddressInfo).port
+          resolve()
+        }),
+      )
 
-      const error = await fetch(new URL("/", server.url.origin))
-        .then((res) => res.text())
-        .catch((e) => e)
+      try {
+        const error = await fetch(`http://127.0.0.1:${serverPort}`)
+          .then((res) => res.text())
+          .catch((e) => e)
 
-      const result = MessageV2.fromError(error, { providerID })
+        const result = MessageV2.fromError(error, { providerID })
 
-      expect(MessageV2.APIError.isInstance(result)).toBe(true)
-      if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
-      expect(result.data.isRetryable).toBe(true)
-      expect(result.data.message).toBe("Connection reset by server")
-      expect(result.data.metadata?.code).toBe("ECONNRESET")
-      expect(result.data.metadata?.message).toInclude("socket connection")
+        expect(MessageV2.APIError.isInstance(result)).toBe(true)
+        if (!MessageV2.APIError.isInstance(result)) throw new Error("expected APIError")
+        expect(result.data.isRetryable).toBe(true)
+        expect(result.data.message).toBe("Connection reset by server")
+        expect(result.data.metadata?.code).toBe("ECONNRESET")
+        expect(result.data.metadata?.message).toInclude("socket connection")
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()))
+      }
     },
-    15_000,
+    5_000,
   )
 
   test("ECONNRESET socket error is retryable", () => {

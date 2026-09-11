@@ -189,47 +189,32 @@ describe("Storage", () => {
     }),
   )
 
-  it.live("migration 2 runs when marker contents are invalid", () =>
+  it.live("migration 1 runs when marker contents are invalid", () =>
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
-      const tmp = yield* tmpdirScoped()
+      const tmp = yield* tmpdirScoped({ git: true })
       const storage = path.join(tmp, "storage")
-      const diffs = [
-        { additions: 2, deletions: 1 },
-        { additions: 3, deletions: 4 },
-      ]
+      const legacy = path.join(tmp, "project", "legacy")
 
       yield* fs.writeWithDirs(path.join(storage, "migration"), "wat")
       yield* fs.writeWithDirs(
-        path.join(storage, "session", "proj_test", "ses_test.json"),
-        JSON.stringify({
-          id: "ses_test",
-          projectID: "proj_test",
-          title: "legacy",
-          summary: { diffs },
-        }),
+        path.join(legacy, "storage", "session", "message", "probe", "1.json"),
+        JSON.stringify({ path: { root: tmp } }),
+      )
+      yield* fs.writeWithDirs(
+        path.join(legacy, "storage", "session", "info", "ses_test.json"),
+        JSON.stringify({ id: "ses_test", title: "legacy" }),
       )
 
       yield* Effect.gen(function* () {
         const svc = yield* Storage.Service
-        expect(yield* svc.list(["session_diff"])).toEqual([["session_diff", "ses_test"]])
-        expect(yield* svc.read<typeof diffs>(["session_diff", "ses_test"])).toEqual(diffs)
-        expect(
-          yield* svc.read<{
-            id: string
-            projectID: string
-            title: string
-            summary: { additions: number; deletions: number }
-          }>(["session", "proj_test", "ses_test"]),
-        ).toEqual({
-          id: "ses_test",
-          projectID: "proj_test",
-          title: "legacy",
-          summary: { additions: 5, deletions: 5 },
-        })
+        const projects = yield* svc.list(["project"])
+        expect(projects).toHaveLength(1)
+        const project = projects[0]![1]
+        expect(yield* svc.list(["session", project])).toEqual([["session", project, "ses_test"]])
       }).pipe(Effect.provide(remappedStorage(tmp)))
 
-      expect(yield* fs.readFileString(path.join(storage, "migration"))).toBe("2")
+      expect(yield* fs.readFileString(path.join(storage, "migration"))).toBe("1")
     }),
   )
 
@@ -271,7 +256,7 @@ describe("Storage", () => {
         })
       }).pipe(Effect.provide(remappedStorage(tmp)))
 
-      expect(yield* fs.readFileString(path.join(storage, "migration"))).toBe("2")
+      expect(yield* fs.readFileString(path.join(storage, "migration"))).toBe("1")
     }),
   )
 

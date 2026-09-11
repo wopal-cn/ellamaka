@@ -11,7 +11,7 @@ import { MessageID, SessionID } from "../../src/session/schema"
 import { Truncate } from "../../src/tool/truncate"
 import { RepoCloneTool } from "../../src/tool/repo_clone"
 import { RepositoryCache } from "../../src/reference/repository-cache"
-import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirInstance, tmpdirScoped, withGithubBase as githubBase } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 afterEach(async () => {
@@ -64,20 +64,6 @@ const git = Effect.fn("RepoCloneToolTest.git")(function* (cwd: string, args: str
   })
 })
 
-const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
-      return previous
-    }),
-    () => self,
-    (previous) =>
-      Effect.sync(() => {
-        if (previous) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
-        else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      }),
-  )
 
 describe("tool.repo_clone", () => {
   it.live("clones a repo into the managed cache and reuses it on subsequent calls", () =>

@@ -292,15 +292,17 @@ describe("Bun installer: failure semantics (profile untouched)", () => {
     mkdirSync(join(profileDir, "node_modules"), { recursive: true })
     const fake = fakeExtract("is-odd@3.0.1")
     const resolve = fakeResolveTree([["is-odd", "3.0.1", []]])
+    const beforeStages = new Set(readdirSync(tmpdir()).filter((d) => d.startsWith("dsh-plugins-stage-")))
     await expect(
       installPackage({ kind: "registry", name: "is-odd", version: "3.0.1" }, { home: root, extract: fake.extract, resolve }),
     ).rejects.toThrow("download failed for is-odd@3.0.1")
     // The profile manifest and node_modules are untouched.
     expect(existsSync(join(profileDir, "node_modules", "is-odd"))).toBe(false)
     expect(readProfileManifest(profileDir).dependencies).toEqual({})
-    // Nothing remains in staging.
-    const leftovers = readdirSync(tmpdir()).filter((d) => d.startsWith("dsh-plugins-stage-"))
-    expect(leftovers).toEqual([])
+    // Nothing created during staging leaked.
+    const afterStages = readdirSync(tmpdir()).filter((d) => d.startsWith("dsh-plugins-stage-"))
+    const freshLeftovers = afterStages.filter((d) => !beforeStages.has(d))
+    expect(freshLeftovers).toEqual([])
   })
 
   test("a malicious --dir manifest with traversal name is rejected (rook B-08) and writes nothing", async () => {

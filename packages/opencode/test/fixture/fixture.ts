@@ -4,7 +4,7 @@ import { Global } from "@wopal/ellamaka-core/global"
 import * as fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Effect, Context, Layer, ManagedRuntime, Scope, Exit } from "effect"
+import { Effect, Context, Layer, ManagedRuntime, Scope, Semaphore, Exit } from "effect"
 import type * as PlatformError from "effect/PlatformError"
 import type * as ScopeType from "effect/Scope"
 import { memoMap } from "@wopal/ellamaka-core/effect/memo-map"
@@ -291,3 +291,28 @@ export function provideTmpdirServer<A, E, R>(
     })
   })
 }
+
+// Several test files point OPENCODE_REPO_CLONE_GITHUB_BASE_URL at their own
+// temporary remote. Bun runs test files concurrently in one process, so those
+// writes race and clones end up hitting the wrong base URL. A single global
+// permit serializes the section that owns the variable. `Semaphore` handles
+// interruption of queued waiters safely, unlike a hand-rolled promise chain.
+const globalGithubBaseLock = ((globalThis as unknown as Record<string, unknown>).__opencode_github_base_lock ??=
+  Semaphore.makeUnsafe(1)) as Semaphore.Semaphore
+
+export const withGithubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  globalGithubBaseLock.withPermit(
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+        process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
+        return previous
+      }),
+      () => self,
+      (previous) =>
+        Effect.sync(() => {
+          if (previous !== undefined) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
+          else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
+        }),
+    ),
+  )
