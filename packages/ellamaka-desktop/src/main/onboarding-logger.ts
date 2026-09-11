@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync, rmSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, renameSync, statSync, unlinkSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -26,7 +26,7 @@ export function getOnboardingLogger(homePath?: string) {
             renameSync(logFile, `${logFile}.1`)
           }
         }
-        
+
         // Desensitize token/keys
         const safeMessage = message.replace(/(?:gh[pousr]_[a-zA-Z0-9]{36,}|sk-[a-zA-Z0-9]{32,})/g, "***")
         const timestamp = new Date().toISOString()

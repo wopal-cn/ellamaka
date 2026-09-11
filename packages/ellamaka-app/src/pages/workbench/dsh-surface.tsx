@@ -217,7 +217,6 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   // B-01: the heal target goes through healTargetUrl so the reload lands on
   // the page-origin (proxied) URL, never the raw backend entry.
   let iframeEl: HTMLIFrameElement | undefined
-  let reloadCalls = 0
   const heal = createDsh401Healer({
     getFrame: () => iframeEl,
     refetchEntry: async () => {

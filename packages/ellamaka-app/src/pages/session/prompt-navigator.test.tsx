@@ -2,7 +2,6 @@
 import { describe, expect, mock, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
-import { createSignal } from "solid-js"
 import type { JSX } from "solid-js"
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { PromptNavigator, type PromptNavigatorProps } from "./prompt-navigator"
@@ -11,7 +10,7 @@ mock.module("@wopal/ui/icon", () => ({
   Icon: (props: { name: string }) => <span data-slot="chat-icon" data-icon={props.name} />,
 }))
 
-function userMessage(id: string, text: string): UserMessage {
+function userMessage(id: string, _text: string): UserMessage {
   return {
     id,
     sessionID: "ses_1",
@@ -124,7 +123,8 @@ describe("PromptNavigator", () => {
       <PromptNavigator
         {...baseProps({
           userMessages: [u1, uNotify, u2],
-          getParts: (id: string) => (id === "u-notify" ? [syntheticPart] : [textPart(`p-${id}`, id, id === "u1" ? "hello" : "world")]),
+          getParts: (id: string) =>
+            id === "u-notify" ? [syntheticPart] : [textPart(`p-${id}`, id, id === "u1" ? "hello" : "world")],
         })}
       />
     ))
@@ -155,7 +155,8 @@ describe("PromptNavigator", () => {
       <PromptNavigator
         {...baseProps({
           userMessages: [u1, uTask, u2],
-          getParts: (id: string) => (id === "u-task" ? [taskPart] : [textPart(`p-${id}`, id, id === "u1" ? "hello" : "world")]),
+          getParts: (id: string) =>
+            id === "u-task" ? [taskPart] : [textPart(`p-${id}`, id, id === "u1" ? "hello" : "world")],
         })}
       />
     ))
@@ -581,13 +582,16 @@ describe("PromptNavigator", () => {
     timeline.style.width = "300px"
     host.appendChild(timeline)
     document.body.appendChild(host)
-    render(() => (
-      <PromptNavigator
-        {...baseProps({
-          userMessages: [u1],
-        })}
-      />
-    ), timeline)
+    render(
+      () => (
+        <PromptNavigator
+          {...baseProps({
+            userMessages: [u1],
+          })}
+        />
+      ),
+      timeline,
+    )
 
     const navigator = host.querySelector("[data-component='chat-prompt-navigator']") as HTMLElement
     const rail = host.querySelector("[data-component='chat-prompt-rail']") as HTMLElement

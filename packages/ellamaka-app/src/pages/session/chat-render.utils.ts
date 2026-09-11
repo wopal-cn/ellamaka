@@ -73,7 +73,7 @@ function isRunning(message: AssistantMessage): boolean {
  * role or completion state. Todo tool parts are owned by the composer todo
  * dock and never enter the transcript.
  */
-export function isRenderablePart(part: Part, message: Message): boolean {
+export function isRenderablePart(part: Part, _message: Message): boolean {
   if (HIDDEN_PART_TYPES.has(part.type)) return false
   if (part.type === "tool" && HIDDEN_TOOLS.has(part.tool)) return false
   return true

@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { render } from "solid-js/web"
-import {
-  clonePersistedWorkbench,
-  createWorkbenchStore,
-  PERSISTED_DEFAULTS,
-} from "./workbench-store"
-import { watchWorkbenchPersistence, initWorkbenchState } from "./view-store"
+import { clonePersistedWorkbench, createWorkbenchStore, PERSISTED_DEFAULTS } from "./workbench-store"
+import { initWorkbenchState } from "./view-store"
 
 describe("view-store reactive guard", () => {
   test("queues persistence when a persisted store field changes", () => {
@@ -101,7 +96,9 @@ describe("view-store diagnostics", () => {
 
     state.setStatusMessage("Refreshing space...")
     expect(state.diagnostics.length).toBe(2)
-    expect(state.diagnostics.some((item: any) => item.text === "Refreshing space..." && item.type === "info")).toBe(true)
+    expect(state.diagnostics.some((item: any) => item.text === "Refreshing space..." && item.type === "info")).toBe(
+      true,
+    )
 
     state.removeDiagnostic(errId)
     expect(state.diagnostics.length).toBe(1)

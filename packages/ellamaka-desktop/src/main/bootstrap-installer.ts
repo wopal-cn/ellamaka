@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { OnboardingStepResult } from "../preload/types"
@@ -162,7 +162,7 @@ export async function installWopalCli(options: InstallWopalCliOptions = {}): Pro
     // Remove the final "exec wopal setup" line to prevent process replacement
     modifiedScript = scriptContent.replace(
       /exec\s+"\$\{WOPAL_BIN\}\/wopal"\s+setup\s*<\s*\/dev\/tty/,
-      'echo "Installation complete. Run wopal setup manually."'
+      'echo "Installation complete. Run wopal setup manually."',
     )
   }
 
@@ -204,7 +204,11 @@ export async function installWopalCli(options: InstallWopalCliOptions = {}): Pro
     const cleanup = () => {
       if (timer) clearTimeout(timer)
       options.abortSignal?.removeEventListener("abort", abortHandler)
-      try { rmSync(tmpDir, { recursive: true, force: true }) } catch { /* best-effort */ }
+      try {
+        rmSync(tmpDir, { recursive: true, force: true })
+      } catch {
+        /* best-effort */
+      }
     }
 
     const stop = async (result: OnboardingStepResult) => {

@@ -1,7 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test"
 import {
   SidecarSupervisor,
-  type SidecarRuntimeState,
   type SidecarRuntimeStatus,
   type SidecarSpawnResult,
   type SidecarSpawnFactory,
@@ -518,7 +517,9 @@ describe("SidecarSupervisor", () => {
     await tick()
 
     let rejected = false
-    supervisor.waitForReady().catch(() => { rejected = true })
+    supervisor.waitForReady().catch(() => {
+      rejected = true
+    })
 
     // First spawn fails immediately
     mockSpawner.reject(new Error("fail"))
@@ -626,7 +627,9 @@ describe("SidecarSupervisor", () => {
     const r1 = createSpawnResult()
     // Override stop to trigger exit (simulating real sidecar behavior)
     let exitCode = 0
-    r1.result.listener.stop = async () => { mockSpawner.triggerExit(exitCode) }
+    r1.result.listener.stop = async () => {
+      mockSpawner.triggerExit(exitCode)
+    }
     mockSpawner.resolve(r1.result)
     r1.passHealth()
     await startPromise

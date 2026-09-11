@@ -32,15 +32,13 @@ mock.module("./shell-env", () => ({
     ...shellEnv,
     ...env,
   }),
-  resolveShellPath: (shellEnv: Record<string, string> | null, appPath: string | undefined) =>
-    shellEnv?.PATH ?? appPath,
+  resolveShellPath: (shellEnv: Record<string, string> | null, appPath: string | undefined) => shellEnv?.PATH ?? appPath,
 }))
 
 const { createSidecarEnv, preferAppEnv } = await import("./server")
 const {
   captureSidecarExperimentalConfig,
   clearSidecarCredentials,
-  getCapturedSidecarExperimentalConfig,
   isSidecarOnlyOpencodeKey,
   listenThenClearCredentials,
   SIDECAR_ONLY_OPENCODE_KEYS,
@@ -248,7 +246,12 @@ describe("preferAppEnv", () => {
       OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true",
       OPENCODE_EXPERIMENTAL_PARALLEL: "true",
     }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH", "OPENCODE_EXPERIMENTAL_NATIVE_LLM", "OPENCODE_EXPERIMENTAL_PARALLEL"])
+    const saved = snapshotKeys([
+      ...OPENCODE_KEYS,
+      "PATH",
+      "OPENCODE_EXPERIMENTAL_NATIVE_LLM",
+      "OPENCODE_EXPERIMENTAL_PARALLEL",
+    ])
     clearOpencodeEnv()
 
     try {

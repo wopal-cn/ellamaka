@@ -20,7 +20,6 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
-import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
@@ -31,11 +30,7 @@ type RenderDiff = VcsFileDiff
 
 function renderDiff(value: unknown): value is RenderDiff {
   return (
-    !!value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    "file" in value &&
-    typeof value.file === "string"
+    !!value && typeof value === "object" && !Array.isArray(value) && "file" in value && typeof value.file === "string"
   )
 }
 
@@ -54,7 +49,6 @@ export function SessionSidePanel(props: {
 }) {
   const layout = useLayout()
   const platform = usePlatform()
-  const sync = useSync()
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()

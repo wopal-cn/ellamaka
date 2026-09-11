@@ -1,7 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
-import { existsSync, mkdirSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { homedir } from "node:os"
+import { existsSync } from "node:fs"
 import type { OnboardingStepResult } from "../preload/types"
 import { terminateChildProcessTree } from "./child-process-lifecycle"
 import { checkWopalCliVersion, checkEngineMajorMinor } from "./version-check"
@@ -68,7 +66,10 @@ export function resolveWopalCliEntry(binaryPath: string): { command: string; spa
   // In development, prefer local source over downloaded binary
   if (process.env.WOPAL_DEV_CLI_PATH && existsSync(process.env.WOPAL_DEV_CLI_PATH)) {
     if (process.env.WOPAL_DEV_CLI_PATH.endsWith(".ts")) {
-      return { command: "bun", spawnArgs: [process.env.WOPAL_DEV_CLI_PATH, "setup", "--machine", "--json", "--api-version", "1"] }
+      return {
+        command: "bun",
+        spawnArgs: [process.env.WOPAL_DEV_CLI_PATH, "setup", "--machine", "--json", "--api-version", "1"],
+      }
     }
   }
 
@@ -81,9 +82,8 @@ export function resolveWopalCliEntry(binaryPath: string): { command: string; spa
 
 export async function runSetupOperation(options: RunSetupOperationOptions): Promise<OnboardingStepResult> {
   const { binaryPath, operation, input = {}, onProgress, spawnFn, abortSignal } = options
-  const timeoutMs = options.timeoutMs ?? (
-    operation === "install-engine" ? 600000 : operation === "prepare-ontology" ? 300000 : 120000
-  )
+  const timeoutMs =
+    options.timeoutMs ?? (operation === "install-engine" ? 600000 : operation === "prepare-ontology" ? 300000 : 120000)
   const inactivityTimeoutMs = options.inactivityTimeoutMs ?? (operation === "install-engine" ? 45000 : 0)
 
   const resolved = resolveWopalCliEntry(binaryPath)
@@ -117,7 +117,7 @@ export async function runSetupOperation(options: RunSetupOperationOptions): Prom
           }
         }
       }
-    } catch (e) {
+    } catch {
       // Ignore version check errors
     }
   }
@@ -186,17 +186,18 @@ export async function runSetupOperation(options: RunSetupOperationOptions): Prom
     const timer = setTimeout(() => {
       void stop({
         status: "failed",
-        error: operation === "install-engine"
-          ? {
-              code: "ENGINE_INSTALL_TIMEOUT",
-              message: "Ellamaka AI 引擎安装超时，已停止本次安装。",
-              suggestion: "请检查网络连接或代理设置，确认网络恢复后点击下方“重试安装”。",
-              details: `Operation '${operation}' timed out after ${timeoutMs}ms.`,
-            }
-          : {
-              code: "SETUP_OPERATION_TIMEOUT",
-              message: `Operation '${operation}' timed out after ${timeoutMs}ms.`,
-            },
+        error:
+          operation === "install-engine"
+            ? {
+                code: "ENGINE_INSTALL_TIMEOUT",
+                message: "Ellamaka AI 引擎安装超时，已停止本次安装。",
+                suggestion: "请检查网络连接或代理设置，确认网络恢复后点击下方“重试安装”。",
+                details: `Operation '${operation}' timed out after ${timeoutMs}ms.`,
+              }
+            : {
+                code: "SETUP_OPERATION_TIMEOUT",
+                message: `Operation '${operation}' timed out after ${timeoutMs}ms.`,
+              },
       })
     }, timeoutMs)
 
@@ -316,10 +317,14 @@ export async function runSetupOperation(options: RunSetupOperationOptions): Prom
           // Map CLI status to Desktop status:
           //   created → completed, reused → reused, skipped → skipped
           const cliStatus = envelope.data.status as string
-          const desktopStatus = cliStatus === "created" ? "completed"
-            : cliStatus === "reused" ? "reused"
-            : cliStatus === "skipped" ? "skipped"
-            : "__invalid__"
+          const desktopStatus =
+            cliStatus === "created"
+              ? "completed"
+              : cliStatus === "reused"
+                ? "reused"
+                : cliStatus === "skipped"
+                  ? "skipped"
+                  : "__invalid__"
 
           if (desktopStatus === "__invalid__") {
             return resolve({
@@ -363,17 +368,13 @@ export async function runSetupOperation(options: RunSetupOperationOptions): Prom
           })
         }
         if (envelope.ok === false && envelope.error) {
-          const upstreamDetails = typeof envelope.error.details === "string"
-            ? envelope.error.details
-            : undefined
+          const upstreamDetails = typeof envelope.error.details === "string" ? envelope.error.details : undefined
           return resolve({
             status: "failed",
             error: {
               code: envelope.error.code ?? "SETUP_OPERATION_FAILED",
               message: envelope.error.message ?? "Operation failed",
-              suggestion: typeof envelope.error.suggestion === "string"
-                ? envelope.error.suggestion
-                : undefined,
+              suggestion: typeof envelope.error.suggestion === "string" ? envelope.error.suggestion : undefined,
               details: buildOperationDetails({
                 operation,
                 command,

@@ -1,10 +1,4 @@
-import type {
-  AssistantMessage,
-  Message,
-  Part,
-  SessionStatus,
-  UserMessage,
-} from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import { isRenderablePart } from "./chat-render.utils"
 
 /**
@@ -80,8 +74,6 @@ export type TranscriptProjection = {
   /** userMessageID -> first transcript row key, used by PromptNavigator. */
   promptIndex: Map<string, string>
 }
-
-const emptyParts: Part[] = []
 
 function isUserMessage(message: Message): message is UserMessage {
   return message.role === "user"
@@ -184,9 +176,6 @@ function buildTurnRows(
     const userParts = getParts(turn.user.id)
     rows.push({ type: "user", key: userRowKey(turnID), turnID, message: turn.user, parts: userParts })
   }
-
-  const running = turn.assistant.some(isRunning)
-  const active = status.type !== "idle"
 
   for (let messageIndex = 0; messageIndex < turn.assistant.length; messageIndex++) {
     const message = turn.assistant[messageIndex]!
@@ -383,7 +372,11 @@ export function projectTranscript(input: TranscriptProjectionInput): TranscriptP
   turns.forEach((turn, index) => {
     const turnRows = buildTurnRows(turn, getParts, status, live, showReasoningSummaries)
     rows.push(...turnRows)
-    if (!promptIndex.has(turn.id)) promptIndex.set(turn.id, turnRows[0]?.key ?? (isCompactionMarker(turn.user, getParts) ? compactionRowKey(turn.id) : userRowKey(turn.id)))
+    if (!promptIndex.has(turn.id))
+      promptIndex.set(
+        turn.id,
+        turnRows[0]?.key ?? (isCompactionMarker(turn.user, getParts) ? compactionRowKey(turn.id) : userRowKey(turn.id)),
+      )
 
     const isLiveTurn = hasLiveTurn && index >= liveTurnIndex
     const turnRunning = turn.assistant.some(isRunning)
@@ -397,7 +390,9 @@ export function projectTranscript(input: TranscriptProjectionInput): TranscriptP
     }
   })
 
-  const partition = input.stabilize ? { virtual: [] as TranscriptRow[], direct: [] as TranscriptRow[] } : { virtual, direct }
+  const partition = input.stabilize
+    ? { virtual: [] as TranscriptRow[], direct: [] as TranscriptRow[] }
+    : { virtual, direct }
   if (input.stabilize) {
     // Stabilize across the whole partition in one pass so the cache sweep does
     // not evict rows that live in the other half of the partition.

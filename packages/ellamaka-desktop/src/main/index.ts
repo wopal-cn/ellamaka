@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { EventEmitter } from "node:events"
-import { existsSync, mkdirSync, rmSync } from "node:fs"
+import { mkdirSync, rmSync } from "node:fs"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir, tmpdir } from "node:os"
@@ -14,8 +14,24 @@ import contextMenu from "electron-context-menu"
 import type { InitStep, SidecarRuntimeState, SqliteMigrationProgress } from "../preload/types"
 import { checkAppExists } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
-import { broadcastSidecarState, registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress, unregisterIpcHandlers } from "./ipc"
-import { exportDebugLogs, initCrashReporter, initLogging, isDebugLogging, setSidecarLogLevelHandler, startNetLog, toggleDebugLogging, write as writeLog } from "./logging"
+import {
+  broadcastSidecarState,
+  registerIpcHandlers,
+  sendDeepLinks,
+  sendMenuCommand,
+  sendSqliteMigrationProgress,
+  unregisterIpcHandlers,
+} from "./ipc"
+import {
+  exportDebugLogs,
+  initCrashReporter,
+  initLogging,
+  isDebugLogging,
+  setSidecarLogLevelHandler,
+  startNetLog,
+  toggleDebugLogging,
+  write as writeLog,
+} from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
 import { createSidecarSpawner, preferAppEnv } from "./server"
@@ -257,7 +273,11 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
         },
         (e) => Effect.runPromise(e),
       ),
-      getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED, version: getReleaseInfo().displayVersion, dshProxyOrigin: getDshHttpProxyOrigin() }),
+      getWindowConfig: () => ({
+        updaterEnabled: UPDATER_ENABLED,
+        version: getReleaseInfo().displayVersion,
+        dshProxyOrigin: getDshHttpProxyOrigin(),
+      }),
       consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
       getDisplayBackend: async () => null,
       setDisplayBackend: async () => undefined,
@@ -494,12 +514,16 @@ const main = Effect.gen(function* () {
       homePath: process.env.WOPAL_HOME,
       killSidecar: () => Promise.resolve(),
       awaitInitialization: Effect.fnUntraced(
-        function* (sendStep) {
+        function* (_sendStep) {
           return { url: "", username: null, password: null } as any
         },
         (e) => Effect.runPromise(e),
       ),
-      getWindowConfig: () => ({ updaterEnabled: UPDATER_ENABLED, version: getReleaseInfo().displayVersion, dshProxyOrigin: getDshHttpProxyOrigin() }),
+      getWindowConfig: () => ({
+        updaterEnabled: UPDATER_ENABLED,
+        version: getReleaseInfo().displayVersion,
+        dshProxyOrigin: getDshHttpProxyOrigin(),
+      }),
       consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
       getDisplayBackend: async () => null,
       setDisplayBackend: async () => undefined,
@@ -512,7 +536,7 @@ const main = Effect.gen(function* () {
       setBackgroundColor: (color) => setBackgroundColor(color),
       exportDebugLogs: () => exportDebugLogs(),
       recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
-      getSidecarState: () => ({ status: "stopped", onboarding: true } as any),
+      getSidecarState: () => ({ status: "stopped", onboarding: true }) as any,
       restartSidecar: () => Promise.resolve(),
       subscribeToSidecarState: () => () => {},
     })
@@ -520,7 +544,7 @@ const main = Effect.gen(function* () {
     mainWindow = createMainWindow()
     if (mainWindow) {
       interceptWindowClose(mainWindow, {
-        getSidecarState: () => ({ status: "stopped", onboarding: true } as any),
+        getSidecarState: () => ({ status: "stopped", onboarding: true }) as any,
         stopSidecar: () => Promise.resolve(),
       })
       createMenu({

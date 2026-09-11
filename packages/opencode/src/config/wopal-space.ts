@@ -3,14 +3,13 @@ import { mergeDeep } from "remeda"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { Global } from "@wopal/ellamaka-core/global"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
-import { InstallationLocal, InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { ConfigParse } from "./parse"
 import { ConfigCommand } from "./command"
 import { ConfigAgent } from "./agent"
 import { Glob } from "@wopal/ellamaka-core/util/glob"
 import { ConfigPlugin } from "./plugin"
 import { loadWopalSpaceSettingsFiles } from "./wopal-space-settings"
-import { Effect, Exit, Fiber } from "effect"
+import { Effect, Fiber } from "effect"
 import type { Info } from "./config"
 import type { ConsoleState } from "./console-state"
 import { existsSync, renameSync } from "fs"
@@ -47,7 +46,10 @@ function depsStatePath(customPath?: string) {
 }
 
 export function hashDeps(deps: InstallDependency[]): string {
-  const str = deps.map((d) => `${d.name}@${d.version ?? ""}`).sort().join(",")
+  const str = deps
+    .map((d) => `${d.name}@${d.version ?? ""}`)
+    .sort()
+    .join(",")
   let hash = 5381
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash + str.charCodeAt(i)) >>> 0
@@ -166,7 +168,11 @@ export function withPluginDepInstallLock<T>(dir: string, fn: () => Promise<T>): 
   return run
 }
 
-export async function writeInstallManifest(dir: string, deps: InstallDependency[], extraDeps?: InstallDependency[]): Promise<void> {
+export async function writeInstallManifest(
+  dir: string,
+  deps: InstallDependency[],
+  extraDeps?: InstallDependency[],
+): Promise<void> {
   const dependencies: Record<string, string> = {}
   for (const dep of [...(extraDeps ?? []), ...deps]) {
     dependencies[dep.name] = dep.version ?? "latest"
@@ -277,9 +283,12 @@ export interface WopalSpaceResult {
   consoleState: ConsoleState
 }
 
-export function tryLoadWopalSpaceConfig(deps: WopalSpaceDeps, ctx: {
-  directory: string
-}) {
+export function tryLoadWopalSpaceConfig(
+  deps: WopalSpaceDeps,
+  ctx: {
+    directory: string
+  },
+) {
   return Effect.gen(function* () {
     if (Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       return undefined
@@ -326,7 +335,9 @@ export function tryLoadWopalSpaceConfig(deps: WopalSpaceDeps, ctx: {
         }
       }
       if (!loaded) {
-        log.warn("wopal space detected but no settings.jsonc or settings.local.jsonc with ellamaka field found", { dir })
+        log.warn("wopal space detected but no settings.jsonc or settings.local.jsonc with ellamaka field found", {
+          dir,
+        })
       }
     }
 

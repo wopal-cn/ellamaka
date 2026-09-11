@@ -49,7 +49,7 @@ describe("onboarding-ipc", () => {
   })
 
   test("onboardingExecuteStep executes handler and updates state", async () => {
-    const executor = async (step: string, input: any) => {
+    const executor = async (_step: string, _input: any) => {
       return { status: "completed" as const, result: { ok: true } }
     }
 
@@ -123,14 +123,15 @@ describe("onboarding-ipc", () => {
   test("onboardingComplete marks state as completed only when snapshot is ready", async () => {
     const executor = async (step: string) => ({
       status: "reused" as const,
-      result: step === "inspect"
-        ? {
-            engineInstalled: true,
-            ontologyInstalled: true,
-            runtime: { ready: true },
-            spaces: [{ name: "space1", path: join(testHome, "space1") }],
-          }
-        : {},
+      result:
+        step === "inspect"
+          ? {
+              engineInstalled: true,
+              ontologyInstalled: true,
+              runtime: { ready: true },
+              spaces: [{ name: "space1", path: join(testHome, "space1") }],
+            }
+          : {},
     })
     const handlers = createOnboardingIpcHandlers({ homePath: testHome, executeStep: executor })
     const result = await handlers["onboarding-complete"]()
@@ -634,8 +635,14 @@ describe("onboarding-ipc", () => {
     const wopal = await handlers["onboarding-probe"]({}, "wopal-cli")
     const ellamaka = await handlers["onboarding-probe"]({}, "ellamaka-cli")
 
-    expect(wopal).toMatchObject({ installed: false, binaryPath: join(testHome, "bin", process.platform === "win32" ? "wopal.exe" : "wopal") })
-    expect(ellamaka).toMatchObject({ installed: false, binaryPath: join(testHome, "bin", process.platform === "win32" ? "ellamaka.exe" : "ellamaka") })
+    expect(wopal).toMatchObject({
+      installed: false,
+      binaryPath: join(testHome, "bin", process.platform === "win32" ? "wopal.exe" : "wopal"),
+    })
+    expect(ellamaka).toMatchObject({
+      installed: false,
+      binaryPath: join(testHome, "bin", process.platform === "win32" ? "ellamaka.exe" : "ellamaka"),
+    })
     expect(readOnboardingState(testHome)).toBeNull()
   })
 
@@ -777,11 +784,18 @@ describe("onboarding-ipc", () => {
 
     const space = { name: "space1", path: join(testHome, "space1"), type: "common" }
     mkdirSync(join(space.path, ".wopal"), { recursive: true })
-    writeFileSync(join(space.path, ".wopal", ".env"), "WOPAL_MEMORY_ENABLED=false\nWOPAL_LLM_BASE_URL=https://space.api.com\n", "utf-8")
+    writeFileSync(
+      join(space.path, ".wopal", ".env"),
+      "WOPAL_MEMORY_ENABLED=false\nWOPAL_LLM_BASE_URL=https://space.api.com\n",
+      "utf-8",
+    )
 
     const handlers = createOnboardingIpcHandlers({
       homePath: testHome,
-      executeStep: async () => ({ status: "reused", result: { memory: { state: "unconfigured", enabled: false }, spaces: [space] } }),
+      executeStep: async () => ({
+        status: "reused",
+        result: { memory: { state: "unconfigured", enabled: false }, spaces: [space] },
+      }),
     })
 
     const result = await handlers["onboarding-probe"]({}, "memory")
@@ -843,13 +857,15 @@ describe("onboarding-ipc", () => {
   })
 
   test("buildMemoryOperationInput forwards only supported fields", () => {
-    expect(buildMemoryOperationInput({
-      enabled: true,
-      llmEndpoint: "https://api.example.com",
-      llmKey: "secret",
-      embeddingModel: "embed",
-      advanced: { backend: "sqlite" },
-    })).toEqual({
+    expect(
+      buildMemoryOperationInput({
+        enabled: true,
+        llmEndpoint: "https://api.example.com",
+        llmKey: "secret",
+        embeddingModel: "embed",
+        advanced: { backend: "sqlite" },
+      }),
+    ).toEqual({
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmKey: "secret",
@@ -869,19 +885,27 @@ describe("onboarding-ipc", () => {
     // Simulate the legacy CLI behavior: configure-memory always writes global state.
     // Space-scoped changes must never invoke this global-only operation.
     const fakeCliPath = join(testHome, "fake-wopal.ts")
-    writeFileSync(fakeCliPath, `
+    writeFileSync(
+      fakeCliPath,
+      `
 import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 await Bun.stdin.text()
 writeFileSync(join(process.env.WOPAL_HOME ?? "", ".env"), "WOPAL_MEMORY_ENABLED=true\\n", "utf-8")
 console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: true, data: { operation: "configure-memory", status: "created", result: {} } }))
-`, "utf-8")
+`,
+      "utf-8",
+    )
     const previousDevCliPath = process.env.WOPAL_DEV_CLI_PATH
     process.env.WOPAL_DEV_CLI_PATH = fakeCliPath
 
     // Setup space env with custom override WOPAL_MEMORY_ENABLED=true and non-memory OTHER_VAR
     const spaceEnvPath = join(spaceWopalDir, ".env")
-    writeFileSync(spaceEnvPath, "WOPAL_MEMORY_ENABLED=true\nWOPAL_LLM_BASE_URL=https://space.api.com\nOTHER_VAR=value\n", "utf-8")
+    writeFileSync(
+      spaceEnvPath,
+      "WOPAL_MEMORY_ENABLED=true\nWOPAL_LLM_BASE_URL=https://space.api.com\nOTHER_VAR=value\n",
+      "utf-8",
+    )
 
     const handlers = createOnboardingIpcHandlers({ homePath: testHome })
 
@@ -947,7 +971,11 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
     // Mock probeWopalSpaceList to return spaceDir when detected
     const mockBin = join(testHome, "bin", process.platform === "win32" ? "wopal.exe" : "wopal")
     mkdirSync(join(testHome, "bin"), { recursive: true })
-    writeFileSync(mockBin, "#!/bin/sh\necho '{\"ok\":true,\"data\":{\"items\":[{\"name\":\"space1\",\"path\":\"" + spaceDir + "\"}]}}'", { mode: 0o755 })
+    writeFileSync(
+      mockBin,
+      '#!/bin/sh\necho \'{"ok":true,"data":{"items":[{"name":"space1","path":"' + spaceDir + "\"}]}}'",
+      { mode: 0o755 },
+    )
 
     const handlers = createOnboardingIpcHandlers({ homePath: testHome })
 
@@ -1094,7 +1122,8 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
 
   test("onboardingExecuteStep create-space skip on fresh env returns failed", async () => {
     const executor = async (step: string, input: any) => {
-      if ((input as any)?.skip) return { status: "failed" as const, error: { code: "NO_EXISTING_SPACE", message: "cannot skip" } }
+      if ((input as any)?.skip)
+        return { status: "failed" as const, error: { code: "NO_EXISTING_SPACE", message: "cannot skip" } }
       return { status: "completed" as const, result: {} }
     }
     const handlers = createOnboardingIpcHandlers({ homePath: testHome, executeStep: executor })
@@ -1250,14 +1279,15 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
 
     const executor = async (step: string) => ({
       status: "reused" as const,
-      result: step === "inspect"
-        ? {
-            engineInstalled: true,
-            ontologyInstalled: true,
-            runtime: { ready: true },
-            spaces: [{ name: "space1", path: join(testHome, "space1") }],
-          }
-        : {},
+      result:
+        step === "inspect"
+          ? {
+              engineInstalled: true,
+              ontologyInstalled: true,
+              runtime: { ready: true },
+              spaces: [{ name: "space1", path: join(testHome, "space1") }],
+            }
+          : {},
     })
     const handlers = createOnboardingIpcHandlers({ homePath: testHome, executeStep: executor })
     const result = await handlers["onboarding-complete"]()
@@ -1298,8 +1328,16 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
     // Both operations ran.
     expect(operations).toEqual(["prepare-ontology", "prepare-runtime"])
     // The preparation progress reached the renderer LogDrawer.
-    expect(events.some((e) => e.step === "ontology-setup" && e.phase === "prepare-runtime" && e.message?.includes("settings"))).toBe(true)
-    expect(events.some((e) => e.step === "ontology-setup" && e.phase === "prepare-runtime" && e.message?.includes("capabilities"))).toBe(true)
+    expect(
+      events.some(
+        (e) => e.step === "ontology-setup" && e.phase === "prepare-runtime" && e.message?.includes("settings"),
+      ),
+    ).toBe(true)
+    expect(
+      events.some(
+        (e) => e.step === "ontology-setup" && e.phase === "prepare-runtime" && e.message?.includes("capabilities"),
+      ),
+    ).toBe(true)
   })
 
   test("create-space forwards initialize-space progress to the LogDrawer", async () => {
@@ -1310,7 +1348,10 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
       if (opts.operation === "initialize-space") {
         opts.onProgress?.({ phase: "initialize-space", message: "reconciling space worktree (3/5)" })
       }
-      return { status: "completed" as const, result: { spaceName: "space1", spacePath: join(testHome, "space1") } } as any
+      return {
+        status: "completed" as const,
+        result: { spaceName: "space1", spacePath: join(testHome, "space1") },
+      } as any
     })
 
     try {
@@ -1324,6 +1365,10 @@ console.log(JSON.stringify({ capability: "setup.operation", apiVersion: 1, ok: t
       spy.mockRestore()
     }
 
-    expect(events.some((e) => e.step === "create-space" && e.phase === "initialize-space" && e.message?.includes("space worktree"))).toBe(true)
+    expect(
+      events.some(
+        (e) => e.step === "create-space" && e.phase === "initialize-space" && e.message?.includes("space worktree"),
+      ),
+    ).toBe(true)
   })
 })

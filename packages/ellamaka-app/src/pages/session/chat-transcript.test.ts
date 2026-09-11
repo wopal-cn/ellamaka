@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type {
-  AssistantMessage,
-  Message,
-  Part,
-  SessionStatus,
-  UserMessage,
-} from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
 import {
   ASSISTANT_SEGMENT_PARTS,
   createRowStabilizer,
@@ -13,8 +7,6 @@ import {
   nearestUserTurnID,
   projectTranscript,
   rowKey,
-  type ChatTurn,
-  type TranscriptPartition,
   type TranscriptRow,
 } from "./chat-transcript"
 
@@ -56,18 +48,6 @@ function reasoningPart(id: string, messageID: string, text: string): Part {
   return { id, sessionID: "ses_1", messageID, type: "reasoning", text, time: { start: 0, end: 1 } }
 }
 
-function toolPart(id: string, messageID: string, tool: string, callID: string): Part {
-  return {
-    id,
-    sessionID: "ses_1",
-    messageID,
-    type: "tool",
-    callID,
-    tool,
-    state: { status: "completed", input: {}, output: "", title: tool, metadata: {}, time: { start: 0, end: 1 } },
-  }
-}
-
 function stepStartPart(id: string, messageID: string): Part {
   return { id, sessionID: "ses_1", messageID, type: "step-start" }
 }
@@ -107,8 +87,12 @@ describe("projectTranscript", () => {
       showReasoningSummaries: true,
     })
 
-    expect(defaultOff.rows.flatMap((row) => (row.type === "assistant" ? row.parts : [])).map((part) => part.id)).toEqual(["r1", "p1"])
-    expect(defaultOn.rows.flatMap((row) => (row.type === "assistant" ? row.parts : [])).map((part) => part.id)).toEqual(["r1", "p1"])
+    expect(
+      defaultOff.rows.flatMap((row) => (row.type === "assistant" ? row.parts : [])).map((part) => part.id),
+    ).toEqual(["r1", "p1"])
+    expect(defaultOn.rows.flatMap((row) => (row.type === "assistant" ? row.parts : [])).map((part) => part.id)).toEqual(
+      ["r1", "p1"],
+    )
   })
 
   test("groups assistant messages by parentID into stable turns", () => {
@@ -181,11 +165,7 @@ describe("projectTranscript", () => {
   test("hides non-renderable parts from assistant segments", () => {
     const u1 = userMessage("u1")
     const a1 = assistantMessage("a1", "u1")
-    const parts: Part[] = [
-      stepStartPart("s1", "a1"),
-      textPart("p1", "a1", "visible"),
-      stepStartPart("s2", "a1"),
-    ]
+    const parts: Part[] = [stepStartPart("s1", "a1"), textPart("p1", "a1", "visible"), stepStartPart("s2", "a1")]
 
     const { rows } = projectTranscript({ messages: [u1, a1], getParts: partsByID(parts), status: idle })
 
@@ -198,11 +178,7 @@ describe("projectTranscript", () => {
     const u1 = userMessage("u1")
     const a1 = assistantMessage("a1", "u1")
     const a2 = assistantMessage("a2", "u1")
-    const parts = [
-      textPart("p1", "u1", "hello"),
-      textPart("p2", "a1", "中间回复"),
-      textPart("p3", "a2", "最终回复"),
-    ]
+    const parts = [textPart("p1", "u1", "hello"), textPart("p2", "a1", "中间回复"), textPart("p3", "a2", "最终回复")]
 
     const { rows } = projectTranscript({ messages: [u1, a1, a2], getParts: partsByID(parts), status: idle })
 
@@ -222,9 +198,7 @@ describe("projectTranscript", () => {
 
     const { rows } = projectTranscript({ messages: [u1, a1], getParts: partsByID(parts), status: idle })
 
-    const assistantRows = rows.filter(
-      (r): r is Extract<TranscriptRow, { type: "assistant" }> => r.type === "assistant",
-    )
+    const assistantRows = rows.filter((r): r is Extract<TranscriptRow, { type: "assistant" }> => r.type === "assistant")
     expect(assistantRows).toHaveLength(2)
     expect(assistantRows[0]?.metaPartID).toBeUndefined()
     expect(assistantRows[1]?.metaPartID).toBe(`p${ASSISTANT_SEGMENT_PARTS + 4}`)
@@ -250,9 +224,9 @@ describe("projectTranscript", () => {
     })
 
     const findAssistant = (rows: TranscriptRow[], messageID: string) =>
-      rows.filter((r): r is Extract<TranscriptRow, { type: "assistant" }> => r.type === "assistant").find(
-        (r) => r.message.id === messageID,
-      )
+      rows
+        .filter((r): r is Extract<TranscriptRow, { type: "assistant" }> => r.type === "assistant")
+        .find((r) => r.message.id === messageID)
     const firstRow = findAssistant(first.rows, "a1")
     const secondRow = findAssistant(second.rows, "a1")
     expect(firstRow).toBeDefined()
@@ -492,7 +466,14 @@ describe("compaction marker projection", () => {
 
   test("isCompactionMarker is false for a user message with file or agent parts", () => {
     const u1 = userMessage("u1")
-    const filePart: Part = { id: "f1", sessionID: "ses_1", messageID: "u1", type: "file", mime: "text/plain", url: "file:///x" }
+    const filePart: Part = {
+      id: "f1",
+      sessionID: "ses_1",
+      messageID: "u1",
+      type: "file",
+      mime: "text/plain",
+      url: "file:///x",
+    }
     expect(isCompactionMarker(u1, partsByID([compactionPart("cp1", "u1"), filePart]))).toBe(false)
   })
 

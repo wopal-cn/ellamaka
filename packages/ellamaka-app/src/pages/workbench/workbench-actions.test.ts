@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { createComputed, createMemo, createRenderEffect, createRoot } from "solid-js"
-import { createWorkbenchActions, type WorkbenchActionPanel, type WorkbenchActionSession, type WorkbenchActionStorePort } from "./workbench-actions"
+import { createMemo, createRoot } from "solid-js"
+import {
+  createWorkbenchActions,
+  type WorkbenchActionPanel,
+  type WorkbenchActionSession,
+  type WorkbenchActionStorePort,
+} from "./workbench-actions"
 import { scopePath, spaceScope } from "./workbench-scope"
 
 function deferred<T>() {
@@ -29,7 +34,7 @@ function createStorePort(options?: { withPty?: boolean }) {
   const store: WorkbenchActionStorePort = {
     panel: (_scope, panelID) => (panel.id === panelID ? panel : undefined),
     panels: () => [panel],
-    boundPanels: (sessionID) => panel.boundSessionId === sessionID ? [{ scope, panelID: panel.id, panel }] : [],
+    boundPanels: (sessionID) => (panel.boundSessionId === sessionID ? [{ scope, panelID: panel.id, panel }] : []),
     active: () => ({ scope, panelID: panel.id }),
     addPanel: () => undefined,
     setActivePanel: () => {},
@@ -196,7 +201,9 @@ describe("WorkbenchActions", () => {
         get: async () => nextSession,
         project: () => {},
         rename: async () => {},
-        remove: async ({ session }) => { removed.push(session.id) },
+        remove: async ({ session }) => {
+          removed.push(session.id)
+        },
       },
     })
 
@@ -244,7 +251,9 @@ describe("WorkbenchActions", () => {
       session: {
         ...unusedSessionPort,
         get: () => fetched.promise,
-        project: ({ session }) => { projected.push(session.id) },
+        project: ({ session }) => {
+          projected.push(session.id)
+        },
       },
     })
 
@@ -269,23 +278,29 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store: state.store,
       pty: {
-        disposePanel: async ({ panel }) => { disposed.push(panel.id) },
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
       session: {
         ...unusedSessionPort,
         get: async () => ({ ...nextSession, id: "session-old", timeArchived: 1 }),
-        project: ({ session }) => { projected.push(session.id) },
+        project: ({ session }) => {
+          projected.push(session.id)
+        },
       },
     })
 
-    expect(await actions.refreshSession({
-      scope,
-      panelID: state.panel().id,
-      sessionID: "session-old",
-      directory: state.panel().directory,
-    })).toEqual({ status: "committed", panelID: "panel-space-a", unavailableReason: "archived" })
+    expect(
+      await actions.refreshSession({
+        scope,
+        panelID: state.panel().id,
+        sessionID: "session-old",
+        directory: state.panel().directory,
+      }),
+    ).toEqual({ status: "committed", panelID: "panel-space-a", unavailableReason: "archived" })
     expect(disposed).toEqual(["panel-space-a"])
     expect(projected).toEqual([])
     expect(state.panel().slotState).toBe("empty")
@@ -298,23 +313,29 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store: state.store,
       pty: {
-        disposePanel: async ({ panel }) => { disposed.push(panel.id) },
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
       session: {
         ...unusedSessionPort,
         get: async () => ({ ...nextSession, id: "session-old", parentID: "session-parent" }),
-        project: ({ session }) => { projected.push(session.id) },
+        project: ({ session }) => {
+          projected.push(session.id)
+        },
       },
     })
 
-    expect(await actions.refreshSession({
-      scope,
-      panelID: state.panel().id,
-      sessionID: "session-old",
-      directory: state.panel().directory,
-    })).toEqual({ status: "committed", panelID: "panel-space-a", unavailableReason: "child" })
+    expect(
+      await actions.refreshSession({
+        scope,
+        panelID: state.panel().id,
+        sessionID: "session-old",
+        directory: state.panel().directory,
+      }),
+    ).toEqual({ status: "committed", panelID: "panel-space-a", unavailableReason: "child" })
     expect(disposed).toEqual(["panel-space-a"])
     expect(projected).toEqual([])
     expect(state.panel().slotState).toBe("empty")
@@ -326,7 +347,9 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store: state.store,
       pty: {
-        disposePanel: async ({ panel }) => { disposed.push(panel.id) },
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -352,7 +375,9 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store: state.store,
       pty: {
-        disposePanel: async ({ panel }) => { events.push(`dispose:${panel.id}`) },
+        disposePanel: async ({ panel }) => {
+          events.push(`dispose:${panel.id}`)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -442,7 +467,9 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store,
       pty: {
-        disposePanel: async ({ panel }) => { events.push(`dispose:${panel.id}`) },
+        disposePanel: async ({ panel }) => {
+          events.push(`dispose:${panel.id}`)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -466,7 +493,7 @@ describe("WorkbenchActions", () => {
     let removed = false
     const store: WorkbenchActionStorePort = {
       panel: (_scope, panelID) => panels.find((panel) => panel.id === panelID),
-      panels: (requestedScope) => requestedScope.kind === "general" || removed ? [] : panels,
+      panels: (requestedScope) => (requestedScope.kind === "general" || removed ? [] : panels),
       boundPanels: () => [],
       active: () => ({ scope, panelID: "panel-a" }),
       addPanel: () => undefined,
@@ -487,7 +514,9 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store,
       pty: {
-        disposePanel: async ({ panel }) => { events.push(`dispose:${panel.id}`) },
+        disposePanel: async ({ panel }) => {
+          events.push(`dispose:${panel.id}`)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -505,7 +534,9 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store: state.store,
       pty: {
-        disposePanel: async () => { throw new Error("dispose failed") },
+        disposePanel: async () => {
+          throw new Error("dispose failed")
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -526,7 +557,9 @@ describe("WorkbenchActions", () => {
     const actions = createWorkbenchActions({
       store: state.store,
       pty: {
-        disposePanel: async () => { disposals += 1 },
+        disposePanel: async () => {
+          disposals += 1
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -580,7 +613,9 @@ describe("WorkbenchActions", () => {
       pty: {
         disposePanel: async () => {},
         ensure: () => created.promise,
-        disposePty: async ({ knownPtyID }) => { disposed.push(knownPtyID) },
+        disposePty: async ({ knownPtyID }) => {
+          disposed.push(knownPtyID)
+        },
       },
       session: unusedSessionPort,
     })
@@ -609,17 +644,21 @@ describe("WorkbenchActions", () => {
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
         probe: async () => "alive",
-        forgetPty: ({ kind }) => { forgotten.push(kind) },
+        forgetPty: ({ kind }) => {
+          forgotten.push(kind)
+        },
       },
       session: unusedSessionPort,
     })
 
-    expect(await actions.recoverPanelPty({
-      scope,
-      panelID: state.panel().id,
-      kind: "tui",
-      ptyID: "pty-existing",
-    })).toEqual({ status: "unchanged", panelID: "panel-space-a" })
+    expect(
+      await actions.recoverPanelPty({
+        scope,
+        panelID: state.panel().id,
+        kind: "tui",
+        ptyID: "pty-existing",
+      }),
+    ).toEqual({ status: "unchanged", panelID: "panel-space-a" })
     expect(forgotten).toEqual([])
     expect(state.panel().tuiPtyId).toBe("pty-existing")
   })
@@ -636,17 +675,21 @@ describe("WorkbenchActions", () => {
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
         probe: async () => "unknown",
-        forgetPty: () => { throw new Error("an unknown PTY must not be forgotten") },
+        forgetPty: () => {
+          throw new Error("an unknown PTY must not be forgotten")
+        },
       },
       session: unusedSessionPort,
     })
 
-    expect(await actions.recoverPanelPty({
-      scope,
-      panelID: state.panel().id,
-      kind: "split",
-      ptyID: "pty-split",
-    })).toEqual({ status: "unchanged", panelID: "panel-space-a" })
+    expect(
+      await actions.recoverPanelPty({
+        scope,
+        panelID: state.panel().id,
+        kind: "split",
+        ptyID: "pty-split",
+      }),
+    ).toEqual({ status: "unchanged", panelID: "panel-space-a" })
     expect(state.transitions).toEqual([])
     expect(state.panel().splitPtyId).toBe("pty-split")
     expect(state.panel().splitTerminal).toBeTrue()
@@ -665,17 +708,21 @@ describe("WorkbenchActions", () => {
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
         probe: async () => "dead",
-        forgetPty: ({ kind }) => { forgotten.push(kind) },
+        forgetPty: ({ kind }) => {
+          forgotten.push(kind)
+        },
       },
       session: unusedSessionPort,
     })
 
-    expect(await actions.recoverPanelPty({
-      scope,
-      panelID: state.panel().id,
-      kind: "split",
-      ptyID: "pty-split",
-    })).toEqual({ status: "committed", panelID: "panel-space-a" })
+    expect(
+      await actions.recoverPanelPty({
+        scope,
+        panelID: state.panel().id,
+        kind: "split",
+        ptyID: "pty-split",
+      }),
+    ).toEqual({ status: "committed", panelID: "panel-space-a" })
     expect(forgotten).toEqual(["split"])
     expect(state.panel().splitPtyId).toBeUndefined()
     expect(state.panel().splitTerminal).toBeFalse()
@@ -701,21 +748,57 @@ describe("WorkbenchActions store port delegation", () => {
       width: 1,
     }
     const store: WorkbenchActionStorePort = {
-      panel: (_s, id) => { calls.push(`panel:${id}`); return id === panel.id ? panel : undefined },
-      panels: (s) => { calls.push(`panels:${s.kind}`); return [panel] },
-      boundPanels: (sid) => { calls.push(`boundPanels:${sid}`); return [] },
-      active: () => { calls.push("active"); return { scope, panelID: panel.id } },
-      addPanel: (s) => { calls.push(`addPanel:${s.kind}`); return "panel-new" },
-      setActivePanel: (_s, id) => { calls.push(`setActivePanel:${id}`) },
-      setActive: (_name) => { calls.push(`setActive:${_name}`) },
+      panel: (_s, id) => {
+        calls.push(`panel:${id}`)
+        return id === panel.id ? panel : undefined
+      },
+      panels: (s) => {
+        calls.push(`panels:${s.kind}`)
+        return [panel]
+      },
+      boundPanels: (sid) => {
+        calls.push(`boundPanels:${sid}`)
+        return []
+      },
+      active: () => {
+        calls.push("active")
+        return { scope, panelID: panel.id }
+      },
+      addPanel: (s) => {
+        calls.push(`addPanel:${s.kind}`)
+        return "panel-new"
+      },
+      setActivePanel: (_s, id) => {
+        calls.push(`setActivePanel:${id}`)
+      },
+      setActive: (_name) => {
+        calls.push(`setActive:${_name}`)
+      },
       activePanelID: () => panel.id,
-      removePanel: (_s, id) => { calls.push(`removePanel:${id}`); return true },
-      removeSpace: (s) => { calls.push(`removeSpace:${s.kind}`); return true },
-      commitSessionBinding: (_s, id, sess) => { calls.push(`commitSessionBinding:${id}:${sess.id}`) },
-      commitSessionUnbinding: (_s, id) => { calls.push(`commitSessionUnbinding:${id}`); return true },
-      commitPanelPty: (_s, id, kind, ptyID) => { calls.push(`commitPanelPty:${id}:${kind}:${ptyID ?? "undefined"}`) },
-      commitPanelMode: (_s, id, mode) => { calls.push(`commitPanelMode:${id}:${mode}`) },
-      commitSplitTerminal: (_s, id, open) => { calls.push(`commitSplitTerminal:${id}:${open}`) },
+      removePanel: (_s, id) => {
+        calls.push(`removePanel:${id}`)
+        return true
+      },
+      removeSpace: (s) => {
+        calls.push(`removeSpace:${s.kind}`)
+        return true
+      },
+      commitSessionBinding: (_s, id, sess) => {
+        calls.push(`commitSessionBinding:${id}:${sess.id}`)
+      },
+      commitSessionUnbinding: (_s, id) => {
+        calls.push(`commitSessionUnbinding:${id}`)
+        return true
+      },
+      commitPanelPty: (_s, id, kind, ptyID) => {
+        calls.push(`commitPanelPty:${id}:${kind}:${ptyID ?? "undefined"}`)
+      },
+      commitPanelMode: (_s, id, mode) => {
+        calls.push(`commitPanelMode:${id}:${mode}`)
+      },
+      commitSplitTerminal: (_s, id, open) => {
+        calls.push(`commitSplitTerminal:${id}:${open}`)
+      },
       spacePaths: () => [],
     }
     return { store, calls, panel }
@@ -729,7 +812,10 @@ describe("WorkbenchActions store port delegation", () => {
 
   const noopSession = {
     create: async ({ panel: p }: { panel: WorkbenchActionPanel }) => ({
-      id: "s-new", title: "New", directory: p.directory, type: "chat" as const,
+      id: "s-new",
+      title: "New",
+      directory: p.directory,
+      type: "chat" as const,
     }),
     get: async () => ({ id: "s-1", title: "S1", directory: "/d", type: "chat" as const }),
     project: () => {},
@@ -824,7 +910,9 @@ describe("WorkbenchActions store port delegation", () => {
       session: {
         ...noopSession,
         create: () => created.promise,
-        remove: async ({ session }) => { removed.push(session.id) },
+        remove: async ({ session }) => {
+          removed.push(session.id)
+        },
       },
     })
     const pending = actions.createSession({ scope, panelID: "panel-1" })
@@ -851,7 +939,7 @@ describe("WorkbenchActions General vs Space scope", () => {
     ]
     const store: WorkbenchActionStorePort = {
       panel: (_s, id) => panels.find((p) => p.id === id),
-      panels: (s) => s.kind === "general" ? [panels[0]] : [panels[1]],
+      panels: (s) => (s.kind === "general" ? [panels[0]] : [panels[1]]),
       boundPanels: () => [],
       active: () => ({ scope: spaceA, panelID: "panel-s" }),
       addPanel: () => undefined,
@@ -875,7 +963,10 @@ describe("WorkbenchActions General vs Space scope", () => {
       store,
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
       session: {
-        create: async ({ scope: s }) => { scopes.push(s.kind); return { id: "s-g", title: "G", directory: "", type: "chat" } },
+        create: async ({ scope: s }) => {
+          scopes.push(s.kind)
+          return { id: "s-g", title: "G", directory: "", type: "chat" }
+        },
         get: async () => ({ id: "s-g", title: "G", directory: "", type: "chat" }),
         project: () => {},
         rename: async () => {},
@@ -893,7 +984,10 @@ describe("WorkbenchActions General vs Space scope", () => {
       store,
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
       session: {
-        create: async ({ scope: s }) => { scopes.push({ kind: s.kind, name: s.kind === "space" ? s.name : undefined }); return { id: "s-s", title: "S", directory: "/fixtures/workspaces/space-a", type: "chat" } },
+        create: async ({ scope: s }) => {
+          scopes.push({ kind: s.kind, name: s.kind === "space" ? s.name : undefined })
+          return { id: "s-s", title: "S", directory: "/fixtures/workspaces/space-a", type: "chat" }
+        },
         get: async () => ({ id: "s-s", title: "S", directory: "/fixtures/workspaces/space-a", type: "chat" }),
         project: () => {},
         rename: async () => {},
@@ -910,7 +1004,9 @@ describe("WorkbenchActions General vs Space scope", () => {
     const actions = createWorkbenchActions({
       store,
       pty: {
-        disposePanel: async ({ panel }) => { disposed.push(panel.id) },
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -948,7 +1044,9 @@ describe("WorkbenchActions General vs Space scope", () => {
     const actions = createWorkbenchActions({
       store,
       pty: {
-        disposePanel: async ({ panel }) => { disposed.push(panel.id) },
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
       },
@@ -995,7 +1093,7 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
     const store: WorkbenchActionStorePort = {
       panel: (_s, panelID) => (panel.id === panelID ? panel : undefined),
       panels: () => [panel],
-      boundPanels: (sessionID) => panel.boundSessionId === sessionID ? [{ scope, panelID: panel.id, panel }] : [],
+      boundPanels: (sessionID) => (panel.boundSessionId === sessionID ? [{ scope, panelID: panel.id, panel }] : []),
       active: () => ({ scope, panelID: panel.id }),
       addPanel: () => undefined,
       setActivePanel: () => {},
@@ -1005,25 +1103,53 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       removeSpace: () => false,
       commitSessionBinding: (_s, panelID, session) => {
         commits.push(session.id)
-        panel = { ...panel, id: panelID, slotState: "bound", boundSessionId: session.id, directory: session.directory, tuiPtyId: undefined }
+        panel = {
+          ...panel,
+          id: panelID,
+          slotState: "bound",
+          boundSessionId: session.id,
+          directory: session.directory,
+          tuiPtyId: undefined,
+        }
       },
       commitSessionUnbinding: () => {
         if (panel.slotState === "empty") return false
-        panel = { ...panel, slotState: "empty", boundSessionId: undefined, tuiPtyId: undefined, termPtyId: undefined, splitPtyId: undefined }
+        panel = {
+          ...panel,
+          slotState: "empty",
+          boundSessionId: undefined,
+          tuiPtyId: undefined,
+          termPtyId: undefined,
+          splitPtyId: undefined,
+        }
         return true
       },
       commitPanelPty: (_s, _panelID, kind, ptyID) => {
         ptys.push(ptyID)
-        panel = { ...panel, tuiPtyId: kind === "tui" ? ptyID : panel.tuiPtyId, termPtyId: kind === "term" ? ptyID : panel.termPtyId, splitPtyId: kind === "split" ? ptyID : panel.splitPtyId }
+        panel = {
+          ...panel,
+          tuiPtyId: kind === "tui" ? ptyID : panel.tuiPtyId,
+          termPtyId: kind === "term" ? ptyID : panel.termPtyId,
+          splitPtyId: kind === "split" ? ptyID : panel.splitPtyId,
+        }
       },
-      commitPanelMode: (_s, _panelID, mode) => { panel = { ...panel, viewMode: mode } },
-      commitSplitTerminal: (_s, _panelID, splitTerminal) => { panel = { ...panel, splitTerminal } },
+      commitPanelMode: (_s, _panelID, mode) => {
+        panel = { ...panel, viewMode: mode }
+      },
+      commitSplitTerminal: (_s, _panelID, splitTerminal) => {
+        panel = { ...panel, splitTerminal }
+      },
       spacePaths: () => [],
     }
     return { store, commits, ptys, panel: () => panel }
   }
 
-  const nextSession = { id: "session-next", title: "Next", directory: "/fixtures/workspaces/space-a/project-next", type: "chat" as const }
+  const nextSession = {
+    id: "session-next",
+    title: "Next",
+    directory: "/fixtures/workspaces/space-a/project-next",
+    type: "chat" as const,
+  }
 
   const unusedSessionPort = {
     create: async () => nextSession,
@@ -1043,10 +1169,14 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       session: {
         ...unusedSessionPort,
         get: async () => ({ ...nextSession, id: "session-old" }),
-        remove: async ({ session }) => { removed.push(session.id) },
+        remove: async ({ session }) => {
+          removed.push(session.id)
+        },
       },
     })
-    expect(await actions.deleteSession({ scope, sessionID: "session-old", directory: state.panel().directory })).toEqual({ status: "committed" })
+    expect(
+      await actions.deleteSession({ scope, sessionID: "session-old", directory: state.panel().directory }),
+    ).toEqual({ status: "committed" })
     expect(removed).toEqual(["session-old"])
     expect(state.panel().slotState).toBe("empty")
   })
@@ -1061,10 +1191,14 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       session: {
         ...unusedSessionPort,
         get: async () => ({ ...nextSession, id: "session-orphan" }),
-        remove: async ({ session }) => { removed.push(session.id) },
+        remove: async ({ session }) => {
+          removed.push(session.id)
+        },
       },
     })
-    expect(await actions.deleteSession({ scope, sessionID: "session-orphan", directory: "/d" })).toEqual({ status: "committed" })
+    expect(await actions.deleteSession({ scope, sessionID: "session-orphan", directory: "/d" })).toEqual({
+      status: "committed",
+    })
     expect(removed).toEqual(["session-orphan"])
   })
 
@@ -1077,7 +1211,9 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
       session: {
         ...unusedSessionPort,
-        rename: async ({ sessionID, title }) => { renamed.push({ sessionID, title }) },
+        rename: async ({ sessionID, title }) => {
+          renamed.push({ sessionID, title })
+        },
       },
     })
     await actions.renameSession({ scope, sessionID: "session-old", directory: "/d", title: "Renamed" })
@@ -1089,7 +1225,9 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
     const state = createStorePort()
     const activations: string[] = []
     state.store.addPanel = () => "panel-fork"
-    state.store.setActivePanel = (_s, id) => { activations.push(id) }
+    state.store.setActivePanel = (_s, id) => {
+      activations.push(id)
+    }
     const actions = createWorkbenchActions({
       store: state.store,
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
@@ -1098,8 +1236,11 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
         get: async () => ({ ...nextSession, id: "session-forked" }),
       },
     })
-    expect(await actions.bindForkedSession({ scope, sourcePanelID: state.panel().id, sessionID: "session-forked" })).toEqual({
-      status: "committed", panelID: "panel-fork",
+    expect(
+      await actions.bindForkedSession({ scope, sourcePanelID: state.panel().id, sessionID: "session-forked" }),
+    ).toEqual({
+      status: "committed",
+      panelID: "panel-fork",
     })
     expect(state.commits).toEqual(["session-forked"])
     expect(activations).toEqual(["panel-fork"])
@@ -1116,8 +1257,11 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
         get: async () => ({ ...nextSession, id: "session-forked" }),
       },
     })
-    expect(await actions.bindForkedSession({ scope, sourcePanelID: state.panel().id, sessionID: "session-forked" })).toEqual({
-      status: "committed", panelID: "panel-space-a",
+    expect(
+      await actions.bindForkedSession({ scope, sourcePanelID: state.panel().id, sessionID: "session-forked" }),
+    ).toEqual({
+      status: "committed",
+      panelID: "panel-space-a",
     })
     expect(state.commits).toEqual(["session-forked"])
   })
@@ -1142,14 +1286,28 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
     const disposed: string[] = []
     const actions = createWorkbenchActions({
       store: state.store,
-      pty: { disposePanel: async ({ panel }) => { disposed.push(panel.id) }, ensure: async ({ create }) => create(), disposePty: async () => {} },
+      pty: {
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
+        ensure: async ({ create }) => create(),
+        disposePty: async () => {},
+      },
       session: {
         ...unusedSessionPort,
         get: async () => ({ ...nextSession, id: "session-loaded" }),
       },
     })
-    expect(await actions.loadSessionIntoPanel({ scope, panelID: state.panel().id, sessionID: "session-loaded", directory: nextSession.directory })).toEqual({
-      status: "committed", panelID: "panel-space-a",
+    expect(
+      await actions.loadSessionIntoPanel({
+        scope,
+        panelID: state.panel().id,
+        sessionID: "session-loaded",
+        directory: nextSession.directory,
+      }),
+    ).toEqual({
+      status: "committed",
+      panelID: "panel-space-a",
     })
     expect(disposed).toEqual(["panel-space-a"])
     expect(state.commits).toEqual(["session-loaded"])
@@ -1162,14 +1320,28 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
     let disposals = 0
     const actions = createWorkbenchActions({
       store: state.store,
-      pty: { disposePanel: async () => { disposals += 1 }, ensure: async ({ create }) => create(), disposePty: async () => {} },
+      pty: {
+        disposePanel: async () => {
+          disposals += 1
+        },
+        ensure: async ({ create }) => create(),
+        disposePty: async () => {},
+      },
       session: {
         ...unusedSessionPort,
         get: async () => ({ ...nextSession, id: "session-old" }),
       },
     })
-    expect(await actions.loadSessionIntoPanel({ scope, panelID: state.panel().id, sessionID: "session-old", directory: state.panel().directory })).toEqual({
-      status: "unchanged", panelID: "panel-space-a",
+    expect(
+      await actions.loadSessionIntoPanel({
+        scope,
+        panelID: state.panel().id,
+        sessionID: "session-old",
+        directory: state.panel().directory,
+      }),
+    ).toEqual({
+      status: "unchanged",
+      panelID: "panel-space-a",
     })
     expect(disposals).toBe(0)
     expect(state.commits).toEqual([])
@@ -1185,8 +1357,17 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
         get: async () => ({ ...nextSession, id: "session-archived", timeArchived: 1 }),
       },
     })
-    expect(await actions.loadSessionIntoPanel({ scope, panelID: state.panel().id, sessionID: "session-archived", directory: "/d" })).toEqual({
-      status: "unchanged", panelID: "panel-space-a", unavailableReason: "archived",
+    expect(
+      await actions.loadSessionIntoPanel({
+        scope,
+        panelID: state.panel().id,
+        sessionID: "session-archived",
+        directory: "/d",
+      }),
+    ).toEqual({
+      status: "unchanged",
+      panelID: "panel-space-a",
+      unavailableReason: "archived",
     })
   })
 
@@ -1200,8 +1381,17 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
         get: async () => ({ ...nextSession, id: "session-child", parentID: "parent" }),
       },
     })
-    expect(await actions.loadSessionIntoPanel({ scope, panelID: state.panel().id, sessionID: "session-child", directory: "/d" })).toEqual({
-      status: "unchanged", panelID: "panel-space-a", unavailableReason: "child",
+    expect(
+      await actions.loadSessionIntoPanel({
+        scope,
+        panelID: state.panel().id,
+        sessionID: "session-child",
+        directory: "/d",
+      }),
+    ).toEqual({
+      status: "unchanged",
+      panelID: "panel-space-a",
+      unavailableReason: "child",
     })
   })
 
@@ -1213,8 +1403,12 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
       session: unusedSessionPort,
     })
-    expect(await actions.ensurePanelPty({ scope, panelID: state.panel().id, kind: "tui", create: async () => "pty-new" })).toEqual({
-      status: "committed", panelID: "panel-space-a", ptyID: "pty-new",
+    expect(
+      await actions.ensurePanelPty({ scope, panelID: state.panel().id, kind: "tui", create: async () => "pty-new" }),
+    ).toEqual({
+      status: "committed",
+      panelID: "panel-space-a",
+      ptyID: "pty-new",
     })
     expect(state.panel().tuiPtyId).toBe("pty-new")
   })
@@ -1226,8 +1420,17 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
       session: unusedSessionPort,
     })
-    expect(await actions.ensurePanelPty({ scope, panelID: state.panel().id, kind: "tui", create: async () => "pty-existing" })).toEqual({
-      status: "unchanged", panelID: "panel-space-a", ptyID: "pty-existing",
+    expect(
+      await actions.ensurePanelPty({
+        scope,
+        panelID: state.panel().id,
+        kind: "tui",
+        create: async () => "pty-existing",
+      }),
+    ).toEqual({
+      status: "unchanged",
+      panelID: "panel-space-a",
+      ptyID: "pty-existing",
     })
   })
 
@@ -1240,11 +1443,18 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       pty: {
         disposePanel: async () => {},
         ensure: () => created.promise,
-        disposePty: async ({ knownPtyID }) => { disposed.push(knownPtyID) },
+        disposePty: async ({ knownPtyID }) => {
+          disposed.push(knownPtyID)
+        },
       },
       session: unusedSessionPort,
     })
-    const pending = actions.ensurePanelPty({ scope, panelID: state.panel().id, kind: "tui", create: async () => "unused" })
+    const pending = actions.ensurePanelPty({
+      scope,
+      panelID: state.panel().id,
+      kind: "tui",
+      create: async () => "unused",
+    })
     actions.cancelPanel(scope, state.panel().id)
     created.resolve("pty-late")
     expect(await pending).toEqual({ status: "stale", panelID: "panel-space-a" })
@@ -1260,11 +1470,18 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
     const disposed: string[] = []
     const actions = createWorkbenchActions({
       store: state.store,
-      pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async ({ knownPtyID }) => { disposed.push(knownPtyID) } },
+      pty: {
+        disposePanel: async () => {},
+        ensure: async ({ create }) => create(),
+        disposePty: async ({ knownPtyID }) => {
+          disposed.push(knownPtyID)
+        },
+      },
       session: unusedSessionPort,
     })
     expect(await actions.closeSplitTerminal({ scope, panelID: state.panel().id })).toEqual({
-      status: "committed", panelID: "panel-space-a",
+      status: "committed",
+      panelID: "panel-space-a",
     })
     expect(disposed).toEqual(["pty-split"])
     expect(state.panel().splitPtyId).toBeUndefined()
@@ -1279,7 +1496,8 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       session: unusedSessionPort,
     })
     expect(await actions.closeSplitTerminal({ scope, panelID: state.panel().id })).toEqual({
-      status: "unchanged", panelID: "panel-space-a",
+      status: "unchanged",
+      panelID: "panel-space-a",
     })
   })
 
@@ -1307,7 +1525,8 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       session: unusedSessionPort,
     })
     expect(await actions.recoverPanelPty({ scope, panelID: "nonexistent", kind: "tui", ptyID: "pty-x" })).toEqual({
-      status: "stale", panelID: "nonexistent",
+      status: "stale",
+      panelID: "nonexistent",
     })
   })
 
@@ -1318,8 +1537,11 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
       session: unusedSessionPort,
     })
-    expect(await actions.recoverPanelPty({ scope, panelID: state.panel().id, kind: "tui", ptyID: "pty-mismatch" })).toEqual({
-      status: "stale", panelID: "panel-space-a",
+    expect(
+      await actions.recoverPanelPty({ scope, panelID: state.panel().id, kind: "tui", ptyID: "pty-mismatch" }),
+    ).toEqual({
+      status: "stale",
+      panelID: "panel-space-a",
     })
   })
 
@@ -1334,12 +1556,17 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
         ensure: async ({ create }) => create(),
         disposePty: async () => {},
         probe: async () => "dead",
-        forgetPty: ({ kind }) => { forgotten.push(kind) },
+        forgetPty: ({ kind }) => {
+          forgotten.push(kind)
+        },
       },
       session: unusedSessionPort,
     })
-    expect(await actions.recoverPanelPty({ scope, panelID: state.panel().id, kind: "tui", ptyID: "pty-existing" })).toEqual({
-      status: "committed", panelID: "panel-space-a",
+    expect(
+      await actions.recoverPanelPty({ scope, panelID: state.panel().id, kind: "tui", ptyID: "pty-existing" }),
+    ).toEqual({
+      status: "committed",
+      panelID: "panel-space-a",
     })
     expect(forgotten).toEqual(["tui"])
     expect(state.panel().tuiPtyId).toBeUndefined()
@@ -1356,7 +1583,8 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
       session: unusedSessionPort,
     })
     expect(await actions.unbindSession({ scope, panelID: state.panel().id })).toEqual({
-      status: "unchanged", panelID: "panel-space-a",
+      status: "unchanged",
+      panelID: "panel-space-a",
     })
   })
 
@@ -1365,11 +1593,18 @@ describe("WorkbenchActions §5.6 additional coverage", () => {
     const disposed: string[] = []
     const actions = createWorkbenchActions({
       store: state.store,
-      pty: { disposePanel: async ({ panel }) => { disposed.push(panel.id) }, ensure: async ({ create }) => create(), disposePty: async () => {} },
+      pty: {
+        disposePanel: async ({ panel }) => {
+          disposed.push(panel.id)
+        },
+        ensure: async ({ create }) => create(),
+        disposePty: async () => {},
+      },
       session: unusedSessionPort,
     })
     expect(await actions.unbindSession({ scope, panelID: state.panel().id })).toEqual({
-      status: "committed", panelID: "panel-space-a",
+      status: "committed",
+      panelID: "panel-space-a",
     })
     expect(disposed).toEqual(["panel-space-a"])
     expect(state.panel().slotState).toBe("empty")
@@ -1430,8 +1665,17 @@ describe("WorkbenchActions revealSession", () => {
     return { store, panels: () => panels, calls, getActive: () => activePanelID }
   }
 
-  const noopPty = { disposePanel: async () => {}, ensure: async ({ create }: { create: () => Promise<string> }) => create(), disposePty: async () => {} }
-  const loadedSession = { id: "session-new", title: "New", directory: "/fixtures/workspaces/space-a/project-new", type: "chat" as const }
+  const noopPty = {
+    disposePanel: async () => {},
+    ensure: async ({ create }: { create: () => Promise<string> }) => create(),
+    disposePty: async () => {},
+  }
+  const loadedSession = {
+    id: "session-new",
+    title: "New",
+    directory: "/fixtures/workspaces/space-a/project-new",
+    type: "chat" as const,
+  }
   const getSession = (over: Partial<WorkbenchActionSession> = {}) => ({
     create: async () => ({ ...loadedSession, ...over }),
     get: async () => ({ ...loadedSession, ...over }),
@@ -1598,7 +1842,9 @@ describe("clearAllPtyForServerChange", () => {
         disposePanel: async () => {},
         ensure: async () => "",
         disposePty: async () => {},
-        clearMemory: () => { calls.push("clearMemory") },
+        clearMemory: () => {
+          calls.push("clearMemory")
+        },
       },
       session: {
         create: async () => ({ id: "s1", title: "", directory: "/test", type: "chat" }),

@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron"
 import type { DesktopMenuAction } from "@wopal/ellamaka-app/desktop-menu"
-import { createMainWindow, updateTitlebar } from "./windows"
+import { updateTitlebar } from "./windows"
 
 export type DesktopMenuActionHandlers = Partial<{
   checkForUpdates: () => void

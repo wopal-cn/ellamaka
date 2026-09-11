@@ -11,8 +11,6 @@ import {
   createDefaultOnboardingState,
   rewindToStep,
   navigateToStep,
-  ONBOARDING_STEPS,
-  type OnboardingState,
 } from "./onboarding-state"
 
 describe("onboarding-state", () => {

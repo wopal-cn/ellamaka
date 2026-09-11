@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from "solid-js"
 import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
-import { cleanSummary, extractPromptSummary, isInjectionPart, isRenderablePart } from "./chat-render.utils"
+import { cleanSummary, extractPromptSummary, isInjectionPart } from "./chat-render.utils"
 import { isCompactionMarker } from "./chat-transcript"
 
 export type PromptNavigatorProps = {
@@ -139,10 +139,7 @@ export function PromptNavigator(props: PromptNavigatorProps) {
 
   return (
     <div data-component="chat-prompt-navigator">
-      <div
-        data-component="chat-prompt-rail"
-        data-open={open()}
-      >
+      <div data-component="chat-prompt-rail" data-open={open()}>
         <For each={entries()}>
           {(entry) => (
             <button

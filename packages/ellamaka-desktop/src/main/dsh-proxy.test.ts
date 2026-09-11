@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createServer } from "node:http"
-import { createDshHttpProxy, createDshProxy, isDshPath } from "./dsh-proxy"
+import { createDshHttpProxy, createDshProxy } from "./dsh-proxy"
 
 describe("createDshProxy", () => {
   test("forwards the launch-token exchange and reuses its cookie", async () => {

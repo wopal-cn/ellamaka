@@ -13,7 +13,6 @@ import {
   parseSyntheticInjection,
   partTitle,
   relativizeProjectPath,
-  type PartClassification,
 } from "./chat-render.utils"
 
 function userMessage(id: string): UserMessage {
@@ -107,9 +106,26 @@ describe("isRenderablePart", () => {
   test("hides step-start, step-finish and legacy snapshot/patch parts", () => {
     const msg = assistantMessage("a1", "u1")
     expect(isRenderablePart({ id: "1", sessionID: "s", messageID: "a1", type: "step-start" }, msg)).toBe(false)
-    expect(isRenderablePart({ id: "2", sessionID: "s", messageID: "a1", type: "step-finish", reason: "x", cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }, msg)).toBe(false)
-    expect(isRenderablePart({ id: "3", sessionID: "s", messageID: "a1", type: "snapshot", snapshot: "x" }, msg)).toBe(false)
-    expect(isRenderablePart({ id: "4", sessionID: "s", messageID: "a1", type: "patch", hash: "x", files: [] }, msg)).toBe(false)
+    expect(
+      isRenderablePart(
+        {
+          id: "2",
+          sessionID: "s",
+          messageID: "a1",
+          type: "step-finish",
+          reason: "x",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        },
+        msg,
+      ),
+    ).toBe(false)
+    expect(isRenderablePart({ id: "3", sessionID: "s", messageID: "a1", type: "snapshot", snapshot: "x" }, msg)).toBe(
+      false,
+    )
+    expect(
+      isRenderablePart({ id: "4", sessionID: "s", messageID: "a1", type: "patch", hash: "x", files: [] }, msg),
+    ).toBe(false)
   })
 
   test("keeps synthetic text renderable regardless of message role or completion", () => {
@@ -161,7 +177,9 @@ describe("classifyPart", () => {
     const u = userMessage("u2")
     // wopal-plugin task notifications arrive as plain text parts wrapped in
     // <system-reminder>, with no synthetic flag.
-    expect(classifyPart(textPart("p1", "u2", "<system-reminder>[WOPAL TASK PROGRESS] running</system-reminder>"), u).kind).toBe("injection")
+    expect(
+      classifyPart(textPart("p1", "u2", "<system-reminder>[WOPAL TASK PROGRESS] running</system-reminder>"), u).kind,
+    ).toBe("injection")
     expect(classifyPart(textPart("p2", "a1", "<rules-context>rule</rules-context>"), a).kind).toBe("injection")
     expect(classifyPart(textPart("p3", "a1", "<memory-context>memory</memory-context>"), a).kind).toBe("injection")
     // Leading whitespace before the shell still matches.
@@ -310,7 +328,14 @@ describe("extractPromptSummary", () => {
     const u = userMessage("u1")
     const parts = [
       textPart("p1", "u1", "<system-reminder>[WOPAL TASK IDLE] done</system-reminder>"),
-      { id: "p2", sessionID: "ses_1", messageID: "u1", type: "text", text: "<rules-context>rules</rules-context>", synthetic: true } as Part,
+      {
+        id: "p2",
+        sessionID: "ses_1",
+        messageID: "u1",
+        type: "text",
+        text: "<rules-context>rules</rules-context>",
+        synthetic: true,
+      } as Part,
       textPart("p3", "u1", "real prompt"),
     ]
     const summary = extractPromptSummary({ message: u, parts })

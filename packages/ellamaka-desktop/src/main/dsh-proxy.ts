@@ -131,7 +131,7 @@ export function createDshHttpProxy() {
   })
 
   // Forward DSH WebSocket upgrades to the sidecar's upgrade route.
-  server.on("upgrade", (req, socket: Duplex, head) => {
+  server.on("upgrade", (req, socket: Duplex, _head) => {
     if (!target || !isDshPath(req.url ?? "/")) {
       socket.destroy()
       return
