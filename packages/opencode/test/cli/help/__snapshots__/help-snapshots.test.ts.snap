@@ -64,8 +64,8 @@ attach to a running ellamaka server
   -s, --session             session id to continue                                          [字符串]
       --fork                fork the session when continuing (use with --continue or --session)
                                                                                               [布尔]
-  -p, --password            basic auth password (defaults to OPENCODE_SERVER_PASSWORD)      [字符串]
-  -u, --username            basic auth username (defaults to OPENCODE_SERVER_USERNAME or 'opencode')
+  -p, --password            basic auth password (defaults to ELLAMAKA_SERVER_PASSWORD)      [字符串]
+  -u, --username            basic auth username (defaults to ELLAMAKA_SERVER_USERNAME or 'ellamaka')
                                                                                             [字符串]"
 `;
 
@@ -99,10 +99,10 @@ run ellamaka with a message
                                       provided)                                             [字符串]
       --attach                        attach to a running ellamaka server (e.g.,
                                       http://localhost:4096)                                [字符串]
-  -p, --password                      basic auth password (defaults to OPENCODE_SERVER_PASSWORD)
+  -p, --password                      basic auth password (defaults to ELLAMAKA_SERVER_PASSWORD)
                                                                                             [字符串]
-  -u, --username                      basic auth username (defaults to OPENCODE_SERVER_USERNAME or
-                                      'opencode')                                           [字符串]
+  -u, --username                      basic auth username (defaults to ELLAMAKA_SERVER_USERNAME or
+                                      'ellamaka')                                           [字符串]
       --dir                           directory to run in, path on remote server if attaching
                                                                                             [字符串]
       --port                          port for the local server (defaults to random port if no value
@@ -133,7 +133,6 @@ debugging and troubleshooting tools
   ellamaka debug file          file system debugging utilities
   ellamaka debug scrap         list all known projects
   ellamaka debug skill         list all available skills
-  ellamaka debug snapshot      snapshot debugging utilities
   ellamaka debug startup       print startup timing
   ellamaka debug agent <name>  show agent configuration details
   ellamaka debug v2            debug v2 catalog and built-in plugins

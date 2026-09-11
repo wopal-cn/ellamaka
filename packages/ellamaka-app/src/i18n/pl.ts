@@ -448,8 +448,6 @@ export const dict = {
   "session.review.loadingChanges": "Ładowanie zmian...",
   "session.review.empty": "Brak zmian w tej sesji",
   "session.review.noVcs": "Nie wykryto systemu kontroli wersji Git, zmiany nie są wyświetlane",
-  "session.review.noSnapshot": "Śledzenie migawek jest wyłączone w konfiguracji, więc zmiany w sesji są niedostępne",
-  "session.review.noChanges": "Brak zmian",
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
   "session.files.empty": "Brak plików",

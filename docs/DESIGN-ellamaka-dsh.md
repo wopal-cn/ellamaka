@@ -124,7 +124,7 @@ ellamaka Basic 认证与 dsh browser-auth 是**两个信任域各守各的门**�
 
 联盟的安全边界由四项机制固化（对应挂载边界，见「运行时机制 · 单端口分发」）：
 
-- **trustedHosts 配置化**：connection fence 的 `trustedHosts` 由 ellamaka 配置项 `ellamaka.dsh.trustedHosts`（默认 `[]`，默认值层进 `settings.jsonc`）经 profile 补丁层注入。非 loopback Host 必须命中该列表——LAN 部署经配置显式放行，认证机制本身仍归官方实现，零官方改动、零自造会话。
+- **围栏信任跟随 CORS 信任决策**：connection fence 的 `trustedHosts` 从宿主 CORS 信任决策自动派生（`server.cors` 配置 + `--cors` 参数合并后的 Origin 列表，按 `host:port` 规约为围栏 authority），经 profile 补丁层注入，无独立的 dsh 配置面。非 loopback Host 必须命中该列表——LAN 部署在 CORS 一处声明信任，CORS 放行与围栏放行同时生效；默认空列表行为不变（loopback-only）。认证机制本身仍归官方实现，零官方改动、零自造会话。
 - **iframe 401 自愈**：`DshSurface` 探测 iframe 内文档的 401 响应，命中即重取 `/workbench/dsh-url` 并重载 src——token URL 重载即重新 303 铸 cookie，无感恢复。单次失效只重试一轮，不引入新会话机制。
 - **挂载认证策略显式声明**：`NodeRouteMount` 强制声明 `auth`（`"self" | "public"`），dispatcher 校验该不变量——挂载要么自带完整认证（如 dsh browser-auth，声明 `self`），要么明确公开（如纯静态资源），不允许默认无认证。E 线实验 profile 是新的 self-auth 挂载前缀，遵循同一契约。
 - **WS upgrade 与 HTTP 共享认证路径**：WS downlink 握手与 `/api` HTTP 通道经同一道认证——connection 的 `requestRejection`（fence + cookie）守卫两条通道，官方实现，宿主不设独立 upgrade 认证。
@@ -378,7 +378,7 @@ ellamaka 通过工具容器采用 dsh 的工具能力。采用原则：**每个�
 
 dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影进 ellamaka ToolRegistry：
 
-- **映射白名单**：配置 `tools: [{source, target, enable}]`。同名 target 覆盖 ellamaka 内置工具；容器缺失时 adapter 挂 0 个工具，内置工具原样可用。
+- **固定投影集**：无 per-tool 映射表。开启沙箱即整套替换（`grep`/`glob`/`read`/`write`/`edit`/`str_replace_editor`/`bash`），同名覆盖 ellamaka 内置工具。dsh 工具不可部分替换——dsh 的 edit 依赖自身 read 的已读账本，内建 read 无法喂给它，混用即错乱，故全有或全无。容器缺失时 adapter 挂 0 个工具，内置工具原样可用。
 - **schema 投影**：把 dsh 的 JSON Schema 解包为 ellamaka 插件 SDK 的 ZodRawShape；不支持的类型降级 `z.unknown()`，dsh schema 扩展不破坏投影。
 - **参数映射**：dsh 蛇形参数（`file_path`）重命名为 ellamaka 驼峰（`filePath`），投影时重命名、execute 时转回。
 - **结果映射**：dsh 的 `meta.diffs` 映射为 ellamaka 的 `filediff`（`file`/`patch`/`additions`/`deletions`），hunk diff 算法在 adapter 内自持，不 import dsh 包。前端零改动。
@@ -393,10 +393,8 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 
 沙箱模式在运行时决议（见「配置与隔离 · 沙箱配置」）：
 
-- **启用沙箱**：注入 `sandbox/mode` 事件，`mode` 在 `read-only` 与 `workspace-write` 间选择。
-- **关闭沙箱**：注入 `danger-full-access`，工具在容器默认后端下运行。**不切换本地 fs/bash 后端**——工具始终走同一容器与已装配的沙箱后端，关沙箱只是放开有效模式。
-
-`danger-full-access` 保留为 dsh 内部一次性 escalation 目标，不作为空间级配置值暴露。
+- **启用沙箱**：adapter 挂载 `tool.provider` 投影整套 dsh 工具，并向每个 facade 注入 `sandbox/mode` 事件，`mode` 在 `read-only` 与 `workspace-write` 间选择。
+- **关闭沙箱**：adapter 空转工具投影——不注册 `tool.provider`、不建 facade、不注入任何 `sandbox/mode` 事件。ellamaka 内置工具原样运行，运行时行为与未加载 adapter 完全一致。空转只作用于工具投影；adapter 未来新增的非工具职责照常挂载。
 
 ### escalation 审批桥接与沙箱三态切换
 
@@ -421,9 +419,9 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 | 无 ask 闭包（TUI 等无 UI 入口） | `next()` 委托 waterfall 兜底 `unavailable`（fail-closed） |
 | abort | dsh 原生 `cancelled`（ApprovalService 与请求信号 race） |
 
-**escalation 策略**：`ellamaka.dsh.sandbox.escalation: "ask" | "never"`（默认 `ask`）。`never` 时 adapter 向每个 facade seed `approval/policy` session 事件（dsh 原生 fold 语义，LAST 优先），approval 服务在 waterfall 之前确定性拒绝，answerer 零调用。沙箱关闭（full-access）时 escalation 字段不广告，无需处理。
+**escalation 策略**：`ellamaka.dsh.sandbox.escalation: "ask" | "never"`（默认 `ask`）。`never` 时 adapter 向每个 facade seed `approval/policy` session 事件（dsh 原生 fold 语义，LAST 优先），approval 服务在 waterfall 之前确定性拒绝，answerer 零调用。沙箱关闭时 adapter 空转、无 escalation 语境，该字段不生效。
 
-**沙箱三态切换（per-session）**：Workbench chat composer 底栏 `ComposerSandboxControl` 下拉（只读 / 工作区写入 / 完全访问），选择按会话存浏览器 storage（workspace 存储，按 sessionID 分桶），不改写任何 settings 文件。选择随消息携带：提交时经 `FollowupDraft.sandboxMode` 进入 prompt payload，`UserMessage.sandboxMode` 持久化（fork/queue 继承），`SessionTools.resolve` 透传进 `Tool.Context.extra`；adapter 在每次 `tools.execute()` 读取 `extra.sandboxMode`，有值即 append `sandbox/mode` 事件（LAST-wins，立即生效）。无选择回落空间默认（「配置与隔离 · 沙箱配置」）。`full-access` 映射事件值 `danger-full-access`（见「沙箱语义」）。显示条件（运行时事实，非配置字符串）：dock composer 且 DSH 运行时状态为 `ready`（kill switch 开、非 `degraded`）且实例级（目录）生效配置含 dsh-adapter 插件；任一不满足即隐藏。运行时状态由 `/global/health` 的 `dsh` 字段提供（`disabled`/`ready`/`degraded`）。不使用 dsh permission-presets。
+**沙箱三态切换（per-session）**：Workbench chat composer 底栏 `ComposerSandboxControl` 下拉（只读 / 工作区写入 / 完全访问），选择按会话存浏览器 storage（workspace 存储，按 sessionID 分桶），不改写任何 settings 文件。选择随消息携带：提交时经 `FollowupDraft.sandboxMode` 进入 prompt payload，`UserMessage.sandboxMode` 持久化（fork/queue 继承），`SessionTools.resolve` 透传进 `Tool.Context.extra`；adapter 在每次 `tools.execute()` 读取 `extra.sandboxMode`，有值即 append `sandbox/mode` 事件（LAST-wins，立即生效）。无选择回落空间默认（「配置与隔离 · 沙箱配置」）。`full-access` 映射事件值 `danger-full-access`（见「沙箱语义」）。显示条件（运行时事实，非配置字符串）：dock composer 且 DSH 运行时状态为 `ready`（kill switch 开、非 `degraded`）且实例级（目录）生效配置含 dsh-adapter 插件且插件 spec 声明 `sandbox.enabled: true`（沙箱关闭即 adapter 空转，无模式可选，选择器隐藏）；任一不满足即隐藏。运行时状态由 `/global/health` 的 `dsh` 字段提供（`disabled`/`ready`/`degraded`）。不使用 dsh permission-presets。
 
 **fold 不变量**：显式选择必须总是追加事件，即使该值等于空间默认。事件日志按 LAST-wins 折叠，"恢复默认"只能靠显式写入默认值；把"等于默认"优化成"不追加"会让会话滞留在上一次的 override 上。`extra.sandboxMode` 缺失才是"沿用当前折叠值"的唯一信号。
 
@@ -435,7 +433,7 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 
 **容器装配是进程级共享能力池**：serve/TUI/desktop 各挂一个工具容器，进程内所有空间共用。容器载入完整工具链，禁用清单只管 agent-loop 基础设施，不管工具。装配一次，所有空间共用。
 
-**工具投影是空间级隔离点**：每个空间的 `.wopal/config/settings.jsonc` 声明自己的 adapter 映射白名单与沙箱策略。adapter 按空间加载，各带各的配置——空间 A 开 grep+glob，空间 B 开 grep+glob+bash，互不影响；未开映射的空间用 ellamaka 内置工具。
+**工具投影是空间级隔离点**：每个空间的 `.wopal/config/settings.jsonc` 声明自己的沙箱策略。adapter 按空间加载，各带各的配置——开沙箱的空间整套替换为 dsh 工具，关沙箱的空间用 ellamaka 内置工具，互不影响。
 
 **配置层级走 ellamaka 原生合并**：用户级 → 空间级 → 空间本地，逐层覆盖。
 
@@ -446,7 +444,7 @@ dsh-adapter（`.wopal/plugins/dsh-adapter`）把工具容器中的工具投影�
 | 配置 | 含义 |
 |------|------|
 | `enabled: true` | 启用沙箱，`mode` 在 `read-only` 与 `workspace-write` 间选择 |
-| `enabled: false` / 缺失 | 关闭沙箱，注入 `danger-full-access` |
+| `enabled: false` / 缺失 | 关闭沙箱，adapter 空转工具投影，ellamaka 内置工具原样运行 |
 
 进程级默认值只在尚未解析空间配置时兜底。**不用 `DSH_PERMISSION_MODE` 环境变量**——沙箱策略由空间配置拥有。
 
@@ -521,6 +519,18 @@ session-query / schedule / subagent / system prompt 注入等能力依赖 dsh �
 3. **`Effect.scope` 须在 `Effect.scoped` 内获取**，否则以空 defect Die。
 4. **ALS 上下文**：effect 体内发起的桥接调用沿传播链天然继承 Instance ALS；纯 async 侧发起的轮次须捕获-恢复 ALS。
 5. **取消语义**：interrupt 后 finalizer 按子先父后顺序确定性执行，`forkIn(scope)` 的并发子任务级联清理。Cordis 入口只启动不拥有中断权。
+
+### Bun 模块缓存键不含 query（2026-09-10，隔离探针实测）
+
+同一模块文件改写后，以三种身份重新 `import()`，探针 `.wopal-space/.tmp/hmr-probe/probe.mjs`/`probe4b.mjs`（bun 1.3.14 / node 22.22.2）：
+
+| 重新导入身份 | Node 22 | Bun 1.3.14 |
+|---|---|---|
+| 同一 URL（文件已改写） | 旧模块 | 旧模块 |
+| `?<hash>` query 附加 | **新模块** | **旧模块（query 被忽略）** |
+| 真实新文件名（候选副本） | 新模块 | **新模块**（相对依赖原样解析） |
+
+**推论**：Bun 宿主下"绕缓存"只有换真实路径一条路；URL query 内容寻址是 Node 专属语义，不能用于 bun-hmr 的 generation 替换（见「运行时机制 · 模块热换的 Bun 替代路径」第 4 步修订）。
 
 ### 插件供应链实测事实（2026-09-02，真实官方包）
 
@@ -873,7 +883,9 @@ Agent 配置单（`agent-presets`）与 Profile 容器（`profiles`）在 WopalS
 1. 插件或 profile patch 变更 → Bridge 组合完整候选补丁栈（现有 `startDshPluginService` 的组合逻辑）。
 2. 候选栈在隔离 Cordis context 中加载并激活校验（复用「插件供应链 · Bun 宿主兼容性预检」的隔离挂载实现）。
 3. 校验通过后等待该容器无进行中 agent 请求（空闲窗口），事务性执行 `includeEntry.update()`——由官方 Loader 按 entry id 插拔 fiber，失败自动回滚旧栈。
-4. Bun 模块缓存不需要清除：隔离候选使用内容寻址 URL（`file://...?<content-hash>`）加载变更模块，天然绕开缓存冲突；已运行容器的旧模块实例随旧 fiber dispose。
+4. 变更模块经**真实路径候选副本**加载，不用 URL query（2026-09-10 实证修订，见「已验证事实 · Bun 模块缓存键不含 query」）：Bun 的模块缓存以去 query 的真实路径为键，`file://...?<content-hash>` 不产生新模块身份；隔离候选必须落在**新文件名**（如 `<profile>/.dsh-hot/<name>-<hash>/` 候选目录）才被重新加载。已运行容器的旧模块实例随旧 fiber dispose。
+
+**落地状态（2026-09-10 审计）**：以上 generation 替换**尚未接线**。`bun-hmr.ts` 的 `watchCompositionFiles`（唯一 generation 候选入口）全仓库零生产调用点，且其实现同样是浅更新 `entry.update({ config })`，不含候选校验/副本挂载；生产重放路径（`runtime.ts` 的 `runReplay`）也只做浅 `config` 合并。因此**更新场景下旧模块继续被服务**——市场显示 `restart` 是当前唯一正确结论，不是误判。实现 candidate 替换需连带处理「插件入口 artifact 形态」（exports/main/index.js）与「空闲窗口」（市场端已有"更新拒绝有 agent 运行"守卫可对齐）。留待今后按本路径实现，不在本次范围。
 
 **Bun 下不伪造 `loader.internal`（拆雷）**：
 
@@ -900,7 +912,7 @@ Agent 配置单（`agent-presets`）与 Profile 容器（`profiles`）在 WopalS
 **Spike 实测结论（S-2，不可再走解析拦截）**：
 
 - `.wopal-space/.tmp/spike/s2-plugin.mjs` 实测：`Bun.plugin({ setup(build) { build.onResolve(...) } })` 注册成功、暴露 `onResolve` API，但**不影响运行时的 `await import()`**——`@wopal-spike/missing` 依旧 `ERR_MODULE_NOT_FOUND`。Bun 的 `Bun.plugin` 拦截只作用于构建期（bundle），运行时模块解析不在其内。
-- bun-hmr 不依赖此能力（走 include update + 内容寻址 URL），该结论仅作记录，防止将来再尝试用 `Bun.plugin` 做运行时解析拦截。
+- bun-hmr 的 generation 替换走「真实路径候选副本」而非解析拦截（见「模块热换的 Bun 替代路径」第 4 步），该结论仅作记录，防止将来再尝试用 `Bun.plugin` 做运行时解析拦截。
 
 **B3 传递的适配教训（B2 实现前必读）**：
 

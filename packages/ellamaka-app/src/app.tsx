@@ -334,9 +334,19 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
 
 function ServerKey(props: ParentProps) {
   const server = useServer()
+  // The credential epoch rides the remount key: saving a new password for the
+  // SAME url rebuilds the whole provider tree against the fresh credentials —
+  // failed stores/resources from the stale-credential episode are discarded
+  // instead of poisoning the UI until a manual reload.
+  const [epoch, setEpoch] = createSignal(0)
+  createEffect(() => {
+    // Track both; the string change drives the keyed re-creation.
+    void `${server.key}#${server.credentialEpoch}`
+    setEpoch((n) => n + 1)
+  })
   return (
-    <Show when={server.key} keyed>
-      {props.children}
+    <Show when={epoch()} keyed>
+      {(_epoch) => props.children}
     </Show>
   )
 }

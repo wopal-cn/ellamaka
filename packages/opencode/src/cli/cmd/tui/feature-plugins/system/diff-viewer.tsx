@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginApi, TuiRouteCurrent } from "@opencode-ai/plugin/tui"
-import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { TextAttributes, type BorderSides, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { useBindings, useCommandShortcut } from "@tui/keymap"
@@ -37,7 +37,7 @@ const WORKING_TREE_DIFF_CONTEXT_LINES = 12
 const KV_SHOW_FILE_TREE = "diff_viewer_show_file_tree"
 const KV_SINGLE_PATCH = "diff_viewer_single_patch"
 const KV_VIEW = "diff_viewer_view"
-type DiffMode = "git" | "last-turn"
+type DiffMode = "git"
 type DiffViewerFocus = "patches" | "files"
 type DiffView = "split" | "unified"
 
@@ -49,7 +49,7 @@ type DiffFile = {
   readonly status: "added" | "deleted" | "modified"
 }
 
-const normalizeDiffs = (diffs: readonly (VcsFileDiff | SnapshotFileDiff)[]): DiffFile[] =>
+const normalizeDiffs = (diffs: readonly VcsFileDiff[]): DiffFile[] =>
   diffs.flatMap((item) =>
     item.file
       ? [
@@ -95,16 +95,6 @@ function DiffViewer(props: { api: TuiPluginApi }) {
     messageID: params()?.messageID,
   }))
   const [diff] = createResource(diffInput, async (input) => {
-    if (input.mode === "last-turn") {
-      const sessionID = input.sessionID
-      if (!sessionID) return []
-      const result = await props.api.client.session.diff(
-        { sessionID, messageID: input.messageID },
-        { throwOnError: true },
-      )
-      return normalizeDiffs(result.data ?? [])
-    }
-
     const result = await props.api.client.vcs.diff(
       { mode: "git", context: WORKING_TREE_DIFF_CONTEXT_LINES },
       { throwOnError: true },
@@ -609,11 +599,6 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       value: "git" as const,
       description: "Show current git changes",
     },
-    {
-      title: "Last turn",
-      value: "last-turn" as const,
-      description: "Show changes from the last assistant turn",
-    },
   ])
 
   const openSwitchDiffDialog = () => {
@@ -664,7 +649,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       <PanelGroup axis="y" width="100%" height="100%">
         <Panel border="none" flexShrink={0} padding={0} paddingLeft={1}>
           <text fg={theme().text}>Diff </text>
-          <text fg={theme().textMuted}>{mode() === "last-turn" ? "last turn" : "working tree"}</text>
+          <text fg={theme().textMuted}>working tree</text>
           <box flexGrow={1} />
           <text fg={theme().textMuted}>
             {files().length} {files().length === 1 ? "file" : "files"}
@@ -874,7 +859,7 @@ function DiffViewerHelpDialog() {
     {
       shortcut: useCommandShortcut("diff.switch_source"),
       action: "Switch source",
-      description: "Choose working tree or last-turn changes",
+      description: "Choose working tree changes",
     },
     {
       shortcut: useCommandShortcut("diff.toggle_view"),

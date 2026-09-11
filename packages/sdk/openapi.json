@@ -231,9 +231,33 @@
                     },
                     "version": {
                       "type": "string"
+                    },
+                    "cli": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": ["ok", "missing", "incompatible", "broken"]
+                        },
+                        "requiredVersion": {
+                          "type": "string"
+                        },
+                        "actualVersion": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["state", "requiredVersion"],
+                      "additionalProperties": false
+                    },
+                    "dsh": {
+                      "type": "string",
+                      "enum": ["disabled", "preparing", "ready", "degraded"]
                     }
                   },
-                  "required": ["healthy", "version"],
+                  "required": ["healthy", "version", "cli"],
                   "additionalProperties": false,
                   "description": "Health information"
                 }
@@ -257,6 +281,74 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/global/cli/repair": {
+      "post": {
+        "tags": ["global"],
+        "operationId": "global.cli.repair",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Wopal CLI repair result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "started": {
+                      "type": "boolean"
+                    },
+                    "cli": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": ["ok", "missing", "incompatible", "broken"]
+                        },
+                        "requiredVersion": {
+                          "type": "string"
+                        },
+                        "actualVersion": {
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["state", "requiredVersion"],
+                      "additionalProperties": false
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["started", "cli"],
+                  "additionalProperties": false,
+                  "description": "Wopal CLI repair result"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update or reinstall the managed Wopal CLI after explicit user confirmation.",
+        "summary": "Repair Wopal CLI",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.cli.repair({\n  ...\n})"
           }
         ]
       }
@@ -509,6 +601,292 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.upgrade({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/wopal-space/spaces": {
+      "get": {
+        "tags": ["wopal-space"],
+        "operationId": "wopal-space.spaces",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Registered WopalSpace spaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "spaces": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "name", "path"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["spaces"],
+                  "additionalProperties": false,
+                  "description": "Registered WopalSpace spaces"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read the `spaces` registry from ~/.wopal/config/settings.jsonc (managed by wopal-cli). Returns all registered WopalSpace spaces with name, path, and type.",
+        "summary": "List WopalSpace spaces",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.wopal-space.spaces({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workbench/session-groups": {
+      "get": {
+        "tags": ["workbench"],
+        "operationId": "workbench.sessionGroups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Legacy Workbench session groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["space", "general"]
+                          },
+                          "sessionCount": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "sessions": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "title": {
+                                  "type": "string"
+                                },
+                                "directory": {
+                                  "type": "string"
+                                },
+                                "directoryHealth": {
+                                  "type": "string",
+                                  "enum": ["healthy", "missing", "unavailable"]
+                                },
+                                "agent": {
+                                  "type": "string"
+                                },
+                                "timeCreated": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "timeUpdated": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["id", "title", "directory", "directoryHealth", "timeCreated", "timeUpdated"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["id", "title", "type", "sessionCount", "sessions"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["groups"],
+                  "additionalProperties": false,
+                  "description": "Legacy Workbench session groups"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "CapabilityContractError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SpaceControlUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceControlUnavailable"
+                }
+              }
+            }
+          }
+        },
+        "description": "Compatibility projection for existing consumers. New Workbench clients use session-tree.",
+        "summary": "List legacy Workbench session groups",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workbench.sessionGroups({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workbench/dsh-url": {
+      "get": {
+        "tags": ["workbench"],
+        "operationId": "workbench.dshUrl",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Authenticated DSH iframe entry URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["url"],
+                  "additionalProperties": false,
+                  "description": "Authenticated DSH iframe entry URL"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Returns the launch-token iframe URL for the mounted dsh web engine, or url: undefined when the engine is disabled or not yet mounted.",
+        "summary": "Resolve the authenticated DSH iframe entry",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workbench.dshUrl({\n  ...\n})"
           }
         ]
       }
@@ -5709,82 +6087,6 @@
         ]
       }
     },
-    "/session/{sessionID}/diff": {
-      "get": {
-        "tags": ["session"],
-        "operationId": "session.diff",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "messageID",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "pattern": "^msg"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successfully retrieved diff",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SnapshotFileDiff"
-                  },
-                  "description": "Successfully retrieved diff"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "description": "Get the file changes (diff) that resulted from a specific user message in the session.",
-        "summary": "Get message diff",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.diff({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/session/{sessionID}/message": {
       "get": {
         "tags": ["session"],
@@ -6025,6 +6327,10 @@
                   },
                   "variant": {
                     "type": "string"
+                  },
+                  "sandboxMode": {
+                    "type": "string",
+                    "enum": ["read-only", "workspace-write", "full-access"]
                   },
                   "parts": {
                     "type": "array",
@@ -6908,6 +7214,10 @@
                   "variant": {
                     "type": "string"
                   },
+                  "sandboxMode": {
+                    "type": "string",
+                    "enum": ["read-only", "workspace-write", "full-access"]
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -7548,6 +7858,87 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.respond({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/permissions/escalation": {
+      "delete": {
+        "tags": ["session"],
+        "operationId": "permission.clearEscalation",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Escalation grants cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Escalation grants cleared"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadRequest | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/effect_HttpApiError_BadRequest"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Drop every sandbox-escalation 'always' grant the session has accumulated. Session-scoped by design; other permission types are untouched.",
+        "summary": "Clear session escalation grants",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.clearEscalation({\n  ...\n})"
           }
         ]
       }
@@ -10397,6 +10788,691 @@
         ]
       }
     },
+    "/wopal-space/mode": {
+      "get": {
+        "tags": ["wopal-space-instance"],
+        "operationId": "wopal-space.mode",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WopalSpace mode for the current directory instance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "isWopalSpace": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["isWopalSpace"],
+                  "additionalProperties": false,
+                  "description": "WopalSpace mode for the current directory instance"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Check if the current directory instance is running in WopalSpace mode.",
+        "summary": "Get WopalSpace mode",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.wopal-space.mode({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workbench/sessions": {
+      "post": {
+        "tags": ["workbench-instance"],
+        "operationId": "workbench.createSession",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Created Workbench session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "directory": {
+                      "type": "string"
+                    },
+                    "directoryHealth": {
+                      "type": "string",
+                      "enum": ["healthy", "missing", "unavailable"]
+                    },
+                    "agent": {
+                      "type": "string"
+                    },
+                    "timeCreated": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    },
+                    "timeUpdated": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["NaN"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["-Infinity"]
+                        },
+                        {
+                          "type": "string",
+                          "enum": ["Infinity", "-Infinity", "NaN"]
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["id", "title", "directory", "directoryHealth", "timeCreated", "timeUpdated"],
+                  "additionalProperties": false,
+                  "description": "Created Workbench session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidSpaceTarget | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidSpaceTarget"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WorkbenchSpaceNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchSpaceNotFound"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "SessionDirectoryUnavailable | WorkbenchRequestConflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionDirectoryUnavailable"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WorkbenchRequestConflict"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "CapabilityContractError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SpaceControlUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceControlUnavailable"
+                }
+              }
+            }
+          }
+        },
+        "description": "Creates a General or registered-Space session. New clients use target.spacePath; legacy target.space remains supported for one release.",
+        "summary": "Create an idempotent Workbench session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestID": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["general"]
+                          }
+                        },
+                        "required": ["type"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["space"]
+                          },
+                          "spacePath": {
+                            "type": "string"
+                          },
+                          "directory": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "spacePath"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": ["space"]
+                          },
+                          "space": {
+                            "type": "string"
+                          },
+                          "directory": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["type", "space"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "agent": {
+                    "type": "string"
+                  }
+                },
+                "required": ["requestID", "target"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workbench.createSession({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workbench/session-tree": {
+      "get": {
+        "tags": ["workbench-instance"],
+        "operationId": "workbench.sessionTree",
+        "parameters": [
+          {
+            "name": "limitPerScope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workbench session tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["general", "space"]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "sessionCount": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "truncated": {
+                            "type": "boolean"
+                          },
+                          "locations": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["general-directory", "general-date", "space-root", "project"]
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "path": {
+                                  "type": "string"
+                                },
+                                "sessionCount": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "sessions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string"
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "directory": {
+                                        "type": "string"
+                                      },
+                                      "relativePath": {
+                                        "type": "string"
+                                      },
+                                      "marker": {
+                                        "type": "string",
+                                        "enum": ["", "directory", "worktree"]
+                                      },
+                                      "branch": {
+                                        "type": "string"
+                                      },
+                                      "directoryHealth": {
+                                        "type": "string",
+                                        "enum": ["healthy", "missing", "unavailable"]
+                                      },
+                                      "timeCreated": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      },
+                                      "timeUpdated": {
+                                        "anyOf": [
+                                          {
+                                            "type": "number"
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["NaN"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["-Infinity"]
+                                          },
+                                          {
+                                            "type": "string",
+                                            "enum": ["Infinity", "-Infinity", "NaN"]
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "title",
+                                      "directory",
+                                      "marker",
+                                      "directoryHealth",
+                                      "timeCreated",
+                                      "timeUpdated"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": ["key", "kind", "name", "path", "sessionCount", "sessions"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["key", "kind", "name", "path", "sessionCount", "truncated", "locations"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["scopes"],
+                  "additionalProperties": false,
+                  "description": "Workbench session tree"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "CapabilityContractError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SpaceControlUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceControlUnavailable"
+                }
+              }
+            }
+          }
+        },
+        "description": "Returns General first, registered Spaces even when empty, and only active root sessions.",
+        "summary": "List sessions as Scope, location, session",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workbench.sessionTree({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/workbench/locations": {
+      "get": {
+        "tags": ["workbench-instance"],
+        "operationId": "workbench.locations",
+        "parameters": [
+          {
+            "name": "spacePath",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Controlled Workbench creation locations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "scopePath": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": ["space-root", "project", "recent", "search"]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "relativeDirectory": {
+                            "type": "string"
+                          },
+                          "lastUsedAt": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          }
+                        },
+                        "required": ["key", "kind", "name", "path", "relativeDirectory"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["scopePath", "items"],
+                  "additionalProperties": false,
+                  "description": "Controlled Workbench creation locations"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WorkbenchSpaceNotFound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkbenchSpaceNotFound"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "CapabilityContractError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityContractError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SpaceControlUnavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaceControlUnavailable"
+                }
+              }
+            }
+          }
+        },
+        "description": "Candidates are Space root, registered projects, recent session directories, and the directory-search capability; arbitrary filesystem browsing is not exposed.",
+        "summary": "List controlled locations inside a Space",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.workbench.locations({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty/{ptyID}/connect": {
       "get": {
         "tags": ["pty"],
@@ -10529,9 +11605,6 @@
           },
           {
             "$ref": "#/components/schemas/EventPermissionReplied"
-          },
-          {
-            "$ref": "#/components/schemas/EventSessionDiff"
           },
           {
             "$ref": "#/components/schemas/EventSessionError"
@@ -11091,29 +12164,6 @@
         "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"],
         "additionalProperties": false
       },
-      "SnapshotFileDiff": {
-        "type": "object",
-        "properties": {
-          "file": {
-            "type": "string"
-          },
-          "patch": {
-            "type": "string"
-          },
-          "additions": {
-            "type": "number"
-          },
-          "deletions": {
-            "type": "number"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["added", "deleted", "modified"]
-          }
-        },
-        "required": ["additions", "deletions"],
-        "additionalProperties": false
-      },
       "ProviderAuthError": {
         "type": "object",
         "properties": {
@@ -11652,6 +12702,29 @@
           }
         ]
       },
+      "SnapshotFileDiff": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "string"
+          },
+          "additions": {
+            "type": "number"
+          },
+          "deletions": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
+          }
+        },
+        "required": ["additions", "deletions"],
+        "additionalProperties": false
+      },
       "UserMessage": {
         "type": "object",
         "properties": {
@@ -11727,6 +12800,10 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "sandboxMode": {
+            "type": "string",
+            "enum": ["read-only", "workspace-write", "full-access"]
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"],
@@ -12961,9 +14038,6 @@
               },
               {
                 "$ref": "#/components/schemas/EventPermissionReplied"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionDiff"
               },
               {
                 "$ref": "#/components/schemas/EventSessionError"
@@ -14358,6 +15432,43 @@
         },
         "additionalProperties": false
       },
+      "SpaceControlUnavailable": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SpaceControlUnavailable"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "CapabilityContractError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["CapabilityContractError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
       "Model": {
         "type": "object",
         "properties": {
@@ -15166,6 +16277,9 @@
             "type": "string"
           },
           "config": {
+            "type": "string"
+          },
+          "wopalHome": {
             "type": "string"
           },
           "worktree": {
@@ -16304,6 +17418,74 @@
           }
         },
         "required": ["name", "data"],
+        "additionalProperties": false
+      },
+      "WorkbenchSpaceNotFound": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["WorkbenchSpaceNotFound"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "spacePath": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message", "spacePath"],
+        "additionalProperties": false
+      },
+      "InvalidSpaceTarget": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["InvalidSpaceTarget"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
+      "SessionDirectoryUnavailable": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SessionDirectoryUnavailable"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message", "directory"],
+        "additionalProperties": false
+      },
+      "WorkbenchRequestConflict": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["WorkbenchRequestConflict"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestID": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message", "requestID"],
         "additionalProperties": false
       },
       "effect_HttpApiError_Forbidden": {
@@ -18421,37 +19603,6 @@
               }
             },
             "required": ["sessionID", "requestID", "reply"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionDiff": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.diff"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              },
-              "diff": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/SnapshotFileDiff"
-                }
-              }
-            },
-            "required": ["sessionID", "diff"],
             "additionalProperties": false
           }
         },
@@ -22250,6 +23401,14 @@
       "description": "Global server routes."
     },
     {
+      "name": "wopal-space",
+      "description": "WopalSpace registry routes (ellamaka customization)."
+    },
+    {
+      "name": "workbench",
+      "description": "Workbench compatibility routes."
+    },
+    {
       "name": "event",
       "description": "Instance event stream route."
     },
@@ -22324,6 +23483,14 @@
     {
       "name": "workspace",
       "description": "Experimental HttpApi workspace routes."
+    },
+    {
+      "name": "wopal-space-instance",
+      "description": "WopalSpace instance routes (ellamaka customization)."
+    },
+    {
+      "name": "workbench-instance",
+      "description": "Workbench instance routes."
     },
     {
       "name": "pty",

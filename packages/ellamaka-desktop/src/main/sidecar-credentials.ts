@@ -10,8 +10,8 @@
  * enumerated here.
  */
 export const SIDECAR_ONLY_OPENCODE_KEYS: readonly string[] = [
-  "OPENCODE_SERVER_USERNAME",
-  "OPENCODE_SERVER_PASSWORD",
+  "ELLAMAKA_SERVER_USERNAME",
+  "ELLAMAKA_SERVER_PASSWORD",
   "OPENCODE_CLIENT",
   "OPENCODE_DISABLE_EMBEDDED_WEB_UI",
 ]
@@ -92,8 +92,8 @@ export function getCapturedSidecarExperimentalConfig(): Record<string, string> {
  * credentials.
  */
 export function clearSidecarCredentials(): void {
-  delete process.env.OPENCODE_SERVER_PASSWORD
-  delete process.env.OPENCODE_SERVER_USERNAME
+  delete process.env.ELLAMAKA_SERVER_PASSWORD
+  delete process.env.ELLAMAKA_SERVER_USERNAME
 }
 
 /**

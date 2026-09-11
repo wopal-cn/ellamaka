@@ -506,9 +506,6 @@ export const dict = {
   "session.review.loadingChanges": "Değişiklikler yükleniyor...",
   "session.review.empty": "Bu oturumda henüz değişiklik yok",
   "session.review.noVcs": "Git VCS algılanamadı, oturum değişiklikleri tespit edilemeyecek",
-  "session.review.noSnapshot":
-    "Yapılandırmada anlık görüntü takibi devre dışı bırakıldı, bu nedenle oturum değişiklikleri kullanılamıyor",
-  "session.review.noChanges": "Değişiklik yok",
 
   "session.files.selectToOpen": "Açmak için bir dosya seçin",
   "session.files.all": "Tüm dosyalar",

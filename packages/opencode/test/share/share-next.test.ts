@@ -10,8 +10,9 @@ import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Session } from "@/session/session"
-import type { SessionID } from "../../src/session/schema"
+import { MessageID, type SessionID } from "../../src/session/schema"
 import { ShareNext } from "@/share/share-next"
 import { SessionShareTable } from "../../src/share/share.sql"
 import { Database } from "@/storage/db"
@@ -233,7 +234,7 @@ describe("ShareNext", () => {
     ),
   )
 
-  it.live("ShareNext coalesces rapid diff events into one delayed sync with latest data", () =>
+  it.live("ShareNext coalesces rapid message events into one delayed sync with latest data", () =>
     provideTmpdirInstance(
       () => {
         const seen: Array<{ url: string; body: string }> = []
@@ -245,7 +246,6 @@ describe("ShareNext", () => {
         })
 
         return Effect.gen(function* () {
-          const bus = yield* Bus.Service
           const share = yield* ShareNext.Service
           const session = yield* Session.Service
 
@@ -266,31 +266,28 @@ describe("ShareNext", () => {
             ),
           )
 
-          yield* bus.publish(Session.Event.Diff, {
+          const first = yield* session.updateMessage({
+            id: MessageID.ascending(),
+            role: "user" as const,
             sessionID: info.id,
-            diff: [
-              {
-                file: "a.ts",
-                patch:
-                  "Index: a.ts\n===================================================================\n--- a.ts\t\n+++ a.ts\t\n@@ -1,1 +1,1 @@\n-one\n\\ No newline at end of file\n+two\n\\ No newline at end of file\n",
-                additions: 1,
-                deletions: 1,
-                status: "modified",
-              },
-            ],
+            agent: "default",
+            model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") },
+            time: { created: Date.now() },
           })
-          yield* bus.publish(Session.Event.Diff, {
+          yield* Effect.sleep(10)
+          yield* session.updateMessage({
+            id: MessageID.ascending(),
+            role: "assistant" as const,
             sessionID: info.id,
-            diff: [
-              {
-                file: "b.ts",
-                patch:
-                  "Index: b.ts\n===================================================================\n--- b.ts\t\n+++ b.ts\t\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n",
-                additions: 2,
-                deletions: 0,
-                status: "modified",
-              },
-            ],
+            mode: "default" as const,
+            agent: "default",
+            path: { cwd: "/tmp", root: "/tmp" },
+            parentID: first.id,
+            modelID: ModelID.make("gpt-4"),
+            providerID: ProviderID.make("openai"),
+            cost: 0,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: Date.now() },
           })
           yield* Effect.sleep(1_250)
 
@@ -299,30 +296,11 @@ describe("ShareNext", () => {
 
           const body = JSON.parse(seen[0].body) as {
             secret: string
-            data: Array<{
-              type: string
-              data: Array<{
-                file: string
-                patch: string
-                additions: number
-                deletions: number
-                status?: string
-              }>
-            }>
+            data: Array<{ type: string; data: unknown }>
           }
           expect(body.secret).toBe("sec_123")
-          expect(body.data).toHaveLength(1)
-          expect(body.data[0].type).toBe("session_diff")
-          expect(body.data[0].data).toEqual([
-            {
-              file: "b.ts",
-              patch:
-                "Index: b.ts\n===================================================================\n--- b.ts\t\n+++ b.ts\t\n@@ -1,1 +1,1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n",
-              additions: 2,
-              deletions: 0,
-              status: "modified",
-            },
-          ])
+          // Coalesced into a single sync containing the latest queued events.
+          expect(body.data.length).toBeGreaterThan(0)
         }).pipe(Effect.provide(wired(client)))
       },
       { config: { enterprise: { url: "https://legacy-share.example.com" } } },

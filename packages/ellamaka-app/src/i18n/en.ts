@@ -551,8 +551,6 @@ export const dict = {
   "session.review.noVcs.createGit.description": "Track, review, and undo changes in this project",
   "session.review.noVcs.createGit.actionLoading": "Creating Git repository...",
   "session.review.noVcs.createGit.action": "Create Git repository",
-  "session.review.noSnapshot": "Snapshot tracking is disabled in config, so session changes are unavailable",
-  "session.review.noChanges": "No changes",
   "session.review.noUncommittedChanges": "No uncommitted changes yet",
   "session.review.noBranchChanges": "No branch changes yet",
 
@@ -1067,6 +1065,9 @@ export const dict = {
   "workbench.runtime.degraded": "Event stream reconnecting",
   "workbench.runtime.recovering": "Reconnecting",
   "workbench.runtime.offlineOverlay": "Connection lost. Reconnecting…",
+  "workbench.runtime.unauthorizedTitle": "Authentication failed",
+  "workbench.runtime.unauthorizedHint": "The stored credentials for this server were rejected. Update them to reconnect.",
+  "workbench.runtime.unauthorizedAction": "Update server credentials",
   "workbench.cli.missing": "Wopal CLI is unavailable. Repair it to restore Space controls (requires {{required}} or later).",
   "workbench.cli.incompatible": "Wopal CLI {{actual}} is incompatible. Repair it to restore Space controls (requires {{required}} or later).",
   "workbench.cli.broken": "Wopal CLI could not be verified. Repair it to restore Space controls (requires {{required}} or later).",

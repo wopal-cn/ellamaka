@@ -47,7 +47,6 @@ import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Skill } from "@/skill"
-import { Snapshot } from "@/snapshot"
 import { SyncEvent } from "@/sync"
 import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
@@ -248,7 +247,6 @@ export function createRoutes(
       SessionStatus.defaultLayer,
       SessionSummary.defaultLayer,
       ShareNext.defaultLayer,
-      Snapshot.defaultLayer,
       SyncEvent.defaultLayer,
       EventV2Bridge.defaultLayer,
       Skill.defaultLayer,

@@ -3,7 +3,6 @@ import path from "path"
 import { Global } from "@wopal/ellamaka-core/global"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
-import { NonNegativeInt } from "@wopal/ellamaka-core/schema"
 import { Git } from "@/git"
 
 const log = Log.create({ service: "storage" })
@@ -40,21 +39,9 @@ const MessageFile = Schema.Struct({
   id: Schema.String,
 })
 
-const DiffFile = Schema.Struct({
-  additions: NonNegativeInt,
-  deletions: NonNegativeInt,
-})
-
-const SummaryFile = Schema.Struct({
-  id: Schema.String,
-  projectID: Schema.String,
-  summary: Schema.Struct({ diffs: Schema.Array(DiffFile) }),
-})
-
 const decodeRoot = Schema.decodeUnknownOption(RootFile)
 const decodeSession = Schema.decodeUnknownOption(SessionFile)
 const decodeMessage = Schema.decodeUnknownOption(MessageFile)
-const decodeSummary = Schema.decodeUnknownOption(SummaryFile)
 
 export interface Interface {
   readonly remove: (key: string[]) => Effect.Effect<void, AppFileSystem.Error>
@@ -183,35 +170,6 @@ const MIGRATIONS: Migration[] = [
           }
         }
       }
-    }
-  }),
-  Effect.fn("Storage.migration.2")(function* (dir: string, fs: AppFileSystem.Interface) {
-    for (const item of yield* fs.glob("session/*/*.json", {
-      cwd: dir,
-      absolute: true,
-    })) {
-      const raw = yield* fs.readJson(item)
-      const session = decodeSummary(raw, { onExcessProperty: "preserve" })
-      if (Option.isNone(session)) continue
-      const diffs = session.value.summary.diffs
-      yield* fs.writeWithDirs(
-        path.join(dir, "session_diff", session.value.id + ".json"),
-        JSON.stringify(diffs, null, 2),
-      )
-      yield* fs.writeWithDirs(
-        path.join(dir, "session", session.value.projectID, session.value.id + ".json"),
-        JSON.stringify(
-          {
-            ...(raw as Record<string, unknown>),
-            summary: {
-              additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-              deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-            },
-          },
-          null,
-          2,
-        ),
-      )
     }
   }),
 ]

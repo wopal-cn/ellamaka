@@ -2,6 +2,7 @@ import { createSimpleContext } from "@wopal/ui/context"
 import { type Accessor, batch, createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
+import { authToastGate } from "@/utils/auth-error"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -64,6 +65,53 @@ export function resolveServerList(input: {
 
   return [...deduped.values()]
 }
+
+/**
+ * The persisted credentials seed for startup-injected servers. Servers that
+ * arrive through props with a password (the `auth_token` URL exchange, the
+ * Desktop sidecar) must survive a page reload: the URL token is cleared right
+ * after the first load, so without a persisted copy every later request runs
+ * unauthenticated. Writes through the SAME storage the "manage servers" dialog
+ * uses (`Persist.global("server")` → `store.list`), so the security posture is
+ * identical to a server the user added by hand — one semantics for all
+ * credentials. A props server without a password never touches the store, and
+ * a fresh launch token overwrites the previous entry (the URL is the newest
+ * credential source).
+ */
+export function seedStoredServers(input: {
+  stored: StoredServer[]
+  props?: Array<ServerConnection.Any>
+}): StoredServer[] {
+  const list = [...(input.stored ?? [])]
+  let changed = false
+
+  for (const conn of input.props ?? []) {
+    if (conn.type !== "http") continue
+    const { username, password } = conn.http
+    if (!password) continue
+    // The authToken flag is a per-load marker, never persisted.
+    const entry: StoredServer = { type: "http", http: { url: conn.http.url, ...(username ? { username } : {}), password } }
+    const key = ServerConnection.key(conn)
+    const index = list.findIndex((x) => {
+      const normalized: ServerConnection.Http =
+        typeof x === "string" ? { type: "http", http: { url: x } } : "http" in x ? x : { type: "http", http: x }
+      return ServerConnection.key(normalized) === key
+    })
+    if (index !== -1) {
+      const existing = list[index]!
+      const existingHttp: ServerConnection.HttpBase =
+        typeof existing === "string" ? { url: existing } : "http" in existing ? existing.http : existing
+      if (existingHttp.password === password && existingHttp.username === username) continue
+      list[index] = entry
+    } else {
+      list.push(entry)
+    }
+    changed = true
+  }
+
+  return changed ? list : input.stored
+}
+
 
 /**
  * The local sidecar URL changes when the desktop process restarts. Persist the
@@ -198,6 +246,17 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       }),
     )
 
+    // Startup credential seed: servers injected through props that carry a
+    // password (auth_token exchange, Desktop sidecar) persist through the
+    // same store the "manage servers" dialog writes, so a page reload keeps
+    // working after the URL token is cleared. Runs once when the store is
+    // ready; a no-op seed returns the same array and skips the write.
+    createEffect(() => {
+      if (!ready()) return
+      const seeded = seedStoredServers({ stored: store.list ?? [], props: props.servers })
+      if (seeded !== (store.list ?? [])) setStore("list", seeded)
+    })
+
     const url = (x: StoredServer) => (typeof x === "string" ? x : "type" in x ? x.http.url : x.url)
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
@@ -208,6 +267,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       active: props.defaultServer,
       initialized: false,
       restoringSavedSelection: false,
+      // Bumped whenever saved credentials are rewritten in place. The app's
+      // remount gate (ServerKey) folds this into its key, so saving a new
+      // password rebuilds the provider tree — every store, SDK, and resource
+      // re-creates against the fresh credentials without a page reload.
+      credentialEpoch: 0,
     })
 
     createEffect(() => {
@@ -229,6 +293,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     function setActive(input: ServerConnection.Key) {
       const active = normalizeServerSelection({ fallback: props.defaultServer, key: input, servers: allServers() })
+      // A server (re)selection is a credential decision: the next 401 episode,
+      // if any, must notify again instead of being swallowed by the old gate.
+      authToastGate().reset()
       batch(() => {
         setState({ active, initialized: true, restoringSavedSelection: false })
         setStore("selected", active)
@@ -249,7 +316,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const conn: ServerConnection.Http = { ...input, authToken: undefined, http: { ...input.http, url: url_ } }
       return batch(() => {
         const existing = store.list.findIndex((x) => url(x) === url_)
-        if (existing !== -1) {
+        const replaced = existing !== -1
+        if (replaced) {
           setStore("list", existing, conn)
         } else {
           setStore("list", store.list.length, conn)
@@ -259,6 +327,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           key: ServerConnection.key(conn),
           servers: allServers(),
         })
+        // Fresh credentials were just saved — re-arm the 401 toast gate, and
+        // when the entry was rewritten in place (same URL key) bump the
+        // credential epoch so the app remounts against the new credentials.
+        authToastGate().reset()
+        if (replaced) setState("credentialEpoch", (n) => n + 1)
         setState({ active, initialized: true, restoringSavedSelection: false })
         setStore("selected", active)
         return conn
@@ -299,6 +372,9 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       isLocal,
       get key() {
         return state.active
+      },
+      get credentialEpoch() {
+        return state.credentialEpoch
       },
       get name() {
         return serverName(current())

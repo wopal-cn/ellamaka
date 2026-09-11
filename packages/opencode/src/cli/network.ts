@@ -1,5 +1,6 @@
 import type { Argv, InferredOptionTypes } from "yargs"
 import { Config } from "@/config/config"
+import { CliNetworkConfig } from "./network-config"
 import { Effect } from "effect"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 
@@ -38,8 +39,15 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {
-  const config = yield* Config.Service.use((cfg) => cfg.getGlobal())
-  return resolveNetworkOptionsNoConfig(args, config)
+  const global = yield* Config.Service.use((cfg) => cfg.getGlobal())
+  // The global tier alone is not the effective config: a space's public and
+  // private settings layers overlay it, CORS included. `serve` resolves its
+  // network options before any instance exists, so the space tiers are read
+  // directly through the same three-tier loader the rest of the config uses.
+  const server = yield* Config.Service.use((cfg) =>
+    CliNetworkConfig.resolveServerConfig(process.cwd(), global.server),
+  )
+  return resolveNetworkOptionsNoConfig(args, { ...global, server })
 })
 
 export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Config.Info) {

@@ -65,6 +65,21 @@ declare module "virtual:opencode-server" {
   export const resolveInstallAnchor: (wopalHome: string, manifest: DshRuntimeManifest) => DshInstallAnchor
   export const createDshRuntimeApi: (installAnchor: string) => DshRuntimeApi
 
+  /**
+   * The install-command decision table shared with the CLI mount
+   * (`dsh-mount.ts`). Typed structurally for the same reason as the rest of
+   * this surface: the desktop package declares no `@wopal/ellamaka-cordis`
+   * dependency, while the value is compiled into the sidecar bundle.
+   */
+  export interface InstallCommandProbe {
+    argv: readonly string[]
+    execPath: string
+    isBun: boolean
+    env: Record<string, string | undefined>
+    allowEngineFallback?: boolean
+  }
+  export const resolveInstallCommand: (probe: InstallCommandProbe) => string[] | undefined
+
   /** The six official DSH runtime modules resolved from the closure. */
   export interface DshRuntimeApi {
     cordis: unknown

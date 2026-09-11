@@ -1,14 +1,10 @@
 import { Effect, Layer, Context, Schema } from "effect"
-import { Bus } from "../bus"
-import { Snapshot } from "../snapshot"
-import { Storage } from "@/storage/storage"
 import { SyncEvent } from "../sync"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import * as Session from "./session"
 import { MessageV2 } from "./message-v2"
 import { SessionID, MessageID, PartID } from "./schema"
 import { SessionRunState } from "./run-state"
-import { SessionSummary } from "./summary"
 
 const log = Log.create({ service: "session.revert" })
 
@@ -31,10 +27,6 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const sessions = yield* Session.Service
-    const snap = yield* Snapshot.Service
-    const storage = yield* Storage.Service
-    const bus = yield* Bus.Service
-    const summary = yield* SessionSummary.Service
     const state = yield* SessionRunState.Service
     const sync = yield* SyncEvent.Service
 
@@ -45,50 +37,34 @@ export const layer = Layer.effect(
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
       let rev: Session.Info["revert"]
-      const patches: Snapshot.Patch[] = []
       for (const msg of all) {
         if (msg.info.role === "user") lastUser = msg.info
         const remaining = []
         for (const part of msg.parts) {
-          if (rev) {
-            if (part.type === "patch") patches.push(part)
-            continue
-          }
+          if (rev) continue
 
-          if (!rev) {
-            if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
-              const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
-              rev = {
-                messageID: !partID && lastUser ? lastUser.id : msg.info.id,
-                partID,
-              }
+          if ((msg.info.id === input.messageID && !input.partID) || part.id === input.partID) {
+            const partID = remaining.some((item) => ["text", "tool"].includes(item.type)) ? input.partID : undefined
+            rev = {
+              messageID: !partID && lastUser ? lastUser.id : msg.info.id,
+              partID,
             }
-            remaining.push(part)
           }
+          remaining.push(part)
         }
       }
 
       if (!rev) return session
 
-      rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
-      if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
-      yield* snap.revert(patches)
-      if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
-      // `all` is time-ordered (time_created asc). The revert point is a
-      // message within that list; slice by position instead of comparing id
-      // lexically so the range survives a message-id wrap-around.
-      const start = all.findIndex((msg) => msg.info.id === rev.messageID)
-      const range = start >= 0 ? all.slice(start) : []
-      const diffs = yield* summary.computeDiff({ messages: range })
-      yield* storage.write(["session_diff", input.sessionID], diffs).pipe(Effect.ignore)
-      yield* bus.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: diffs })
+      // Message-only semantics: no workspace snapshot/restore. Historical
+      // `rev.snapshot`/`rev.diff` values are tolerated but never written back.
       yield* sessions.setRevert({
         sessionID: input.sessionID,
         revert: rev,
         summary: {
-          additions: diffs.reduce((sum, x) => sum + x.additions, 0),
-          deletions: diffs.reduce((sum, x) => sum + x.deletions, 0),
-          files: diffs.length,
+          additions: 0,
+          deletions: 0,
+          files: 0,
         },
       })
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -99,7 +75,6 @@ export const layer = Layer.effect(
       yield* state.assertNotBusy(input.sessionID)
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       if (!session.revert) return session
-      if (session.revert.snapshot) yield* snap.restore(session.revert.snapshot)
       yield* sessions.clearRevert(input.sessionID)
       return yield* sessions.get(input.sessionID).pipe(Effect.orDie)
     })
@@ -149,10 +124,6 @@ export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
     Layer.provide(SessionRunState.defaultLayer),
     Layer.provide(Session.defaultLayer),
-    Layer.provide(Snapshot.defaultLayer),
-    Layer.provide(Storage.defaultLayer),
-    Layer.provide(Bus.layer),
-    Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(SyncEvent.defaultLayer),
   ),
 )

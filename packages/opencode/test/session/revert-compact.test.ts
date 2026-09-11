@@ -6,7 +6,6 @@ import { Session } from "@/session/session"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Snapshot } from "../../src/snapshot"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
@@ -25,12 +24,7 @@ void Log.init({ print: false })
 // nothing. Reset the shared DB before this file's tests run.
 beforeAll(() => resetDatabase())
 
-const env = Layer.mergeAll(
-  Session.defaultLayer,
-  SessionRevert.defaultLayer,
-  Snapshot.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
-)
+const env = Layer.mergeAll(Session.defaultLayer, SessionRevert.defaultLayer, CrossSpawnSpawner.defaultLayer)
 
 const it = testEffect(env)
 
@@ -463,14 +457,16 @@ describe("revert + compact workflow", () => {
   )
 
   it.live(
-    "restore messages in sequential order",
+    "revert keeps workspace files untouched (message-only semantics)",
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
           const session = yield* Session.Service
           const revert = yield* SessionRevert.Service
-          const snapshot = yield* Snapshot.Service
 
+          // Without snapshot tracking there is no file capture to restore
+          // from: revert must only mark/remove messages and never touch the
+          // working tree, even inside a git project.
           yield* write(path.join(dir, "a.txt"), "a0")
           yield* write(path.join(dir, "b.txt"), "b0")
           yield* write(path.join(dir, "c.txt"), "c0")
@@ -482,18 +478,12 @@ describe("revert + compact workflow", () => {
             const u = yield* user(sid)
             yield* text(sid, u.id, `${file}:${next}`)
             const a = yield* assistant(sid, u.id, dir)
-            const before = yield* snapshot.track()
-            if (!before) throw new Error("expected snapshot")
             yield* write(path.join(dir, file), next)
-            const after = yield* snapshot.track()
-            if (!after) throw new Error("expected snapshot")
-            const patch = yield* snapshot.patch(before)
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: a.id,
               sessionID: sid,
               type: "step-start",
-              snapshot: before,
             })
             yield* session.updatePart({
               id: PartID.ascending(),
@@ -501,17 +491,8 @@ describe("revert + compact workflow", () => {
               sessionID: sid,
               type: "step-finish",
               reason: "stop",
-              snapshot: after,
               cost: 0,
               tokens,
-            })
-            yield* session.updatePart({
-              id: PartID.ascending(),
-              messageID: a.id,
-              sessionID: sid,
-              type: "patch",
-              hash: patch.hash,
-              files: patch.files,
             })
             return u.id
           })
@@ -519,38 +500,42 @@ describe("revert + compact workflow", () => {
           const first = yield* turn("a.txt", "a1")
           const second = yield* turn("b.txt", "b2")
           const third = yield* turn("c.txt", "c3")
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b2")
+          expect(yield* read(path.join(dir, "c.txt"))).toBe("c3")
 
           yield* revert.revert({
             sessionID: sid,
             messageID: first,
           })
           expect((yield* session.get(sid)).revert?.messageID).toBe(first)
-          expect(yield* read(path.join(dir, "a.txt"))).toBe("a0")
-          expect(yield* read(path.join(dir, "b.txt"))).toBe("b0")
-          expect(yield* read(path.join(dir, "c.txt"))).toBe("c0")
-
-          yield* revert.revert({
-            sessionID: sid,
-            messageID: second,
-          })
-          expect((yield* session.get(sid)).revert?.messageID).toBe(second)
-          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
-          expect(yield* read(path.join(dir, "b.txt"))).toBe("b0")
-          expect(yield* read(path.join(dir, "c.txt"))).toBe("c0")
-
-          yield* revert.revert({
-            sessionID: sid,
-            messageID: third,
-          })
-          expect((yield* session.get(sid)).revert?.messageID).toBe(third)
+          // Files keep the AI-modified contents: no git-snapshot restore.
           expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
           expect(yield* read(path.join(dir, "b.txt"))).toBe("b2")
-          expect(yield* read(path.join(dir, "c.txt"))).toBe("c0")
+          expect(yield* read(path.join(dir, "c.txt"))).toBe("c3")
 
+          // unrevert only clears the marker; files still untouched.
           yield* revert.unrevert({
             sessionID: sid,
           })
           expect((yield* session.get(sid)).revert).toBeUndefined()
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
+          expect(yield* read(path.join(dir, "b.txt"))).toBe("b2")
+          expect(yield* read(path.join(dir, "c.txt"))).toBe("c3")
+
+          // Re-establish the marker and run cleanup: messages from the revert
+          // point onward are removed, the workspace stays as-is.
+          yield* revert.revert({
+            sessionID: sid,
+            messageID: second,
+          })
+          const state = yield* session.get(sid)
+          yield* revert.cleanup(state)
+          const msgs = yield* session.messages({ sessionID: sid })
+          const ids = msgs.map((m) => m.info.id)
+          expect(ids).toContain(first)
+          expect(ids).not.toContain(second)
+          expect(ids).not.toContain(third)
           expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
           expect(yield* read(path.join(dir, "b.txt"))).toBe("b2")
           expect(yield* read(path.join(dir, "c.txt"))).toBe("c3")
@@ -560,13 +545,12 @@ describe("revert + compact workflow", () => {
   )
 
   it.live(
-    "restore same file in sequential order",
+    "revert never rewrites files even when they keep changing across turns",
     provideTmpdirInstance(
       (dir) =>
         Effect.gen(function* () {
           const session = yield* Session.Service
           const revert = yield* SessionRevert.Service
-          const snapshot = yield* Snapshot.Service
 
           yield* write(path.join(dir, "a.txt"), "a0")
 
@@ -577,18 +561,12 @@ describe("revert + compact workflow", () => {
             const u = yield* user(sid)
             yield* text(sid, u.id, `a.txt:${next}`)
             const a = yield* assistant(sid, u.id, dir)
-            const before = yield* snapshot.track()
-            if (!before) throw new Error("expected snapshot")
             yield* write(path.join(dir, "a.txt"), next)
-            const after = yield* snapshot.track()
-            if (!after) throw new Error("expected snapshot")
-            const patch = yield* snapshot.patch(before)
             yield* session.updatePart({
               id: PartID.ascending(),
               messageID: a.id,
               sessionID: sid,
               type: "step-start",
-              snapshot: before,
             })
             yield* session.updatePart({
               id: PartID.ascending(),
@@ -596,17 +574,8 @@ describe("revert + compact workflow", () => {
               sessionID: sid,
               type: "step-finish",
               reason: "stop",
-              snapshot: after,
               cost: 0,
               tokens,
-            })
-            yield* session.updatePart({
-              id: PartID.ascending(),
-              messageID: a.id,
-              sessionID: sid,
-              type: "patch",
-              hash: patch.hash,
-              files: patch.files,
             })
             return u.id
           })
@@ -616,26 +585,21 @@ describe("revert + compact workflow", () => {
           const third = yield* turn("a3")
           expect(yield* read(path.join(dir, "a.txt"))).toBe("a3")
 
+          // Reverting to any turn leaves the file at its latest state; only
+          // the revert marker moves.
           yield* revert.revert({
             sessionID: sid,
             messageID: first,
           })
           expect((yield* session.get(sid)).revert?.messageID).toBe(first)
-          expect(yield* read(path.join(dir, "a.txt"))).toBe("a0")
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a3")
 
           yield* revert.revert({
             sessionID: sid,
             messageID: second,
           })
           expect((yield* session.get(sid)).revert?.messageID).toBe(second)
-          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
-
-          yield* revert.revert({
-            sessionID: sid,
-            messageID: third,
-          })
-          expect((yield* session.get(sid)).revert?.messageID).toBe(third)
-          expect(yield* read(path.join(dir, "a.txt"))).toBe("a2")
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a3")
 
           yield* revert.unrevert({
             sessionID: sid,

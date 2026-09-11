@@ -2,7 +2,6 @@ import { drizzle } from "drizzle-orm/node-sqlite/driver"
 import * as http from "node:http"
 import * as tls from "node:tls"
 import { register } from "node:module"
-import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { listenThenClearCredentials } from "./sidecar-credentials"
@@ -50,6 +49,8 @@ type Listener = {
   stop(close?: boolean): void | Promise<void>
   mountNodeRoute(mount: {
     prefix: string
+    /** Mirrors NodeRouteMount.auth: every mount bypasses the host auth stack. */
+    auth: "self" | "public"
     request(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse): void
     upgrade?(req: import("node:http").IncomingMessage, socket: import("node:stream").Duplex, head: Buffer): void
   }): () => void
@@ -196,35 +197,44 @@ function dshLaunch(command: StartCommand) {
  * every previously installed plugin into `node_modules/.ignored/`.
  *
  * `process.execPath` is unusable here: under `utilityProcess.fork` it
- * resolves to Electron's helper executable, not a CLI. Resolution order:
- * 1. `ELLAMAKA_DSH_INSTALL_COMMAND` — an authoritative whitespace-separated
- *    command string. dev.sh sets `bun <root>/packages/opencode/src/index.ts`
- *    so installs work without building the engine binary. The executable may
- *    be a PATH command such as `bun`, so this branch intentionally does not
- *    use existsSync: spawn resolves it using the sidecar PATH. An explicit
- *    invalid value must fail visibly instead of silently falling through to
- *    an older installed engine binary with a different CLI surface.
- * 2. `<wopalHome>/bin/ellamaka` — the engine binary the engine installer
- *    lays down under the WOPAL_HOME bin directory (resolveEngineBinaryPath
- *    in wopal-cli). `wopalHome` comes from the start command / sidecar env
- *    (the same value dshLaunch resolves), NOT from `~` directly — packaged
- *    desktop users with a custom WOPAL_HOME must resolve against their own
- *    home, and the env may be absent in the utility process.
+ * resolves to Electron's helper executable, not a CLI, and `argv[1]` is the
+ * sidecar bundle. So this host is the one case that needs the engine-binary
+ * fallback — the shared `resolveInstallCommand` decision table
+ * (`@wopal/ellamaka-cordis/plugins/install-command`) is asked with
+ * `allowEngineFallback: true`, which:
+ * 1. prefers `ELLAMAKA_DSH_INSTALL_COMMAND` — an authoritative
+ *    whitespace-separated command string. dev.sh sets `bun
+ *    <root>/packages/opencode/src/index.ts` so installs work without building
+ *    the engine binary. The executable may be a PATH command such as `bun`,
+ *    so that branch intentionally does not use existsSync: spawn resolves it
+ *    using the sidecar PATH. An explicit invalid value must fail visibly
+ *    instead of silently falling through to an older installed engine binary
+ *    with a different CLI surface.
+ * 2. otherwise falls back to `<wopalHome>/bin/ellamaka` — the engine binary
+ *    the engine installer lays down under the WOPAL_HOME bin directory
+ *    (resolveEngineBinaryPath in wopal-cli). `wopalHome` comes from the start
+ *    command / sidecar env (the same value dshLaunch resolves), NOT from `~`
+ *    directly — packaged desktop users with a custom WOPAL_HOME must resolve
+ *    against their own home, and the env may be absent in the utility process.
  * Returns undefined when neither yields a usable command; the web mount
  * then logs `dsh.desktop.web.no-install-worker` and the market keeps its
  * CLI-spawn fallback (install attempts surface the mismatch explicitly).
  */
-export function resolveEllamakaInstallCommand(wopalHomeOverride?: string): string[] | undefined {
-  const override = process.env.ELLAMAKA_DSH_INSTALL_COMMAND
-  if (override && override.trim().length > 0) {
-    return override.trim().split(/\s+/)
-  }
+export async function resolveEllamakaInstallCommand(wopalHomeOverride?: string): Promise<string[] | undefined> {
   const wopalHome = wopalHomeOverride ?? process.env.WOPAL_HOME ?? join(homedir(), ".wopal")
-  const engine = join(wopalHome, "bin", process.platform === "win32" ? "ellamaka.exe" : "ellamaka")
-  if (existsSync(engine)) return [engine]
-  return undefined
+  // Reached through the same seam every other cordis entry point uses; the
+  // dynamic import keeps the sidecar's module-eval order unchanged.
+  const { resolveInstallCommand } = await import("virtual:opencode-server")
+  return resolveInstallCommand({
+    argv: process.argv,
+    execPath: process.execPath,
+    isBun: process.versions.bun !== undefined,
+    // The override is read from the same env the shared resolver consults;
+    // injecting the resolved home keeps a custom WOPAL_HOME authoritative.
+    env: { ...process.env, WOPAL_HOME: wopalHome },
+    allowEngineFallback: true,
+  })
 }
-
 /**
  * Mount the dsh web engine via the unified Runtime Manager.
  *
@@ -249,7 +259,7 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
     }
     sidecarLog.info("dsh.desktop.web.boot", { anchor: launch.anchor.path })
     const runtime = launch.runtime
-    const ellamakaCommand = resolveEllamakaInstallCommand(wopalHome)
+    const ellamakaCommand = await resolveEllamakaInstallCommand(wopalHome)
     if (!ellamakaCommand) {
       sidecarLog.warn("dsh.desktop.web.no-install-worker", {
         reason: "no ELLAMAKA_DSH_INSTALL_COMMAND and no engine binary under WOPAL_HOME/bin",
@@ -263,9 +273,12 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
       runtime,
       ellamakaCommand,
     })
-    // Mount the VirtualWebServer under /dsh on the Ellamaka listener.
+    // Mount the VirtualWebServer under /dsh on the Ellamaka listener. The dsh
+    // mount brings its own complete browser-auth (launch-token → signed
+    // cookie fence), so it declares "self" on the host auth stack it bypasses.
     const unmount = listener?.mountNodeRoute({
       prefix: host.mountPath,
+      auth: "self",
       request: (req, res) => host.webServer.request(req, res),
       upgrade: (req, socket, head) => host.webServer.upgrade(req, socket, head),
     })

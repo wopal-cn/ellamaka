@@ -29,8 +29,8 @@ export function createTuiAttachRequest(input: {
     : undefined
   const env = input.auth?.password
     ? {
-        OPENCODE_SERVER_USERNAME: input.auth.username ?? "ellamaka",
-        OPENCODE_SERVER_PASSWORD: input.auth.password,
+        ELLAMAKA_SERVER_USERNAME: input.auth.username ?? "ellamaka",
+        ELLAMAKA_SERVER_PASSWORD: input.auth.password,
       }
     : undefined
 

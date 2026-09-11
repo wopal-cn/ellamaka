@@ -30,6 +30,7 @@ import { testEffect } from "../lib/effect"
 const routes = HttpRouter.serve(
   HttpApiBuilder.layer(RootHttpApi).pipe(
     Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers, workbenchHandlers]),
+    Layer.provide(workbenchDshUrlLayer),
     Layer.provide([authorizationLayer, schemaErrorLayer]),
   ),
   { disableListenLog: true, disableLogger: true },

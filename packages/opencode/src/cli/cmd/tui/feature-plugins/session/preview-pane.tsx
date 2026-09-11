@@ -2,7 +2,7 @@ import { createResource, Show, createMemo, createSignal, onMount, type Accessor,
 import { TextAttributes, type RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { debounce, leadingAndTrailing } from "@solid-primitives/scheduled"
-import type { Message, Part, Session as SdkSession, SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { Message, Part, Session as SdkSession } from "@opencode-ai/sdk/v2"
 import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
@@ -16,7 +16,6 @@ type Sdk = ReturnType<typeof useSDK>
 type Sync = ReturnType<typeof useSync>
 
 const messageCache = new Map<string, Promise<WithParts[]>>()
-const diffCache = new Map<string, Promise<SnapshotFileDiff[]>>()
 
 function cacheKey(sessionID: string, version: number) {
   return `${sessionID}:${version}`
@@ -47,30 +46,10 @@ function loadMessages(sdk: Sdk, sessionID: string, version: number): Promise<Wit
   return promise
 }
 
-function loadDiff(sdk: Sdk, sessionID: string, version: number): Promise<SnapshotFileDiff[]> {
-  const key = cacheKey(sessionID, version)
-  const cached = diffCache.get(key)
-  if (cached) return cached
-
-  const promise = sdk.client.session
-    .diff({ sessionID })
-    .then((res) => {
-      if (res.error) diffCache.delete(key)
-      return (res.data as SnapshotFileDiff[] | undefined) ?? []
-    })
-    .catch(() => {
-      diffCache.delete(key)
-      return [] as SnapshotFileDiff[]
-    })
-  diffCache.set(key, promise)
-  return promise
-}
-
 export function prefetchPreviews(sdk: Sdk, sync: Sync, sessionIDs: readonly string[]) {
   for (const id of sessionIDs) {
     const version = sync.data.session.find((session) => session.id === id)?.time.updated ?? 0
     if (!hydrateFromSync(sync, id)) loadMessages(sdk, id, version).catch(() => {})
-    if (!sync.data.session_diff[id]?.length) loadDiff(sdk, id, version).catch(() => {})
   }
 }
 
@@ -121,13 +100,6 @@ export function SessionPreviewPane(props: {
     return hydrateFromSync(sync, id)
   })
 
-  const syncedDiff = createMemo(() => {
-    const id = props.sessionID()
-    if (!id) return undefined
-    const diff = sync.data.session_diff[id]
-    return diff && diff.length > 0 ? (diff as SnapshotFileDiff[]) : undefined
-  })
-
   const [fetchedMessages] = createResource(
     () => {
       const id = props.sessionID()
@@ -137,31 +109,11 @@ export function SessionPreviewPane(props: {
     async (input) => loadMessages(sdk, input.sessionID, input.version),
   )
 
-  const [fetchedDiff] = createResource(
-    () => {
-      const id = props.sessionID()
-      if (!id || syncedDiff()) return undefined
-      return { sessionID: id, version: session()?.time.updated ?? 0 }
-    },
-    async (input) => loadDiff(sdk, input.sessionID, input.version),
-  )
-
   const messages = createMemo(() => syncedMessages() ?? fetchedMessages() ?? [])
-  const diff = createMemo(() => syncedDiff() ?? fetchedDiff() ?? [])
 
-  const diffSummary = createMemo(() => {
-    const live = diff()
-    if (live && live.length > 0) {
-      let additions = 0
-      let deletions = 0
-      for (const file of live) {
-        additions += file.additions ?? 0
-        deletions += file.deletions ?? 0
-      }
-      return formatDiffSummary({ additions, deletions, files: live.length })
-    }
-    return formatDiffSummary(session()?.summary)
-  })
+  // The git-snapshot diff pipeline was removed; the header falls back to the
+  // session summary totals (historical data only).
+  const diffSummary = createMemo(() => formatDiffSummary(session()?.summary))
 
   const exchange = createMemo(() => {
     const items = messages()
@@ -174,7 +126,7 @@ export function SessionPreviewPane(props: {
     return { user, assistant }
   })
 
-  const loading = createMemo(() => (fetchedMessages.loading || fetchedDiff.loading) && !exchange())
+  const loading = createMemo(() => fetchedMessages.loading && !exchange())
 
   const statusLabel = createMemo(() => {
     const s = status()

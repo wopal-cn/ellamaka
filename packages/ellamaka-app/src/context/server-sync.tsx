@@ -1,6 +1,6 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
-import { showToast } from "@wopal/ui/toast"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
+import { showServerToast } from "@/utils/server-toast"
 import {
   batch,
   createContext,
@@ -260,11 +260,14 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
           .command.list()
           .then((x) => setStore("command", x.data ?? [])),
       ).catch((err) => {
-        showToast({
-          variant: "error",
-          title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
-          description: formatServerError(err, language.t),
-        })
+        showServerToast(
+          {
+            variant: "error",
+            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+            description: formatServerError(err, language.t),
+          },
+          err,
+        )
       })
     },
     onDispose: (directory) => {
@@ -341,12 +344,14 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
             })
             .catch((err) => {
               console.error("Failed to load sessions", err)
-              const project = getFilename(directory)
-              showToast({
-                variant: "error",
-                title: language.t("toast.session.listFailed.title", { project }),
-                description: formatServerError(err, language.t),
-              })
+              showServerToast(
+                {
+                  variant: "error",
+                  title: language.t("toast.session.listFailed.title", { project: getFilename(directory) }),
+                  description: formatServerError(err, language.t),
+                },
+                err,
+              )
             })
             .then(() => null),
       })

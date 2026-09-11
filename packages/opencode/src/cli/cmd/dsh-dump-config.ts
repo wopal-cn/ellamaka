@@ -1,6 +1,9 @@
 import { Effect } from "effect"
 import { join } from "node:path"
+import { existsSync, readFileSync } from "node:fs"
+import { mergeDeep } from "remeda"
 import { Global } from "@wopal/ellamaka-core/global"
+import { detectWopalSpace } from "@wopal/ellamaka-brand/detect"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   resolveInstallAnchor,
@@ -8,6 +11,10 @@ import {
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { dumpDshConfig } from "@wopal/ellamaka-cordis/diagnostics/dump-config"
 import { CliError, effectCmd } from "../effect-cmd"
+import { trustedDshAuthorities, localDshInterfaceAddresses, isWildcardBind } from "./dsh-mount"
+import { AppRuntime } from "@/effect/app-runtime"
+import { Config } from "@/config/config"
+import { ConfigParse } from "@/config/parse"
 
 /**
  * `ellamaka dsh dump-config` — the ellamaka COMPATIBILITY extension form
@@ -75,6 +82,17 @@ export const runDshDump = (options: {
         }),
     })
 
+    // The dump previews the fence the same boot composes. The runtime `serve`
+    // resolves its server config through the three-tier merge (global, then
+    // the space's public/private settings), so the dump reads those same
+    // tiers directly: the light root-flag form has no booted AppRuntime, and
+    // nested AppRuntime calls do not compose a config in this path.
+    const globalServer = (yield* Effect.promise(() =>
+      AppRuntime.runPromise(Config.Service.use((cfg) => cfg.getGlobal())),
+    )).server
+    const spaceServer = readSpaceServerBlock(process.cwd())
+    const server = spaceServer ? (mergeDeep(globalServer ?? {}, spaceServer) as typeof globalServer) : globalServer
+
     const dumpOptions = {
       wopalHome,
       profileName: options.profileName,
@@ -83,6 +101,14 @@ export const runDshDump = (options: {
       dshHome: join(wopalHome, "dsh"),
       installAnchor: anchorPath,
       overlayPatches: options.overlayPatches,
+      // The dump reflects the fence value: the CORS trust decision (merged
+      // server.cors) plus the server's own serving authorities, so a wildcard
+      // bind advertises every local interface address on its port.
+      trustedHosts: trustedDshAuthorities(
+        { hostname: server?.hostname ?? "127.0.0.1", port: server?.port ?? 0 },
+        server?.cors ?? [],
+        isWildcardBind(server?.hostname ?? "") && (server?.port ?? 0) > 0 ? localDshInterfaceAddresses() : [],
+      ),
     } as const
 
     const dumped = yield* Effect.tryPromise({
@@ -91,6 +117,41 @@ export const runDshDump = (options: {
     })
     process.stdout.write(dumped.endsWith("\n") ? dumped : dumped + "\n")
   })()
+
+/**
+ * Read the space tier's `server` block for the dump, mirroring the `serve`
+ * path's walk-up space detection. The dump runs in the light CLI form with no
+ * booted AppRuntime, so this reads the space's public and private settings
+ * files directly and deep-merges them over the global block. Returns
+ * `undefined` when the working directory is not inside a wopal space.
+ */
+function readSpaceServerBlock(directory: string): Config.Info["server"] | undefined {
+  const root = detectWopalSpace(directory)?.root
+  if (!root) return undefined
+  const candidates = [
+    join(root, ".wopal", "config", "settings.jsonc"),
+    join(root, ".wopal", "config", "settings.json"),
+    join(root, ".wopal", "config", "settings.local.jsonc"),
+    join(root, ".wopal", "config", "settings.local.json"),
+  ]
+  let merged: Config.Info["server"] | undefined
+  for (const file of candidates) {
+    if (!existsSync(file)) continue
+    let raw: unknown
+    try {
+      raw = ConfigParse.jsonc(readFileSync(file, "utf8"), file)
+    } catch {
+      continue
+    }
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) continue
+    const ellamaka = (raw as Record<string, unknown>).ellamaka
+    if (typeof ellamaka !== "object" || ellamaka === null || Array.isArray(ellamaka)) continue
+    const server = (ellamaka as Record<string, unknown>).server
+    if (typeof server !== "object" || server === null || Array.isArray(server)) continue
+    merged = mergeDeep(merged ?? {}, server) as Config.Info["server"]
+  }
+  return merged
+}
 
 function toCliErrorMessage(err: unknown): CliError {
   const message = err instanceof Error ? err.message : String(err)

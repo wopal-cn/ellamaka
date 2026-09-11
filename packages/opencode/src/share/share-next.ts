@@ -59,10 +59,6 @@ type Data =
       data: SDK.Part
     }
   | {
-      type: "session_diff"
-      data: SDK.SnapshotFileDiff[]
-    }
-  | {
       type: "model"
       data: SDK.Model[]
     }
@@ -102,8 +98,6 @@ function key(item: Data) {
       return `message/${item.data.id}`
     case "part":
       return `part/${item.data.messageID}/${item.data.id}`
-    case "session_diff":
-      return "session_diff"
     case "model":
       return "model"
   }
@@ -205,9 +199,6 @@ export const layer = Layer.effect(
         yield* watch(MessageV2.Event.PartUpdated, (evt) =>
           sync(evt.properties.part.sessionID, [{ type: "part", data: evt.properties.part }]),
         )
-        yield* watch(Session.Event.Diff, (evt) =>
-          sync(evt.properties.sessionID, [{ type: "session_diff", data: evt.properties.diff }]),
-        )
         yield* watch(Session.Event.Deleted, (evt) => remove(evt.properties.sessionID))
 
         return cache
@@ -278,7 +269,6 @@ export const layer = Layer.effect(
     const full = Effect.fn("ShareNext.full")(function* (sessionID: SessionID) {
       log.info("full sync", { sessionID })
       const info = yield* session.get(sessionID)
-      const diffs = yield* session.diff(sessionID)
       const messages = yield* session.messages({ sessionID })
       const models = yield* Effect.forEach(
         Array.from(
@@ -297,7 +287,6 @@ export const layer = Layer.effect(
         { type: "session", data: info },
         ...messages.map((item) => ({ type: "message" as const, data: item.info })),
         ...messages.flatMap((item) => item.parts.map((part) => ({ type: "part" as const, data: part }))),
-        { type: "session_diff", data: diffs },
         { type: "model", data: models },
       ])
     })

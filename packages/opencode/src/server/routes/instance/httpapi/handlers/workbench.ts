@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpServerRequest } from "effect/unstable/http"
 import { InstanceHttpApi, RootHttpApi } from "../api"
 import {
   InvalidSpaceTarget,
@@ -53,7 +54,12 @@ export const workbenchHandlers = HttpApiBuilder.group(RootHttpApi, "workbench", 
       }
     })
     const dshUrlHandler = Effect.fn("WorkbenchHttpApi.dshUrl")(function* () {
-      return { url: dshUrl.get() }
+      // The entry composes on the origin the browser is actually talking to
+      // (its Host header) — a wildcard bind (`0.0.0.0` / mdns) must not leak
+      // a non-routable authority into the launch-token URL, or the minted
+      // cookie can never match and the Workbench Basic auth dialog loops.
+      const request = yield* HttpServerRequest.HttpServerRequest
+      return { url: dshUrl.get(request.headers.host) }
     })
     const sessionStatuses = Effect.fn("WorkbenchHttpApi.sessionStatuses")(function* () {
       return yield* status.snapshot()

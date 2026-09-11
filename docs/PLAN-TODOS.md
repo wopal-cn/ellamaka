@@ -93,7 +93,7 @@
 
 | 步 | 名称 | 交付成果 | 验收标准 | 实施形态 | 状态 |
 |---|------|---------|---------|---------|------|
-| **B5a** | trustedHosts 配置化 | `ellamaka.dsh.trustedHosts` 配置项（settings.jsonc 默认值层）经 profile 补丁层注入 connection 插件 | LAN 部署（`OPENCODE_SERVER_PASSWORD` + 声明 trustedHosts）下 DSH iframe 正常认证可用；默认空数组行为不变（loopback-only） | dev-flow Plan（TDD + rook 审查） | 待排期 |
+| **B5a** | trustedHosts 配置化 | `ellamaka.dsh.trustedHosts` 配置项（settings.jsonc 默认值层）经 profile 补丁层注入 connection 插件 | LAN 部署（`ELLAMAKA_SERVER_PASSWORD` + 声明 trustedHosts）下 DSH iframe 正常认证可用；默认空数组行为不变（loopback-only） | dev-flow Plan（TDD + rook 审查） | 待排期 |
 | **B5b** | iframe 401 自愈 | `DshSurface` 401 探测 + 自动重取 `/workbench/dsh-url` 重载 iframe（token 重载即重新铸 cookie） | cookie 过期或引擎重启后 iframe 自动恢复，无需用户手动刷新；恢复过程无感 | dev-flow Plan（TDD + rook 审查） | 待排期 |
 | **B5c** | 挂载认证策略显式化 | `NodeRouteMount` 增加强制 `auth: "self" \| "public"` 声明；dispatcher 固化「新 mount 不允许默认无认证」不变量 | 现有 `/dsh` 挂载声明为 `self`；新增 mount 缺少声明时报错；E 线实验 profile 挂载复用该契约 | dev-flow Plan（依赖项，E2 前置） | 待排期 |
 | **B5d** | WS upgrade 认证探针 | 探针测试：未带 cookie 对 `/dsh/api/events*` 发起 upgrade，实证认证路径 | 探针给出确定结论：握手被拒（记录官方机制事实）或未被拒（宿主挂载层补 upgrade 前置 cookie 检查） | 探针测试（.tmp 或 test/） | 待排期 |

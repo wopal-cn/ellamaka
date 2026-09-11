@@ -74,8 +74,8 @@ delete process.env["DEEPSEEK_API_KEY"]
 delete process.env["FIREWORKS_API_KEY"]
 delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
-delete process.env["OPENCODE_SERVER_PASSWORD"]
-delete process.env["OPENCODE_SERVER_USERNAME"]
+delete process.env["ELLAMAKA_SERVER_PASSWORD"]
+delete process.env["ELLAMAKA_SERVER_USERNAME"]
 
 // Clear WopalSpace flags so tests run in standard opencode mode.
 // WopalSpace-specific tests set these explicitly in their own setup.

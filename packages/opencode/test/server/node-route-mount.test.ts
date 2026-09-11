@@ -4,6 +4,15 @@ import { once } from "node:events"
 import { connect } from "node:net"
 import { installDispatcher, matchMount, stripPrefix, type NodeRouteMount } from "../../src/server/node-route-mount"
 
+function baseMount(overrides: Partial<NodeRouteMount> = {}): NodeRouteMount {
+  return {
+    prefix: "/dsh",
+      auth: "self",
+    request: () => {},
+    ...overrides,
+  } as NodeRouteMount
+}
+
 async function startServer(handler: (req: IncomingMessage, res: ServerResponse) => void) {
   const server = createServer(handler)
   server.listen(0, "127.0.0.1")
@@ -20,7 +29,7 @@ async function get(baseUrl: string, path: string) {
 
 describe("node route mount pure helpers", () => {
   test("matchMount matches exact prefix and prefix/... but not prefixx", () => {
-    const mounts: NodeRouteMount[] = [{ prefix: "/dsh", request: () => {} }]
+    const mounts: NodeRouteMount[] = [{ prefix: "/dsh", auth: "self", request: () => {} }]
     expect(matchMount(mounts, "/dsh")).toBe(mounts[0])
     expect(matchMount(mounts, "/dsh/api/x?q=1")).toBe(mounts[0])
     expect(matchMount(mounts, "/dshx")).toBeUndefined()
@@ -45,6 +54,7 @@ describe("node route mount dispatcher", () => {
     const seen: string[] = []
     dispatcher.mount({
       prefix: "/dsh",
+      auth: "self",
       request: (req, res) => {
         seen.push(req.url!)
         res.writeHead(200)
@@ -67,6 +77,7 @@ describe("node route mount dispatcher", () => {
     const dispatcher = installDispatcher(server)
     dispatcher.mount({
       prefix: "/dsh",
+      auth: "self",
       request: (req, res) => {
         res.writeHead(200)
         res.end("mounted")
@@ -87,6 +98,7 @@ describe("node route mount dispatcher", () => {
     const dispatcher = installDispatcher(server)
     const dispose = dispatcher.mount({
       prefix: "/dsh",
+      auth: "self",
       request: (req, res) => {
         res.writeHead(200)
         res.end("mounted")
@@ -108,6 +120,7 @@ describe("node route mount dispatcher", () => {
     const dispatcher = installDispatcher(server)
     dispatcher.mount({
       prefix: "/dsh",
+      auth: "self",
       request: () => {
         throw new Error("boom")
       },
@@ -129,6 +142,7 @@ describe("node route mount dispatcher", () => {
     const seen: string[] = []
     dispatcher.mount({
       prefix: "/dsh",
+      auth: "self",
       request: (req, res) => {
         res.writeHead(200)
         res.end("mounted")
@@ -153,3 +167,48 @@ describe("node route mount dispatcher", () => {
     server.close()
   })
 })
+
+describe("node route mount auth policy contract (auth-fix-3)", () => {
+  test("mount with auth: 'self' is accepted", () => {
+    const { server } = startServerSync()
+    const dispatcher = installDispatcher(server)
+    const dispose = dispatcher.mount(baseMount({ auth: "self" }))
+    expect(typeof dispose).toBe("function")
+    dispose()
+    server.close()
+  })
+
+  test("mount with auth: 'public' is accepted", () => {
+    const { server } = startServerSync()
+    const dispatcher = installDispatcher(server)
+    const dispose = dispatcher.mount(baseMount({ auth: "public" }))
+    expect(typeof dispose).toBe("function")
+    dispose()
+    server.close()
+  })
+
+  test("mount without auth throws with an actionable diagnostic", () => {
+    const { server } = startServerSync()
+    const dispatcher = installDispatcher(server)
+    // Simulate a JS caller / type-erased object missing the auth field.
+    const missing = baseMount() as unknown as Record<string, unknown>
+    delete missing.auth
+    expect(() => dispatcher.mount(missing as unknown as NodeRouteMount)).toThrow(/auth/)
+    server.close()
+  })
+
+  test("mount with an unknown auth value throws with an actionable diagnostic", () => {
+    const { server } = startServerSync()
+    const dispatcher = installDispatcher(server)
+    expect(() => dispatcher.mount(baseMount({ auth: "unknown-value" as NodeRouteMount["auth"] }))).toThrow(
+      /auth.*unknown-value|unknown-value.*auth/s,
+    )
+    server.close()
+  })
+})
+
+/** Minimal synchronous server stub — mount() never touches the listeners. */
+function startServerSync(): { server: Server } {
+  const server = createServer(() => {})
+  return { server }
+}

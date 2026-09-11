@@ -12,7 +12,6 @@ import { Ripgrep } from "@/file/ripgrep"
 import { File } from "@/file"
 import { FileWatcher } from "@/file/watcher"
 import { Storage } from "@/storage/storage"
-import { Snapshot } from "@/snapshot"
 import { Plugin } from "@/plugin"
 import { ModelsDev } from "@wopal/ellamaka-core/models-dev"
 import { Provider } from "@/provider/provider"
@@ -71,7 +70,6 @@ export const AppLayer = Layer.mergeAll(
   File.defaultLayer,
   FileWatcher.defaultLayer,
   Storage.defaultLayer,
-  Snapshot.defaultLayer,
   Plugin.defaultLayer,
   ModelsDev.defaultLayer,
   Provider.defaultLayer,

@@ -447,8 +447,6 @@ export const dict = {
   "session.review.loadingChanges": "変更を読み込み中...",
   "session.review.empty": "このセッションでの変更はまだありません",
   "session.review.noVcs": "Gitバージョン管理システムが検出されないため、変更は表示されません",
-  "session.review.noSnapshot": "設定でスナップショット追跡が無効になっているため、セッションの変更は利用できません",
-  "session.review.noChanges": "変更なし",
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
   "session.files.empty": "ファイルなし",

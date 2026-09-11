@@ -6,7 +6,6 @@ import { InstanceRef } from "../../src/effect/instance-ref"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import { InstanceStore } from "../../src/project/instance-store"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
-import { Snapshot } from "../../src/snapshot"
 import { Server } from "../../src/server/server"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { resetDatabase } from "../fixture/db"
@@ -23,7 +22,7 @@ afterEach(async () => {
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
 const testInstanceStore = InstanceStore.defaultLayer.pipe(Layer.provide(noopBootstrap))
 
-const it = testEffect(Layer.mergeAll(AppFileSystem.defaultLayer, Snapshot.defaultLayer, testInstanceStore))
+const it = testEffect(Layer.mergeAll(AppFileSystem.defaultLayer, testInstanceStore))
 
 function request(directory: string, url: string, init: RequestInit = {}) {
   return Effect.promise(() => {
@@ -82,12 +81,6 @@ describe("project.initGit endpoint", () => {
         vcs: "git",
         worktree: tmp.directory,
       })
-
-      const ctx = yield* InstanceStore.use.reload({ directory: tmp.directory })
-      const tracked = yield* Snapshot.Service.use((snapshot) => snapshot.track()).pipe(
-        Effect.provideService(InstanceRef, ctx),
-      )
-      expect(tracked).toBeTruthy()
     }),
   )
 

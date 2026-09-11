@@ -379,9 +379,6 @@ export function tryLoadWopalSpaceConfig(deps: WopalSpaceDeps, ctx: {
     deps.applyPostMerge()
 
     const result = deps.getResult()
-    if (result.snapshot === undefined) {
-      result.snapshot = false
-    }
 
     return {
       config: result,

@@ -224,15 +224,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
   }).activeFileTab
 
-  const commentInReview = (path: string) => {
-    const sessionID = params.id
-    if (!sessionID) return false
-
-    const diffs = sync.data.session_diff[sessionID]
-    if (!diffs) return false
-    return diffs.some((diff) => diff.file === path)
-  }
-
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
     if (!item.commentID) return
 
@@ -256,7 +247,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       schedule(attempts)
     }
 
-    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    const wantsReview = item.commentOrigin === "review"
     if (wantsReview) {
       if (!view().reviewPanel.opened()) view().reviewPanel.open()
       layout.fileTree.setTab("changes")
@@ -414,9 +405,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   // "Allow always" on a sandbox-escalation approval applies the escalated
   // mode as the session's standing choice: the engine keeps silently allowing
-  // that mode from then on, so the selector must show it.
+  // that mode from then on, so the selector must show it. The bus is
+  // session-scoped — the publish carries the requesting session id, and this
+  // subscription re-arms on session switch so only the matching session's
+  // composer applies the preset.
   createEffect(() => {
-    const unsubscribe = subscribeEscalatedSandboxPreset((preset) => sandboxSelect(preset, { fromEscalation: true }))
+    const sessionID = params.id
+    if (!sessionID) return
+    const unsubscribe = subscribeEscalatedSandboxPreset(sessionID, (preset) => sandboxSelect(preset, { fromEscalation: true }))
     onCleanup(unsubscribe)
   })
 

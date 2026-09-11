@@ -71,7 +71,6 @@ const baseState = (input: Partial<State> = {}) =>
     session: [],
     sessionTotal: 0,
     session_status: {},
-    session_diff: {},
     todo: {},
     permission: {},
     question: {},
@@ -174,7 +173,6 @@ describe("applyDirectoryEvent", () => {
         sessionTotal: 2,
         message: { ses_1: [message] },
         part: { [message.id]: [textPart("prt_1", "ses_1", message.id)] },
-        session_diff: { ses_1: [] },
         todo: { ses_1: [] },
         permission: { ses_1: [] },
         question: { ses_1: [] },
@@ -195,7 +193,6 @@ describe("applyDirectoryEvent", () => {
     expect(store.sessionTotal).toBe(1)
     expect(store.message.ses_1).toEqual([message])
     expect(store.part[message.id]).toEqual([textPart("prt_1", "ses_1", message.id)])
-    expect(store.session_diff.ses_1).toBeUndefined()
     expect(store.todo.ses_1).toBeUndefined()
     expect(store.permission.ses_1).toBeUndefined()
     expect(store.question.ses_1).toBeUndefined()
@@ -220,7 +217,6 @@ describe("applyDirectoryEvent", () => {
           sessionTotal: 2,
           message: { [item.info.id]: [message] },
           part: { [message.id]: [textPart("prt_1", item.info.id, message.id)] },
-          session_diff: { [item.info.id]: [] },
           todo: { [item.info.id]: [] },
           permission: { [item.info.id]: [] },
           question: { [item.info.id]: [] },
@@ -241,7 +237,6 @@ describe("applyDirectoryEvent", () => {
       expect(store.sessionTotal).toBe(item.expectedTotal)
       expect(store.message[item.info.id]).toEqual([message])
       expect(store.part[message.id]).toEqual([textPart("prt_1", item.info.id, message.id)])
-      expect(store.session_diff[item.info.id]).toBeUndefined()
       expect(store.todo[item.info.id]).toBeUndefined()
       expect(store.permission[item.info.id]).toBeUndefined()
       expect(store.question[item.info.id]).toBeUndefined()
@@ -260,7 +255,6 @@ describe("applyDirectoryEvent", () => {
         session: [dropped],
         message: { [dropped.id]: [message] },
         part: { [message.id]: [textPart("prt_1", dropped.id, message.id)] },
-        session_diff: { [dropped.id]: [] },
         todo: { [dropped.id]: [] },
         permission: { [dropped.id]: [] },
         question: { [dropped.id]: [] },
@@ -284,12 +278,29 @@ describe("applyDirectoryEvent", () => {
     expect(store.session.map((x) => x.id)).toEqual([kept.id])
     expect(store.message[dropped.id]).toEqual([message])
     expect(store.part[message.id]).toEqual([textPart("prt_1", dropped.id, message.id)])
-    expect(store.session_diff[dropped.id]).toBeUndefined()
     expect(store.todo[dropped.id]).toBeUndefined()
     expect(store.permission[dropped.id]).toBeUndefined()
     expect(store.question[dropped.id]).toBeUndefined()
     expect(store.session_status[dropped.id]).toBeUndefined()
     expect(todos).toEqual([dropped.id])
+  })
+
+  // Snapshot mechanism removed (plan 216): the engine no longer emits
+  // session.diff events and the session_diff cache no longer exists, so the
+  // reducer must ignore the event entirely.
+  test("ignores session.diff events", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: { type: "session.diff", properties: { sessionID: "ses_1", diff: [] } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect((store as Record<string, unknown>).session_diff).toBeUndefined()
   })
 
   test("cleanupDroppedSessionCaches preserves part-only state and message history", () => {

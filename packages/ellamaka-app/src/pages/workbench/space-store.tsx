@@ -37,14 +37,21 @@ const SpaceStoreContext = createSimpleContext({
     const [lastError, setLastError] = createSignal<unknown>()
     const [spacesResource, spacesActions] = createResource(
       () => canUseSpaceControl(runtime.cli),
-      (available) => available ? fetchSpaces(sdk) : lastSuccessful(),
+      (available) => (available ? fetchSpaces(sdk) : Promise.resolve(lastSuccessful())),
     )
 
     createEffect(() => {
-      const list = spacesResource()
-      if (!list) return
-      setLastSuccessful(list)
-      setLastError(undefined)
+      // Read the settled value, never the throwing one: a rejected resource
+      // re-throws when read in a tracking scope, which would carry a transient
+      // 401 (stale credentials mid-switch) into the shell error boundary and
+      // crash the whole workbench. The UI already surfaces the failure through
+      // the unauthorized overlay; the list simply holds its last good value.
+      if (spacesResource.error) return
+      const settled = spacesResource.latest
+      if (settled) {
+        setLastSuccessful(settled)
+        setLastError(undefined)
+      }
     })
 
     createEffect(() => {
@@ -54,7 +61,11 @@ const SpaceStoreContext = createSimpleContext({
       setLastError(error)
     })
 
-    const spaces = createMemo(() => spacesResource() ?? lastSuccessful())
+    const spaces = createMemo(() => {
+      // `latest` is undefined until the first success; the signal then carries
+      // every later failure without touching the throwing read path.
+      return lastSuccessful()
+    })
 
     // 在 spaces 列表加载完毕后，校验 wb 中的 tabs 列表
     createEffect(() => {

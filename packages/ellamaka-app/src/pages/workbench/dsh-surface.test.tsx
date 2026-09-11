@@ -2,7 +2,15 @@
 import { describe, expect, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
-import { DshIframe, dshIframeSrc, dshSurfaceStyle } from "./dsh-surface"
+import {
+  DshIframe,
+  createDsh401Healer,
+  dshIframeSrc,
+  dshSurfaceStyle,
+  healTargetUrl,
+  looksLikeDsh401,
+  selfHealDshIframe,
+} from "./dsh-surface"
 
 /**
  * The DSH iframe embeds the DSH web UI under the backend origin's `/dsh/` path
@@ -93,5 +101,235 @@ describe("dshSurfaceStyle keep-alive", () => {
   test("visible layer participates in layout, hidden layer drops out", () => {
     expect(dshSurfaceStyle(true)).toEqual({ display: "contents" })
     expect(dshSurfaceStyle(false)).toEqual({ display: "none" })
+  })
+})
+
+/**
+ * auth-fix-2 (iframe 401 self-heal): the keep-alive iframe never reloads on
+ * tab switches, so a stale cookie (30-day expiry, or an engine restart that
+ * rotated the token+signing key) leaves a bare 401 page on screen forever.
+ * After a load, the content is probed; a dsh 401 body triggers ONE re-fetch
+ * of `/workbench/dsh-url` and a src reload (the fresh token re-mints the
+ * cookie via the 303 exchange). A single failure only retries once — no
+ * storm; a healthy document never triggers anything.
+ */
+describe("dsh 401 self-heal probe (auth-fix-2)", () => {
+  test("detects the official dsh 401 body text", () => {
+    expect(
+      looksLikeDsh401("dsh web authentication required; reopen the URL printed by dsh web.\n"),
+    ).toBe(true)
+  })
+
+  test("does not treat healthy content or empty documents as a 401", () => {
+    expect(looksLikeDsh401("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")).toBe(false)
+    expect(looksLikeDsh401("")).toBe(false)
+    expect(looksLikeDsh401("forbidden")).toBe(false)
+  })
+
+  test("reloads the iframe src on a detected 401 using the refetched entry", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    let entryCalls = 0
+    const resolveEntry = async () => {
+      entryCalls += 1
+      return "http://localhost:4097/dsh/?token=fresh"
+    }
+    selfHealDshIframe(iframe, resolveEntry)
+    // The reload is deferred to the next microtask/frame; wait it out.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(entryCalls).toBe(1)
+    expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=fresh")
+    iframe.remove()
+  })
+
+  test("stops after one retry when the entry is undefined (engine not mounted)", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    let entryCalls = 0
+    const resolveEntry = async () => {
+      entryCalls += 1
+      return undefined
+    }
+    selfHealDshIframe(iframe, resolveEntry)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(entryCalls).toBe(1)
+    expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=stale")
+    iframe.remove()
+  })
+
+  test("same-token heal forces exactly one in-place reload via the seam", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=same")
+    document.body.appendChild(iframe)
+    // happy-dom does not implement contentWindow.location.reload; the seam
+    // exists so the reload branch is observable in tests too.
+    let reloadCalls = 0
+    selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=same", {
+      reload: () => {
+        reloadCalls += 1
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(reloadCalls).toBe(1)
+    expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=same")
+    iframe.remove()
+  })
+
+  test("src-change heal does not touch the reload seam", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    let reloadCalls = 0
+    selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=fresh", {
+      reload: () => {
+        reloadCalls += 1
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(reloadCalls).toBe(0)
+    expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=fresh")
+    iframe.remove()
+  })
+
+  // B-01 regression: the initial iframe src is retargeted onto the serving
+  // page origin, but the heal used to hand the RAW backend entry to
+  // selfHealDshIframe — the frame jumped to the backend origin, a cross-site
+  // iframe cannot carry the SameSite=Strict cookie (DESIGN-ellamaka-dsh dev
+  // topology), and the frame stayed 401 with the episode gate closed. The
+  // heal target must ride the same dshIframeSrc retarget as the initial src.
+  test("healTargetUrl keeps the heal on the vite proxy origin (B-01)", () => {
+    const target = healTargetUrl(
+      "http://127.0.0.1:4097",
+      "http://127.0.0.1:4097/dsh/?token=fresh",
+      "http://localhost:3000",
+    )
+    expect(target).toBe("http://localhost:3000/dsh/?token=fresh")
+  })
+
+  test("healTargetUrl keeps the heal on the desktop dshProxyOrigin (B-01)", () => {
+    const target = healTargetUrl(
+      "http://127.0.0.1:4097",
+      "http://127.0.0.1:4097/dsh/?token=fresh",
+      "http://dsh-proxy.internal",
+    )
+    expect(target).toBe("http://dsh-proxy.internal/dsh/?token=fresh")
+  })
+
+  test("healTargetUrl writes a proxy-originated target into the iframe (B-01 end to end)", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:3000/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    const refetchEntry = async () =>
+      healTargetUrl("http://127.0.0.1:4097", "http://127.0.0.1:4097/dsh/?token=fresh", "http://localhost:3000")
+    selfHealDshIframe(iframe, refetchEntry)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    // The proxy-originated URL differs from the frame's current src, so the
+    // heal swaps the src — the frame never leaves the page origin.
+    expect(iframe.getAttribute("src")).toBe("http://localhost:3000/dsh/?token=fresh")
+    iframe.remove()
+  })
+
+  test("stops after one retry when the entry is undefined (engine not mounted)", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    let entryCalls = 0
+    const resolveEntry = async () => {
+      entryCalls += 1
+      return undefined
+    }
+    selfHealDshIframe(iframe, resolveEntry)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(entryCalls).toBe(1)
+    expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=stale")
+    iframe.remove()
+  })
+
+  test("does not retry when the refetched entry equals the current src", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=same")
+    document.body.appendChild(iframe)
+    let entryCalls = 0
+    const resolveEntry = async () => {
+      entryCalls += 1
+      return "http://localhost:4097/dsh/?token=same"
+    }
+    selfHealDshIframe(iframe, resolveEntry)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(entryCalls).toBe(1)
+    // Unchanged entry: force the in-place reload instead of a no-op src set.
+    expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=same")
+    iframe.remove()
+  })
+
+  test("keeps the keep-alive contract: heal only touches src, never the element", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    const before = iframe
+    selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=fresh")
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(iframe).toBe(before)
+    expect(document.body.contains(before)).toBe(true)
+    iframe.remove()
+  })
+})
+
+describe("createDsh401Healer episode semantics (auth-fix-2)", () => {
+  const FRESH = (n: number) => `http://localhost:4097/dsh/?token=fresh-${n}`
+
+  function healerHarness() {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    let calls = 0
+    const heal = createDsh401Healer({
+      getFrame: () => iframe,
+      refetchEntry: async () => FRESH(++calls),
+    })
+    return { iframe, heal, calls: () => calls }
+  }
+
+  test("healthy probes never refetch", async () => {
+    const { heal, calls, iframe } = healerHarness()
+    heal("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")
+    heal(null)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls()).toBe(0)
+    iframe.remove()
+  })
+
+  test("consecutive 401 loads trigger exactly one attempt (no storm)", async () => {
+    const { heal, calls, iframe } = healerHarness()
+    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
+    // The src reload lands on a still-stale session: the load probe fires 401 again.
+    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
+    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls()).toBe(1)
+    iframe.remove()
+  })
+
+  test("a healthy load re-arms the healer so a later episode heals again", async () => {
+    const { heal, calls, iframe } = healerHarness()
+    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls()).toBe(1)
+    // The healed src reloaded into a healthy surface, then the cookie expired
+    // again weeks later: a NEW failure episode must heal once more.
+    heal("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")
+    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls()).toBe(2)
+    iframe.remove()
   })
 })

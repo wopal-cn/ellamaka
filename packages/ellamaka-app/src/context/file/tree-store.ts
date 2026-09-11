@@ -13,7 +13,7 @@ type TreeStoreOptions = {
   scope: () => string
   normalizeDir: (input: string) => string
   list: (input: string) => Promise<FileNode[]>
-  onError: (message: string) => void
+  onError: (message: string, error?: unknown) => void
 }
 
 export function createFileTreeStore(options: TreeStoreOptions) {
@@ -117,7 +117,7 @@ export function createFileTreeStore(options: TreeStoreOptions) {
             draft.error = e.message
           }),
         )
-        options.onError(e.message)
+        options.onError(e.message, e)
       })
       .finally(() => {
         inflight.delete(dir)
