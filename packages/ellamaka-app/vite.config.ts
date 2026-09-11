@@ -21,6 +21,15 @@ const sentry =
 
 export default defineConfig({
   plugins: [desktopPlugin, sentry] as any,
+  // Files carrying a `@jsxImportSource` pragma (the workbench status-bar
+  // diagnostics module and virtua's solid entry) are compiled by
+  // vite-plugin-solid, but Vite's built-in esbuild pass still inspects them
+  // with the tsconfig `jsx: "preserve"` + `jsxImportSource` pair. esbuild
+  // rejects that combination with a spurious "React automatic transform"
+  // warning. Declaring the automatic transform here settles the esbuild pass;
+  // it does not alter output because .tsx/.jsx are handed to Solid's babel
+  // pipeline regardless.
+  esbuild: { jsx: "automatic" },
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
