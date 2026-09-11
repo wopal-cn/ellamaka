@@ -15,7 +15,7 @@ import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped, withGithubBase as githubBase } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
@@ -95,20 +95,6 @@ const fail = Effect.fn("ReadToolTest.fail")(function* (
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 const glob = (p: string) =>
   process.platform === "win32" ? Filesystem.normalizePathPattern(p) : p.replaceAll("\\", "/")
-const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
-      return previous
-    }),
-    () => self,
-    (previous) =>
-      Effect.sync(() => {
-        if (previous) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
-        else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      }),
-  )
 const git = Effect.fn("ReadToolTest.git")(function* (cwd: string, args: string[]) {
   return yield* Effect.promise(async () => {
     const proc = Bun.spawn(["git", ...args], {

@@ -4,7 +4,7 @@ import os from "os"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
-import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, TestInstance, tmpdirScoped, withGithubBase as githubBase } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Global } from "@wopal/ellamaka-core/global"
@@ -57,20 +57,6 @@ const ctx = {
 const root = path.join(__dirname, "../..")
 const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
-const githubBase = <A, E, R>(url: string, self: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = url
-      return previous
-    }),
-    () => self,
-    (previous) =>
-      Effect.sync(() => {
-        if (previous) process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL = previous
-        else delete process.env.OPENCODE_REPO_CLONE_GITHUB_BASE_URL
-      }),
-  )
 
 const git = Effect.fn("GrepToolTest.git")(function* (cwd: string, args: string[]) {
   return yield* Effect.promise(async () => {
