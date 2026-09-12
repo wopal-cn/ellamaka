@@ -9,7 +9,7 @@ import {
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
 import { createServerSyncContext } from "./server-sync"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, SessionStatus } from "@opencode-ai/sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"
@@ -21,19 +21,46 @@ function sortParts(parts: Part[]) {
   return parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
 }
 
-function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
-  const pending = map.get(key)
-  if (pending) return pending
-  const promise = task().finally(() => {
-    map.delete(key)
+function startInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
+  let promise: Promise<void>
+  promise = task().finally(() => {
+    // A forced task can replace the map entry while an earlier task settles.
+    // Only its own finalizer may remove the current entry.
+    if (map.get(key) === promise) map.delete(key)
   })
   map.set(key, promise)
   return promise
 }
 
+export function runInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
+  return map.get(key) ?? startInflight(map, key, task)
+}
+
+/**
+ * Runs a recovery read after any active request for the same session. The
+ * active request may have begun before an SSE gap, so reusing it would return
+ * the stale data that recovery is meant to replace.
+ */
+export function forceInflight(map: Map<string, Promise<void>>, key: string, task: () => Promise<void>) {
+  const pending = map.get(key)
+  return startInflight(map, key, pending ? () => pending.then(task, task) : task)
+}
+
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+/**
+ * GET /session/status stores only non-idle sessions. An absent entry is
+ * therefore a positive idle result, never a reason to preserve a previously
+ * streamed busy status.
+ */
+export function sessionStatusFromSnapshot(
+  snapshot: Record<string, SessionStatus> | undefined,
+  sessionID: string,
+): SessionStatus {
+  return snapshot?.[sessionID] ?? { type: "idle" }
+}
 
 const isNotFound = (error: unknown) =>
   error instanceof Error &&
@@ -532,7 +559,8 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
           })
         }
 
-        return runInflight(inflight, key, async () => {
+        const load = opts?.force ? forceInflight : runInflight
+        return load(inflight, key, async () => {
           if (opts?.force) setMeta("loading", key, true)
           const pending = getSessionPrefetchPromise(directory, sessionID)
           if (pending) {
@@ -587,7 +615,19 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
             force: opts?.force,
           })
 
-          await Promise.all([sessionReq, messagesReq])
+          // A reconnect can miss both the final message update and its
+          // session.status idle event. Message reload alone repairs the
+          // transcript but leaves the live-activity tail spinning forever.
+          // Read the authoritative status snapshot for the recovered session
+          // and turn an omitted entry into idle.
+          const statusReq = opts?.force
+            ? retry(() => client.session.status()).then((status) => {
+                if (!tracked(directory, sessionID)) return
+                setStore("session_status", sessionID, reconcile(sessionStatusFromSnapshot(status.data, sessionID)))
+              })
+            : Promise.resolve()
+
+          await Promise.all([sessionReq, messagesReq, statusReq])
         })
       },
       async todo(sessionID: string, opts?: { force?: boolean }) {

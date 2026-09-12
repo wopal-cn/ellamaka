@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { Message } from "@opencode-ai/sdk/v2/client"
-import { reconcileActiveSessions, shouldDelegateMessageLoad } from "./directory-sync"
+import {
+  forceInflight,
+  reconcileActiveSessions,
+  runInflight,
+  sessionStatusFromSnapshot,
+  shouldDelegateMessageLoad,
+} from "./directory-sync"
 
 const message = (id: string, sessionID: string): Message =>
   ({
@@ -146,5 +152,39 @@ describe("shouldDelegateMessageLoad", () => {
         hasSession: true,
       }),
     ).toBe(true)
+  })
+})
+
+describe("reconnect recovery", () => {
+  test("runs a forced reload after an in-flight cached load instead of reusing its stale result", async () => {
+    const inflight = new Map<string, Promise<void>>()
+    let releaseInitial: (() => void) | undefined
+    let runs = 0
+
+    const initial = runInflight(inflight, "dir\\nses_1", async () => {
+      runs += 1
+      await new Promise<void>((resolve) => {
+        releaseInitial = resolve
+      })
+    })
+    await Promise.resolve()
+
+    const recovered = forceInflight(inflight, "dir\\nses_1", async () => {
+      runs += 1
+    })
+
+    expect(runs).toBe(1)
+    releaseInitial?.()
+    await Promise.all([initial, recovered])
+
+    expect(runs).toBe(2)
+    expect(inflight.size).toBe(0)
+  })
+
+  test("treats a missing status-snapshot entry as idle after a reconnect", () => {
+    // The server intentionally omits idle sessions from GET /session/status.
+    // Leaving the old busy entry in the client would keep the Chat tail
+    // spinning indefinitely even after the final message was persisted.
+    expect(sessionStatusFromSnapshot({}, "ses_1")).toEqual({ type: "idle" })
   })
 })
