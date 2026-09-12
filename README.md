@@ -84,7 +84,7 @@ See `AGENTS.md` for details.
 | Doc | Contents |
 |---|---|
 | `docs/DESIGN.md` | Architecture design & WopalSpace adaptation |
-| `docs/DISTRIBUTION.md` | Release process & artifact specs |
+| `docs/DESIGN-distribution.md` | Release process & artifact specs |
 | `docs/BRANDING.md` | Branding changes inventory |
 | `docs/UPSTREAM-MERGE-LOG.md` | Upstream merge history |
 

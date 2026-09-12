@@ -46,7 +46,7 @@ Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建
 ./scripts/withdraw-release.sh <cli|desktop> [--channel <stable|beta>] [version] [--dry-run]
 ```
 
-按 `docs/DISTRIBUTION.md §7.3` 撤回：登记到 `release/withdrawn-versions.json`，再 dispatch cleanup 的 withdraw 模式执行远端删除。版本默认取该渠道最新发布版本，fallback 为该渠道上一版本。
+按 [`docs/DESIGN-distribution.md` 整版撤回](./DESIGN-distribution.md#failed-attempt-and-whole-version-withdrawal) 规则撤回：登记到 `release/withdrawn-versions.json`，再 dispatch cleanup 的 withdraw 模式执行远端删除。版本默认取该渠道最新发布版本，fallback 为该渠道上一版本。
 
 ## 开发
 

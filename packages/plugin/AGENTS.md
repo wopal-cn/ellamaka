@@ -5,12 +5,12 @@ description: Plugin SDK package providing type definitions for server plugins (t
 
 # Agent Development Rules
 
-## 1. Canonical References
+## Canonical References
 
 - Parent Rules: `../../AGENTS.md`
 - DESIGN: `../../docs/DESIGN.md`
 
-## 2. Architecture and Directories
+## Architecture and Directories
 
 Type-only export package with no runtime logic. CLI loads `src/` directly via TypeScript; no build output is consumed.
 
@@ -22,7 +22,7 @@ Type-only export package with no runtime logic. CLI loads `src/` directly via Ty
 | `src/shell.ts` | `BunShell` type bindings for plugin shell access |
 | `src/example*.ts` | Reference implementations, not tests |
 
-## 3. Development Commands
+## Development Commands
 
 | Scenario | Command | When |
 |---|---|---|

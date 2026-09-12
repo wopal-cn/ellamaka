@@ -83,7 +83,7 @@ ellamaka
 | 文档 | 内容 |
 |---|---|
 | `docs/DESIGN.md` | 架构设计与 WopalSpace 适配 |
-| `docs/DISTRIBUTION.md` | 发布流程与产物规格 |
+| `docs/DESIGN-distribution.md` | 发布流程与产物规格 |
 | `docs/BRANDING.md` | 品牌化改造清单 |
 | `docs/UPSTREAM-MERGE-LOG.md` | 上游合并历史 |
 

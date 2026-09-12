@@ -5,7 +5,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 
 # Agent Development Rules
 
-## 1. Canonical References
+## Canonical References
 
 权威引用：
 
@@ -17,7 +17,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - HttpApi Route Rules: `src/server/routes/instance/httpapi/AGENTS.md`
 - Effect Migration Reference: `specs/effect/migration.md`
 
-## 2. Architecture and Directories
+## Architecture and Directories
 
 执行链：CLI entry → config/runtime services → server/session/tool/storage/TUI → WopalSpace hooks。
 
@@ -37,7 +37,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 | `test/` | package-local tests and fixtures；详细规则见 `test/AGENTS.md` |
 | `migration/` | Drizzle migration output |
 
-## 3. Development Commands (build format test)
+## Development Commands (build format test)
 
 | 场景 | 命令 | 何时 |
 |---|---|---|
@@ -52,7 +52,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 
 所有命令从 `packages/opencode` 目录运行。
 
-## 4. Implementation Rules
+## Implementation Rules
 
 - 遵循父级 `../../AGENTS.md` 的 Bun、TypeScript、WopalSpace mode、上游定制边界和验证规则。
 - 禁止用 `export namespace Foo { ... }` 组织模块；使用 flat top-level exports，并在文件底部 self-reexport，例如 `export * as Foo from "./foo"`。
@@ -88,7 +88,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - 修改 `src/server/routes/instance/` 时保持 legacy Hono routes 与 Effect HttpApi 行为对齐；详细规则见对应子目录 `AGENTS.md`。
 - 修改 `src/server/routes/instance/httpapi/` 时遵循 HttpApi route patterns；不要在 request handler 中重建 stable layers。
 
-## 5. Testing
+## Testing
 
 - 测试子集由 `script/run-tests.ts` 按层展开，`package.json` 提供四个入口：`test:unit`（默认开发子集，扫 `test/` 全部子目录 + 顶层 `*.test.ts`，剔除集成目录与 `*-e2e.test.ts`）、`test:integration`（只跑 7 个集成目录：server/session/cli/snapshot/project/tool/control-plane）、`test:e2e`（只跑 `*-e2e.test.ts` 文件，递归）、`test:all`（全量回归）。日常开发默认用 `test:unit`；改到集成目录（server/session/cli/snapshot/project/tool/control-plane）相关代码时至少跑 `test:integration`；提交/合并前跑 `test:all` 回归。
 - e2e 文件遵循 `*-e2e.test.ts` 命名约定，通过 `pathIgnorePatterns` 从 `test:unit`/`test:integration` 隔离（CLI 值覆盖 bunfig，不合并），只在 `test:e2e` 下运行。不要将 e2e 文件移出所属 domain 目录。
@@ -108,7 +108,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明 `WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
 - Windows 的 Git 克隆通常使用 `core.symlinks=false`；插件解析器必须把内容为受限相对源码路径的扁平化 symlink 占位文件解析到同一插件目录内的真实文件，并拒绝目录越界目标。
 
-## 6. User-Supplied Rules
+## User-Supplied Rules
 
 ### Module Shape
 

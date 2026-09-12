@@ -9,7 +9,7 @@
 
 ## 一、版本时间线与阶段定位
 
-### 1.1 版本发布节奏
+### 版本发布节奏
 
 | 版本 | 发布日期 | commit 数 | 阶段定位 |
 |------|---------|----------|---------|
@@ -19,7 +19,7 @@
 | **v1.17.0** | 06-10 | 163 | 能力补齐期：V2 runner 功能补全、全面 Effect 化 |
 | v1.17.1 → v1.17.3 | 06-10（同日） | — | 快速修复 |
 
-### 1.2 v1.16 为何只到 .2 就跳到 v1.17？
+### v1.16 为何只到 .2 就跳到 v1.17？
 
 **不是方向变更，而是 V2 重构进入了新里程碑。**
 
@@ -38,7 +38,7 @@ v1.17 引入了完整的 V2 工具架构（`Tool.make` 统一类型、permission
 
 ## 二、V1/V2 双轨并行现状
 
-### 2.1 代码结构（v1.17.3）
+### 代码结构（v1.17.3）
 
 当前代码库中 V1 和 V2 三层并存：
 
@@ -48,7 +48,7 @@ v1.17 引入了完整的 V2 工具架构（`Tool.make` 统一类型、permission
 | **V1 兼容命名空间** | `packages/core/src/v1/` | V1 config/permission/session schema 隔离到 `v1/` 子目录 |
 | **V2 运行时** | `packages/core/src/session/`、`packages/core/src/plugin/` | Effect-native 运行时，实验阶段 |
 
-### 2.2 V1 插件兼容机制
+### V1 插件兼容机制
 
 V1 插件在当前版本**仍可运行**。`packages/opencode/src/plugin/index.ts` 的 `applyPlugin()` 采用探测式加载：
 
@@ -59,7 +59,7 @@ V1 插件在当前版本**仍可运行**。`packages/opencode/src/plugin/index.t
 
 两套插件系统并行，互不干扰。
 
-### 2.3 V2 替换 V1 的 Launch Gate
+### V2 替换 V1 的 Launch Gate
 
 `specs/v2/session.md` 包含一份 **"V1 Runtime Context Parity" 对照表**，列出 V2 替换 V1 前必须达到功能对等的行为清单：
 
@@ -83,7 +83,7 @@ V1 插件在当前版本**仍可运行**。`packages/opencode/src/plugin/index.t
 
 `specs/v2/config.md` 是一份逐字段审查文档，对每个配置项明确标注 keep / remove / redesign。
 
-### 3.1 字段重命名（单数 → 复数，无兼容别名）
+### 字段重命名（单数 → 复数，无兼容别名）
 
 | V1 | V2 | 说明 |
 |----|----|------|
@@ -96,7 +96,7 @@ V1 插件在当前版本**仍可运行**。`packages/opencode/src/plugin/index.t
 | `attachment` | `attachments` | 避免与 model capability flag `attachment` 冲突 |
 | MCP servers | `mcp.servers` | 协议级设置（如 timeout）提升到 `mcp` 下 |
 
-### 3.2 字段删除
+### 字段删除
 
 | 删除项 | 原因 |
 |--------|------|
@@ -113,7 +113,7 @@ V1 插件在当前版本**仍可运行**。`packages/opencode/src/plugin/index.t
 | `experimental.continue_loop_on_deny` | 废弃 |
 | `experimental.openTelemetry` | 走标准 OTel 环境变量 |
 
-### 3.3 字段语义重设计
+### 字段语义重设计
 
 **Provider 启停控制** — `disabled_providers` / `enabled_providers` 全部替换为 `experimental.policies` 策略数组：
 
@@ -138,7 +138,7 @@ Policy 评估规则（`specs/v2/provider-policy.md`）：
 
 **MCP timeout** — 从 `experimental.mcp_timeout` 移到 `mcp.timeout`（默认）和 `mcp.servers.<name>.timeout`（per-server）。
 
-### 3.4 配置自动转换计划
+### 配置自动转换计划
 
 `specs/v2/todo.md` 第 96-97 行：
 
@@ -152,7 +152,7 @@ Policy 评估规则（`specs/v2/provider-policy.md`）：
 
 V2 的插件系统是全新架构，不是增量改进。
 
-### 4.1 架构对比
+### 架构对比
 
 | 维度 | V1 | V2 |
 |------|----|----|
@@ -163,7 +163,7 @@ V2 的插件系统是全新架构，不是增量改进。
 | 热重载 | 全局 reload | 粒度化：服务 emit 事件，依赖方响应变更 |
 | 禁用行为 | 需手动清理 | 自动回滚（replayable transform 卸载） |
 
-### 4.2 V2 插件加载顺序
+### V2 插件加载顺序
 
 ```ts
 export const Order = {
@@ -176,7 +176,7 @@ export const Order = {
 }
 ```
 
-### 4.3 V2 核心 Hook
+### V2 核心 Hook
 
 ```ts
 type HookSpec = {
@@ -192,7 +192,7 @@ type HookSpec = {
 - 顺序触发，确定性保证
 - **插件不能修改 policy**
 
-### 4.4 Catalog Transform 模型
+### Catalog Transform 模型
 
 插件不再直接操作 catalog，而是注册 **replayable transform**。插件禁用时自动回滚其贡献——这是 V1 没有的概念。
 
@@ -215,7 +215,7 @@ interface Catalog {
 
 这是最深层的行为变更。
 
-### 5.1 Prompt 投递模型
+### Prompt 投递模型
 
 | 维度 | V1 | V2 |
 |------|----|----|
@@ -224,7 +224,7 @@ interface Catalog {
 | Delivery 语义 | 无 | 显式 `steer`（插入当前活动）vs `queue`（FIFO 新活动）|
 | 幂等性 | 无 | Prompt message ID 复用 = 精确重试（Session + prompt + delivery 匹配时）|
 
-### 5.2 Context Epoch
+### Context Epoch
 
 V2 引入全新概念——持久化精确的 system context baseline + 结构化快照，按 epoch 版本管理。
 
@@ -235,7 +235,7 @@ V2 引入全新概念——持久化精确的 system context baseline + 结构�
 
 V1 没有等价机制。
 
-### 5.3 Compaction
+### Compaction
 
 V2 compaction 在每个 provider turn 前自动触发：
 1. 估算完整请求大小 vs 模型 context window 减去绝对保留 headroom
@@ -243,7 +243,7 @@ V2 compaction 在每个 provider turn 前自动触发：
 3. Provider-native reasoning/tool 消息不跨越压缩边界（避免签名和加密 reasoning 失败）
 4. 压缩完成后请求 Context Epoch 替换，重新加载 pending turn
 
-### 5.4 执行模型
+### 执行模型
 
 - V2 runner 每个 provider turn 只发一个 `llm.stream(request)`，不桥接 `SessionPrompt.loop()`
 - 本地工具即时执行（eager settlement），provider turn 关闭后统一 await
@@ -255,7 +255,7 @@ V2 compaction 在每个 provider turn 前自动触发：
 
 ## 六、工具架构 — 统一类型系统
 
-### 6.1 `Tool.make` 统一接口
+### `Tool.make` 统一接口
 
 V1 工具从应用层 orchestration 导入。V2 所有工具（built-in、plugin、application）用同一个 `Tool.Definition`：
 
@@ -269,7 +269,7 @@ const make: <Input, Output>(config: {
 }) => Definition<Input, Output>
 ```
 
-### 6.2 工具法则（Laws）
+### 工具法则（Laws）
 
 `specs/v2/tools.md` 定义了严格约束：
 
@@ -281,7 +281,7 @@ const make: <Input, Output>(config: {
 - **Stale rejection**：call 永远不执行非 provider-turn-advertised 的 registration
 - **Storage encapsulation**：domain output 不因 model-output bounding 改变
 
-### 6.3 内置工具行为变更
+### 内置工具行为变更
 
 | 工具 | V2 变更 |
 |------|---------|
@@ -296,7 +296,7 @@ const make: <Input, Output>(config: {
 
 ## 七、权限系统 — 双层重构
 
-### 7.1 PermissionV2（工具级）
+### PermissionV2（工具级）
 
 - Location-scoped pending requests
 - 回复类型：`once` / `always` / `reject`
@@ -313,7 +313,7 @@ const make: <Input, Output>(config: {
 }
 ```
 
-### 7.2 Policy（Provider 级）
+### Policy（Provider 级）
 
 全新系统，替代 `enabled_providers` / `disabled_providers`：
 
@@ -326,13 +326,13 @@ const make: <Input, Output>(config: {
 
 ## 八、数据持久化 — 不兼容重置
 
-### 8.1 V2 实验数据库明确 disposable
+### V2 实验数据库明确 disposable
 
 `specs/v2/session.md` 第 167 行：
 
 > "The `session.next.*` event schemas remain experimental and unshipped; databases created by earlier experimental builds are disposable rather than compatibility targets."
 
-### 8.2 新增数据库对象
+### 新增数据库对象
 
 | 对象 | 用途 |
 |------|------|
@@ -341,7 +341,7 @@ const make: <Input, Output>(config: {
 | `session_message.seq` 字段 | Projected message 按 durable event sequence 排序，替代 wall-clock timestamp |
 | `session.next.*` 事件族 | 版本化 durable event（如 `session.next.compaction.ended.2`） |
 
-### 8.3 迁移策略
+### 迁移策略
 
 - 多次 schema migration 会 reset pre-launch projections
 - workspace beta 数据被明确标记为可丢弃
@@ -365,11 +365,11 @@ const make: <Input, Output>(config: {
 
 ## 十、对 Ellamaka 的影响评估
 
-### 10.1 当前影响（短期）
+### 当前影响（短期）
 
 **无直接影响。** Ellamaka 基于 V1 运行时，V1 运行时和插件系统完整保留。V2 处于实验阶段，不影响 V1 代码路径。
 
-### 10.2 上游合并风险（中期）
+### 上游合并风险（中期）
 
 随着 V2 逐步成熟，上游每次 release 会包含更多 V2 代码和 V1→V2 迁移：
 
@@ -380,7 +380,7 @@ const make: <Input, Output>(config: {
 | Config schema 变更 | 配置加载可能受影响 | 关注 `packages/core/src/v1/config/` 是否被修改 |
 | TUI 独立包 | TUI 插件加载路径变更 | 关注 `packages/opencode/src/plugin/tui/` |
 
-### 10.3 V2 迁移准备（长期）
+### V2 迁移准备（长期）
 
 当 V2 launch（V1 Runtime Context Parity 表大部分达到 `complete`）时，ellamaka 需要评估：
 
@@ -389,7 +389,7 @@ const make: <Input, Output>(config: {
 3. **Location 抽象**：V2 的 Location-scoped 服务是否与 WopalSpace 的空间模型对齐
 4. **Session 运行时**：V2 的 event-sourced session 是否影响 ellamaka 的 session 管理逻辑
 
-### 10.4 监控信号
+### 监控信号
 
 以下信号出现时，说明 V2 迁移迫近：
 

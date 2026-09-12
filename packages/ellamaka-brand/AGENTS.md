@@ -5,13 +5,13 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 
 # Agent Development Rules
 
-## 1. Canonical References
+## Canonical References
 
 - Parent Rules: `../../AGENTS.md`
 - Branding Design: `../../docs/BRANDING.md`
 - Project Design: `../../docs/DESIGN.md`
 
-## 2. Architecture and Directories
+## Architecture and Directories
 
 This package is responsible for ellamaka's brand identity injection and build. Upstream files reference brand constants via `import { BINARY_NAME } from "@ellamaka/build/branding"` rather than hardcoding brand values in source.
 
@@ -27,14 +27,14 @@ This package is responsible for ellamaka's brand identity injection and build. U
 > Gitee releases, cleanup, upstream lock, legacy inventory) moved to
 > `../ellamaka-release`. See `../ellamaka-release/AGENTS.md`.
 
-## 3. Development Commands
+## Development Commands
 
 | Scenario | Command |
 |----------|---------|
 | Test | `bun test` from `packages/ellamaka-brand` |
 | Build | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
 
-## 4. Implementation Rules
+## Implementation Rules
 
 - `branding.ts` is the single source of truth for brand constants; all brand value changes go here only.
 - `detect.ts` detects WopalSpace by checking whether `.wopal/.git` is a regular file (worktree marker); stops at the home directory or filesystem root.
@@ -43,12 +43,12 @@ This package is responsible for ellamaka's brand identity injection and build. U
 - `--web-ui ellamaka-app` embeds the ellamaka Web UI, `--web-ui app` embeds the upstream app baseline, and `--web-ui none` skips Web UI embedding.
 - After adding brand constants or changing channel naming, check whether `../../docs/BRANDING.md` needs a corresponding update.
 
-## 5. Testing
+## Testing
 
 - Code changes follow TDD: write a failing test first, then implement to make it pass.
 - Run `bun test` from `packages/ellamaka-brand`.
 - After modifying `branding.ts`, run `branding.test.ts`; after modifying `detect.ts`, run `detect.test.ts`; after modifying `is-wopal-install.ts`, run `is-wopal-install.test.ts`.
 
-## 6. User-Supplied Rules
+## User-Supplied Rules
 
 (None)

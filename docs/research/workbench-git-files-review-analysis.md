@@ -4,15 +4,15 @@
 
 本报告针对 **Ellamaka Workbench** 项目在 Git 状态展示、文件树探查、空间级多 Repo 嵌套架构兼容性，以及 Session 闭环内部代码审查（Code Review）与批注系统的可行性与架构进行了深入调研与系统分析。
 
-调研明确了 Ellamaka 现有的前端组件能力及其边界，剖析了在 Wopal 空间多仓库嵌套架构下的底层缺陷，纠正了脱离真实 DOM 结构的 UI 假设，并提出了两个方向的架构方案：基于当前 `Session.tsx` 页面结构的会话内代码审查与批注闭环（§4），以及覆盖空间全部仓库的仓库总览与 Git API 服务（§5）。两个方向共享同一后端地基 `Git.Service`，按 §6 的分期推进。
+调研明确了 Ellamaka 现有的前端组件能力及其边界，剖析了在 Wopal 空间多仓库嵌套架构下的底层缺陷，纠正了脱离真实 DOM 结构的 UI 假设，并提出了两个方向的架构方案：基于当前 `Session.tsx` 页面结构的会话内代码审查与批注闭环（[Session 内部文件审查与批注闭环架构方案](#session-内部文件审查与批注闭环架构方案)），以及覆盖空间全部仓库的仓库总览与 Git API 服务（[空间仓库总览与 Git API 服务架构方案](#空间仓库总览与-git-api-服务架构方案)）。两个方向共享同一后端地基 `Git.Service`，按 [重构与实施建议](#重构与实施建议) 的分期推进。
 
 ---
 
-## 1. 现有前端组件与能力现状
+## 现有前端组件与能力现状
 
 通过对 `projects/ellamaka/packages/app/src` 的源码分析，Ellamaka 已经具备了良好的 UI 基础与底层渲染组件：
 
-### 1.1 文件树组件 (`FileTree`)
+### 文件树组件 (`FileTree`)
 * **源文件**: `packages/app/src/components/file-tree.tsx`
 * **现有能力**:
   - 支持多层级目录的树状折叠/展开与状态记忆。
@@ -20,20 +20,20 @@
   - 支持 `all`（全量文件）与 `changes`（仅变动文件）的视图模式切换。
   - 基于 `@thisbeyond/solid-dnd` 支持文件与目录的拖拽（Drag & Drop）操作。
 
-### 1.2 Git 差异对比组件 (`SessionReview` / `SessionReviewTab`)
+### Git 差异对比组件 (`SessionReview` / `SessionReviewTab`)
 * **源文件**: `packages/app/src/pages/session/review-tab.tsx` / `@opencode-ai/ui/session-review`
 * **现有能力**:
   - 支持解析并展示 VCS/Git 补丁差异。
   - 支持 `unified`（单栏统一）与 `split`（双栏并排对比）两种视图格式切换。
   - 具备代码差异高亮、行号锚定以及行级批注（Line Comments）互动能力。
 
-### 1.3 多文件选项卡组件 (`FileTabs`)
+### 多文件选项卡组件 (`FileTabs`)
 * **源文件**: `packages/app/src/pages/session/file-tabs.tsx`
 * **现有能力**:
   - 基于 `file.pathFromTab` 呈现多文件选项卡，支持标签页拖拽重排与切换。
   - 接入了代码阅读器，支持语法高亮、代码滚动位置持久化与选中行高亮。
 
-### 1.4 行级选区与批注存储机制 (`useComments`)
+### 行级选区与批注存储机制 (`useComments`)
 * **源文件**: `packages/app/src/context/comments.tsx`
 * **工作机制**:
   1. 用户在代码或 Diff 视图中划选代码行，产生 `SelectedLineRange` 选区对象。
@@ -45,19 +45,19 @@
 
 ---
 
-## 2. Wopal 空间级多 Repo 架构兼容性与后端缺陷
+## Wopal 空间级多 Repo 架构兼容性与后端缺陷
 
-### 2.1 Wopal 空间多仓库特征
+### Wopal 空间多仓库特征
 在 `wopal-workspace` 空间架构中：
 - **空间根仓库 (Space Root)**：位于空间根目录（如 `space/wopal-workspace` 分支），管理 `.wopal-space/` 与空间级规则。
 - **嵌套项目仓库 (Project Repos)**：位于 `projects/*` 目录下（如 `projects/ellamaka`, `projects/gesp`, `projects/space-flow` 等），每一个子项目都是独立且自治的 Git 仓库。
 
-### 2.2 后端 VCS 服务与 `vcsQuery` 的现实缺陷
+### 后端 VCS 服务与 `vcsQuery` 的现实缺陷
 分析 `packages/opencode/src/project/vcs.ts` 和 `packages/app/src/pages/session.tsx` (L485) 发现：
 - 前端 `reviewDiffs()` 底层调用的 `vcsQuery` 仅针对单一工作目录（`cwd`）执行 `git status` 或 `git diff`。
 - **缺陷**：在多 Repo 嵌套空间中，如果单个 AI 会话同时修改了位于不同子项目 Repo 中的文件，当前的后端 `vcs` 无法跨多个 Repo 归集修改，会导致代码改动的漏报与错报。
 
-### 2.3 已有 `Git.Service` 的能力边界
+### 已有 `Git.Service` 的能力边界
 `packages/opencode/src/git/index.ts` 已提供完整的 `Git.Service`（Effect service，`@opencode/Git`），核心为通用执行原语：
 
 ```ts
@@ -73,11 +73,11 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 
 ---
 
-## 3. Ellamaka Workbench 真实界面 DOM & 路由结构剖析
+## Ellamaka Workbench 真实界面 DOM & 路由结构剖析
 
 为避免脱离实际代码的抽象套用，本调研重新对 `app.tsx` 和 `layout.tsx` 的 DOM 结构进行了摸排：
 
-### 3.1 真实 DOM 层级结构
+### 真实 DOM 层级结构
 ```
 [最外层 Layout (layout.tsx)]
  ├── 1. 顶部 Titlebar (44px, 包含 Logo、空间/项目下拉切换器)
@@ -93,16 +93,16 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
                 └── PromptInput (底部提示词输入框)
 ```
 
-### 3.2 界面架构结论
+### 界面架构结论
 目前的 Ellamaka Workbench 结构中，`{props.children}` 区域在主要使用路径下**完全由 `Session` 页面驱动**。系统中目前并不存在一个独立于 Session 之外的“通用主工作区”。
 
 ---
 
-## 4. Session 内部文件审查与批注闭环架构方案
+## Session 内部文件审查与批注闭环架构方案
 
 基于真实 Session 页面架构，用户提出了在 Session Panel 内部集成代码审查与批注的痛点与需求。
 
-### 4.1 方案设计：Session 内部 Header 视角切换
+### 方案设计：Session 内部 Header 视角切换
 在 `Session.tsx` 页面内部，保持底部的 `PromptInput` 固定，在顶部 Header 或侧栏增加视图切换：
 
 ```
@@ -130,7 +130,7 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 +-----------------------------------------------------------------------------------+
 ```
 
-### 4.2 交互闭环三步骤
+### 交互闭环三步骤
 1. **视图切换**：用户在 Session 头部将视角从 `对话` 切至 `审查`，消息流区域替换为 `SessionReviewTab`。
 2. **划线批注与 Context 联动**：在 Diff 差异行划选并提交批注时，触发：
    ```ts
@@ -141,13 +141,13 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 
 ---
 
-## 5. 空间仓库总览与 Git API 服务架构方案
+## 空间仓库总览与 Git API 服务架构方案
 
-### 5.1 目标
+### 目标
 
 在 Workbench 中呈现空间及其全部项目仓库的变更情况：空间根仓库与 `projects/*` 下每个仓库的分支、未提交变更、ahead/behind 状态一屏总览，并支持查看 diff、暂存、提交、推送。后端以 HTTP API 服务提供这些能力，管理仓库的变更、提交、push 与 diff。
 
-### 5.2 后端分层
+### 后端分层
 
 | 层 | 组件 | 职责 |
 |---|---|---|
@@ -157,11 +157,11 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 
 不新建平行 git 服务，`Git.Service` 是唯一原语提供者；`/git/*` 是唯一的网络入口。
 
-### 5.3 仓库发现
+### 仓库发现
 
 仓库清单复用 `SpaceRegistry`（消费 wopal CLI `space.projects.list` v2，返回注册 projects 与 linked worktrees），空间根仓库作为固定条目补充。后端不重复实现仓库发现逻辑，CLI 清单是事实来源；未能发现的仓库不出现在总览中。
 
-### 5.4 API 端点草案
+### API 端点草案
 
 | 端点 | 语义 | 关键约束 |
 |---|---|---|
@@ -173,7 +173,7 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 | `POST /git/repos/{repoId}/commit` | 提交 `{message}` | **确认流** |
 | `POST /git/repos/{repoId}/push` | 推送 | **确认流** |
 
-### 5.5 写操作确认流
+### 写操作确认流
 
 `commit` / `push` 采用两阶段：
 
@@ -182,7 +182,7 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 
 前端交互：用户点击提交/推送 → 展示 preview 内容 → 确认 → execute。
 
-### 5.6 安全与并发
+### 安全与并发
 
 | 风险 | 对策 |
 |---|---|
@@ -191,7 +191,7 @@ run(args: string[], opts: { cwd, env?, maxOutputBytes?, stdin? }): Effect<Result
 | 同仓库并发写 | 写操作过 Effect Semaphore 按 repo 串行化；`.git/index.lock` 兜底，冲突返回 409 |
 | push 长操作 | 同步执行 + 超时；后续经 `/global/event` SSE 做进度推送 |
 
-### 5.7 前端视图挂载
+### 前端视图挂载
 
 Workbench 已有 `ViewRegistry` 多视图机制（`view-registry.ts` + `registerDefaultViews`），总览视图注册为独立视图。文件树与 diff 分别复用现有组件：
 
@@ -200,16 +200,16 @@ Workbench 已有 `ViewRegistry` 多视图机制（`view-registry.ts` + `register
 
 不新建平行 UI 组件；总览视图是现有组件的编排层。
 
-### 5.8 与 §4 会话审查方案的关系
+### 与 [Session 内部文件审查与批注闭环架构方案](#session-内部文件审查与批注闭环架构方案) 会话审查方案的关系
 
 两个方案共享同一后端地基 `Git.Service`，投影维度不同：
 
-- §4 会话审查：**file-centric**——本次会话跨仓库改了哪些文件，供 `reviewDiffs` 归集。
-- §5 空间总览：**repo-centric**——每个仓库的分支与变更状态，供总览视图展示。
+- [Session 内部文件审查与批注闭环架构方案](#session-内部文件审查与批注闭环架构方案) 会话审查：**file-centric**——本次会话跨仓库改了哪些文件，供 `reviewDiffs` 归集。
+- [空间仓库总览与 Git API 服务架构方案](#空间仓库总览与-git-api-服务架构方案) 空间总览：**repo-centric**——每个仓库的分支与变更状态，供总览视图展示。
 
 status 数据按仓库组织，file-centric 是前端聚合维度，不增加后端负担。
 
-## 6. 重构与实施建议
+## 重构与实施建议
 
 1. **P1 后端地基（仓库总览 API）**：
    - 扩展 `Git.Service`：`log / stage / unstage / commit / push / aheadBehind` 原语（`run()` 薄封装）。
@@ -218,10 +218,10 @@ status 数据按仓库组织，file-centric 是前端聚合维度，不增加后
 2. **P2 空间总览视图（Workbench）**：
    - 在 `ViewRegistry` 注册总览视图，复用 `FileTree` 与 `SessionReviewTab` 展示仓库变更与 diff。
    - 提交/推送走确认流（preview 弹窗 → execute）。
-3. **P3 会话跨仓库归集（§4 闭环）**：
+3. **P3 会话跨仓库归集（[Session 内部文件审查与批注闭环架构方案](#session-内部文件审查与批注闭环架构方案) 闭环）**：
    - 增强 `Vcs`：会话归集时发现多仓库 → 逐仓库调 `Git.Service` 聚合，修复 `reviewDiffs` 跨仓库漏报。
-   - 按 §4 在 `SessionHeader` 增加对话/审查视角切换，批注联动 Prompt。
+   - 按 [Session 内部文件审查与批注闭环架构方案](#session-内部文件审查与批注闭环架构方案) 在 `SessionHeader` 增加对话/审查视角切换，批注联动 Prompt。
 
 ---
 
-*报告生成时间: 2026-07-30* ｜ *更新: 2026-08-12 融合空间仓库总览与 Git API 服务方案（§2.3、§5、§6）*
+*报告生成时间: 2026-07-30* ｜ *更新: 2026-08-12 融合空间仓库总览与 Git API 服务方案（[已有 `Git.Service` 的能力边界](#已有-gitservice-的能力边界)、[空间仓库总览与 Git API 服务架构方案](#空间仓库总览与-git-api-服务架构方案)、[重构与实施建议](#重构与实施建议)）*

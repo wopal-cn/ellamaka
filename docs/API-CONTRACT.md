@@ -2,15 +2,15 @@
 
 > **状态**：Active
 > **更新时间**：2026-09-10
-> **上级架构**：`../../../docs/products/wopal-space/DESIGN-wopalspace.md` §1.1
+> **上级架构**：[`../../../docs/products/wopal-space/DESIGN-wopalspace.md`](../../../docs/products/wopal-space/DESIGN-wopalspace.md)（架构与职责边界）
 
-## 1. 目的
+## 目的
 
 Ellamaka 的 HTTP API 是 Workbench、官方客户端和外部集成使用运行时能力的唯一网络表面。每个端点同时是服务端契约、OpenAPI 描述和生成 SDK 的来源。
 
 本契约延续 OpenCode 当前的 Effect HttpApi 架构：领域 schema 定义请求、响应和可预期错误；`HttpApiGroup` 定义端点；handler 调用领域服务；OpenAPI 由 API 树生成；JavaScript SDK 从 OpenAPI 自动生成。WopalSpace 定制沿用这条链路，而不是创建旁路 API 或手写客户端。
 
-## 2. API 分层
+## API 分层
 
 | 层 | API | 适用领域 | 上下文 |
 |---|---|---|---|
@@ -20,7 +20,7 @@ Ellamaka 的 HTTP API 是 Workbench、官方客户端和外部集成使用运行
 
 端点按领域归入现有 group。一个新 group 代表清晰、独立的领域边界。WopalSpace 的全局注册表和 CLI 集成能力属于 Root API。Session 工作目录、消息和 PTY 属于 Instance API。
 
-## 3. 领域语义与路径
+## 领域语义与路径
 
 HTTP 路径表达领域资源与自然从属关系。集合使用复数名词，单个资源以稳定标识寻址，筛选和排序使用 query 参数。
 
@@ -67,9 +67,9 @@ Global API 为 Workbench 提供运行时与 CLI 健康边界：
 | `GET /global/health` | 服务端存活与 Wopal CLI 状态 | 始终以服务端健康响应。`cli` 包含 `ok`、`missing`、`incompatible` 或 `broken`，并声明 `requiredVersion`。 |
 | `POST /global/cli/repair` | 修复已检测到的 Wopal CLI 问题 | 只由用户确认的界面操作调用。服务端选择已有 CLI 更新或第一方 installer，并返回新的探测结果。 |
 
-## 4. Schema、错误与版本
+## Schema、错误与版本
 
-### 4.1 Schema 是契约真相源
+### Schema 是契约真相源
 
 每个端点在 API group 中声明 query、payload、success 和 error schema。领域模型或 group-local schema 同时服务运行时校验、OpenAPI 和 SDK 类型生成。
 
@@ -78,7 +78,7 @@ Global API 为 Workbench 提供运行时与 CLI 健康边界：
 - `HttpApiError` 适用于通用 HTTP 失败。SDK 可见的领域失败使用具名 schema。
 - handler 返回领域 schema 所声明的结果，不以 `any`、未声明对象或字符串解析替代契约。
 
-### 4.2 兼容性
+### 兼容性
 
 当前主版本内的 API 通过新增可选字段和新增端点演进。字段删除、重命名、类型变化、语义变化、默认行为变化和可选变必填构成破坏性变更。
 
@@ -86,7 +86,7 @@ Global API 为 Workbench 提供运行时与 CLI 健康边界：
 
 API 路径版本只服务破坏性版本演进。局部字段变化不通过临时 query 参数、隐式响应分支或手写 SDK 补丁表达。
 
-## 5. OpenAPI 与生成 SDK
+## OpenAPI 与生成 SDK
 
 `OpenCodeHttpApi` 是 API 组合根。每个 group 提供稳定的 OpenAPI identifier，端点提供稳定的 operation identifier。OpenAPI 生成流程从运行中 API 树导出规范，`packages/sdk/js/script/build.ts` 使用 `@hey-api/openapi-ts` 生成 `packages/sdk/js/src/v2/gen/` 的类型和客户端。
 
@@ -100,7 +100,7 @@ Effect Schema + HttpApiGroup
 
 生成目录由 SDK 构建管线拥有。应用代码通过生成客户端调用端点。新增或修改端点后，实施者重新生成 SDK、审阅生成 diff，并让消费端使用生成方法。手写生成文件无法形成稳定契约。
 
-## 6. Wopal CLI 集成
+## Wopal CLI 集成
 
 Ellamaka 的 Wopal CLI adapter 是 Runtime API 的领域服务。它以绝对可执行路径和参数数组调用已登记的 `wopal ... --api-version` capability，验证结构化结果，映射稳定 CLI 错误码，并维护非权威查询快照。adapter 位于 sidecar（serve 进程）内部，直接 spawn wopal 进程；不引入专门的 wopal 常驻 worker——wopal 调用是无状态进程边界，sidecar 已是常驻承载者，Workbench renderer 的所有 CLI 调用都经过它。
 
@@ -108,11 +108,11 @@ CLI 健康契约由 `CliContract` 服务负责。它使用同一安装路径检�
 
 Runtime API 面向 Workbench 暴露 Ellamaka 领域资源与投影，而不是透传 CLI 命令、CLI JSON envelope 或底层 filesystem 参数。CLI 管理的 settings、Git 和 ontology 状态保持事实来源。Session、PTY、消息和 General Session 工作目录由 ellamaka 直接拥有。
 
-### 6.1 消费侧 schema 来源
+### 消费侧 schema 来源
 
 消费侧 schema 从共享契约包导入，与 wopal 契约同源：wopal-cli 以 TypeBox 声明的能力 schema（真相源）发布为共享契约包，ellamaka 从共享包导入，编译期与 wopal 契约同步。运行时的 envelope 解码与错误映射保持现有 adapter 形态不变；具体转换方式（Effect Schema 包装或直接 TypeBox 校验）属落地阶段决策。共享包与 wopal-cli 同版本发布，ellamaka 锁版本消费。
 
-### 6.2 当前消费的 CLI capability
+### 当前消费的 CLI capability
 
 | Capability | 版本 | 消费方 | 用途 |
 |---|---|---|---|
@@ -122,7 +122,7 @@ Runtime API 面向 Workbench 暴露 Ellamaka 领域资源与投影，而不是�
 
 `space.projects.list` v2 返回的 `worktrees[]` 已经过滤主工作树并限定在 `<spaceRoot>/.worktrees/` 下，Session Projection 直接消费用于 session marker 分类（`worktree` / `directory` / 普通），无需在后端重复执行 git 命令。
 
-## 7. 端点设计门禁
+## 端点设计门禁
 
 新增或修改 API 时，实施者完成以下检查：
 
@@ -134,11 +134,11 @@ Runtime API 面向 Workbench 暴露 Ellamaka 领域资源与投影，而不是�
 6. 测试 schema 验证、成功路径、领域错误、授权或工作区路由边界，以及生成客户端调用。
 7. 更新对应领域设计、BRANDING 注入记录和本契约的变更记录。
 
-## 8. 现有端点迁移
+## 现有端点迁移
 
 本契约适用于所有新端点。已有 WopalSpace 端点在其下一次相关功能变更时按本契约审查和迁移。迁移保持已发布消费者可用，并将 schema、operation identity、SDK 生成与领域所有权收敛到同一条链路。
 
-## 9. 相关文档
+## 相关文档
 
 | 文档 | 职责 |
 |---|---|

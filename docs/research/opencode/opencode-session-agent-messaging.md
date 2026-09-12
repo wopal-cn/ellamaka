@@ -15,7 +15,7 @@ Project
 
 ---
 
-## 1. Session（会话）
+## Session（会话）
 
 **定位**：对话的持久化容器，存储在 SQLite 数据库中
 
@@ -33,7 +33,7 @@ Project
 
 ---
 
-## 2. Agent（代理/角色）
+## Agent（代理/角色）
 
 **定位**：定义 AI 的行为模式，不是运行时实例
 
@@ -59,7 +59,7 @@ Project
 
 ---
 
-## 3. Message & Part（消息结构）
+## Message & Part（消息结构）
 
 **Message 类型**：
 - `user` - 用户消息
@@ -84,9 +84,9 @@ pending → running → completed/error
 
 ---
 
-## 4. 发送消息的方式
+## 发送消息的方式
 
-### 4.1 HTTP API
+### HTTP API
 
 **同步发送（等待响应）**：
 ```
@@ -113,7 +113,7 @@ POST /session/{id}/shell
 Body: { command: string, agent: string }
 ```
 
-### 4.2 消息内容类型
+### 消息内容类型
 
 **文本**：
 ```json
@@ -148,9 +148,9 @@ Body: { command: string, agent: string }
 
 ---
 
-## 5. Agent 如何回复
+## Agent 如何回复
 
-### 5.1 响应模式
+### 响应模式
 
 **流式（Stream）**：
 - 默认模式，通过 Bus Event 实时推送
@@ -161,7 +161,7 @@ Body: { command: string, agent: string }
 - `prompt()` 返回 Promise，等待最终响应
 - 内部仍是流式处理，只是等待完成
 
-### 5.2 事件订阅（SSE）
+### 事件订阅（SSE）
 
 **全局事件流**：
 ```
@@ -188,7 +188,7 @@ Accept: text/event-stream
 | `file.edited` | 文件被编辑 |
 | `pty.created/exited` | PTY 进程生命周期 |
 
-### 5.3 Question 事件机制（非交互模式核心）
+### Question 事件机制（非交互模式核心）
 
 **场景**：当 Agent 需要用户选择时（如 `question` 工具），在非交互模式下通过 SSE 通知外部控制器。
 
@@ -245,7 +245,7 @@ Wopal 订阅 SSE
 - `question.reply` 只在收到事件后调用，效率高
 - 适用于 Agent 在后台运行时需要交互的场景
 
-### 5.3 处理流程
+### 处理流程
 
 ```
 用户输入
@@ -265,9 +265,9 @@ Tool 调用 → 更新 ToolPart 状态
 
 ---
 
-## 6. Subagent（子代理）机制
+## Subagent（子代理）机制
 
-### 6.1 调用方式
+### 调用方式
 
 **方式一：用户 @ 引用**
 ```
@@ -283,7 +283,7 @@ Tool 调用 → 更新 ToolPart 状态
 → 返回结果给父 Session
 ```
 
-### 6.2 Task 工具参数
+### Task 工具参数
 
 ```
 {
@@ -294,7 +294,7 @@ Tool 调用 → 更新 ToolPart 状态
 }
 ```
 
-### 6.3 隔离机制
+### 隔离机制
 
 - 子 Session 有独立的 message 历史
 - 权限继承自父 Agent + 配置覆盖
@@ -303,7 +303,7 @@ Tool 调用 → 更新 ToolPart 状态
 
 ---
 
-## 7. SDK 使用示例
+## SDK 使用示例
 
 ### JavaScript/TypeScript SDK
 
@@ -346,31 +346,31 @@ await client.session.prompt({
 
 ---
 
-## 8. 关键设计要点
+## 关键设计要点
 
-### 8.1 并发控制
+### 并发控制
 - 每个 Session 有一个 `AbortController`
 - 同时只能有一个 prompt 在处理
 - 新请求会排队等待或抛出 `BusyError`
 
-### 8.2 消息压缩（Compaction）
+### 消息压缩（Compaction）
 - 当 token 超限时自动触发
 - 将历史消息压缩为摘要
 - 用户可手动触发 `POST /session/{id}/summarize`
 
-### 8.3 权限系统
+### 权限系统
 - Agent 级 + Session 级规则合并
 - 规则格式：`{ permission, action, pattern }`
 - action: `allow` / `deny` / `ask`
 
-### 8.4 指定 Agent/模型
+### 指定 Agent/模型
 - 每条 User Message 可指定 `agent` 和 `model`
 - 模型格式：`{ providerID, modelID }`
 - 不指定则使用 Agent 默认配置或上次使用的模型
 
 ---
 
-## 9. 源码位置参考
+## 源码位置参考
 
 | 模块 | 路径 |
 |------|------|
@@ -386,7 +386,7 @@ await client.session.prompt({
 
 ---
 
-## 10. 完整 Part 类型列表
+## 完整 Part 类型列表
 
 | Type | 说明 | 关键字段 |
 |------|------|----------|
@@ -403,7 +403,7 @@ await client.session.prompt({
 | `retry` | 重试记录 | `attempt`, `error`, `time` |
 | `compaction` | 压缩标记 | `auto`, `overflow` |
 
-### 11.1 FilePartSource（文件来源）
+### FilePartSource（文件来源）
 
 | Type | 说明 | 关键字段 |
 |------|------|----------|
@@ -411,7 +411,7 @@ await client.session.prompt({
 | `symbol` | LSP 符号 | `path`, `range`, `name`, `kind`, `text` |
 | `resource` | MCP 资源 | `clientName`, `uri`, `text` |
 
-### 11.2 Tool State 完整定义
+### Tool State 完整定义
 
 ```typescript
 type ToolState =
@@ -421,7 +421,7 @@ type ToolState =
   | { status: "error", input: object, error: string, metadata?: object, time: { start, end } }
 ```
 
-### 11.3 OutputFormat（输出格式）
+### OutputFormat（输出格式）
 
 ```typescript
 type OutputFormat =
@@ -431,7 +431,7 @@ type OutputFormat =
 
 ---
 
-## 12. 错误类型
+## 错误类型
 
 | Error | 说明 |
 |-------|------|

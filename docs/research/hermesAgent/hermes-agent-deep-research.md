@@ -6,7 +6,7 @@
 
 ---
 
-## 1. 项目定位
+## 项目定位
 
 Hermes Agent 是一个 **self-improving AI agent**——能自我学习、持久记忆、跨平台运行的通用 AI Agent。
 
@@ -19,9 +19,9 @@ Hermes Agent 是一个 **self-improving AI agent**——能自我学习、持久
 
 ---
 
-## 2. Agent Loop 架构
+## Agent Loop 架构
 
-### 2.1 核心循环
+### 核心循环
 
 核心逻辑在 `AIAgent.run_conversation()`（`run_agent.py:7528-10346`，约 2800 行），是一个 **完全同步的 while 循环**：
 
@@ -37,7 +37,7 @@ while (api_call_count < max_iterations 且 iteration_budget.remaining > 0) 或 b
     5. 检查 context 使用率 → 自动压缩（阈值 50%）
 ```
 
-### 2.2 Iteration Budget
+### Iteration Budget
 
 线程安全计数器，替代旧版 `max_iterations`：
 - 默认 **90 次** turn
@@ -45,7 +45,7 @@ while (api_call_count < max_iterations 且 iteration_budget.remaining > 0) 或 b
 - 预算耗尽时 **Grace Call**：注入一条 "总结你已完成的工作" 的消息，再给一次 API 机会
 - 子代理有 **独立预算**（默认 50）
 
-### 2.3 System Prompt 与 Prompt Caching 保护
+### System Prompt 与 Prompt Caching 保护
 
 这是 Hermes 最精妙的设计之一：
 
@@ -59,7 +59,7 @@ while (api_call_count < max_iterations 且 iteration_budget.remaining > 0) 或 b
 
 **目的**：确保 Anthropic prefix cache 命中率，多轮对话 input token 成本降低约 75%。
 
-### 2.4 Context Compression
+### Context Compression
 
 当 prompt_tokens + completion_tokens 总 token 数超过阈值的 **50%** 时自动触发：
 - 中间 turn 总结压缩
@@ -68,7 +68,7 @@ while (api_call_count < max_iterations 且 iteration_budget.remaining > 0) 或 b
 - 压缩后创建新 session，原 session 保持完整（用于回溯）
 - **Preflight 压缩**：加载历史会话时如果已超限，进入 loop 前先压缩
 
-### 2.5 错误恢复矩阵
+### 错误恢复矩阵
 
 Hermes 拥有约 **20+ 种** 错误恢复策略：
 
@@ -89,7 +89,7 @@ Hermes 拥有约 **20+ 种** 错误恢复策略：
 | 非可重试客户端错误 | 尝试 fallback → 失败则终止 |
 | 连接死亡 | 自动清理 TCP dead connection → 重建 |
 
-### 2.6 并行工具执行
+### 并行工具执行
 
 ```python
 _PARALLEL_SAFE_TOOLS = {"read_file", "search_files", "session_search", ...}
@@ -103,7 +103,7 @@ _PATH_SCOPED_TOOLS = {"read_file", "write_file", "patch"}  # 路径不重叠时�
 
 则用线程池并行执行，否则串行。
 
-### 2.7 API Mode 适配
+### API Mode 适配
 
 三种模式自动检测切换：
 - `chat_completions` — OpenAI 兼容
@@ -114,9 +114,9 @@ _PATH_SCOPED_TOOLS = {"read_file", "write_file", "patch"}  # 路径不重叠时�
 
 ---
 
-## 3. 工具系统
+## 工具系统
 
-### 3.1 工具注册
+### 工具注册
 
 集中式注册器（`tools/registry.py`）：
 
@@ -134,7 +134,7 @@ registry.register(
 )
 ```
 
-### 3.2 Toolset 组合系统
+### Toolset 组合系统
 
 `toolsets.py` 提供灵活的 toolset 定义：
 
@@ -152,7 +152,7 @@ TOOLSETS = {
 - 插件可在运行时注册新 toolset
 - 子代理可继承父代理的 toolset 并移除受限工具
 
-### 3.3 工具类别
+### 工具类别
 
 | 类别 | 工具 |
 |------|------|
@@ -176,23 +176,23 @@ TOOLSETS = {
 
 ---
 
-## 4. 记忆系统
+## 记忆系统
 
-### 4.1 双层记忆
+### 双层记忆
 
 | 存储 | 内容 | 分隔符 |
 |------|------|--------|
 | MEMORY.md | Agent 个人笔记和观察（环境事实、项目约定、工具特性） | `§` |
 | USER.md | 用户画像（偏好、沟通风格、工作习惯） | `§` |
 
-### 4.2 冻结快照模式
+### 冻结快照模式
 
 - System prompt 初始化时读入 MEMORY.md + USER.md
 - 会话期间 tool 操作写入磁盘，**但 system prompt 不更新**
 - 下一会话启动时才刷新
 - 好处：保持 prefix cache 完整
 
-### 4.3 Memory Provider 插件
+### Memory Provider 插件
 
 外部记忆系统通过插件注入（如 Honcho dialectic profiling）：
 
@@ -208,7 +208,7 @@ memory:
 - `on_delegation(task, result, session_id)` — 委派结果通知
 - Tool schema 注入
 
-### 4.4 安全扫描
+### 安全扫描
 
 Memory 写入前进行 prompt injection 检测：
 - 不可见 unicode 字符检测
@@ -216,7 +216,7 @@ Memory 写入前进行 prompt injection 检测：
 
 ---
 
-### 4.5 上下文构造流程（深度分析）
+### 上下文构造流程（深度分析）
 
 Hermes 的上下文构造是**多层装配 + 动态生命周期管理**的混合系统。核心围绕四个来源：
 
@@ -268,7 +268,7 @@ ContextCompressor / 插件 ContextEngine
 
 ---
 
-### 4.6 记忆的生命周期：写入与读取
+### 记忆的生命周期：写入与读取
 
 #### 写入路径
 
@@ -353,7 +353,7 @@ LLM 根据 memory tool 的 description 指导主动写入：
 
 ---
 
-### 4.7 自动召回：每轮对话前的主题相关搜索
+### 自动召回：每轮对话前的主题相关搜索
 
 Hermes 的记忆召回有两个层级来处理不同主题的动态搜索：
 
@@ -403,7 +403,7 @@ queue_prefetch(user_message)     ← 本轮结束后排队
 
 ---
 
-### 4.8 选择逻辑：内置记忆 vs 外部服务 vs 历史搜索
+### 选择逻辑：内置记忆 vs 外部服务 vs 历史搜索
 
 Hermes 设计了**三层并存**的工具表，暴露给 LLM 同时使用：
 
@@ -454,7 +454,7 @@ if tool_name == "memory":
 
 ---
 
-### 4.9 Context Compression（上下文压缩）深度分析
+### Context Compression（上下文压缩）深度分析
 
 触发条件：
 ```
@@ -511,7 +511,7 @@ AND 连续两次压缩节省率 >= 10%（防抖动）
 
 ---
 
-### 4.10 MemoryManager 架构
+### MemoryManager 架构
 
 ```
 MemoryManager（管理器）
@@ -546,7 +546,7 @@ MemoryProvider 抽象基类定义了完整生命周期接口：
 
 ---
 
-### 4.11 设计局限
+### 设计局限
 
 | 局限 | 说明 |
 |------|------|
@@ -557,15 +557,15 @@ MemoryProvider 抽象基类定义了完整生命周期接口：
 
 ---
 
-## 5. 技能系统
+## 技能系统
 
-### 5.1 Skills 文档
+### Skills 文档
 
 兼容 agentskills.io 标准，每个技能是一个目录：
 - `SKILL.md` — 技能描述和指令
 - 可选: references/, scripts/, templates/
 
-### 5.2 技能生命周期
+### 技能生命周期
 
 | 操作 | 方式 |
 |------|------|
@@ -575,7 +575,7 @@ MemoryProvider 抽象基类定义了完整生命周期接口：
 | 条件触发 | `SKILL.md` 中的 `condition` 字段 |
 | 平台级开关 | 不同 platform 可启用/禁用不同技能 |
 
-### 5.3 自主技能创建
+### 自主技能创建
 
 - Agent 在完成任务时可自主创建/更新 skill
 - `_SKILL_REVIEW_PROMPT` 驱动
@@ -583,9 +583,9 @@ MemoryProvider 抽象基类定义了完整生命周期接口：
 
 ---
 
-## 6. 多 Agent 协作
+## 多 Agent 协作
 
-### 6.1 delegate_task 工具
+### delegate_task 工具
 
 `tools/delegate_tool.py`（1103 行）是实现多 Agent 协作的核心。
 
@@ -611,7 +611,7 @@ _run_single_child():
 结果汇总 → JSON → 返回父代理的 tool result
 ```
 
-### 6.2 委派约束
+### 委派约束
 
 | 约束 | 设计 |
 |------|------|
@@ -622,7 +622,7 @@ _run_single_child():
 | 不写共享内存 | 移除 memory |
 | 不用 execute_code | 要求逐步推理，而非写脚本 |
 
-### 6.3 Background Review — 后台审查
+### Background Review — 后台审查
 
 `_spawn_background_review()`：用户 turn 结束后 **异步** 启动完整 AIAgent 实例：
 
@@ -637,9 +637,9 @@ _run_single_child():
 
 ---
 
-## 7. Serve 模式与前后端分离
+## Serve 模式与前后端分离
 
-### 7.1 OpenAI API Server
+### OpenAI API Server
 
 **位置**: `gateway/platforms/api_server.py`（~1800 行 FastAPI 应用）
 
@@ -669,7 +669,7 @@ API Server 是 Gateway 的一个**平台适配器**，与 Telegram、Discord 等
 | **Multi-user** | Profile 隔离（独立端口/key/memory/skills） |
 | **前端兼容** | Open WebUI、LobeChat、LibreChat 等 10+ |
 
-### 7.2 ACP Server（Agent Client Protocol）
+### ACP Server（Agent Client Protocol）
 
 **位置**: `acp_adapter/`
 
@@ -680,7 +680,7 @@ ACP 是 VS Code / Zed / JetBrains 的 Agent 通信协议标准。独立入口 `h
 - MCP Server 注册（Stdio + SSE + HTTP 三种传输）
 - 权限审批回调
 
-### 7.3 Gateway 常驻守护进程
+### Gateway 常驻守护进程
 
 Gateway = **常驻 agent 进程**，同时监听多个消息平台：
 
@@ -708,9 +708,9 @@ Gateway = **常驻 agent 进程**，同时监听多个消息平台：
 
 ---
 
-## 8. Session 与存储
+## Session 与存储
 
-### 8.1 Session DB
+### Session DB
 
 SQLite + FTS5 全文搜索：
 - 会话持久化：JSON 日志 + SQLite 双写
@@ -719,7 +719,7 @@ SQLite + FTS5 全文搜索：
 - Token 统计：input/output/cache/read/write/cost
 - 系统 prompt 快照存储（用于 prefix cache 恢复）
 
-### 8.2 Trajectory 采样
+### Trajectory 采样
 
 支持保存对话轨迹到 JSONL：
 - 成功会话 → `trajectory_samples.jsonl`
@@ -728,9 +728,9 @@ SQLite + FTS5 全文搜索：
 
 ---
 
-## 9. Plugin 系统
+## Plugin 系统
 
-### 9.1 Hook 生命周期
+### Hook 生命周期
 
 | Hook | 触发时机 |
 |------|---------|
@@ -741,7 +741,7 @@ SQLite + FTS5 全文搜索：
 | `post_llm_call` | tool-calling loop 结束后 |
 | `on_session_end` | run_conversation() 返回前 |
 
-### 9.2 Context Engine 插件
+### Context Engine 插件
 
 可替换内置 ContextCompressor：
 
@@ -752,7 +752,7 @@ context:
 
 插件位于 `plugins/context_engine/<name>/` 或安装插件。
 
-### 9.3 Memory Provider 插件
+### Memory Provider 插件
 
 ```yaml
 memory:
@@ -761,28 +761,28 @@ memory:
 
 ---
 
-## 10. 安全与护栏
+## 安全与护栏
 
-### 10.1 终端安全
+### 终端安全
 
 - 危险命令审批机制
 - `terminal_approval_threshold` 配置触发条件
 - `DANGEROUS_COMMANDS` 预定义列表
 
-### 10.2 路径安全
+### 路径安全
 
 - 工作目录限制
 - 路径遍历检测（`..` 检测）
 - 符号链接跟随策略
 
-### 10.3 Prompt Injection 防护
+### Prompt Injection 防护
 
 - Memory content 扫描
 - Context file（AGENTS.md/.cursorrules/SOUL.md）扫描
 - 不可见 unicode 字符检测
 - 注入模式匹配表
 
-### 10.4 技能防护
+### 技能防护
 
 - `skills_guard.py` — 技能执行前安全检查
 - 技能禁用列表
@@ -790,9 +790,9 @@ memory:
 
 ---
 
-## 11. 性能与成本
+## 性能与成本
 
-### 11.1 成本追踪
+### 成本追踪
 
 | 指标 | 存储 |
 |------|------|
@@ -802,7 +802,7 @@ memory:
 | Estimated cost USD | 模型定价表查询 |
 | 来源标注 | real/estimated/included |
 
-### 11.2 上下文压力警告
+### 上下文压力警告
 
 Tiered 警告系统（仅用户可见，不注入消息）：
 - 85% → orange 警告
@@ -811,7 +811,7 @@ Tiered 警告系统（仅用户可见，不注入消息）：
 
 ---
 
-## 12. 与 OpenCode 的设计对比
+## 与 OpenCode 的设计对比
 
 | 维度 | Hermes Agent | OpenCode |
 |------|-------------|----------|
@@ -835,7 +835,7 @@ Tiered 警告系统（仅用户可见，不注入消息）：
 
 ---
 
-## 13. 与 WopalSpace 的设计对比
+## 与 WopalSpace 的设计对比
 
 | 维度 | Hermes | WopalSpace |
 |------|--------|------------|
@@ -850,9 +850,9 @@ Tiered 警告系统（仅用户可见，不注入消息）：
 
 ---
 
-## 14. 可借鉴的功能
+## 可借鉴的功能
 
-### 14.1 高优先级
+### 高优先级
 
 | # | 功能 | 借鉴理由 |
 |--|------|---------|
@@ -862,7 +862,7 @@ Tiered 警告系统（仅用户可见，不注入消息）：
 | 4 | **API Server（OpenAI 兼容）** | 让 Wopal 的能力可通过标准 API 暴露给 Open WebUI 等前端。配合 profile 隔离实现多租户。 |
 | 5 | **Toolset 组合系统** | Hermes 的 includes 递归组合优于 Wopal 扁平工具注册。可参考设计 ontological toolsets。 |
 
-### 14.2 中优先级
+### 中优先级
 
 | # | 功能 | 借鉴理由 |
 |--|------|---------|
@@ -872,7 +872,7 @@ Tiered 警告系统（仅用户可见，不注入消息）：
 | 9 | **Profile 多实例隔离** | 完整的 HERMES_HOME 隔离。Wopal 目前只有单一身份。 |
 | 10 | **Grace Call** | 预算耗尽前先让模型总结已完成的工作，避免用户得到空回复。 |
 
-### 14.3 探索性
+### 探索性
 
 | # | 功能 | 借鉴理由 |
 |--|------|---------|

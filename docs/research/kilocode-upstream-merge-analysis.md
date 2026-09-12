@@ -14,7 +14,7 @@ Kilocode 面临完全相同的问题（也是 OpenCode fork），但他们建立
 
 Kilocode 维护了一套总计约 **11,300 行** 的自动化合并工具链（位于 `script/upstream/`），核心思路是 **"预转换上游，再合并"**。
 
-### 2.1 核心流程（8 步）
+### 核心流程（8 步）
 
 ```
 1. 环境验证 → 2. Fetch 上游 → 3. 确定目标版本 → 4. 冲突分析报告
@@ -24,7 +24,7 @@ Kilocode 维护了一套总计约 **11,300 行** 的自动化合并工具链（�
 → 8. 重新生成 lock 文件 + SDK
 ```
 
-### 2.2 第 6 步：预转换清单（在合并前对上游分支执行）
+### 第 6 步：预转换清单（在合并前对上游分支执行）
 
 | 转换 | 作用 |
 |------|------|
@@ -41,7 +41,7 @@ Kilocode 维护了一套总计约 **11,300 行** 的自动化合并工具链（�
 
 **关键洞察**：因为品牌化转换在合并**之前**完成，两个分支的品牌字符串已经一致，git 不会产生品牌差异冲突。最终只剩**真正有代码逻辑差异**的文件需要手动处理。
 
-### 2.3 第 7 步：自动解决工具链
+### 第 7 步：自动解决工具链
 
 合并后，对残留冲突按优先级自动处理：
 
@@ -52,7 +52,7 @@ Kilocode 维护了一套总计约 **11,300 行** 的自动化合并工具链（�
 
 ## 三、支撑体系
 
-### 3.1 `kilocode_change` 标记系统（三层机制）
+### `kilocode_change` 标记系统（三层机制）
 
 标记系统的运作依赖 **人工 + 工具 + CI** 三层：
 
@@ -80,7 +80,7 @@ registerKiloFeature(app)
 
 **第三层：CI 验证**。`check-opencode-annotations.ts`（291 行）在 PR 时检查：所有共享文件的 Kilo 特有改动是否都有 `kilocode_change` 标记。缺失标记的 PR 被 CI 拦截。
 
-### 3.2 合并冲突最小化原则（日常开发纪律）
+### 合并冲突最小化原则（日常开发纪律）
 
 来自 `.kilo/skills/kilocode-merge-minimizer/SKILL.md`：
 
@@ -90,7 +90,7 @@ registerKiloFeature(app)
 - 保持上游格式和 import 风格
 - 加性功能提取到专属目录，修改上游行为则内联标记
 
-### 3.3 配置驱动
+### 配置驱动
 
 `utils/config.ts` 集中管理所有合并策略：
 
@@ -101,7 +101,7 @@ takeTheirsAndTransform: ["packages/ui/**", ...] // 取上游 + 品牌转换
 kiloDirectories: ["packages/opencode/src/kilocode", ...] // Kilo 专属目录（免标记）
 ```
 
-### 3.4 其他支撑机制
+### 其他支撑机制
 
 - **`.opencode-version`** — 记录上次合并的上游 tag，供工具链定位基线
 - **`merge.conflictStyle=zdiff3`** — 冲突标记包含共同祖先，mergiraf 和手动解决都依赖此格式
@@ -136,7 +136,7 @@ kiloDirectories: ["packages/opencode/src/kilocode", ...] // Kilo 专属目录（
 
 Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，总计 ~11,300 行 TypeScript，分为以下几类：
 
-### 6.1 可直接移植的工具（仅需全局替换关键词）
+### 可直接移植的工具（仅需全局替换关键词）
 
 这些工具的代码逻辑与品牌无关，只需要把 `kilocode_change` → `ellamaka_change`、`kilo` → `ellamaka` 等标识符全局替换即可。
 
@@ -156,13 +156,13 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 | `find-conflict-markers.sh` | ~20 | Shell 脚本：检测残留冲突标记 | 零改动 |
 | **小计** | **~2,200** | | |
 
-### 6.2 需要适配的工具（品牌/配置映射不同）
+### 需要适配的工具（品牌/配置映射不同）
 
 这些工具的核心逻辑可复用，但需要根据 ellamaka 的实际情况调整配置映射和品牌替换规则。
 
 | 源文件 | 行数 | 功能 | 适配要点 |
 |--------|------|------|----------|
-| `utils/config.ts` | 246 | 合并策略配置中心 | 改为 ellamaka 的 `keepOurs`、`skipFiles`、`ellamakaDirectories` 等映射。**当前 ellamaka 的 `BRANDING.md` §0 已有完整精简清单，可直接翻译为配置** |
+| `utils/config.ts` | 246 | 合并策略配置中心 | 改为 ellamaka 的 `keepOurs`、`skipFiles`、`ellamakaDirectories` 等映射。**当前 ellamaka 的 [`BRANDING.md` 项目精简](../BRANDING.md#项目精简 已有完整精简清单，可直接翻译为配置** |
 | `utils/report.ts` | 377 | 冲突分析报告生成（Markdown） | 替换品牌名、分支命名 |
 | `utils/worktree.ts` | ~80 | Worktree 参考快照管理 | 替换路径命名 |
 | `transforms/package-names.ts` | 186 | 包名字符串替换（`opencode-ai` → `@kilocode/cli`） | ellamaka **不改变包名**（保持 `opencode-ai` 等），此文件简化为空操作或移除 |
@@ -184,7 +184,7 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 | `index.ts` | 70 | 模块导出汇总 | 替换导出路径 |
 | **小计** | **~5,700** | | |
 
-### 6.3 外部依赖
+### 外部依赖
 
 | 依赖 | 用途 | 安装方式 |
 |------|------|----------|
@@ -192,13 +192,13 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 | `ts-morph` | AST 级代码转换（codemods） | `bun add ts-morph` 到 `script/upstream/package.json` |
 | `bun` | 脚本运行时 | 已有 |
 
-### 6.4 CI 检查
+### CI 检查
 
 | 源文件 | 行数 | 功能 | 移植要点 |
 |--------|------|------|----------|
 | `script/check-opencode-annotations.ts` | 291 | CI：检查共享文件改动是否有标记 | 替换 `kilocode_change` → `ellamaka_change`，免检路径映射 |
 
-### 6.5 Git 配置
+### Git 配置
 
 | 配置项 | 值 | 说明 |
 |--------|-----|------|
@@ -206,7 +206,7 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 | `rerere.enabled` | `true` | 启用冲突解决方案记录与重放 |
 | `.gitattributes` | 无需 `merge=ours` | 改由配置驱动 `keepOurs` 替代 |
 
-### 6.6 不需要移植的部分
+### 不需要移植的部分
 
 以下 Kilocode 特有功能 ellamaka 不需要：
 
@@ -220,7 +220,7 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 
 ## 七、一次性实施计划
 
-### 7.1 总体工作量估算
+### 总体工作量估算
 
 | 类别 | 行数 | 工作内容 |
 |------|------|----------|
@@ -231,7 +231,7 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 | 外部依赖 | 0 | `brew install` + `bun add` |
 | **总计** | **~8,200** | 估计 2-3 个工作日 |
 
-### 7.2 实施步骤
+### 实施步骤
 
 #### 第一阶段：基础设施（2-4 小时）
 
@@ -240,8 +240,8 @@ Kilocode 的完整工具链位于 `labs/research/kilocode/script/upstream/`，�
 3. 移植 `utils/` 下全部文件（logger、version、git、match、markers、reset、upstream、config、report、worktree）
 4. 全局替换关键词：`kilocode_change` → `ellamaka_change`、`kilo` → `ellamaka`、`Kilo` → `Ellamaka`、`.opencode-version` → `.ellamaka-version`
 5. 编写 `utils/config.ts` 的 ellamaka 配置：
-   - `keepOurs`：从 `BRANDING.md` §0 "保留文件" + 现有 `.gitattributes merge=ours` 翻译
-   - `skipFiles`：从 `BRANDING.md` §0 "已删除目录/文件" 翻译
+   - `keepOurs`：从 [`BRANDING.md` 项目精简](../BRANDING.md#项目精简 "保留文件" + 现有 `.gitattributes merge=ours` 翻译
+   - `skipFiles`：从 [`BRANDING.md` 项目精简](../BRANDING.md#项目精简 "已删除目录/文件" 翻译
    - `takeTheirsAndTransform`：ellamaka 范围较窄（无 kilo-ui/kilo-vscode 等），仅需少量文件
    - `ellamakaDirectories`：`packages/opencode/src/ellamaka/`、`packages/ellamaka/`、`packages/ellamaka-app/`、`script/upstream/`
    - `packageMappings`：**空数组**（ellamaka 不改变包名，这是与 Kilocode 最大的区别）
@@ -312,7 +312,7 @@ Ellamaka 的情况比 Kilocode **更简单**，因此实施工作量比 Kilocode
 | **包名** | 需要大量替换（opencode→kilo 6种映射） | 不变 | 移除 `package-names.ts`、`transform-imports.ts`，大幅简化 `transform-package-json.ts` |
 | **产品矩阵** | CLI + VS Code + JetBrains + Gateway + Telemetry + UI + Docs | 仅 CLI | 移除扩展/web 转换，精简 `takeTheirsAndTransform` |
 | **品牌字符串** | 分散在共享文件中 | 集中在 `packages/ellamaka/branding.ts` | 品牌注入点更少，标记范围更窄 |
-| **精简目录** | ~40 条 skipFiles 规则 | ~20 条（`BRANDING.md` §0 已有完整清单） | 配置更简单 |
+| **精简目录** | ~40 条 skipFiles 规则 | ~20 条（[`BRANDING.md` 项目精简](../BRANDING.md#项目精简 已有完整清单） | 配置更简单 |
 | **专属目录** | 10 个 | 3-4 个（ellamaka + ellamaka-app + opencode/src/ellamaka + upstream） | 免检范围更小 |
 | **CI 复杂度** | 5+ 个检查 | 1 个（`check-ellamaka-annotations.ts`） | 验证更简单 |
 
@@ -328,7 +328,7 @@ Kilocode 的方案**完全可行且高度合理**。核心逻辑清晰：
 1. 所有源码在 `labs/research/kilocode/script/upstream/` 中可直接参考
 2. ellamaka 的定制比 Kilocode 少，工具链可以大幅简化
 3. 品牌常量已集中管理，标记范围天然更窄
-4. `BRANDING.md` §0 已有完整的精简/保留清单，直接翻译为配置即可
+4. [`BRANDING.md` 项目精简](../BRANDING.md#项目精简 已有完整的精简/保留清单，直接翻译为配置即可
 5. 两个项目使用相同的上游（`anomalyco/opencode`），`upstream` remote 无需改变
 6. 包名不变，消除了最复杂的转换逻辑
 

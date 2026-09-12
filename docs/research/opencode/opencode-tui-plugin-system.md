@@ -28,7 +28,7 @@ TUI 插件是**基于 SolidJS + OpenTUI 的终端 UI 扩展系统**，采用声�
 
 ## 二、能力全景
 
-### 2.1 UI 扩展 — 插槽系统
+### UI 扩展 — 插槽系统
 
 8 个可注入插槽，按渲染模式分三类：
 
@@ -40,21 +40,21 @@ TUI 插件是**基于 SolidJS + OpenTUI 的终端 UI 扩展系统**，采用声�
 
 `sidebar_content` 的 order 分层：context(100) → mcp(200) → lsp(300) → todo(400) → files(500)，外部插件可插入任意位置。
 
-### 2.2 路由系统
+### 路由系统
 
 - 注册自定义路由页面（`home` 和 `session` 为保留名）
 - 路由间导航 + 参数传递（`api.route.navigate(name, params?)`）
 - `api.route.current` 感知当前位置（home / session / 自定义）
 - 未知路由渲染 fallback 页面（含 go home 操作）
 
-### 2.3 命令 + 快捷键
+### 命令 + 快捷键
 
 - 注册命令：title、value、category、keybind、slash name、aliases
 - 隐藏命令仍响应快捷键和 `command.trigger()`
 - 支持斜杠命令（如 `/smoke`）
 - 插件级 keybind 集合（`api.keybind.create()`），支持用户覆盖
 
-### 2.4 对话框 & Toast
+### 对话框 & Toast
 
 | 组件 | 用途 |
 |---|---|
@@ -66,7 +66,7 @@ TUI 插件是**基于 SolidJS + OpenTUI 的终端 UI 扩展系统**，采用声�
 | `api.ui.dialog.replace()` | 在宿主 dialog 栈上叠加自定义界面 |
 | `api.ui.toast()` | 轻量提示 |
 
-### 2.5 数据访问（`api.state`）
+### 数据访问（`api.state`）
 
 实时同步的宿主状态：
 
@@ -78,34 +78,34 @@ TUI 插件是**基于 SolidJS + OpenTUI 的终端 UI 扩展系统**，采用声�
 | 工具 | lsp()、mcp() |
 | Part | part(messageID) — 消息的各部分内容 |
 
-### 2.6 主题系统
+### 主题系统
 
 - `api.theme.current` — 60+ 个 RGBA 色值 token（含 diff、markdown、syntax 高亮色）
 - `api.theme.set(name)` / `has(name)` / `mode()` — 切换/检测
 - `api.theme.install(jsonPath)` — 安装主题 JSON 文件
 - 插件更新时自动同步已追踪主题的变更
 
-### 2.7 SDK Client
+### SDK Client
 
 - `api.client` — 当前 workspace 的 SDK client
 - `api.scopedClient(workspaceID)` — 绑定特定 workspace
 - `api.event.on(type, handler)` — 订阅 SSE 事件流，返回 unsubscribe
 - `api.renderer` — 原始 CliRenderer（可添加后处理特效，如 VignetteEffect）
 
-### 2.8 KV 持久化
+### KV 持久化
 
 - `api.kv.get/set` — 基于 `state/kv.json` 的共享键值存储
 - **非命名空间**，所有插件共享同一 KV 空间
 - `api.kv.ready` 等待加载完成
 
-### 2.9 插件间管理
+### 插件间管理
 
 - `api.plugins.list()` — 所有插件状态（id、source、enabled、active）
 - `api.plugins.activate(id)` / `deactivate(id)` — 运行时切换
 - `api.plugins.install(spec, options)` — 运行时安装新插件
 - `api.plugins.add(spec)` — 运行时加载（不写入配置）
 
-### 2.10 生命周期
+### 生命周期
 
 | 阶段 | 行为 |
 |---|---|
@@ -210,7 +210,7 @@ export default { id: "acme.demo", tui } satisfies TuiPluginModule & { id: string
 
 ## 五、本空间利用分析
 
-### 5.1 当前状态
+### 当前状态
 
 | 项目 | 现状 |
 |---|---|
@@ -219,7 +219,7 @@ export default { id: "acme.demo", tui } satisfies TuiPluginModule & { id: string
 | TUI 插件 | **无**（无 `tui.json`，无 `.opencode/plugins/`） |
 | 配置层 | `.opencode/` 存在，但无 `tui.json` 和 `plugins/` 目录 |
 
-### 5.2 可利用方向
+### 可利用方向
 
 | 方向 | 可行性 | 价值 | 复杂度 | 说明 |
 |---|---|---|---|---|
@@ -230,7 +230,7 @@ export default { id: "acme.demo", tui } satisfies TuiPluginModule & { id: string
 | **E. 空间品牌主题** | ★★★ | 低-中 | 低 | `api.theme.install()` 安装 WopalSpace 主题 |
 | **F. Server-TUI 联动** | ★★ | 中期 | 高 | KV + event bus 让 TUI 插件与 Server 插件协作 |
 
-### 5.3 约束与风险
+### 约束与风险
 
 | 约束 | 影响 | 应对 |
 |---|---|---|
@@ -241,7 +241,7 @@ export default { id: "acme.demo", tui } satisfies TuiPluginModule & { id: string
 | `api.kv` 非命名空间 | 多插件 KV 冲突风险 | key 加 plugin id 前缀 |
 | 内置插件不可卸载 | 可能与自定义 sidebar 插槽冲突 | 通过 order 值控制排列顺序 |
 
-### 5.4 推荐路径
+### 推荐路径
 
 #### 短期：文件插件试水
 

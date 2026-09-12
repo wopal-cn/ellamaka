@@ -6,9 +6,9 @@
 
 ---
 
-## 1. 架构概览
+## 架构概览
 
-### 1.1 核心组件关系图
+### 核心组件关系图
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -56,7 +56,7 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 文件依赖链
+### 文件依赖链
 
 ```
 tools/registry.py  (无依赖 — 所有工具文件导入此模块)
@@ -74,9 +74,9 @@ cli.py / gateway/run.py / batch_runner.py  (入口点)
 
 ---
 
-## 2. Agent Loop 机制
+## Agent Loop 机制
 
-### 2.1 迭代预算（IterationBudget）
+### 迭代预算（IterationBudget）
 
 **替代传统 `max_iterations` 的线程安全计数器**：
 
@@ -105,7 +105,7 @@ Summarize what you've accomplished..." →
 最后一次 API 调用 → 返回摘要 → 结束对话
 ```
 
-### 2.2 错误恢复矩阵（20+ 策略）
+### 错误恢复矩阵（20+ 策略）
 
 | 错误类型 | 恢复策略 | 代码位置 |
 |---------|---------|----------|
@@ -124,7 +124,7 @@ Summarize what you've accomplished..." →
 | 非可重试客户端错误 | 尝试 fallback → 失败则终止 | run_agent.py:~7900 |
 | 连接死亡 | 自动清理 TCP dead connection → 重建 | run_agent.py:~7600 |
 
-### 2.3 Parallel Tool Execution
+### Parallel Tool Execution
 
 **并行安全工具判定**：
 
@@ -159,7 +159,7 @@ else:
         execute_tool(tool)
 ```
 
-### 2.4 Prompt Cache Freezing 原理
+### Prompt Cache Freezing 原理
 
 **设计目标**：确保 Anthropic prefix cache 命中率，多轮对话 input token 成本降低约 75%。
 
@@ -192,9 +192,9 @@ User Message N (breakpoint 4)
 
 ---
 
-## 3. 多 Agent 委托
+## 多 Agent 委托
 
-### 3.1 delegate_tool 全流程
+### delegate_tool 全流程
 
 **位置**：`tools/delegate_tool.py`（1103 行）
 
@@ -221,7 +221,7 @@ _run_single_child():
 结果汇总 → JSON → 返回父代理的 tool result
 ```
 
-### 3.2 委派约束
+### 委派约束
 
 | 约束 | 设计原因 |
 |------|---------|
@@ -232,7 +232,7 @@ _run_single_child():
 | 不写共享内存 | 移除 memory，避免跨代理记忆污染 |
 | 不用 execute_code | 要求逐步推理，而非写脚本批量执行 |
 
-### 3.3 Background Review Agent
+### Background Review Agent
 
 **位置**：`run_agent.py:_spawn_background_review()`
 
@@ -252,9 +252,9 @@ _run_single_child():
 
 ---
 
-## 4. Gateway 守护进程模式
+## Gateway 守护进程模式
 
-### 4.1 Gateway 架构
+### Gateway 架构
 
 **设计哲学**：Agent 永远在后台运行（Gateway 常驻），前端只负责交互。同一个 agent 同时服务所有平台，共享 memory、skills、会话状态。
 
@@ -277,7 +277,7 @@ _run_single_child():
 └────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 各平台配置步骤
+### 各平台配置步骤
 
 #### Telegram Bot
 
@@ -343,7 +343,7 @@ SIGNAL_HTTP_URL=http://localhost:8080
 SIGNAL_ALLOWED_USERS=...
 ```
 
-### 4.3 Session 管理
+### Session 管理
 
 **Session Key 格式**：
 
@@ -363,7 +363,7 @@ slack:C12345678:U987654321         # Slack Channel + User
 - 会话 ID 链接消息历史
 - 跨会话搜索：`session_search` 工具
 
-### 4.4 后台进程通知机制
+### 后台进程通知机制
 
 **配置项**：`display.background_process_notifications`
 
@@ -382,9 +382,9 @@ terminal(background=true, notify_on_complete=true)
 
 ---
 
-## 5. ACP 协议集成
+## ACP 协议集成
 
-### 5.1 概述
+### 概述
 
 ACP (Agent Client Protocol) 是 VS Code / Zed / JetBrains 的 Agent 通信协议标准。
 
@@ -396,7 +396,7 @@ hermes acp
 hermes-acp
 ```
 
-### 5.2 功能
+### 功能
 
 | 功能 | 说明 |
 |------|------|
@@ -405,7 +405,7 @@ hermes-acp
 | MCP Server 注册 | Stdio + SSE + HTTP 三种传输 |
 | 权限审批回调 | 危险命令审批 UI |
 
-### 5.3 编辑器配置
+### 编辑器配置
 
 #### VS Code
 
@@ -432,9 +432,9 @@ hermes-acp
 
 ---
 
-## 6. MCP 工具集成
+## MCP 工具集成
 
-### 6.1 MCP Server 注册
+### MCP Server 注册
 
 **配置文件**：`~/.hermes/config.yaml`
 
@@ -455,7 +455,7 @@ mcp:
       url: "http://localhost:8080/mcp"
 ```
 
-### 6.2 MCP 工具调用
+### MCP 工具调用
 
 Hermes 自动发现 MCP Server 的工具，注册为 `mcp_<server>_<tool>` 格式：
 
@@ -472,7 +472,7 @@ mcp_github_list_repos
 /reload-mcp
 ```
 
-### 6.3 Hermes 作为 MCP Server
+### Hermes 作为 MCP Server
 
 **暴露消息会话给其他 MCP 客户端**：
 
@@ -490,9 +490,9 @@ hermes mcp serve
 
 ---
 
-## 7. Skills 系统
+## Skills 系统
 
-### 7.1 Skills Hub 搜索/浏览
+### Skills Hub 搜索/浏览
 
 **CLI 命令**：
 
@@ -512,7 +512,7 @@ hermes skills install github/hermes-agent-official/pptx
 /skills install pptx
 ```
 
-### 7.2 技能 Enable/Disable
+### 技能 Enable/Disable
 
 **Per-Platform 配置**：
 
@@ -534,7 +534,7 @@ hermes skills config telegram --enable pptx
 hermes skills config list
 ```
 
-### 7.3 自定义技能编写
+### 自定义技能编写
 
 **技能目录结构**：
 
@@ -588,9 +588,9 @@ See `references/api-docs.md` for API details.
 
 ---
 
-## 8. Toolset 定制
+## Toolset 定制
 
-### 8.1 自定义 Tool 编写（三文件修改）
+### 自定义 Tool 编写（三文件修改）
 
 **步骤 1**：创建 `tools/my_tool.py`
 
@@ -662,7 +662,7 @@ TOOLSETS["custom"] = {
 _HERMES_CORE_TOOLS.append("my_tool")
 ```
 
-### 8.2 Toolset 组合策略
+### Toolset 组合策略
 
 **组合规则**：
 
@@ -701,9 +701,9 @@ resolve_toolset("*")  # 或 "all"
 
 ---
 
-## 9. 模型与 Provider 管理
+## 模型与 Provider 管理
 
-### 9.1 支持的 Provider
+### 支持的 Provider
 
 | Provider | Auth Type | 端点 | 特点 |
 |----------|-----------|------|------|
@@ -718,7 +718,7 @@ resolve_toolset("*")  # 或 "all"
 | `minimax-cn` | API Key | https://api.minimaxi.com | MiniMax 中国 |
 | `custom` | API Key + Base URL | 自定义 | OpenAI-compatible 端点 |
 
-### 9.2 Model 切换命令
+### Model 切换命令
 
 **临时切换**（当前会话）：
 ```
@@ -741,7 +741,7 @@ fallback_providers:
 # 当主 Provider 失败时，按顺序尝试 Fallback
 ```
 
-### 9.3 Credential Pool（多密钥轮换）
+### Credential Pool（多密钥轮换）
 
 **配置**：
 
@@ -764,9 +764,9 @@ hermes auth add openrouter --api-key sk-or-v2-yyy
 
 ---
 
-## 10. RL 训练环境
+## RL 训练环境
 
-### 10.1 Atropos RL 环境集成
+### Atropos RL 环境集成
 
 **依赖**：
 - `TINKER_API_KEY` — Tinker Console
@@ -778,7 +778,7 @@ hermes auth add openrouter --api-key sk-or-v2-yyy
 pip install hermes-agent[rl]
 ```
 
-### 10.2 RL 工具
+### RL 工具
 
 | 工具 | 说明 |
 |------|------|
@@ -795,9 +795,9 @@ pip install hermes-agent[rl]
 
 ---
 
-## 11. Cron 定时任务
+## Cron 定时任务
 
-### 11.1 定时调度配置
+### 定时调度配置
 
 **位置**：`~/.hermes/cron/jobs.yaml`
 
@@ -817,7 +817,7 @@ jobs:
     channel: "12345678"
 ```
 
-### 11.2 Cron 命令
+### Cron 命令
 
 | 命令 | 说明 |
 |------|------|
@@ -831,9 +831,9 @@ jobs:
 
 ---
 
-## 12. Skin/主题系统
+## Skin/主题系统
 
-### 12.1 Skin 架构
+### Skin 架构
 
 **位置**：`hermes_cli/skin_engine.py`
 
@@ -843,7 +843,7 @@ jobs:
 - `mono` — 灰度单色
 - `slate` — 冷蓝开发者风格
 
-### 12.2 自定义皮肤编写
+### 自定义皮肤编写
 
 **位置**：`~/.hermes/skins/<name>.yaml`
 
@@ -884,9 +884,9 @@ tool_emojis:
 
 ---
 
-## 13. 安全与权限
+## 安全与权限
 
-### 13.1 危险操作检测
+### 危险操作检测
 
 **位置**：`tools/approval.py`
 
@@ -902,7 +902,7 @@ tool_emojis:
 | 密钥读取 | `cat ~/.env`, `cat ~/.ssh/authorized_keys` |
 | Fork Bomb | `:(){ :|:& };:` |
 
-### 13.2 Approval Mode
+### Approval Mode
 
 **配置**：
 
@@ -917,7 +917,7 @@ approvals:
 - `smart`：使用辅助 LLM 自动审批低风险命令，高风险仍需确认
 - `off`：跳过所有审批（等同于 `/yolo`）
 
-### 13.3 永久白名单
+### 永久白名单
 
 **添加**：
 
@@ -935,7 +935,7 @@ command_allowlist:
   - "git status"
 ```
 
-### 13.4 Prompt Injection 防护
+### Prompt Injection 防护
 
 **Memory 内容扫描**：
 
@@ -954,9 +954,9 @@ _INVISIBLE_CHARS = {'\u200b', '\u200c', '\u200d', '\u2060', '\ufeff', ...}
 
 ---
 
-## 14. 二次开发指南
+## 二次开发指南
 
-### 14.1 Fork/修改流程
+### Fork/修改流程
 
 1. **Clone 源码**：
    ```bash
@@ -985,7 +985,7 @@ _INVISIBLE_CHARS = {'\u200b', '\u200c', '\u200d', '\u2060', '\ufeff', ...}
    pytest tests/gateway/ -v
    ```
 
-### 14.2 Plugin 开发
+### Plugin 开发
 
 **Plugin 目录结构**：
 
@@ -1033,9 +1033,9 @@ def post_llm_call(session_id: str, response: str, tool_calls: list) -> None:
 
 ---
 
-## 15. Troubleshooting
+## Troubleshooting
 
-### 15.1 高级问题排查
+### 高级问题排查
 
 | 问题 | 排查方法 |
 |------|----------|
@@ -1047,7 +1047,7 @@ def post_llm_call(session_id: str, response: str, tool_calls: list) -> None:
 | Provider 连接失败 | 检查 IPv6 配置，设置 `force_ipv4: true` |
 | MCP Server 不响应 | 检查传输配置（stdio/sse/http），确认进程存活 |
 
-### 15.2 诊断命令
+### 诊断命令
 
 ```bash
 hermes doctor                  # 检查配置和依赖
@@ -1057,7 +1057,7 @@ hermes usage                   # 显示 Token 使用统计
 hermes insights 7              # 显示 7 天使用洞察
 ```
 
-### 15.3 日志位置
+### 日志位置
 
 | 日志 | 路径 | 内容 |
 |------|------|------|
@@ -1068,7 +1068,7 @@ hermes insights 7              # 显示 7 天使用洞察
 
 ---
 
-## 16. 与 OpenCode 设计对比
+## 与 OpenCode 设计对比
 
 | 维度 | Hermes Agent | OpenCode |
 |------|-------------|----------|

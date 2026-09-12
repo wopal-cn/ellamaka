@@ -3,11 +3,11 @@
 > **状态**: Active
 > **更新时间**: 2026-09-01
 > **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
-> **配套文档**: `./DESIGN.md`（架构概览）、`./DISTRIBUTION.md`（分发与版本身份契约）、`./BRANDING.md`（品牌化真相源）
+> **配套文档**: `./DESIGN.md`（架构概览）、`./DESIGN-distribution.md`（分发与版本身份契约）、`./BRANDING.md`（品牌化真相源）
 
-本文档是 ellamaka 品牌化定制的唯一真相源。记录每项定制设计的**目的、内容、要求和实现逻辑**。ellamaka 已放弃跟踪上游（见 §12），需要参考上游实现时从 `labs/ref-repos/opencode/` 读取，本文档不依赖 `git diff upstream/dev`。
+本文档是 ellamaka 品牌化定制的唯一真相源。记录每项定制设计的**目的、内容、要求和实现逻辑**。ellamaka 已放弃跟踪上游（见 [上游合并策略](#上游合并策略)），需要参考上游实现时从 `labs/ref-repos/opencode/` 读取，本文档不依赖 `git diff upstream/dev`。
 
-## 0. 项目精简
+## 项目精简
 
 品牌化第一步：删除不由 ellamaka 产品直接继承的上游模块和文件。需要保留的产品能力由独立品牌包承接。
 
@@ -62,7 +62,7 @@
 
 ---
 
-## 1. 品牌常量
+## 品牌常量
 
 ### 目的
 
@@ -82,11 +82,11 @@
 
 独立文件 `packages/ellamaka-brand/branding.ts`（包 `@wopal/ellamaka-brand`），零侵入上游源码。消费者一律通过包路径 import（`@wopal/ellamaka-brand/branding`），禁止相对路径跨包引用，品牌值不在上游文件中出现。
 
-> 包沿革：品牌常量最初位于 `packages/ellamaka/branding.ts`（包名 `@wopal/ellamaka-build`）。2026-09-01 包结构定案（见 DESIGN.md §2.1）：目录与包名统一为 `ellamaka-brand`，名实相符——该包只承载运行时品牌身份，不含构建逻辑；构建与发布归属 `@wopal/ellamaka-release`。
+> 包沿革：品牌常量最初位于 `packages/ellamaka/branding.ts`（包名 `@wopal/ellamaka-build`）。2026-09-01 包结构定案（见 [品牌与构建包结构](./DESIGN.md#品牌与构建包结构)）：目录与包名统一为 `ellamaka-brand`，名实相符——该包只承载运行时品牌身份，不含构建逻辑；构建与发布归属 `@wopal/ellamaka-release`。
 
 ---
 
-## 2. 路径体系
+## 路径体系
 
 ### 目的
 
@@ -124,7 +124,7 @@ Core `Global` 只负责 `WOPAL_HOME` 路径布局，不将 `.env` 文件写入 `
 
 ---
 
-## 3. 构建系统
+## 构建系统
 
 ### 目的
 
@@ -140,7 +140,7 @@ Core `Global` 只负责 `WOPAL_HOME` 路径布局，不将 `.env` 文件写入 `
 4. **单平台构建**：`--single` 仅构建当前平台
 5. **Web UI 选择**：`--web-ui ellamaka-app|none` 选择嵌入 ellamaka UI 或不嵌入 UI
 
-构建期版本/渠道解析由 `@wopal/ellamaka-release` 的 `build-env` 模块提供（原 `@wopal/ellamaka-script` 的 `Script`，2026-09-01 收编，见 DESIGN.md §2.1）。
+构建期版本/渠道解析由 `@wopal/ellamaka-release` 的 `build-env` 模块提供（原 `@wopal/ellamaka-script` 的 `Script`，2026-09-01 收编，见 [品牌与构建包结构](./DESIGN.md#品牌与构建包结构)）。
 
 ### 要求
 
@@ -153,7 +153,7 @@ Core `Global` 只负责 `WOPAL_HOME` 路径布局，不将 `.env` 文件写入 `
 
 ---
 
-## 4. CLI 身份与 Logo
+## CLI 身份与 Logo
 
 ### 目的
 
@@ -161,7 +161,7 @@ CLI 的所有用户可见输出——命令名、帮助文本、版本号、启�
 
 ### 版本号
 
-`--version` 输出 Ellamaka CLI 自身的标准 SemVer（如 `1.17.1`，开发构建仍可使用明确的 local/dev identity），不输出 OpenCode version。OpenCode baseline、Ellamaka source commit 和 build date 通过 `ellamaka debug release-info --json --api-version 1` 提供；该命令读取 binary 内嵌 identity，不读取安装收据或网络，字段定义见 `DISTRIBUTION.md` §5。
+`--version` 输出 Ellamaka CLI 自身的标准 SemVer（如 `1.17.1`，开发构建仍可使用明确的 local/dev identity），不输出 OpenCode version。OpenCode baseline、Ellamaka source commit 和 build date 通过 `ellamaka debug release-info --json --api-version 1` 提供；该命令读取 binary 内嵌 identity，不读取安装收据或网络，字段定义见 [Canonical Manifest](./DESIGN-distribution.md#canonical-manifest)。
 
 ### 命令名
 
@@ -188,7 +188,7 @@ GitHub issue URL 从 `anomalyco/opencode` 替换为 `wopal-cn/${BINARY_NAME}`，
 
 ---
 
-## 5. WopalSpace 自动检测
+## WopalSpace 自动检测
 
 ### 目的
 
@@ -221,7 +221,7 @@ CLI 入口中间件先清除继承的 `WOPAL_SPACE`/`WOPAL_SPACE_ROOT`，再执�
 
 ---
 
-## 6. 配置加载体系
+## 配置加载体系
 
 ### 目的
 
@@ -230,7 +230,7 @@ ellamaka 提供两种运行模式：
 - **WopalSpace 模式**：配置和能力由 `$WOPAL_HOME` 与当前 instance 的 `<spaceRoot>/.wopal/` 共同组成。
 - **非 WopalSpace 模式**：配置入口迁移到 `$WOPAL_HOME/config/settings.jsonc`；capability loading 保持 OpenCode-compatible，并在最后叠加 `$WOPAL_HOME` 全局能力。
 
-### 6.1 WopalSpace 模式配置加载
+### WopalSpace 模式配置加载
 
 #### 加载链路（优先级从低到高）
 
@@ -269,7 +269,7 @@ $WOPAL_HOME/config → $WOPAL_HOME/ → <space>/.wopal/
 3. 从目录加载 agents（含 frontmatter mergeDeep）、commands、plugins
 4. 返回完整结果，`config.ts` 中 **直接短路返回**，不执行后续任何 opencode 配置加载（remote wellknown、`~/.config/opencode/`、项目 `opencode.jsonc`、`.opencode/` 扫描等）
 
-### 6.2 非 WopalSpace 模式配置加载
+### 非 WopalSpace 模式配置加载
 
 当前 directory 未检测到空间根时，配置文件入口只属于 Ellamaka：
 
@@ -309,19 +309,19 @@ $WOPAL_HOME/config → $WOPAL_HOME/ → <space>/.wopal/
 
 **与 WopalSpace 模式的关系**：两个模式复用同一插件依赖收集与安装服务，分别接收 `$WOPAL_HOME` 或当前 instance 的 `<wopalSpaceRoot>/.wopal/`。
 
-### 6.3 目录扫描守卫
+### 目录扫描守卫
 
 `ConfigPaths.directories()` 负责非 WopalSpace 的 OpenCode-compatible capability directories。WopalSpace 请求从当前 directory 检测结果构造专属目录序列，不依赖进程级 `Flag.WOPAL_SPACE` 过滤其他 instance。
 
 ---
 
-## 7. TUI 配置与品牌
+## TUI 配置与品牌
 
 ### 目的
 
 TUI 的配置加载和视觉元素与 WopalSpace 模式深度整合。所有模式下 TUI 配置仅从 ellamaka 自身路径加载，不与 opencode 配置体系交互。
 
-### 7.1 TUI 配置加载
+### TUI 配置加载
 
 TUI 加载流程中的统一行为（WopalSpace/非 WopalSpace 模式一致）：
 
@@ -331,7 +331,7 @@ TUI 加载流程中的统一行为（WopalSpace/非 WopalSpace 模式一致）�
 4. **目录过滤**（空间模式）：主题扫描目录仅保留 `$WOPAL_HOME/config/`，跳过所有 `.opencode/` 目录
 5. **配置迁移跳过**：所有模式下跳过 opencode 配置文件中的旧 TUI key 迁移
 
-### 7.2 TUI 品牌插件
+### TUI 品牌插件
 
 WopalSpace 模式下通过 ontology 插件注入额外品牌元素：
 
@@ -340,15 +340,15 @@ WopalSpace 模式下通过 ontology 插件注入额外品牌元素：
 
 上述文件位于 `.wopal/` ontology worktree（`wopal-space-ontology` 仓库），不属于 ellamaka 引擎仓库。
 
-### 7.3 主题安装路径
+### 主题安装路径
 
 插件安装主题时检测来源目录：若从 `.wopal/config/` 加载的插件，主题安装到 `.wopal/config/themes/`；否则安装到对应 `.opencode/themes/` 目录。
 
-### 7.4 配置路径提示
+### 配置路径提示
 
 TUI 首页提示文案显示 `$WOPAL_HOME/config/settings.jsonc` 路径，与 ellamaka 实际配置根对齐。
 
-### 7.5 WopalSpace 模式 `/help` 命令覆盖
+### WopalSpace 模式 `/help` 命令覆盖
 
 #### 目的
 
@@ -386,7 +386,7 @@ slashName: Flag.WOPAL_SPACE ? undefined : "help",
 
 ---
 
-## 8. 运行时模式集成
+## 运行时模式集成
 
 ### 目的
 
@@ -420,13 +420,13 @@ WopalSpace 模式下，`<spaceRoot>/.wopal/skills/` 的同名技能显式优先�
 
 ---
 
-## 9. 安装与自动更新
+## 安装与自动更新
 
 ### 目的
 
 Ellamaka 通过 wopal-cli 分发安装。`wopal ellamaka install` 默认安装 Desktop latest 与 CLI latest；`--cli` 只安装 CLI latest。制品使用自有 CDN，不依赖 OpenCode 的 GitHub/npm/brew 更新通道。
 
-### 9.1 安装方法
+### 安装方法
 
 `Installation.method()` 检测当前运行环境的安装方式，返回 `"ellamaka"` 表示通过 wopal-cli 安装。检测逻辑：`isUnderWopalBin()` 检查 `process.execPath` 或 `process.argv[0]` 是否包含 `.wopal/bin`。
 
@@ -434,7 +434,7 @@ Ellamaka 通过 wopal-cli 分发安装。`wopal ellamaka install` 默认安装 D
 
 外部 CLI 保持固定路径 `$WOPAL_HOME/bin/ellamaka`。安装收据位于 `$WOPAL_HOME/ellamaka/state/ellamaka-install.json`。`bin/` 目录不保存 `.ellamaka.meta.json` 等 metadata 文件。
 
-### 9.2 自动更新
+### 自动更新
 
 TUI 启动后 1 秒触发 `checkUpgrade()` → `upgrade()`，流程如下：
 
@@ -449,9 +449,9 @@ TUI 启动后 1 秒触发 `checkUpgrade()` → `upgrade()`，流程如下：
    - minor/major 版本 → 通过 Bus 事件通知 UI 显示更新提示，不自动安装
    - patch 版本且 autoupdate 未设为 notify → 自动下载安装
 
-### 9.3 CDN 版本清单
+### CDN 版本清单
 
-`latest()` 请求 CLI stable `manifest.json`。完整 schema 由 `DISTRIBUTION.md` §5 定义，最小示例：
+`latest()` 请求 CLI stable `manifest.json`。完整 schema 由 [Canonical Manifest](./DESIGN-distribution.md#canonical-manifest) 定义，最小示例：
 
 ```json
 {
@@ -475,7 +475,7 @@ TUI 启动后 1 秒触发 `checkUpgrade()` → `upgrade()`，流程如下：
 
 `upgrade()` 根据已经授权的目标版本请求 `https://download.coursedao.com/ellamaka/v{version}/manifest.json`，再次校验 identity，通过 `findEllamakaArtifact()` 匹配当前平台架构的制品，校验 SHA-256 后下载 → 解压 → 安装 → codesign。安装收据保存完整 ReleaseIdentity，不通过同版本重建覆盖现有 release。
 
-### 9.4 与 opencode 的差异
+### 与 opencode 的差异
 
 | 维度         | opencode                                               | ellamaka                                                            |
 | ------------ | ------------------------------------------------------ | ------------------------------------------------------------------- |
@@ -492,7 +492,7 @@ TUI 启动后 1 秒触发 `checkUpgrade()` → `upgrade()`，流程如下：
 
 ---
 
-## 10. 插件去重
+## 插件去重
 
 ### 目的
 
@@ -510,7 +510,7 @@ WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）和 `<space>/.wopal/`�
 
 ---
 
-## 11. 注入原则
+## 注入原则
 
 ellamaka 对上游源码的所有修改遵循以下原则，以最小化每次上游合并的冲突面：
 
@@ -534,7 +534,7 @@ ellamaka 对上游源码的所有修改遵循以下原则，以最小化每次�
 
 ---
 
-## 12. 上游合并策略
+## 上游合并策略
 
 > **状态**: 已放弃跟踪上游（2026-08-31 起）。ellamaka 不再从 `upstream/dev` 合并 OpenCode 变更，`dev` 分支不再作为上游跟踪线。以下历史机制仅作记录，不再执行。
 
@@ -552,7 +552,7 @@ ellamaka 已放弃跟踪上游，后续如需参考 OpenCode 对应模块代码�
 | ---------------------------------------------------------------------------------------- | -------------------- |
 | `README.md`、`README.zh-CN.md`                                                           | ellamaka 项目 README |
 | `AGENTS.md`、`AGENTS.zh-CN.md`                                                           | ellamaka 开发规范    |
-| `docs/DESIGN.md`、`docs/DISTRIBUTION.md`、`docs/BRANDING.md` | ellamaka 设计文档    |
+| `docs/DESIGN.md`、`docs/DESIGN-distribution.md`、`docs/BRANDING.md` | ellamaka 设计文档    |
 | `scripts/`                                                                               | ellamaka 自有脚本    |
 | `.github/workflows/publish-ellamaka-cli.yml`                                                 | ellamaka CI          |
 | `packages/ellamaka-brand/`                                                               | ellamaka 品牌包      |
@@ -576,7 +576,7 @@ ellamaka 已放弃跟踪上游，后续如需参考 OpenCode 对应模块代码�
 
 ---
 
-## 13. 文件系统兼容性决策
+## 文件系统兼容性决策
 
 ### 已品牌化
 
@@ -606,13 +606,13 @@ ellamaka 已放弃跟踪上游，后续如需参考 OpenCode 对应模块代码�
 
 ---
 
-## 14. TUI tips 与 sidebar 品牌化
+## TUI tips 与 sidebar 品牌化
 
 ### 目的
 
 TUI 首页 tips 系统和 sidebar 版本署名中不再出现 `OpenCode` 引用，全部替换为 ellamaka 品牌。
 
-### 14.1 Tips 列表
+### Tips 列表
 
 原创 tips 列表定义在 `packages/ellamaka-brand/tips.ts`（包 `@wopal/ellamaka-brand`），导出 `ELLAMAKA_TIPS`。tips-view.tsx 通过 import 引用，不再内联定义。
 
@@ -623,23 +623,23 @@ TUI 首页 tips 系统和 sidebar 版本署名中不再出现 `OpenCode` 引用�
 - CLI 命令引用使用 `BINARY_NAME` 常量（`ellamaka run`、`ellamaka serve` 等）
 - 配置文件引用从 `opencode.json` 更新为 `settings.jsonc`
 
-### 14.2 Sidebar 版本署名
+### Sidebar 版本署名
 
 sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中的 `OpenCode` → `BINARY_TITLE`（`Ellamaka`）。通过 import `BINARY_TITLE` from `@wopal/ellamaka-brand/branding` 注入。
 
 ---
 
-## 15. ellamaka-app Web UI
+## ellamaka-app Web UI
 
 ### 目的
 
 `packages/ellamaka-app` 是 ellamaka 的官方 web UI,通过 fork 上游
 `packages/app` 创建。承载三栏 IDE 工作台的产品形态。
-上游 `packages/app` 已放弃跟踪（见 §12），后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
+上游 `packages/app` 已放弃跟踪（见 [上游合并策略](#上游合并策略)），后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
 
-**设计决策与架构详见 [WORKBENCH.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/WORKBENCH.md) 以及 [DESIGN.md §8](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/DESIGN.md)。** 本节记录品牌化实施细节。
+**设计决策与架构详见 [DESIGN-workbench.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/DESIGN-workbench.md) 以及 [Unified Reload & Lifecycle](./DESIGN.md#unified-reload-lifecycle)。** 本节记录品牌化实施细节。
 
-### 15.1 包级差异(相对于上游 `packages/app`)
+### 包级差异(相对于上游 `packages/app`)
 
 | 维度     | 上游 `packages/app` | `packages/ellamaka-app`      |
 | -------- | ------------------- | ---------------------------- |
@@ -648,7 +648,7 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 | 上游同步 | 已放弃跟踪          | 独立演进                     |
 | 构建嵌入 | opencode 二进制     | ellamaka 二进制              |
 
-### 15.2 文件级差异
+### 文件级差异
 
 `ellamaka-app` 在 `app` 基线上的新增部分:
 
@@ -658,14 +658,14 @@ sidebar footer（`footer.tsx`）和 sidebar 缺省署名（`sidebar.tsx`）中�
 | `src/app.tsx`                         | 追加     | 注册 `/workbench` 路由和 ViewProvider                                                 |
 | `src/pages/workbench/index.tsx`       | 新增     | 工作台页面主布局(TopBar + ActivityBar + Sidebar + Workspace + StatusBar)              |
 | `src/pages/workbench/view.tsx`        | 新增     | 视图切换 Provider(TUI/Chat/Split),持久化到 localStorage                               |
-| `src/pages/workbench/space-store.tsx` | 新增     | 空间列表 + tab 状态 Provider,通过 SDK `client.wopalSpace.spaces()` 拉取空间(详见 §16) |
+| `src/pages/workbench/space-store.tsx` | 新增     | 空间列表 + tab 状态 Provider,通过 SDK `client.wopalSpace.spaces()` 拉取空间(详见 [WopalSpace 空间注册表 API](#wopalspace-空间注册表-api)) |
 | `src/pages/workbench/parts/*`         | 新增     | 工作台部件:top-bar / activity-bar / sidebar / workspace / status-bar                  |
 | `src/i18n/{en,zh}.ts`                 | 追加     | 12 个 `workbench.*` 翻译键(视图名、面板、侧栏、空状态)                                |
 | `AGENTS.md`                           | 新增     | 包级开发规则                                                                          |
 
 **非侵入原则**:尽量不修改 app/ 现有结构,定制通过新增文件和入口追加方式注入。
 
-### 15.3 构建嵌入
+### 构建嵌入
 
 `packages/ellamaka-release/src/cli/build.ts` 的 `--web-ui` 参数选择嵌入源:
 
@@ -676,16 +676,16 @@ bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌�
 
 默认值是 `ellamaka-app`。嵌入机制不变:Vite build → dist/ → `opencode-web-ui.gen.ts` 编译入二进制。
 
-### 15.4 上游关系与合并保护
+### 上游关系与合并保护
 
-ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不再从上游同步。`.gitattributes` 保护规则:
+ellamaka 已放弃跟踪上游（见 [上游合并策略](#上游合并策略)），`ellamaka-app` 独立演进，不再从上游同步。`.gitattributes` 保护规则:
 
 | 目录                              | 合并保护     | 说明                         |
 | --------------------------------- | ------------ | ---------------------------- |
 | `packages/ellamaka-app/`          | `merge=ours` | ellamaka 定制,不接受上游覆盖 |
 | `packages/ellamaka-app/` 新增目录 | 无保护       | 无上游对应,不参与合并冲突    |
 
-### 15.5 运行时 UI 代理与品牌解耦策略
+### 运行时 UI 代理与品牌解耦策略
 
 #### 目的
 
@@ -701,7 +701,7 @@ ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不
    - **默认状态 (`null`)**：禁用反向代理机制，避免在任何未显式配置的情况下泄漏网络请求或展示非预期品牌界面。
    - **品牌托管支持（Custom Host Support）**：仅在部署品牌方自有的 Workbench 静态托管服务（例如 `https://ellamaka.wopal.cn`）时，可通过将 `UI_UPSTREAM_URL` 显式声明为指定域名，复用路由透传机制，实现云端前端与本地 CLI 引擎的契约衔接。
 
-### 15.6 实施范围
+### 实施范围
 
 **已完成(基础设施跑通 → 空间侧栏接通)**:
 
@@ -710,12 +710,12 @@ ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不
 3. 在 `packages/ellamaka-release/src/cli/build.ts` 切换嵌入源
 4. 注册 `/workbench` 路由 + 三栏布局骨架(TopBar/ActivityBar/Sidebar/Workspace/StatusBar)
 5. 视图切换 Provider(TUI/Chat/Split)持久化到 localStorage
-6. 空间侧栏接通真实数据:通过 `wopalSpace.spaces` SDK 方法(后端 §16)拉取 `$WOPAL_HOME/config/settings.jsonc` 的 WopalSpace 注册表
+6. 空间侧栏接通真实数据:通过 `wopalSpace.spaces` SDK 方法(后端 [WopalSpace 空间注册表 API](#wopalspace-空间注册表-api))拉取 `$WOPAL_HOME/config/settings.jsonc` 的 WopalSpace 注册表
 7. 点击空间在 workbench 内开 tab,不跳转官方 session 路由
 
 **后续迭代**:TUI 视图接入(复用 terminal.tsx) → Chat 视图接入(复用 session 组件) → Split 分屏 → 命令面板集成。
 
-### 15.7 相关文档
+### 相关文档
 
 | 文档                               | 说明                            |
 | ---------------------------------- | ------------------------------- |
@@ -724,7 +724,7 @@ ellamaka 已放弃跟踪上游（见 §12），`ellamaka-app` 独立演进，不
 
 ---
 
-## 16. WopalSpace 空间注册表 API
+## WopalSpace 空间注册表 API
 
 ### 目的
 
@@ -732,7 +732,7 @@ ellamaka-app workbench 侧栏需要展示用户通过 `wopal-cli` 注册的 Wopa
 
 数据源是 wopal CLI 管理的 settings.jsonc,不是 ellamaka 自己的 project 持久化层。ellamaka 只读不写这份注册表。
 
-### 16.1 端点
+### 端点
 
 | 方法  | 路径                              | 说明                                                                                               |
 | ----- | --------------------------------- | -------------------------------------------------------------------------------------------------- |
@@ -816,7 +816,7 @@ type WorkbenchSessionMarker = "" | "directory" | "worktree"
 `search-directories` query: `{ spaceName: string, query: string }`
 `recent-directories` query: `{ spaceName: string }`
 
-### 16.2 实现位置
+### 实现位置
 
 ellamaka 定制遵循"新文件优先 + 最小注入点"原则:
 
@@ -827,7 +827,7 @@ ellamaka 定制遵循"新文件优先 + 最小注入点"原则:
 | `packages/opencode/src/server/routes/instance/httpapi/api.ts`                  | 注入(1 行) | `RootHttpApi.addHttpApi(WopalSpaceApi)`                                               |
 | `packages/opencode/src/server/routes/instance/httpapi/server.ts`               | 注入(2 行) | import + `rootApiRoutes` Layer.provide 添加 `wopalSpaceHandlers`                      |
 
-### 16.3 路由层级
+### 路由层级
 
 `WopalSpaceApi` 挂在 `RootHttpApi`(与 `ControlApi`/`GlobalApi` 同级),**不挂** `InstanceHttpApi`。原因:
 
@@ -835,7 +835,7 @@ ellamaka 定制遵循"新文件优先 + 最小注入点"原则:
 - 不需要 `InstanceContextMiddleware` / `WorkspaceRoutingMiddleware`(那些 middleware 依赖 request-scoped directory)
 - 只需 `Authorization` middleware(继承 RootHttpApi 的 auth 声明)
 
-### 16.4 数据读取
+### 数据读取
 
 handler 直接读文件系统,不走 ellamaka config schema:
 
@@ -849,9 +849,9 @@ const spaces = (raw as { spaces?: Record<string, { path: string; type?: string }
 
 - 用 `ConfigParse.jsonc` 解析(支持 JSONC 注释,与 ellamaka config 加载一致)
 - 文件不存在或解析失败时返回空数组,不抛错
-- `Global.Path.config` 是 `$WOPAL_HOME/config`(受 `WOPAL_HOME` 环境变量覆盖,与 ellamaka 路径体系 §2 一致)
+- `Global.Path.config` 是 `$WOPAL_HOME/config`(受 `WOPAL_HOME` 环境变量覆盖,与 [路径体系](#路径体系) 一致)
 
-### 16.5 SDK 自动生成
+### SDK 自动生成
 
 ellamaka 的 SDK 由 `packages/sdk/js/script/build.ts` 从后端 OpenAPI spec 自动生成。新增 `WopalSpaceApi` 后:
 
@@ -866,7 +866,7 @@ ellamaka 的 SDK 由 `packages/sdk/js/script/build.ts` 从后端 OpenAPI spec �
 | `packages/sdk/js/src/v2/gen/sdk.gen.ts`   | 新增 `WopalSpace` 类 + `OpencodeClient.wopalSpace` getter        |
 | `packages/sdk/js/src/v2/gen/types.gen.ts` | 新增 `WopalSpaceSpacesResponses` / `WopalSpaceSpacesErrors` 类型 |
 
-### 16.6 上游隔离
+### 上游隔离
 
 `wopal-space` group/handler 是 ellamaka 定制,上游 opencode 不存在。上游合并时:
 
@@ -875,7 +875,7 @@ ellamaka 的 SDK 由 `packages/sdk/js/script/build.ts` 从后端 OpenAPI spec �
 
 如果上游未来也加同类型 endpoint,需在合并时评估是否替换为本实现。
 
-### 16.7 项目目录聚合端点（Workbench 自有归组模型）
+### 项目目录聚合端点（Workbench 自有归组模型）
 
 `spaceOverview`、`nonSpaceOverview`、`searchDirectories`、`recentDirectories` 四个端点为 Workbench 左侧"Space → Project → Session"三级会话浏览器和空 Panel 目录搜索提供数据。
 
@@ -947,27 +947,27 @@ Space
 
 归组模块和 4 个 handler 是 ellamaka 定制，上游 opencode 不存在。新增端点只追加到现有 wopal-space.ts 文件和新建归组模块，不触碰上游 project/session handler。
 
-### 16.8 相关文档
+### 相关文档
 
 | 文档                                                                              | 说明                                                      |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `docs/ELLAMAKA-WORKBENCH.zh-CN.md`                                                | ellamaka-app 详细 architecture (workbench 侧栏数据源契约) |
 | `docs/ELLAMAKA-WORKBENCH-STEP5-DESIGN.zh-CN.md`                                   | Step 5 补充设计 §3.4 数据源                               |
 | `docs/plans/feature-workbench-wopal-space-projects-and-non-space-projects-api.md` | 后端 API 实现 Plan                                        |
-| `docs/BRANDING.md §2`                                                             | 路径体系(`Global.Path.config` = `$WOPAL_HOME/config`)     |
+| [路径体系](./BRANDING.md#路径体系)                                  | 路径体系(`Global.Path.config` = `$WOPAL_HOME/config`)     |
 | `packages/opencode/src/server/routes/instance/httpapi/AGENTS.md`                  | HttpApi 路由模式规范                                      |
 
 ---
 
-## 17. ellamaka-desktop 桌面应用
+## ellamaka-desktop 桌面应用
 
 ### 目的
 
 `packages/ellamaka-desktop` 是 ellamaka 的官方桌面应用。它承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
 
-完整架构、状态所有权和生命周期契约见 [`DESKTOP.md`](./DESKTOP.md)。本节记录桌面产品的品牌化基线和包级差异。
+完整架构、状态所有权和生命周期契约见 [`DESIGN-desktop.md`](./DESIGN-desktop.md)。本节记录桌面产品的品牌化基线和包级差异。
 
-### 17.1 复制起点与上游基线
+### 复制起点与上游基线
 
 桌面包最初从 OpenCode `v1.15.13` 的 `packages/desktop` 独立复制，来源 commit 为 `385cb694419f98103af0e8fc6187ddcbcbb6eecb`。该复制起点已经使用 Electron，不包含 Tauri 运行时。当前 Engine baseline 与冻结 component baseline 均以 `release/upstreams.lock.json` 为准，不能从产品版本或本节文字推导。
 
@@ -980,7 +980,7 @@ Space
 | 默认界面   | OpenCode 主界面              | Ellamaka Workbench `/workbench`                          |
 | 本地运行时 | OpenCode node sidecar        | Ellamaka/WopalSpace node sidecar                         |
 
-### 17.2 包边界
+### 包边界
 
 `ellamaka-desktop` 与 `ellamaka-app` 采用相同的独立复制模式。上游 `packages/desktop` 已删除（2026-08-31），桌面定制集中在 `packages/ellamaka-desktop`，参考代码从 `labs/ref-repos/opencode/packages/desktop` 读取。
 
@@ -990,7 +990,7 @@ Space
 - 一次 Desktop build 内的 `ellamaka-app`、`ellamaka-desktop`、Engine sidecar 与 SDK 来自同一 Ellamaka source commit；冻结 component baseline 可与 Engine baseline 不同，二者都从 upstream lock 审计。
 - Desktop 与外部 Ellamaka CLI 的产品 SemVer 独立；共享 Engine/API 变化可以协调发布，但不要求版本号相同。
 
-### 17.3 PTY 生命周期
+### PTY 生命周期
 
 桌面端将页面状态与进程所有权分离：
 
@@ -1009,29 +1009,29 @@ Space
 - 应用退出时，Main Process 停止 sidecar，Instance finalizer 立即终止全部 PTY 和子进程。
 - PTY 所有权集中在 sidecar；Electron Main 与 Preload 保持窗口、系统能力和 sidecar 生命周期边界。
 
-### 17.4 上游关系
+### 上游关系
 
-`ellamaka-desktop` 的历史复制起点是 OpenCode v1.15.13，记录于 `release/upstreams.lock.json`。ellamaka 已放弃跟踪上游（见 §12），上游 `packages/desktop` 已删除，参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
+`ellamaka-desktop` 的历史复制起点是 OpenCode v1.15.13，记录于 `release/upstreams.lock.json`。ellamaka 已放弃跟踪上游（见 [上游合并策略](#上游合并策略)），上游 `packages/desktop` 已删除，参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
 
 - Electron 安全修复、进程生命周期修复和平台兼容修复可从参考实现独立回移，并通过桌面测试验证。
 - Ellamaka 如升级 OpenCode Engine baseline，sidecar 与 Engine API 同步评估。
 - 独立包保留基线来源和定制差异记录，确保演进可审计。
 
-### 17.5 实施边界
+### 实施边界
 
 本节确立桌面产品的目标架构与版本基线。包创建、品牌资源、构建发布、签名、公证、自动更新和 sidecar 断连宽限机制由独立 Plan 实施和验收。
 
-### 17.6 相关文档
+### 相关文档
 
 | 文档                               | 说明                                                      |
 | ---------------------------------- | --------------------------------------------------------- |
-| `docs/DESKTOP.md`                  | ellamaka-desktop 架构、状态所有权、PTY 生命周期与验证契约 |
+| `docs/DESIGN-desktop.md`                  | ellamaka-desktop 架构、状态所有权、PTY 生命周期与验证契约 |
 | `docs/ELLAMAKA-WORKBENCH.zh-CN.md` | ellamaka-app Workbench 详细设计                           |
-| `docs/DISTRIBUTION.md`             | Ellamaka 构建与分发设计                                   |
+| `docs/DESIGN-distribution.md`             | Ellamaka 构建与分发设计                                   |
 
 ---
 
-## 18. Workbench CLI 健康与恢复
+## Workbench CLI 健康与恢复
 
 ### 目的
 

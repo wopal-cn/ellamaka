@@ -5,9 +5,9 @@
 
 ---
 
-## 1. 问题陈述
+## 问题陈述
 
-### 1.1 现状：阻塞等待模型
+### 现状：阻塞等待模型
 
 OpenCode 当前的 Task Tool 采用**同步阻塞**模式：
 
@@ -26,7 +26,7 @@ OpenCode 当前的 Task Tool 采用**同步阻塞**模式：
 - 多个子任务只能串行或全部阻塞等待
 - 主 Agent 无法在等待期间响应用户新消息
 
-### 1.2 目标：异步通知模型
+### 目标：异步通知模型
 
 ```
 主 Agent loop → spawn(prompt, agent) → 立即返回 "任务已启动"
@@ -43,21 +43,21 @@ OpenCode 当前的 Task Tool 采用**同步阻塞**模式：
 
 ---
 
-## 2. 业界方案调研
+## 业界方案调研
 
-### 2.1 Nanobot：MessageBus 注入模式
+### Nanobot：MessageBus 注入模式
 
 **实现位置**：`nanobot/agent/subagent.py`
 
 **核心机制**：
 
 ```python
-# 1. spawn 时立即返回，不阻塞
+# spawn 时立即返回，不阻塞
 async def spawn(self, task, label, ...):
     bg_task = asyncio.create_task(self._run_subagent(...))
     return f"Subagent [{label}] started (id: {task_id})."
 
-# 2. 子任务完成后，通过 MessageBus 注入 system message
+# 子任务完成后，通过 MessageBus 注入 system message
 async def _announce_result(self, task_id, label, task, result, origin, status):
     announce_content = f"""[Subagent '{label}' {status_text}]
 Task: {task}
@@ -84,7 +84,7 @@ Summarize this naturally for the user."""
 - 无结构化结果传递（纯文本拼接）
 - 子 Agent 间无法互相通信
 
-### 2.2 OpenCode 当前：SubtaskPart 阻塞模式
+### OpenCode 当前：SubtaskPart 阻塞模式
 
 **实现位置**：`packages/opencode/src/tool/task.ts` + `packages/opencode/src/session/prompt.ts`
 
@@ -109,7 +109,7 @@ TaskTool.execute() → 写入 SubtaskPart（不执行）
 - 子任务无法在执行中途通知
 - 并行子任务也需全部完成后才能继续
 
-### 2.3 其他参考
+### 其他参考
 
 | 项目 | 模式 | 特点 |
 |------|------|------|
@@ -120,9 +120,9 @@ TaskTool.execute() → 写入 SubtaskPart（不执行）
 
 ---
 
-## 3. 设计方案
+## 设计方案
 
-### 3.1 方案 A：事件注入 + Session.prompt()（推荐）
+### 方案 A：事件注入 + Session.prompt()（推荐）
 
 **核心思路**：子 Agent 完成后通过事件总线通知，监听器调用 `SessionPrompt.prompt()` 将结果作为新消息注入父 Session。
 
@@ -219,7 +219,7 @@ TaskTool.execute() → 写入 SubtaskPart（不执行）
 | `session/prompt.ts` | loop 不再处理 SubtaskPart（或兼容两种模式） |
 | 新增 `subtask/notify.ts` | 事件监听 + 消息注入 |
 
-### 3.2 方案 B：SubtaskPart async 标志
+### 方案 B：SubtaskPart async 标志
 
 **核心思路**：保持现有 SubtaskPart 机制，增加 `async` 字段区分阻塞/非阻塞。
 
@@ -243,7 +243,7 @@ if (subtask.async) {
 **优点**：向后兼容，sync/async 共存。
 **缺点**：loop 逻辑复杂度增加；结果回传仍需方案 A 的事件机制。
 
-### 3.3 方案 C：共享 Channel 模式（远期）
+### 方案 C：共享 Channel 模式（远期）
 
 **核心思路**：引入命名 Channel，Agent 可以 publish/subscribe：
 
@@ -260,9 +260,9 @@ Channel.subscribe("task-results", (msg) => { ... });
 
 ---
 
-## 4. 方案 A 详细设计
+## 方案 A 详细设计
 
-### 4.1 通知消息格式
+### 通知消息格式
 
 子 Agent 完成后注入父 Session 的消息需要精心设计，确保主 Agent 能正确理解和处理：
 
@@ -288,7 +288,7 @@ Do not mention technical details like "subagent" or task IDs.
 - 包含尾部指令（引导主 Agent 的行为）
 - 不暴露实现细节（用户感知层面）
 
-### 4.2 并发控制
+### 并发控制
 
 | 场景 | 行为 |
 |------|------|
@@ -298,7 +298,7 @@ Do not mention technical details like "subagent" or task IDs.
 | 子任务执行出错 | 通知 status="error"，主 Agent 决定是否重试 |
 | 父 Session 已关闭 | 通知被丢弃或持久化待恢复 |
 
-### 4.3 兼容性考虑
+### 兼容性考虑
 
 **与现有 sync 模式共存**：
 
@@ -328,7 +328,7 @@ Plugin.trigger("subtask.completed", { event }, { action: "allow" });
 
 子 Session 创建时继承父 Session 的权限规则（现有行为不变）。
 
-### 4.4 主 Agent 系统提示词补充
+### 主 Agent 系统提示词补充
 
 异步模式下，主 Agent 的系统提示词需要增加对子任务通知的理解：
 
@@ -342,9 +342,9 @@ You can have multiple subtasks running concurrently.
 
 ---
 
-## 5. 对 WopalSpace 的启示
+## 对 WopalSpace 的启示
 
-### 5.1 当前 WopalSpace 架构适配
+### 当前 WopalSpace 架构适配
 
 WopalSpace 基于 OpenCode 内核，Fae 作为子 Agent 通过 `wopal_task` 委派。当前模式：
 
@@ -357,7 +357,7 @@ Wopal → wopal_task(fae, prompt) → 同步等待 → 返回结果
 - SSE 超时风险
 - 长任务无法中途汇报
 
-### 5.2 异步通知模式的应用
+### 异步通知模式的应用
 
 ```
 Wopal → spawn(fae, prompt) → 立即返回 "任务已启动"
@@ -374,7 +374,7 @@ Wopal → spawn(fae, prompt) → 立即返回 "任务已启动"
 - 新增 `spawn` 用于长任务（研究、实现、重构）
 - 两套机制共存，按任务类型选择
 
-### 5.3 进阶能力
+### 进阶能力
 
 异步通知模式解锁的进阶场景：
 
@@ -387,7 +387,7 @@ Wopal → spawn(fae, prompt) → 立即返回 "任务已启动"
 
 ---
 
-## 6. 风险与待研究
+## 风险与待研究
 
 | 风险 | 说明 | 缓解措施 |
 |------|------|----------|
@@ -399,7 +399,7 @@ Wopal → spawn(fae, prompt) → 立即返回 "任务已启动"
 
 ---
 
-## 7. 结论
+## 结论
 
 **方案 A（事件注入 + Session.prompt()）是最优选择**：
 - 改动最小，与 OpenCode 现有架构高度兼容

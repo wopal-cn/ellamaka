@@ -108,13 +108,13 @@ Electron Main Process (src/main/index.ts)
 ## 构建步骤
 
 ```bash
-# 1. 先构建 sidecar（必须）
+# 先构建 sidecar（必须）
 cd ../opencode && bun script/build-node.ts
 
-# 2. 构建桌面应用
+# 构建桌面应用
 cd ../ellamaka-desktop && bun run build
 
-# 3. 打包 macOS 安装包（开发版，未签名）
+# 打包 macOS 安装包（开发版，未签名）
 bun run package:mac
 ```
 
@@ -146,7 +146,7 @@ bash scripts/check-app-baseline.sh
 
 ## 验证契约
 
-详见 `docs/DESKTOP.md` §11。可自动化验证的已通过 CI。需要手动运行时验证的：
+详见 [验证契约](../../docs/DESIGN-desktop.md#验证契约)。可自动化验证的已通过 CI。需要手动运行时验证的：
 
 | # | 验证内容 | 操作 |
 |---|---------|------|

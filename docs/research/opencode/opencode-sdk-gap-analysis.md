@@ -33,14 +33,14 @@ opencode-sdk/
 
 ## 二、已实现的 CLI 命令
 
-### 2.1 Global 模块
+### Global 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc global health` | `fetch(/global/health)` | 健康检查 | ✅ |
 | `oc global agents` | `api.app.agents()` | 列出可用 Agent | ✅ |
 | `oc global commands` | `api.command.list()` | 列出可用命令 | ✅ |
 
-### 2.2 Session 模块
+### Session 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc session list` | `api.session.list()` | 列出会话 | ✅ |
@@ -50,38 +50,38 @@ opencode-sdk/
 | `oc session abort <id>` | `api.session.abort()` | 中止会话 | ✅ |
 | `oc session messages <id>` | `api.session.messages()` | 查看消息列表 | ✅ |
 
-### 2.3 Project 模块
+### Project 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc project current` | `api.project.current()` | 当前项目 | ✅ |
 | `oc project list` | `api.project.list()` | 项目列表 | ✅ |
 
-### 2.4 Provider 模块
+### Provider 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc provider list` | `api.provider.list()` | 提供商列表 | ✅ |
 | `oc provider auth` | `api.provider.auth()` | 认证状态 | ✅ |
 
-### 2.5 Config 模块
+### Config 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc config get` | `api.config.get()` | 获取配置 | ✅ |
 | `oc config set <k> <v>` | `api.config.update()` | 设置配置 | ✅ |
 
-### 2.6 File 模块
+### File 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc file list <path>` | `api.file.list()` | 列出目录 | ✅ |
 | `oc file read <path>` | `api.file.read()` | 读取文件 | ✅ |
 
-### 2.7 Find 模块
+### Find 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc find files <pattern>` | `api.find.files()` | 查找文件 | ✅ |
 | `oc find text <pattern>` | `api.find.text()` | 搜索文本 | ✅ |
 | `oc find symbols <query>` | `api.find.symbols()` | 查找符号 | ✅ |
 
-### 2.8 Prompt 模块
+### Prompt 模块
 | 命令 | API | 功能 | 状态 |
 |------|-----|------|------|
 | `oc prompt <msg> -s <id>` | `api.session.prompt()` | 发送消息 | ✅ |
@@ -91,7 +91,7 @@ opencode-sdk/
 
 ## 三、未实现的 CLI 命令（差距分析）
 
-### 3.1 Session 高级功能（差距最大）
+### Session 高级功能（差距最大）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -114,7 +114,7 @@ opencode-sdk/
 | `session.part.update` | 更新消息部分 | P2 | 细粒度编辑 |
 | `session.part.delete` | 删除消息部分 | P2 | 细粒度编辑 |
 
-### 3.2 PTY 终端管理（完全未实现）
+### PTY 终端管理（完全未实现）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -127,7 +127,7 @@ opencode-sdk/
 
 **使用场景：** 后台运行长时间任务（测试、构建、服务器等）
 
-### 3.3 MCP 服务管理（完全未实现）
+### MCP 服务管理（完全未实现）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -142,7 +142,7 @@ opencode-sdk/
 
 **使用场景：** 动态加载/管理 Model Context Protocol 服务
 
-### 3.4 权限与问题交互（完全未实现）
+### 权限与问题交互（完全未实现）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -155,7 +155,7 @@ opencode-sdk/
 **关键说明：** 
 这些 API 是实现**非交互模式自动化**的核心。当 Agent 在后台运行时，无法通过 TUI 交互，必须通过 API 响应权限请求和问题。
 
-### 3.5 工具管理（完全未实现）
+### 工具管理（完全未实现）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -164,7 +164,7 @@ opencode-sdk/
 
 **使用场景：** 查询当前可用的工具及其参数定义
 
-### 3.6 Workspace/Worktree 管理（实验性 API）
+### Workspace/Worktree 管理（实验性 API）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -178,7 +178,7 @@ opencode-sdk/
 | `experimental.session.list` | 全局会话列表 | P1 | 跨项目会话 |
 | `experimental.resource.list` | MCP 资源列表 | P2 | 资源发现 |
 
-### 3.7 事件订阅（完全未实现）
+### 事件订阅（完全未实现）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -195,7 +195,7 @@ opencode-sdk/
 - `pty.created/exited` - PTY 生命周期
 - `mcp.tools.changed` - MCP 工具变更
 
-### 3.8 TUI 控制（完全未实现）
+### TUI 控制（完全未实现）
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -211,7 +211,7 @@ opencode-sdk/
 
 **说明：** TUI API 主要用于外部程序控制 OpenCode TUI 界面，CLI 场景使用较少。
 
-### 3.9 其他 API
+### 其他 API
 
 | API | 功能 | 优先级 | 说明 |
 |-----|------|--------|------|
@@ -232,7 +232,7 @@ opencode-sdk/
 
 ## 四、覆盖率统计
 
-### 4.1 按模块统计
+### 按模块统计
 
 | 模块 | 官方 API 数量 | 已实现 CLI | 覆盖率 |
 |------|--------------|-----------|--------|
@@ -257,7 +257,7 @@ opencode-sdk/
 | App | 3 | 0 | **0%** |
 | LSP/Formatter | 2 | 0 | **0%** |
 
-### 4.2 总体统计
+### 总体统计
 
 | 指标 | 数值 |
 |------|------|
@@ -313,7 +313,7 @@ opencode-sdk/
 
 ## 六、实现建议
 
-### 6.1 架构建议
+### 架构建议
 
 当前实现直接使用官方 SDK，架构简洁。建议：
 
@@ -321,7 +321,7 @@ opencode-sdk/
 2. **补充事件处理** - 添加 SSE 事件订阅的 CLI 封装
 3. **统一错误处理** - 当前 `withCommandHandler` 已有基础，可扩展
 
-### 6.2 CLI 命令设计建议
+### CLI 命令设计建议
 
 ```bash
 # Session 高级命令
@@ -351,7 +351,7 @@ oc event subscribe               # 订阅事件流
 oc event global                  # 全局事件流
 ```
 
-### 6.3 事件处理示例
+### 事件处理示例
 
 ```typescript
 // src/cli/commands/event.ts

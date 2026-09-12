@@ -5,14 +5,14 @@
 > **上级文档**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-onboarding.md` — 统一入口架构与职责边界
-> - `./DESKTOP.md` — Desktop 启动、窗口与 sidecar 生命周期
+> - `./DESIGN-desktop.md` — Desktop 启动、窗口与 sidecar 生命周期
 >   **CLI machine 契约**: `../../../projects/wopal-cli/src/lib/setup-machine.ts`
 
 本文档定义 Ellamaka Desktop onboarding 的目标实现。入口判定只依赖 `onboarding.json`（Desktop-owned UI 状态）；CLI machine operation 的输入、输出和业务语义以 wopal-cli 代码为准。
 
 ---
 
-## 1. 实现架构
+## 实现架构
 
 ```text
 SolidJS Onboarding Renderer
@@ -32,7 +32,7 @@ SolidJS Onboarding Renderer
 
 Renderer 不直接访问文件系统或启动子进程。它不依赖 sidecar、Server 或 SDK。冷启动进入 onboarding 时不挂载 Workbench，健康门禁完成前 sidecar 保持未启动。onboarding 本身不依赖 sidecar 完成配置。
 
-## 2. 启动门禁与状态
+## 启动门禁与状态
 
 Desktop 在启动时解析 `WOPAL_HOME`。GUI 进程缺少 shell 环境时，Main 从登录 shell 补齐该变量；不可用时使用默认目录。
 
@@ -53,7 +53,7 @@ Main 是 UI 状态文件的唯一写入者。写入使用临时文件加 rename 
 
 旧 `onboarding.json` 的步骤名继续兼容读取。旧步骤 `install-wopal-cli`、`install-ellamaka-cli` 和 `star-guide` 分别映射到当前的 `install-cli` 或 `done`。
 
-## 3. 阶段与步骤
+## 阶段与步骤
 
 底层状态机保留八个步骤，供恢复、执行和诊断使用：
 
@@ -75,7 +75,7 @@ Renderer 将它们呈现为四个阶段：
 
 顶部阶段追踪器只允许访问已解锁阶段。用户可以返回已访问步骤；返回后重新 probe，并以真实机器状态重算后续阶段。任何成功结果都停留在当前页面，直到用户显式点击"下一步"。
 
-## 4. Onboarding 交互模型
+## Onboarding 交互模型
 
 `OnboardingRoot` 持有当前阶段、执行状态、步骤结果、错误、解锁阶段和日志。各步骤组件通过 `onStatusChange` 与 `onError` 上报状态；根组件管理固定导航栏和跨步骤状态。
 
@@ -87,7 +87,7 @@ Renderer 将它们呈现为四个阶段：
 
 `done` 页面只在用户点击"启动工作台"时执行完成门禁。它先调用 `onboardingComplete`，再调用 `onboardingTransitionToWorkbench`；Main 复用仍健康的 sidecar，只有不存在或已失效时才启动/重启。Star 是用户主动触发的独立动作，不阻断启动。
 
-## 5. Main IPC 与执行
+## Main IPC 与执行
 
 | IPC 能力                             | Main 行为                                                                                                        |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
@@ -100,7 +100,7 @@ Renderer 将它们呈现为四个阶段：
 
 每次 `onboarding-execute-step` 创建一个 `AbortController`。Main 同一时间只接受一个执行型操作；第二个请求立即返回 `ONBOARDING_OPERATION_BUSY`。执行期间，Main 将状态置为 `in-progress`，结束后写入 `done`、`skipped` 或 `failed`。
 
-### 5.1 CLI bootstrap 与 machine operation
+### CLI bootstrap 与 machine operation
 
 `system-check` 由 Main 执行本地 bootstrap 检查。`install-cli` 先运行站点 installer 的 install-only 模式安装或复用 Wopal CLI，再调用 machine operation 读取 CLI latest 并安装外部 Ellamaka CLI。machine operation 在修改 binary 前完成 latest manifest 的 ReleaseIdentity 与 artifact SHA-256 校验；latest 不兼容时明确失败并建议刷新或重试。Wopal CLI 的版本来自直接执行已安装 binary 的 `wopal --version`。
 
@@ -108,7 +108,7 @@ Renderer 将它们呈现为四个阶段：
 
 Ontology 页面默认使用 Clone。Fork 模式复用 GitHub CLI、`GITHUB_TOKEN`、`GH_TOKEN` 或本地配置中的现有凭据；缺少凭据时先提交内嵌 `github-auth`，随后调用 `prepare-ontology`。Main 在 Ontology 成功或复用后调用 `prepare-runtime`。Space、Provider 和 Memory 分别使用对应的 machine operation。
 
-### 5.2 超时、终止与进度
+### 超时、终止与进度
 
 Main 是 timeout 的唯一 Owner。Wopal installer 具有下载超时和五分钟安装上限；Engine machine operation 使用十分钟硬上限，并以 45 秒无 stdout/stderr 活动作为下载停滞门禁，持续产生下载进度时会刷新活动计时；Ontology 准备使用五分钟硬上限。Renderer 不设置独立的竞速超时。
 
@@ -118,7 +118,7 @@ Main 将步骤进度广播给 Renderer，并记录到 `$WOPAL_HOME/logs/onboardi
 
 执行型 operation 使用显式 runtime impact：`externalCli` 与 `desktopSidecar` 分开报告，`stopRunning` 是调用方授权输入，不是 operation 自动推导的成功结果。替换外部 Bun CLI 不得停止 Desktop sidecar；只有确需重启内嵌 sidecar 的 operation 才能在 UI 明确说明活跃 Session/PTY 会终止并确认后执行。
 
-### 5.3 依赖安装
+### 依赖安装
 
 Onboarding 不预装插件与 dsh 依赖（2026-09-01 决策，原提前物化方案已废弃）。依赖安装由 ellamaka 运行时兜底统一负责：
 
@@ -126,11 +126,11 @@ Onboarding 不预装插件与 dsh 依赖（2026-09-01 决策，原提前物化�
 | ---- | ---------- |
 | 用户级插件依赖 | ellamaka 首次使用即装 |
 | 空间级插件依赖 | ellamaka per-directory 加载时安装 |
-| dsh 依赖闭包 | ellamaka 装配 dsh 前自物化（Runtime Manager，见 `DESIGN-ellamaka-dsh.md` §3.4） |
+| dsh 依赖闭包 | ellamaka 装配 dsh 前自物化（Runtime Manager，见 [运行时机制](./DESIGN-ellamaka-dsh.md#运行时机制)） |
 
 onboarding 可能被跳过（用户已完成后重装、纯终端 setup、外部安装），运行时兜底保证依赖始终可用，onboarding 编排对依赖安装无前置要求。
 
-## 6. 关键文件
+## 关键文件
 
 | 文件                                                 | 职责                                                                                   |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |

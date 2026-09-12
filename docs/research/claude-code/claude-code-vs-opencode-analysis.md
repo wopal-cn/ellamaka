@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 定位与理念
+## 定位与理念
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -18,9 +18,9 @@
 
 ---
 
-## 2. 架构对比
+## 架构对比
 
-### 2.1 整体架构
+### 整体架构
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -32,7 +32,7 @@
 | **事件系统** | React 状态驱动 + 自定义 Store（~150 字段） | Bus/GlobalBus 事件总线 + SSE 推送 |
 | **代码规模** | 512,664 行（单包） | 分散在 15+ packages |
 
-### 2.2 启动链路
+### 启动链路
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -42,9 +42,9 @@
 
 ---
 
-## 3. 核心子系统对比
+## 核心子系统对比
 
-### 3.1 Agentic 循环
+### Agentic 循环
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -54,7 +54,7 @@
 | **预算控制** | `maxBudgetUsd` + `maxTurns` + token 计数 | `maxTurns` + compaction 阈值 |
 | **模型降级** | 529 过载 → 3 次重试 → 自动降级 | Provider 错误 → 直接报错 |
 
-### 3.2 工具系统
+### 工具系统
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -66,7 +66,7 @@
 | **Prompt Cache** | 工具按名称排序保证缓存稳定性 | 无缓存优化设计 |
 | **MCP 工具** | 6 种传输类型（stdio/sse/http/ws/proxy/in-process） | stdio + SSE，通过 `mcp-read`/`mcp-prompt` 代理 |
 
-### 3.3 权限系统
+### 权限系统
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -76,7 +76,7 @@
 | **远程审批** | Claude.ai Bridge + Telegram/iMessage 中继 | 无远程审批 |
 | **审计** | Statsig + OTel 全量决策日志 | 无审计设计 |
 
-### 3.4 命令/技能系统
+### 命令/技能系统
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -84,7 +84,7 @@
 | **技能系统** | 17 内建 + 目录扫描 + MCP 技能 + 插件技能，inline/fork 两种执行模式 | markdown + YAML frontmatter，`skill` 工具加载 |
 | **变量替换** | 无（命令是 PromptCommand 或 LocalCommand） | `$ARGUMENTS` / `$1` / `$2` 模板替换 |
 
-### 3.5 扩展体系
+### 扩展体系
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -92,7 +92,7 @@
 | **Hook 系统** | 28 个生命周期事件，3 种执行模式（shell/prompt/async），条件表达式 | 5 个 hook 点（beforeTool/afterTool/event/shellEnv/providerOptions） |
 | **Plugin Hook** | `PreToolUse`/`PostToolUse`/`SessionStart`/`FileRead`/`SubAgentStart` 等 | `tool.execute.before`/`tool.execute.after`/`event`/`shell.env`/`provider.options` |
 
-### 3.6 多代理/团队
+### 多代理/团队
 
 | 维度 | Claude Code | OpenCode |
 |------|------------|----------|
@@ -102,7 +102,7 @@
 
 ---
 
-## 4. 各自设计优势
+## 各自设计优势
 
 ### Claude Code 优势
 
@@ -138,7 +138,7 @@
 
 ---
 
-## 5. 各自设计劣势
+## 各自设计劣势
 
 ### Claude Code 劣势
 
@@ -171,7 +171,7 @@
 
 ---
 
-## 6. 设计哲学差异
+## 设计哲学差异
 
 ```
 Claude Code                          OpenCode
@@ -193,7 +193,7 @@ Claude Code                          OpenCode
 
 ---
 
-## 7. 对 WopalSpace 的启示
+## 对 WopalSpace 的启示
 
 | Claude Code 可借鉴 | OpenCode 可借鉴 |
 |-------------------|----------------|

@@ -12,9 +12,9 @@ Compaction 不是子 session，而是同一 session 内的内联处理。它把�
 
 ---
 
-## 1. 整体架构
+## 整体架构
 
-### 1.1 三阶段协作
+### 三阶段协作
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -39,7 +39,7 @@ Compaction 不是子 session，而是同一 session 内的内联处理。它把�
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 触发条件
+### 触发条件
 
 | 触发方式 | 入口 | 说明 |
 |----------|------|------|
@@ -47,7 +47,7 @@ Compaction 不是子 session，而是同一 session 内的内联处理。它把�
 | 手动触发 | TUI `/compact` 命令 → `session.compact` | 用户主动执行 |
 | API 触发 | `POST /session/{id}/compact` | 编程触发 |
 
-### 1.3 自动触发的两条路径
+### 自动触发的两条路径
 
 **路径 A：正常响应后主动检测**（最常见）
 
@@ -88,9 +88,9 @@ return 实际用量 >= 可用空间
 
 ---
 
-## 2. Compaction 执行流程
+## Compaction 执行流程
 
-### 2.1 create — 写 compaction 消息
+### create — 写 compaction 消息
 
 `compaction.ts:349-372`
 
@@ -102,7 +102,7 @@ return 实际用量 >= 可用空间
 
 这一步只是写入标记，不执行压缩。
 
-### 2.2 process — 生成摘要
+### process — 生成摘要
 
 `compaction.ts:141-347`
 
@@ -132,7 +132,7 @@ return 实际用量 >= 可用空间
       - "compact" → 摘要也失败了（context 仍然太大），标记 error
 ```
 
-### 2.3 摘要 Prompt 模板
+### 摘要 Prompt 模板
 
 `compaction.ts:189-217`，固定模板结构：
 
@@ -152,9 +152,9 @@ Provide a detailed prompt for continuing our conversation above.
 
 ---
 
-## 3. 上下文清理机制
+## 上下文清理机制
 
-### 3.1 消息级截断（filterCompacted）
+### 消息级截断（filterCompacted）
 
 `message-v2.ts:903-918`
 
@@ -178,7 +178,7 @@ filterCompacted 返回：
 
 **效果**：u1/a1/u2/a2/u3 全部消失，a3 成为新的对话起点。
 
-### 3.2 摘要消息如何变成模型输入
+### 摘要消息如何变成模型输入
 
 `toModelMessagesEffect`（`message-v2.ts:576-812`）：
 
@@ -189,7 +189,7 @@ filterCompacted 返回：
 | compaction 之后的消息 | 正常转换 |
 | subtask user message | 替换为固定文本 `"The following tool was executed by the user"` |
 
-### 3.3 工具输出裁剪（prune）
+### 工具输出裁剪（prune）
 
 `compaction.ts:93-139`
 
@@ -220,7 +220,7 @@ filterCompacted 返回：
 | attachments | 图片等附件 | `[]`（清空） |
 | input | 工具调用参数 | **保留** |
 
-### 3.4 清理总结
+### 清理总结
 
 | 层级 | 清理了什么 | 保留了什么 |
 |------|-----------|-----------|
@@ -229,7 +229,7 @@ filterCompacted 返回：
 | **媒体级** | compact 时 stripMedia=true 去掉所有图片/文件 | 替换为 `[Attached mime: filename]` 占位符 |
 | **指令文件** | 无（每轮从文件系统重新读取） | AGENTS.md / CLAUDE.md 等始终完整 |
 
-### 3.5 prune 举例
+### prune 举例
 
 ```
 a3(summary) → u4 → a4(read:2K, bash:3K) → u5 → a5(edit:1K) → u6 → a6(bash:5K, write:8K)
@@ -244,9 +244,9 @@ a3(summary) → u4 → a4(read:2K, bash:3K) → u5 → a5(edit:1K) → u6 → a6
 
 ---
 
-## 4. System Prompt 与 Compact 的关系
+## System Prompt 与 Compact 的关系
 
-### 4.1 每轮重建，不存储在消息历史中
+### 每轮重建，不存储在消息历史中
 
 `prompt.ts:1501-1507`，runLoop 每次迭代固定执行：
 
@@ -262,7 +262,7 @@ const system = [...env, ...(skills ? [skills] : []), ...instructions]
 
 **System prompt 每轮从磁盘重建**，不走消息历史，compact 不影响它。
 
-### 4.2 指令文件发现范围（instruction.ts）
+### 指令文件发现范围（instruction.ts）
 
 | 来源 | 查找逻辑 |
 |------|---------|
@@ -273,9 +273,9 @@ const system = [...env, ...(skills ? [skills] : []), ...instructions]
 
 ---
 
-## 5. 模型选择
+## 模型选择
 
-### 5.1 Compaction Agent 的模型
+### Compaction Agent 的模型
 
 `compaction.ts:179-182`：
 
@@ -288,7 +288,7 @@ const model = agent.model
 
 优先使用 `config.agent.compaction.model`，未配置则回退到触发 compaction 的用户消息所用模型。
 
-### 5.2 配置方式
+### 配置方式
 
 **唯一途径**：`opencode.jsonc`
 
@@ -304,7 +304,7 @@ const model = agent.model
 
 `AgentConfig` 还支持 `temperature`、`prompt`（覆盖默认摘要模板）、`variant` 等字段。
 
-### 5.3 其他 compaction 相关配置
+### 其他 compaction 相关配置
 
 | 配置 | 作用 | 方式 |
 |------|------|------|
@@ -317,13 +317,13 @@ const model = agent.model
 
 ---
 
-## 6. TUI 上下文占用显示延迟问题
+## TUI 上下文占用显示延迟问题
 
-### 6.1 现象
+### 现象
 
 执行 `/compact` 后，TUI 显示的上下文占用不会立刻降低，要等到下一轮 API 调用后才会显示明显下降。
 
-### 6.2 原因
+### 原因
 
 TUI 的上下文占用来自 `assistantMessage.tokens`，由每次 API 调用后 provider 返回的 `usage` 写入。
 
@@ -344,7 +344,7 @@ TUI 的上下文占用来自 `assistantMessage.tokens`，由每次 API 调用后
 
 ---
 
-## 7. 关键源码索引
+## 关键源码索引
 
 | 文件 | 关键行 | 职责 |
 |------|--------|------|

@@ -2,17 +2,17 @@
 
 > **状态**：核心设计文档，描述 Workbench 的架构选择、状态模型与交互流程。
 > **更新时间**：2026-08-12
-> **相关文档**：`DESKTOP.md`（Electron 桌面承载与共享 PTY 生命周期）、`packages/ellamaka-app/AGENTS.md`（开发规则）
+> **相关文档**：`DESIGN-desktop.md`（Electron 桌面承载与共享 PTY 生命周期）、`packages/ellamaka-app/AGENTS.md`（开发规则）
 >
 > 本文专注"是什么"和"为什么"——架构选择、状态模型、交互流程与异常处理设计。具体开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
 
 ---
 
-## 1. 方向与核心理念
+## 方向与核心理念
 
 Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面（fork 自上游 `packages/app`）。
 
-**根本边界**：ellamaka 已放弃跟踪上游（见 `BRANDING.md` §12），`packages/ellamaka-app` 是 Ellamaka 自有的应用副本，独立演进，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。需要参考上游 UI 实现时，从 `labs/ref-repos/opencode/packages/app` 读取，不再依赖 `packages/app` 副本或上游同步。
+**根本边界**：ellamaka 已放弃跟踪上游（见 [上游合并策略](./BRANDING.md#上游合并策略)），`packages/ellamaka-app` 是 Ellamaka 自有的应用副本，独立演进，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。需要参考上游 UI 实现时，从 `labs/ref-repos/opencode/packages/app` 读取，不再依赖 `packages/app` 副本或上游同步。
 
 **核心概念**：
 
@@ -23,7 +23,7 @@ Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面（
 
 ---
 
-## 2. 目标架构模型
+## 目标架构模型
 
 ```
 Ellamaka App
@@ -43,13 +43,13 @@ Ellamaka App
 
 ---
 
-## 3. 壳与路由设计
+## 壳与路由设计
 
-### 3.1 路由定义
+### 路由定义
 
 路径 `/workbench` 使用独立的 Workbench Shell 渲染。官方应用页面继续使用继承的 `Layout`。在 `RouterRoot` 中通过条件 `Show` 判断，若当前路径以 `/workbench` 开头，则跳过 `Layout` 的外层包裹。
 
-### 3.2 架构与目录结构
+### 架构与目录结构
 
 ```
 packages/ellamaka-app/           ← ellamaka 定制 web UI
@@ -70,7 +70,7 @@ packages/ellamaka-app/           ← ellamaka 定制 web UI
   └── src/context/                 ← 应用级上下文与目录范围状态
 ```
 
-### 3.3 与上游关系
+### 与上游关系
 
 - **上游参考来源**：ellamaka 已放弃跟踪上游（2026-08-31）。需要观察上游产品变化或审查差异时，从 `labs/ref-repos/opencode/packages/app` 读取对应实现。
 - **选择性参考**：从参考仓库的 `packages/app` 中，通过差异审查，将符合 Ellamaka 产品方向的能力重新实现或移植到 `packages/ellamaka-app/`。Ellamaka 已形成独立体验的区域继续由自有设计主导。
@@ -78,9 +78,9 @@ packages/ellamaka-app/           ← ellamaka 定制 web UI
 
 ---
 
-## 4. 面板工作区与视图隔离
+## 面板工作区与视图隔离
 
-### 4.1 面板状态定义
+### 面板状态定义
 
 每个面板通过 `slotState` 处于以下两种状态之一：
 
@@ -115,7 +115,7 @@ type WorkbenchPanel = {
 }
 ```
 
-### 4.2 Panel 子区域：Split Terminal
+### Panel 子区域：Split Terminal
 
 Split Terminal 是面板的**底部辅助终端子区域**，不是独立面板。它拥有以下特征：
 
@@ -126,7 +126,7 @@ Split Terminal 是面板的**底部辅助终端子区域**，不是独立面板�
 - **操作行为**：面板头部右侧的终端图标用于切换 `splitTerminal` 的开关。收起时只隐藏渲染区域，Terminal 连接继续作为 subscriber 存活，保留 PTY 进程与终端上下文；再次展开时复用同一终端。
 - **进程存活高亮**：终端图标不采用右侧小绿点形式，而是**直接以图标本身的颜色进行状态指示**。当辅助终端 PTY 进程存活时，图标渲染为高亮绿；进程退出或被销毁时恢复为默认 muted 灰色。该颜色状态与 `splitTerminal` 本身的折叠/展开（pressed 灰色背景）在视觉上解耦。
 
-### 4.3 视图注册机制 (View Registry)
+### 视图注册机制 (View Registry)
 
 为保持视图的横向可扩展性（如后续追加 `file` 或 `diff` 视图），任何面板视图都必须通过 `view-registry.tsx` 进行注册：
 
@@ -153,7 +153,7 @@ type PanelViewDef = {
 
 **视图组件不拥有 PTY 生命周期**。视图只把"确保、关闭、连接断开"的意图交给 `WorkbenchActions`；Action 再调用 `PtyManager` 和目录 SDK。PTY 的创建、复用、存活探测、释放、布局提交和视图回退必须是同一个 Action 的一致性边界。视图的 `onCleanup` 只能断开前端连接（WebSocket 等），不得直接调用 `pty.remove`、`PtyManager` 或 Workbench Store。
 
-### 4.4 Canvas 终端的无缝贴边尺寸规则
+### Canvas 终端的无缝贴边尺寸规则
 
 Workbench 内嵌终端由 `ghostty-web` 的 canvas 渲染。canvas 只能按完整的字符列和字符行绘制，而 Panel 的可用宽高可以是任意像素值。因此，不能把 `FitAddon` 的默认尺寸结果直接作为 Workbench 的视觉尺寸：它会固定预留 canvas 滚动条宽度，并在按字符格向下取整后，于右侧或底部留下可见的深色空带。
 
@@ -178,7 +178,7 @@ Workbench 内嵌终端由 `ghostty-web` 的 canvas 渲染。canvas 只能按完�
 - 普通 terminal 与 Split Terminal 不出现横向/纵向滚动条，也不因 TUI 的满铺规则裁切字符行。
 - 单元测试至少覆盖：默认滚动条预留被移除、TUI 在小于半格余量时仍向上补足一行/列、普通 terminal 保持向下取整，以及分数 DPR 只多覆盖一个物理像素。
 
-### 4.5 终端中文输入法预编辑
+### 终端中文输入法预编辑
 
 `ghostty-web` 通过隐藏 textarea 接收键盘和 composition 事件；其默认样式使用 `clip-path` 完全裁切，因此系统候选窗可以定位、`compositionend` 也能把汉字发送给 PTY，但 composition 期间的拼音等 preedit 文本不会自动出现在 Canvas 上。
 
@@ -191,13 +191,13 @@ Workbench 内嵌终端由 `ghostty-web` 的 canvas 渲染。canvas 只能按完�
 
 回归测试至少覆盖 composition 的 start → update → end 状态序列以及 blur 清理。桌面端人工验收需确认：输入拼音时可见 preedit，候选窗跟随终端光标，选词后只向 TUI 提交一次最终汉字。
 
-### 4.6 Chat 视图：对话轮、内容分块与视觉语言
+### Chat 视图：对话轮、内容分块与视觉语言
 
 Workbench Chat 是面向长时间 Agent 协作的结构化工作界面。它将一次用户请求及其后续 Agent 活动组织为一个完整对话轮，让用户能够快速区分最终回复、思考过程、工具执行、文件变更、子代理工作与异常状态。
 
 Chat 的信息组织借鉴 Kilo Code 在紧凑开发界面中的成熟经验：以对话轮建立第一层边界，以内容块表达 Agent 活动类型，以展开状态控制信息密度。Ellamaka 负责自己的视觉语言。所有内容块继续使用 Workbench 现有字体、主题色、边框、圆角和交互状态，形成与 Headbar、Panel、Session Tree、Composer 和 Statusbar 一致的产品体验。
 
-#### 4.6.1 设计原则
+#### 设计原则
 
 1. **最终答案优先**：自然语言回复是对话的主内容。思考、工具执行和过程信息提供可追溯证据，并以更低视觉权重呈现。
 2. **类型决定形态**：正文、思考、Shell、文件编辑、上下文读取和子代理拥有稳定且可辨认的内容块形态。用户无需阅读文本即可判断活动类型。
@@ -205,15 +205,15 @@ Chat 的信息组织借鉴 Kilo Code 在紧凑开发界面中的成熟经验：�
 4. **流式过程保持稳定**：新 Part 到达时追加到当前对话轮。已渲染内容的字体、宽度和折叠状态保持稳定，避免生成期间出现视觉跳动。
 5. **Ellamaka 视觉原生化**：Chat 使用 `--font-family-sans`、`--font-family-mono`、`--text-*`、`--surface-*`、`--border-*`、`--icon-*` 与既有 radius token。Kilo Code 提供信息架构参考，Workbench 主题提供最终视觉表达。
 
-#### 4.6.2 所有权与组件边界
+#### 所有权与组件边界
 
-`packages/ellamaka-app/` 拥有 Workbench Chat 的完整呈现层，可根据产品目标深入定制。上游实现参考 `labs/ref-repos/opencode/packages/app`（已放弃跟踪，见 `BRANDING.md` §12）。
+`packages/ellamaka-app/` 拥有 Workbench Chat 的完整呈现层，可根据产品目标深入定制。上游实现参考 `labs/ref-repos/opencode/packages/app`（已放弃跟踪，见 [上游合并策略](./BRANDING.md#上游合并策略)）。
 
 **核心决策：`packages/ui` 零修改；内容块在自建与复用官方组件之间务实选择。**
 
 `packages/ui/` 作为基础组件供应商（Markdown、Diff、File、Icon、Accordion、Card、主题 token 与官方工具渲染器），永远不被 Workbench 修改。所有适配都在 `ellamaka-app` 内完成，手段包括组件包装、扩展点注入与作用域 CSS 覆盖。
 
-Workbench Chat 的信息架构、转录行模型、Part 分类、时间线和导航完全由 `ellamaka-app/src/pages/session/` 下的自有组件实现。单个内容块优先自建；当自建成本过高、流式稳定性不足或官方渲染器即为最佳选择时，复用官方组件链并适配接入。每个块的最终取舍记录在 §4.6.6 对应小节，随验证与调优持续校准。
+Workbench Chat 的信息架构、转录行模型、Part 分类、时间线和导航完全由 `ellamaka-app/src/pages/session/` 下的自有组件实现。单个内容块优先自建；当自建成本过高、流式稳定性不足或官方渲染器即为最佳选择时，复用官方组件链并适配接入。每个块的最终取舍记录在 [Agent 内容块类型](#agent-内容块类型) 对应小节，随验证与调优持续校准。
 
 Workbench Chat 不复刻 Kilo Code 专有实现；Kilo Code 提供信息架构参考，Workbench 主题提供最终视觉表达。
 
@@ -254,7 +254,7 @@ PanelChat
 
 展示模型只派生 Message 与 Part，不持久化消息副本。Session Projection 和目录 SDK 继续拥有服务端数据真相。组件本地状态只保存折叠、选中、复制反馈和滚动交互等瞬态视图信息。
 
-#### 4.6.3 对话轮结构
+#### 对话轮结构
 
 一个 `ChatTurn` 由一条用户消息和所有以该消息为 `parentID` 的 Assistant 消息组成。多条 Assistant Message 在视觉上属于同一个回复过程，不重复制造 Agent 气泡或独立消息外框。上下文压缩产生的用户消息形成可见的压缩边界；历史分页暂未加载到父消息时，Assistant 先进入稳定的 partial turn，父消息到达后再归并到正式 Turn。
 
@@ -277,7 +277,7 @@ PanelChat
 
 所有 Chat 内容共享同一条可读内容轨道。用户消息、Agent 回复、工具块、变更摘要、实时状态和 Composer（含 Question、Permission、Todo、Revert Dock）使用相同的水平基准和 `98ch` 最大轨道宽度；禁止消息区限宽而 Composer 继续铺满 Panel。轨道在宽 Panel 下居中并保留 20px 内边距，在窄 Panel 下占满可用宽度；内容块保持 `min-width: 0` 和安全换行。正文行宽上限约为 76ch，工具输出和 Diff 可使用完整轨道宽度。
 
-#### 4.6.4 字体层级
+#### 字体层级
 
 Workbench Chat 使用现有字体体系收敛层级，不建立独立于产品的字号系统：
 
@@ -293,7 +293,7 @@ Workbench Chat 使用现有字体体系收敛层级，不建立独立于产品�
 
 Agent 名称、模型和耗时位于响应尾部的轻量元数据行。该行使用 13px、`--text-weak` 和单行省略，作为回复归属信息，不与正文争夺注意力。流式阶段可显示运行状态与累计耗时；完成后收敛为静态元数据。
 
-#### 4.6.5 色彩、表面与形状
+#### 色彩、表面与形状
 
 Chat 从 Workbench 主题继承颜色，不引入 VS Code 专用色或 Kilo 品牌色：
 
@@ -306,7 +306,7 @@ Chat 从 Workbench 主题继承颜色，不引入 VS Code 专用色或 Kilo 品�
 - 所有工具块展开内容（Shell、上下文输出、通用工具、文件变更 Diff）统一滚动条策略：默认隐藏滚动条，鼠标进入内容区域时显示 8px 细滚动条；内容超宽时水平滚动，超长时限制最大高度内部垂直滚动，保证块与块之间视觉一致、默认状态安静。
 - 顶部活动会话进度条始终绘制在工具块内容之上（`z-index` 高于工具块定位内容），展开块不得遮挡进度指示。
 
-#### 4.6.6 Agent 内容块类型
+#### Agent 内容块类型
 
 **Part 类型映射表**（基于 Ellamaka SDK v2）：
 
@@ -418,7 +418,7 @@ Session 处于忙碌状态时，Chat 在实时尾部持续表达当前阶段，�
 
 错误位于产生错误的活动块内。无法归属具体 Part 的 Assistant 错误由 `TurnOutcome` 在回复末尾展示。中断与上下文压缩使用带标签的水平分隔，重试状态紧邻当前活动显示。
 
-#### 4.6.7 默认展开策略
+#### 默认展开策略
 
 默认展开状态由内容类型与生命周期共同决定：
 
@@ -436,7 +436,7 @@ Shell 和文件编辑的用户设置覆盖表中的初始默认值。设置值�
 
 用户手动选择优先于自动策略。折叠状态由 Chat 呈现层的有上限运行时 Map 保存，key 使用 `sessionID + tool + callID/partID`；Map 同时缓存每个 Part 首次解析出的默认状态。虚拟列表回收和重挂载组件时可恢复相同几何状态；刷新应用后按当时设置与默认策略重新计算。Map 达到上限时淘汰最早条目。Session 数据、WorkbenchStore 和 `localStorage` 均不承载折叠状态。
 
-#### 4.6.8 流式更新、虚拟化与滚动
+#### 流式更新、虚拟化与滚动
 
 消息时间线使用“稳定历史虚拟化 + 实时尾部直接渲染”。已完成历史按稳定转录行 key 维持测量缓存。当前增长中的 Assistant 分段离开 Virtualizer 后持续接收 `message.part.delta`，完成并稳定后再进入虚拟历史。Markdown 按稳定顶级块增量更新；流式结束时保留可复用块的 DOM，已高亮且源码未变化的代码块原地保留，避免完成瞬间的整段重排或普通代码/高亮代码闪替。未闭合的公式定界符保持普通文本，直到 `$...$` 或 `$$...$$` 完整闭合后才原地渲染，避免流式过程发生公式几何抖动。新增输出不会重建整个消息列表，也不会改变其它块的展开状态。
 
@@ -444,7 +444,7 @@ Shell 和文件编辑的用户设置覆盖表中的初始默认值。设置值�
 
 隐藏的 Space 和非活动 Panel 继续接收必要的数据更新，但只有当前 Space 的活动 Chat Panel 获得 Prompt 焦点和主动滚动控制。视图切换与 Panel keep-alive 保留草稿、时间线位置和当前应用生命周期内的内容块展开状态。
 
-#### 4.6.9 提示词导航
+#### 提示词导航
 
 长对话在时间线两侧提供常驻的 `PromptNavigator`。左侧刻度用于快速确认和跳转历史用户请求，右侧目录入口用于浏览完整对话目录；两者共享同一份 turn 索引，并使用 Ellamaka Workbench 的视觉 token 完成呈现。
 
@@ -506,7 +506,7 @@ PromptNavigator 不依赖新的后端目录接口。初始目录使用当前已�
 - 触摸设备扩大刻度命中区域；视觉刻度保持细小，不因触摸尺寸变粗。
 - Composer、交互 Dock 和底部操作区始终位于导航作用域之外。
 
-#### 4.6.10 响应式与无障碍
+#### 响应式与无障碍
 
 - 64ch 以上宽度保持完整工具标题、路径和状态；更窄面板按“标题 → 状态 → 路径/参数”的优先级省略次要信息。
 - 工具块头部是语义化按钮，使用 `aria-expanded` 表达展开状态。运行状态通过文本和图标共同表达。
@@ -515,7 +515,7 @@ PromptNavigator 不依赖新的后端目录接口。初始目录使用当前已�
 - 颜色作为辅助信息。错误、成功、运行和等待状态同时具备图标或文字标识。
 - 动画遵守 `prefers-reduced-motion`。折叠动画只改变内容可见性和高度，不造成主内容横向位移。
 
-#### 4.6.11 体验验收
+#### 体验验收
 
 Workbench Chat 达到以下目标状态：
 
@@ -534,7 +534,7 @@ Workbench Chat 达到以下目标状态：
 
 ---
 
-## 5. 状态管理与持久化设计
+## 状态管理与持久化设计
 
 Workbench 状态管理的核心目标：
 
@@ -543,7 +543,7 @@ Workbench 状态管理的核心目标：
 3. **切换视图模式不释放 PTY**——TUI PTY、Split Terminal PTY 在视图切换时保持运行。
 4. **高频对话生成期间左侧导航树保持绝对稳定**。
 
-### 5.1 状态模型分层设计
+### 状态模型分层设计
 
 Workbench 不再把布局、服务端会话和运行时资源塞进一个控制器。每类状态只有一个规范所有者：
 
@@ -561,7 +561,7 @@ Workbench 不再把布局、服务端会话和运行时资源塞进一个控制�
 
 PTY ID（`tuiPtyId`、`splitPtyId`、`termPtyId`）作为**重连提示**随 Workbench 布局持久化。Sidecar 的 PTY Session Registry 是进程存活状态的真相源。刷新后 PTY Manager 先探测旧 ID：存活则重连，已回收则清除旧 ID 并按需创建新 PTY。浏览器 Tab 关闭后没有新连接，sidecar 在断连宽限期结束时终止对应 PTY；下次打开时持久化的旧 ID 会在探测阶段自然失效。
 
-### 5.2 水合门控与协同 (allStoresReady)
+### 水合门控与协同 (allStoresReady)
 
 WorkbenchStore 完成水合后，`index.tsx` 以 `wb.ready()` 作为唯一的 **Workbench Bootstrap Gate**：
 
@@ -582,7 +582,7 @@ const allStoresReady = () => wb.ready()
 
 这消除了刷新后"先显示空 Panel 再跳变到恢复布局"的闪烁问题。
 
-### 5.3 Space Keep-Alive 容器
+### Space Keep-Alive 容器
 
 `Workspace` 为每个已打开 Tab 建立稳定容器，但布局恢复与会话运行环境加载分离：
 
@@ -604,7 +604,7 @@ const allStoresReady = () => wb.ready()
 
 左侧文件树与右侧文件预览属于注册 Space 的文件浏览能力，通过 Root 级受控文件接口读取，不创建会话 instance，不加载插件、MCP 或 LSP。隐藏文件树不预加载；首次展示后保留展开状态。没有绑定会话时，状态栏显示服务器状态，不把空间根或旧 Panel 目录当作能力加载目标。
 
-### 5.4 PTY 运行时管理器
+### PTY 运行时管理器
 
 Renderer 中的 PTY 关联由 `pty-manager.tsx` 统一管理，后台进程生命周期由 sidecar 的 PTY Service 统一管理。Web 与 Desktop 使用同一套创建、探测、重连、显式删除和断连宽限语义。
 
@@ -649,7 +649,7 @@ Renderer 中的 PTY 关联由 `pty-manager.tsx` 统一管理，后台进程生�
 
 **异步安全**：创建 PTY 的 Promise 必须携带 generation token。若 Promise resolve 时 Panel 已关闭或 Session 已变更，立即释放该 PTY，禁止将失效 ID 写入持久化状态。
 
-### 5.5 TUI 进程关闭与自愈机制
+### TUI 进程关闭与自愈机制
 
 WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确认 sidecar 中的 PTY 状态，再决定重连或回退：
 
@@ -659,9 +659,9 @@ WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确�
 - **原子状态回退**：确认 PTY 已退出后，前端先清 PTY Manager 缓存，再通过 SolidJS `batch` 提交布局守卫与 PTY ID。TUI 必须先切 `viewMode=chat` 再清 `tuiPtyId`；Split Terminal 必须先设 `splitTerminal=false` 再清 `splitPtyId`，避免创建 effect 观察到中间状态并抢跑创建新 PTY。
 - **组件 Keyed 实例化隔离**：终端 `<Show>` 使用 `keyed`。PTY ID 变化时卸载旧 Terminal 实例并创建新实例，防止 WebSocket 与终端对象跨 PTY 复用。
 
-> **开发规则**：effect 守卫、action 顺序、DELETE 幂等性等实现约束见 `packages/ellamaka-app/AGENTS.md` §5.6。
+> **开发规则**：effect 守卫、action 顺序、DELETE 幂等性等实现约束见 [`packages/ellamaka-app/AGENTS.md` 事务、异步竞态与 PTY 生命周期](../packages/ellamaka-app/AGENTS.md#transactions-async-races-and-pty-lifecycle)。
 
-### 5.6 Session 状态收敛
+### Session 状态收敛
 
 服务端 Session 是 Session 标题、归档状态、消息内容的**唯一事实来源**。
 
@@ -686,7 +686,7 @@ WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确�
 
 Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.deleted` 事件或带归档时间的 `session.updated` 事件解除。外部删除或归档已经装载的 Session 时，Workbench 必须释放对应 PTY 和 Panel 绑定，并向用户显示状态变化提示。远端数据加载完成前不得根据空列表解绑 Panel，避免初始空数组误判。Projection 的失效信号只用于通知树重新拉取，不能承载会话领域数据，也不能写入持久化。
 
-### 5.7 持久化性能优化
+### 持久化性能优化
 
 拖拽过程中的尺寸变更（Panel 宽度、Split Terminal 高度、Sidebar 宽度）只在内存 draft 中更新，`pointerup` 时一次性提交到持久化 Store。
 
@@ -699,7 +699,7 @@ Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.del
 
 禁止每次 `mousemove` 序列化整个 Workbench 状态。
 
-### 5.8 持久化与 Tab Pin 策略
+### 持久化与 Tab Pin 策略
 
 - `workbench`：统一的 Workbench 状态快照。使用 `localStorage` 持久化，确保关 Tab 重开时布局保持。包含显示设置、已打开与已 Pin 的 Space Tabs、当前激活 Space Path、每个 Space 的 Panel 布局、Session 绑定、Split Terminal 配置和 PTY ID 重连提示。
 - **Tab Pin (钉住) 规约**：
@@ -707,7 +707,7 @@ Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.del
   - 物理项目 Space Tabs 支持用户自主 Pin 钉住。已 Pin 的 Tab 不允许关闭，必须解除 Pin 钉住后方可关闭。
   - 在 Desktop 桌面端，**已钉住的 Tab 拦截并禁止使用 `Cmd + W` 快捷键关闭**。
 
-### 5.9 Headbar 标题栏、单空间 Session Tree 与侧栏架构
+### Headbar 标题栏、单空间 Session Tree 与侧栏架构
 
 - **Headbar 标题栏与 Web 兼容性**：
   - **macOS 红绿灯避让与双层 Layout 契约**：Workbench 顶栏 `<header>` 必须保持 `flex-col` 双层结构。第一层为 `workbench-macos-window-chrome`（28px 高度），在 macOS 桌面端为红绿灯提供专有拖拽避让高度；第二层为 `workbench-titlebar-toolbar`。Logo、Space Tabs 与右侧操作按钮必须全部收纳于第二层 toolbar 内，严禁绝对定位逃逸至第一层拖拽区。
@@ -724,7 +724,7 @@ Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.del
   - 后端 Session 存在关联物理目录的强约束限制（`directory` 为 `notNull()`）。
   - 通用日常对话由 `POST /workbench/sessions` 的服务端 provisioner 创建 `$WOPAL_HOME/general_tasks/` 下隔离目录。
 
-### 5.10 Statusbar 真实代码契约与异常诊断中心
+### Statusbar 真实代码契约与异常诊断中心
 
 Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `status-bar-diagnostics.tsx`，采用响应式三分区结构：
 
@@ -740,7 +740,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
   - **可恢复与清除机制**：每个条目呈现图标、文本、时间戳 (`formatTime`) 及 `source` 来源；若携带 `onRetry` 句柄，提供异步重试操作（重试成功后自动剔除该条目）；右侧支持单条目关闭与底部一键 `clearAllDiagnostics()`。
 - **右区（服务器状态与控制）**：带有左边框分割 (`border-l border-v2-border-border-base pl-2`)，结合 `StatusBarStatusPopover` 呈现在线指示器（小绿点）与服务器名称 `server.name`。
 
-### 5.11 浏览器生命周期与单 Tab 互斥
+### 浏览器生命周期与单 Tab 互斥
 
 **单 Tab 互斥（Web Locks API）**：
 
@@ -765,13 +765,13 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 3. 新页面水合布局并通过 `ptyManager.ensure()` 探测旧 ID。
 4. 探测成功后重新连接，sidecar 取消 Grace 回收任务。
 
-浏览器关闭、Renderer 崩溃和 Electron 窗口关闭使用相同的断连回收语义。桌面应用退出时由 Electron Main Process 停止 sidecar，立即释放全部 PTY。详见 `DESKTOP.md`。
+浏览器关闭、Renderer 崩溃和 Electron 窗口关闭使用相同的断连回收语义。桌面应用退出时由 Electron Main Process 停止 sidecar，立即释放全部 PTY。详见 `DESIGN-desktop.md`。
 
 ---
 
-## 6. 关键交互流程
+## 关键交互流程
 
-### 6.1 开启新会话（以 Empty 槽位为例）
+### 开启新会话（以 Empty 槽位为例）
 
 1. 点击 "Add Panel" 新增面板，槽位为 `empty` 状态。
 2. 显示 `PanelLoader`，用户选定 Project Path 及类型（默认为 Chat）。
@@ -779,13 +779,13 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 4. 通过 `viewStore.bindSession(spacePath, panel.id, sessionId)` 将绑定写入持久化布局。
 5. 槽位状态切为 `bound`，渲染对应的 `PanelChat` 并开始交互。PTY 运行时管理器按需创建资源。
 
-### 6.2 拖拽会话恢复
+### 拖拽会话恢复
 
 1. 左侧树的 idle 状态会话节点支持 Drag。
 2. 拖入任意 `empty` 状态的 Panel 释放。
 3. 通过 `viewStore.bindSession(spacePath, panel.id, sessionId)` 修改持久化槽位状态，恢复会话。目标 Panel 若已有 PTY 则先释放旧资源。
 
-### 6.3 切换视图模式
+### 切换视图模式
 
 1. 在 `bound` 槽位的面板中，点击头部 `TUI | Chat | Context` 主视图按钮，或点击 `TUI` 左侧的终端图标展开/收起下方 Split Terminal。
 2. 主视图按钮仅切换 `panel.view`。终端图标仅切换 `panel.splitTerminal`，不会抢占当前主视图。
@@ -794,14 +794,14 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
    - 切回 TUI：恢复同一 Terminal 的可见性，终端上下文保持不变。
    - Split Terminal 收起时只隐藏渲染区域并保留 WebSocket subscriber；再次展开时复用同一连接。
 
-### 6.4 切换 Space Tab
+### 切换 Space Tab
 
 1. 用户点击顶部 Space Tab 切换激活 Space。
 2. 当前 Space 变为 `visibility: hidden; inert`，新激活 Space 变为可见。
 3. **不销毁任何 Panel、PTY、Chat 状态**。切回原 Tab 即恢复全部上下文。
 4. 若当前 Space 有正在运行的会话，切换不会中断它们。
 
-### 6.5 关闭面板与会话解绑
+### 关闭面板与会话解绑
 
 1. 面板头部右侧提供直观的 "关闭" 按钮，取代复杂的菜单。
 2. 当槽位处于 `bound`（绑定会话）时，展示关闭按钮。
@@ -809,13 +809,13 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
    - 若为 `bound`：弹出二次确认框。确认后解绑 Session（在左侧树中保留可重新恢复），调用 `ptyManager.disposePanel(spacePath, panelId, sdk)` 释放该面板全部 PTY 并清除持久化 PTY ID，从布局中移除该 Panel。
    - 若移除的是空间内最后一个 Panel：保留该 Panel 并将其重置为 `empty` 状态，确保工作区不为 0。
 
-### 6.6 关闭 Space Tab
+### 关闭 Space Tab
 
 1. 用户点击 Tab 上的关闭按钮。
 2. 弹出确认框，列出资源释放清单：面板数量、绑定会话数量、终端实例。
 3. 确认后：`ptyManager.disposeSpace(spacePath)` 释放该 Space 全部 PTY，解绑所有 Session，销毁 `SpaceWorkspace` DOM 及子组件，从持久化状态中移除该 Space 布局，关闭 Tab。
 
-### 6.7 跨空间智能 Tab/Panel 分发与定位
+### 跨空间智能 Tab/Panel 分发与定位
 
 - **重复绑定拦截**：在双击或单击会话的第一时间，优先检索该会话是否已在工作台的任何面板（包括当前或其它空间）中打开。若已打开，工作台拒绝发起重复绑定，而是自动执行跨空间 Tab 切换聚焦，并精准闪烁高亮对应的面板。
 - **自适应 Tab 开辟**：双击 A 空间下的会话时，工作台自动寻找 A 空间的 Tab。若 A 空间 Tab 尚未在顶部打开，工作台自动在顶栏"开辟"（创建并激活）该 Tab 页，保证会话与空间的强隔离。
@@ -828,11 +828,11 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 ---
 
-## 7. 异常处理与健壮自愈机制
+## 异常处理与健壮自愈机制
 
 为了保证 Workbench 在各种运行状况（网络抖动、CLI 版本变化、环境配置损坏）下均能稳定可靠运行，系统遵循本章的异常防御与诊断设计。
 
-### 7.1 异常分类与应对原则
+### 异常分类与应对原则
 
 | 严重性等级 | 典型场景 | 前端渲染表现 | 自愈/应对机制 |
 | :--- | :--- | :--- | :--- |
@@ -841,7 +841,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 | **瞬态连接丢失 (Connection)** | WebSocket 断连 / 服务端 API 失去响应（抖动） | 模态遮罩层 (Modal Overlay) | 在视口覆盖半透明遮罩，阻断全部用户输入保护状态；启动指数退避自动重连，连接恢复后自动闭合。 |
 | **局部非阻塞错误 (Warning)** | 空面板选择受控目录时 `locations` 接口拉取失败 | 状态栏局部错误区 + 局部重试 | **严禁抛出至面板 ErrorBoundary**！保持面板可操作，在底部状态栏指示错误并提供"重试/清除"入口。 |
 
-### 7.2 网络断连与模态保护
+### 网络断连与模态保护
 
 为防止用户在离线状态下发生错误输入导致本地状态与数据不一致：
 
@@ -849,7 +849,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 2. **输入隔离**：遮罩层拦截所有的鼠标、键盘和拖放操作，并将工作台表面设为 `inert`。
 3. **静默水合**：后台自动重连。连接成功后，自动关闭遮罩并恢复之前的操作现场，无需用户刷新页面。
 
-### 7.3 CLI 健康握手与可恢复修复
+### CLI 健康握手与可恢复修复
 
 系统确立 CLI 的健康与版本握手机制：
 
@@ -858,7 +858,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 3. **受控降级**：Space 列表刷新、受控 Space location 和其他 CLI 控制能力在 CLI 不可用期间暂停。状态栏诊断中心保留修复入口，并说明最低兼容版本。
 4. **用户确认的修复**：用户点击修复后，`POST /global/cli/repair` 对不兼容 CLI 执行 `wopal update`，并在需要时调用第一方 installer。服务端重新探测 CLI；Workbench 在探测成功后自动恢复 Space Control，不重启 sidecar 或当前 Workbench。
 
-### 7.4 状态栏居中诊断与信息中心
+### 状态栏居中诊断与信息中心
 
 为了简化 UI 结构并提供随时可见的系统诊断与信息，我们将侧边栏底部的提示信息区移除，并在常驻状态栏的**正居中位置**建立统一的"信息与异常诊断中心"：
 

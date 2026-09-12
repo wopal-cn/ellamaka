@@ -14,5 +14,5 @@
 
 ## 参考
 
-- Workbench 产品文档：`docs/WORKBENCH.md`
+- Workbench 产品文档：`docs/DESIGN-workbench.md`
 - Workbench 前端实现：`packages/ellamaka-app/src/pages/workbench/`

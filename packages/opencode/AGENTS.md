@@ -5,7 +5,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 
 # Agent Development Rules
 
-## 1. Canonical References
+## Canonical References
 
 - Project DESIGN: `../../docs/DESIGN.md`
 - Parent Rules: `../../AGENTS.md`
@@ -15,7 +15,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - HttpApi Route Rules: `src/server/routes/instance/httpapi/AGENTS.md`
 - Effect Migration Reference: `specs/effect/migration.md`
 
-## 2. Architecture and Directories
+## Architecture and Directories
 
 Execution chain: CLI entry → config/runtime services → server/session/tool/storage/TUI → WopalSpace hooks.
 
@@ -35,7 +35,7 @@ This is ellamaka's main engine package. It carries the OpenCode inherited runtim
 | `test/` | Package-local tests and fixtures; detailed rules in `test/AGENTS.md` |
 | `migration/` | Drizzle migration output |
 
-## 3. Development Commands (build format test)
+## Development Commands (build format test)
 
 | Scenario | Command | When |
 |---|---|---|
@@ -50,7 +50,7 @@ This is ellamaka's main engine package. It carries the OpenCode inherited runtim
 
 All commands run from `packages/opencode`.
 
-## 4. Implementation Rules
+## Implementation Rules
 
 - Follow parent `../../AGENTS.md` for Bun, TypeScript, WopalSpace mode, upstream customization boundaries, and verification rules.
 - Do not use `export namespace Foo { ... }`; use flat top-level exports with a self-reexport at the bottom: `export * as Foo from "./foo"`.
@@ -86,7 +86,7 @@ All commands run from `packages/opencode`.
 - When modifying `src/server/routes/instance/`, keep legacy Hono routes aligned with Effect HttpApi behavior; see subdirectory `AGENTS.md`.
 - When modifying `src/server/routes/instance/httpapi/`, follow HttpApi route patterns; do not rebuild stable layers in request handlers.
 
-## 5. Testing
+## Testing
 
 - Test subsets are expanded by `script/run-tests.ts` on a layer basis. `package.json` exposes four entries: `test:unit` (default dev subset — scans all `test/` subdirectories plus top-level `*.test.ts`, excluding the integration dirs and any `*-e2e.test.ts`), `test:integration` (only the integration directories: server/session/cli/snapshot/project/tool/control-plane/plugin/file/pty/skill/reference/share/mcp/lsp), `test:e2e` (only `*-e2e.test.ts` files, recursively), and `test:all` (full regression). Use `test:unit` for daily development; when touching integration-dir code, run at least `test:integration`; run `test:all` before commit/merge.
 - e2e files follow the `*-e2e.test.ts` naming convention and are isolated from `test:unit`/`test:integration` via `pathIgnorePatterns` (CLI value overrides bunfig, not merged). They run only under `test:e2e`. Do not move e2e files out of their domain directories.
@@ -106,7 +106,7 @@ All commands run from `packages/opencode`.
 - When modifying database schema, generate a migration and add or update migration tests.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.
 
-## 6. User-Supplied Rules
+## User-Supplied Rules
 
 ### Module Shape
 

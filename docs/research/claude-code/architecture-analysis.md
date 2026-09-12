@@ -8,25 +8,25 @@
 
 ## 目录
 
-1. [项目概览](#1-项目概览)
-2. [启动链路](#2-启动链路)
-3. [分层架构](#3-分层架构)
-4. [核心子系统](#4-核心子系统)
-5. [UI 架构](#5-ui-架构)
-6. [扩展体系](#6-扩展体系)
-7. [Feature Flags](#7-feature-flags)
-8. [设计模式总结](#8-设计模式总结)
-9. [附录：完整文件清单](#9-附录完整文件清单)
+1. [项目概览]#项目概览
+2. [启动链路]#启动链路
+3. [分层架构]#分层架构
+4. [核心子系统]#核心子系统
+5. [UI 架构]#ui-架构
+6. [扩展体系]#扩展体系
+7. [Feature Flags]#feature-flags
+8. [设计模式总结]#设计模式总结
+9. [附录：完整文件清单]#附录完整文件清单
 
 ---
 
-## 1. 项目概览
+## 项目概览
 
-### 1.1 项目定位
+### 项目定位
 
 Claude Code 是 Anthropic 官方的 CLI 工具，允许用户在终端中与 Claude 交互，完成代码编辑、命令执行、代码搜索和复杂工作流编排。它是目前最成熟的 Agentic CLI 系统之一。
 
-### 1.2 技术栈
+### 技术栈
 
 | 分类 | 技术 |
 |------|------|
@@ -42,7 +42,7 @@ Claude Code 是 Anthropic 官方的 CLI 工具，允许用户在终端中与 Cla
 | 认证 | OAuth 2.0 + PKCE + JWT + macOS Keychain |
 | 布局引擎 | 纯 TypeScript Yoga Layout 实现 |
 
-### 1.3 目录结构
+### 目录结构
 
 ```
 src/
@@ -87,9 +87,9 @@ src/
 
 ---
 
-## 2. 启动链路
+## 启动链路
 
-### 2.1 完整启动流程
+### 完整启动流程
 
 ```
 Process Start
@@ -197,7 +197,7 @@ Process Start
       └─ Agentic Loop：API 调用 → 工具执行 → API 调用 ...
 ```
 
-### 2.2 启动性能优化
+### 启动性能优化
 
 | 优化策略 | 实现细节 |
 |----------|----------|
@@ -210,7 +210,7 @@ Process Start
 
 ---
 
-## 3. 分层架构
+## 分层架构
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -251,9 +251,9 @@ Process Start
 
 ---
 
-## 4. 核心子系统
+## 核心子系统
 
-### 4.1 Query Engine — Agentic 循环
+### Query Engine — Agentic 循环
 
 **核心文件**: `QueryEngine.ts`（1295 行）+ `query.ts`
 
@@ -322,11 +322,11 @@ submitMessage(prompt, options)
 - 401/403：自动刷新 Auth Token
 - 持久（无人值守）模式：心跳 keep-alive yields
 
-### 4.2 Tool System — 工具系统
+### Tool System — 工具系统
 
 **核心文件**: `Tool.ts`（792 行）+ `tools.ts`（389 行）+ `src/tools/`（43 子目录）
 
-#### 4.2.1 接口设计
+#### 接口设计
 
 工具采用**纯结构化接口**，无类继承：
 
@@ -382,7 +382,7 @@ type Tool<Input, Output, Progress> = {
 | `toAutoClassifierInput()` | `''`（跳过分类器） |
 | `userFacingName()` | `name` |
 
-#### 4.2.2 完整工具清单
+#### 完整工具清单
 
 | # | 工具名 | 分类 | 描述 |
 |---|--------|------|------|
@@ -433,7 +433,7 @@ type Tool<Input, Output, Progress> = {
 
 Monitor, WebBrowser, Workflow, SendUserFile, PushNotification, SubscribePR, Tungsten, SuggestBackgroundPR, OverflowTest, CtxInspect, TerminalCapture, Snip, ListPeers, VerifyPlanExecution, TestingPermission 等 15+ 个。
 
-#### 4.2.3 工具注册与发现
+#### 工具注册与发现
 
 **无自动发现**，工具通过静态导入手动组装：
 
@@ -469,7 +469,7 @@ assembleToolPool(permissionContext, mcpTools)  ← 唯一真相源
 
 **延迟加载机制**：工具标记 `shouldDefer: true` 后，API payload 中发送 `defer_loading: true`。模型必须先调用 `ToolSearchTool` 查询并加载延迟工具才能使用。
 
-#### 4.2.4 权限系统
+#### 权限系统
 
 ```
 hasPermissionsToUseTool()
@@ -498,11 +498,11 @@ hasPermissionsToUseTool()
 
 **权限决策日志**：所有决策记录到 Statsig 分析事件 + OTel 遥测 + 代码编辑 OTel 计数器。
 
-### 4.3 Command System — 命令系统
+### Command System — 命令系统
 
 **核心文件**: `commands.ts`（754 行）+ `src/commands/`（100+ 命令）
 
-#### 4.3.1 命令类型
+#### 命令类型
 
 ```typescript
 type Command =
@@ -510,7 +510,7 @@ type Command =
   | LocalCommand     // 在 CLI 进程中本地执行（懒加载模块）
 ```
 
-#### 4.3.2 命令来源（7 层，按优先级合并）
+#### 命令来源（7 层，按优先级合并）
 
 1. **Bundled Skills** — 编译内联的技能命令
 2. **Built-in Plugin Skills** — 内建插件提供的技能
@@ -520,7 +520,7 @@ type Command =
 6. **Plugin Skills** — 插件技能
 7. **Built-in 命令** — `COMMANDS()` 数组（~80 个）
 
-#### 4.3.3 完整命令清单
+#### 完整命令清单
 
 | 分类 | 命令 |
 |------|------|
@@ -539,11 +539,11 @@ type Command =
 | **语音** | `voice`（feature-gated: `VOICE_MODE`） |
 | **Feature-gated** | `proactive`, `brief`, `assistant`, `torch`, `subscribe-pr`, `force-snip`, `workflows`, `onboarding`, `sandbox-toggle` |
 
-### 4.4 Services 层
+### Services 层
 
 **36 个子服务**，按职责分类：
 
-#### 4.4.1 API 客户端 (`services/api/`)
+#### API 客户端 (`services/api/`)
 
 | 文件 | 职责 |
 |------|------|
@@ -557,7 +557,7 @@ type Command =
 | `grove.ts` | 后端分析 API 客户端 |
 | `promptCacheBreakDetection.ts` | Prompt cache 断裂检测 |
 
-#### 4.4.2 MCP 集成 (`services/mcp/`)
+#### MCP 集成 (`services/mcp/`)
 
 | 文件 | 职责 |
 |------|------|
@@ -580,21 +580,21 @@ type Command =
 | `claudeai-proxy` | HTTPS + OAuth | Claude.ai 代理 |
 | `sdk` / `in-process` | 内存 | SDK 托管 / 进程内 |
 
-#### 4.4.3 OAuth 认证 (`services/oauth/`)
+#### OAuth 认证 (`services/oauth/`)
 
 完整 OAuth 2.0 + PKCE 流程：
 - `OAuthService` 编排：本地 HTTP 回调服务器 → PKCE → 浏览器/手动 → Token 交换 → Profile 获取
 - Token 刷新支持 scope 扩展
 - Profile 缓存（~700 万请求/天节省）
 
-#### 4.4.4 LSP 集成 (`services/lsp/`)
+#### LSP 集成 (`services/lsp/`)
 
 - `LSPClient` — 基于 `vscode-jsonrpc` 的客户端，支持延迟初始化
 - `LSPServerManager` — 多服务器管理，按文件扩展名路由
 - `LSPDiagnosticRegistry` — 多服务器诊断收集
 - `--bare` 模式下跳过 LSP
 
-#### 4.4.5 Context 压缩 (`services/compact/`)
+#### Context 压缩 (`services/compact/`)
 
 **四级压缩策略**：
 
@@ -609,7 +609,7 @@ type Command =
 - **熔断器**: 连续 3 次失败后停止
 - **附件**: compact 后生成 file state、plan state、skill state、deferred tools delta、MCP instructions delta
 
-#### 4.4.6 其他服务
+#### 其他服务
 
 | 服务 | 职责 |
 |------|------|
@@ -632,9 +632,9 @@ type Command =
 
 ---
 
-## 5. UI 架构
+## UI 架构
 
-### 5.1 渲染管线
+### 渲染管线
 
 ```
 src/ink.ts → ThemeProvider → src/ink/root.ts → Ink Root
@@ -653,7 +653,7 @@ src/ink.ts → ThemeProvider → src/ink/root.ts → Ink Root
 - 事件分发（键盘/点击/焦点）
 - BiDi 双向文本支持
 
-### 5.2 组件树
+### 组件树
 
 ```
 <App>
@@ -665,7 +665,7 @@ src/ink.ts → ThemeProvider → src/ink/root.ts → Ink Root
             → <REPL>              ← 5006 行单体组件
 ```
 
-### 5.3 组件分类（~146 文件）
+### 组件分类（~146 文件）
 
 | 分类 | 核心文件 | 规模 |
 |------|----------|------|
@@ -680,7 +680,7 @@ src/ink.ts → ThemeProvider → src/ink/root.ts → Ink Root
 | **任务/代理** | TaskListV2, tasks/ (12 文件), teams/, agents/ (14 文件) | ~30 文件 |
 | **设计系统** | ThemeProvider, ThemedBox/Text, Dialog, FuzzyPicker, ListItem, Tabs, ProgressBar | ~16 文件 |
 
-### 5.4 Screen 层
+### Screen 层
 
 | Screen | 规模 | 职责 |
 |--------|------|------|
@@ -688,7 +688,7 @@ src/ink.ts → ThemeProvider → src/ink/root.ts → Ink Root
 | `Doctor.tsx` | ~73KB | 诊断/排错屏幕 |
 | `ResumeConversation.tsx` | ~59KB | 会话恢复选择器 |
 
-### 5.5 State 管理
+### State 管理
 
 **自定义轻量 Store**，非 Redux/Zustand：
 
@@ -714,14 +714,14 @@ type Store<T> = {
 
 React 集成：`useSyncExternalStore`（React 18 外部 Store 模式），`onChangeAppState` 回调处理副作用。
 
-### 5.6 Keybindings 系统
+### Keybindings 系统
 
 `src/keybindings/`（14 文件）：
 - Zod schema 校验 `keybindings.json`
 - 18 个上下文：Global, Chat, Autocomplete, Confirmation, Vim Normal, Vim Insert ...
 - 用户自定义 + 保留快捷键 + 冲突验证
 
-### 5.7 Vim 模式
+### Vim 模式
 
 `src/vim/`（5 文件）：
 - 完整 Vim 状态机：INSERT / NORMAL 模式
@@ -730,9 +730,9 @@ React 集成：`useSyncExternalStore`（React 18 外部 Store 模式），`onCha
 
 ---
 
-## 6. 扩展体系
+## 扩展体系
 
-### 6.1 Plugin 系统
+### Plugin 系统
 
 ```
 builtinPlugins.ts → 内建插件注册（ID: {name}@builtin）
@@ -745,7 +745,7 @@ Plugin 提供：
   └─ MCP Servers ← 额外工具/资源
 ```
 
-### 6.2 Skill 系统
+### Skill 系统
 
 ```
 bundledSkills.ts → 17 个内建技能
@@ -764,7 +764,7 @@ SkillTool 执行：
   └─ fork   → 子代理独立上下文执行
 ```
 
-### 6.3 Hook 系统
+### Hook 系统
 
 **28 个生命周期事件**，Zod 校验：
 
@@ -791,7 +791,7 @@ SkillTool 执行：
 
 ---
 
-## 7. Feature Flags
+## Feature Flags
 
 通过 Bun 的 `bun:bundle` feature flags 在构建时进行死代码消除：
 
@@ -825,7 +825,7 @@ const voiceCommand = feature('VOICE_MODE')
 
 ---
 
-## 8. 设计模式总结
+## 设计模式总结
 
 | 模式 | 实现方式 | 目的 |
 |------|----------|------|
@@ -846,9 +846,9 @@ const voiceCommand = feature('VOICE_MODE')
 
 ---
 
-## 9. 附录：完整文件清单
+## 附录：完整文件清单
 
-### 9.1 src/ 顶层文件
+### src/ 顶层文件
 
 ```
 main.tsx              # 主 CLI 入口（Commander.js 参数解析，4684 行）
@@ -873,7 +873,7 @@ tsconfig.json         # TypeScript 配置
 globals.d.ts          # 全局类型声明
 ```
 
-### 9.2 关键子系统文件统计
+### 关键子系统文件统计
 
 | 子系统 | 文件数 | 核心文件 |
 |--------|--------|----------|
@@ -898,7 +898,7 @@ globals.d.ts          # 全局类型声明
 | `src/types/` | ~15 | messages, commands, plugins, IDs |
 | `src/bootstrap/` | ~3 | state.ts (1577行) |
 
-### 9.3 代码规模分布（估算）
+### 代码规模分布（估算）
 
 | 模块 | 估算行数 | 占比 |
 |------|----------|------|

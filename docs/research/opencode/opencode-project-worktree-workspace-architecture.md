@@ -7,7 +7,7 @@
 
 ## 一、核心概念定义
 
-### 1.1 Project
+### Project
 
 **定义**: Git 仓库的逻辑抽象，代表一个独立的项目。
 
@@ -59,7 +59,7 @@ const ProjectTable = sqliteTable("project", {
 })
 ```
 
-### 1.2 Worktree
+### Worktree
 
 **定义**: Git worktree 的物理实现，提供目录隔离机制。
 
@@ -84,7 +84,7 @@ const Info = z.object({
 - 名词池: cabin, cactus, canyon, circuit, comet, eagle, engine, falcon, forest, garden, harbor, island, knight, lagoon, meadow, moon, mountain, nebula, orchid, otter, panda, pixel, planet, river, rocket, sailor, squid, star, tiger, wizard, wolf
 - 生成格式: `<adjective>-<noun>` 或 `<base>-<adjective>-<noun>`
 
-### 1.3 Sandbox（深度分析）
+### Sandbox（深度分析）
 
 **定义**: Project 的 `sandboxes` 字段中存储的 Worktree 目录路径。
 
@@ -121,7 +121,7 @@ result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 
 > **结论**: Sandbox = Worktree 的同义词，只是在不同语境下的称呼。主 worktree 存储在 `Project.worktree`，派生的存储在 `Project.sandboxes[]`。
 
-### 1.4 Workspace
+### Workspace
 
 **定义**: Worktree 的业务抽象层，提供 API 级别的隔离。
 
@@ -190,7 +190,7 @@ Project (Git 仓库)
 
 > **结论**: Workspace 是半成品架构，API 能用但只有 worktree 一种实现，本质上是对 Worktree 的薄封装。除非未来扩展其他类型（如远程/容器），否则直接用 Worktree API 更简洁。
 
-### 1.5 Session
+### Session
 
 **定义**: 对话工作单元，可属于 Project 或 Workspace。
 
@@ -233,7 +233,7 @@ const Info = z.object({
 })
 ```
 
-### 1.6 Directory（物理工作目录）
+### Directory（物理工作目录）
 
 **定义**: 用户通过 API 请求传入的**物理工作目录**，是 OpenCode 运行时上下文的入口参数。
 
@@ -273,7 +273,7 @@ Instance 创建完成
     └── Instance.project = { id: "abc123", ... }
 ```
 
-### 1.7 Directory vs Workspace vs Instance 对照
+### Directory vs Workspace vs Instance 对照
 
 | 特性 | Directory | Instance | Workspace |
 |------|-----------|----------|-----------|
@@ -304,7 +304,7 @@ Instance 创建完成
 
 ## 二、架构层次关系
 
-### 2.1 层次图
+### 层次图
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -332,7 +332,7 @@ Instance 创建完成
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 术语关系对照表
+### 术语关系对照表
 
 | 术语 | 本质 | 层级 | 持久化 | 生命周期 | 示例 |
 |------|------|------|--------|----------|------|
@@ -348,7 +348,7 @@ Instance 创建完成
 
 ## 三、核心算法与流程
 
-### 3.1 Project ID 生成算法
+### Project ID 生成算法
 
 **源码位置**: `project/project.ts:90-204`
 
@@ -393,7 +393,7 @@ if (!id) {
 - 无 Git 的目录使用 `"global"` 作为 ID
 - 缓存机制避免重复计算
 
-### 3.2 Worktree 创建流程
+### Worktree 创建流程
 
 **源码位置**: `worktree/index.ts:334-429`
 
@@ -446,7 +446,7 @@ export async function createFromInfo(info: Info, startCommand?: string) {
 - 使用 `--no-checkout` 避免立即填充文件
 - 启动脚本支持项目级和 worktree 级两级
 
-### 3.3 Sandbox 自动注册机制
+### Sandbox 自动注册机制
 
 **源码位置**: `project/project.ts:236-238`
 
@@ -466,7 +466,7 @@ result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 - 每次调用 `fromDirectory()` 都会更新 sandboxes 列表
 - 主 worktree 不会被添加到 sandboxes（因为条件是 `!==`）
 
-### 3.4 Workspace 创建与 Adaptor 模式
+### Workspace 创建与 Adaptor 模式
 
 **源码位置**: `control-plane/workspace.ts:55-87`, `control-plane/adaptors/worktree.ts`
 
@@ -529,7 +529,7 @@ export const WorktreeAdaptor: Adaptor = {
 
 ## 四、实际测试验证
 
-### 4.1 本地测试（macOS）
+### 本地测试（macOS）
 
 **测试环境**:
 - 平台: macOS
@@ -559,7 +559,7 @@ $ git worktree list
 /Users/sam/.local/share/opencode/worktree/5abd9d34c6299911967441461a52109583124aef/test-worktree-123  73672df [opencode/test-worktree-123]
 ```
 
-### 4.2 Docker 容器内测试
+### Docker 容器内测试
 
 **测试环境**:
 - 容器 ID: `f89d845504d4`
@@ -597,7 +597,7 @@ $ docker exec f89d845504d4 git worktree list
 /home/coder/.local/share/opencode/worktree/543f6025230cefff449109df38f3febc2899b691/curious-meadow  bade9dc [opencode/curious-meadow]
 ```
 
-### 4.3 测试结论
+### 测试结论
 
 | 项目 | 本地测试 | Docker 测试 |
 |------|---------|------------|
@@ -612,7 +612,7 @@ $ docker exec f89d845504d4 git worktree list
 
 ## 五、API 端点汇总
 
-### 5.1 Project API
+### Project API
 
 **源码位置**: `server/routes/project.ts`
 
@@ -622,7 +622,7 @@ $ docker exec f89d845504d4 git worktree list
 | `/project/current` | GET | 获取当前 Project | `Project.Info` |
 | `/project/:projectID` | PATCH | 更新 Project | `Project.Info` |
 
-### 5.2 Worktree API (Experimental)
+### Worktree API (Experimental)
 
 **源码位置**: `server/routes/experimental.ts:92-189`
 
@@ -633,7 +633,7 @@ $ docker exec f89d845504d4 git worktree list
 | `/experimental/worktree` | DELETE | 删除 Worktree | `boolean` |
 | `/experimental/worktree/reset` | POST | 重置 Worktree 到默认分支 | `boolean` |
 
-### 5.3 Workspace API (Experimental)
+### Workspace API (Experimental)
 
 **源码位置**: `server/routes/workspace.ts`
 
@@ -643,7 +643,7 @@ $ docker exec f89d845504d4 git worktree list
 | `/experimental/workspace` | GET | 列出 Workspaces | `Workspace.Info[]` |
 | `/experimental/workspace/:id` | DELETE | 删除 Workspace | `Workspace.Info?` |
 
-### 5.4 Session API (Experimental - Global)
+### Session API (Experimental - Global)
 
 **源码位置**: `server/routes/experimental.ts:190-248`
 
@@ -664,7 +664,7 @@ $ docker exec f89d845504d4 git worktree list
 
 ## 六、使用示例
 
-### 6.1 创建 Worktree
+### 创建 Worktree
 
 ```typescript
 import { ExperimentalClient } from 'opencode-sdk';
@@ -685,7 +685,7 @@ console.log('Worktree 创建成功:', worktree);
 // }
 ```
 
-### 6.2 创建 Workspace
+### 创建 Workspace
 
 ```typescript
 // 创建 Workspace（内部是 Worktree）
@@ -706,7 +706,7 @@ console.log('Workspace 创建成功:', workspace);
 // }
 ```
 
-### 6.3 在 Worktree 中创建 Session
+### 在 Worktree 中创建 Session
 
 ```typescript
 // 1. 创建 worktree
@@ -726,7 +726,7 @@ await sessionClient.prompt(session.id, {
 });
 ```
 
-### 6.4 并行开发多个功能
+### 并行开发多个功能
 
 ```typescript
 async function developMultipleFeatures() {
@@ -760,7 +760,7 @@ async function developMultipleFeatures() {
 
 ## 七、约束与限制
 
-### 7.1 Git Only 限制
+### Git Only 限制
 
 **源码位置**: `worktree/index.ts:335-337`
 
@@ -772,7 +772,7 @@ if (Instance.project.vcs !== "git") {
 
 **约束**: Worktree/Sandbox/Workspace 仅支持 Git 项目（`vcs === "git"`）
 
-### 7.2 主 Worktree 保护
+### 主 Worktree 保护
 
 **源码位置**: `worktree/index.ts:527-529`
 
@@ -786,7 +786,7 @@ if (directory === primary) {
 
 **约束**: 主 worktree 不可被 reset
 
-### 7.3 分支命名规范
+### 分支命名规范
 
 **源码位置**: `worktree/index.ts:271`
 
@@ -796,7 +796,7 @@ const branch = `opencode/${name}`
 
 **约束**: Worktree 分支必须使用 `opencode/` 前缀
 
-### 7.4 路径存储规范
+### 路径存储规范
 
 **源码位置**: `worktree/index.ts:339`
 
@@ -820,7 +820,7 @@ const data = path.join(xdgData!, app)  // app = "opencode"
 
 ## 八、Instance 上下文机制
 
-### 8.1 Instance 定义与核心职责
+### Instance 定义与核心职责
 
 **源码位置**: `project/instance.ts`
 
@@ -845,7 +845,7 @@ const context = Context.create<Context>("instance")  // AsyncLocalStorage 封装
 const cache = new Map<string, Promise<Context>>()    // 实例缓存
 ```
 
-### 8.2 Instance 创建流程
+### Instance 创建流程
 
 **源码** (`instance.ts:22-44`):
 ```typescript
@@ -928,7 +928,7 @@ export const Instance = {
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 8.3 directory vs worktree 核心区别
+### directory vs worktree 核心区别
 
 | 字段 | 来源 | 含义 | 典型场景 |
 |------|------|------|----------|
@@ -978,7 +978,7 @@ Instance.worktree = "/workspace"                   ← Git 根目录
 - Git 操作 → 在 /workspace 执行
 ```
 
-### 8.4 State 机制
+### State 机制
 
 **源码位置**: `project/state.ts`
 
@@ -1037,7 +1037,7 @@ state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S
 }
 ```
 
-### 8.5 Instance 生命周期
+### Instance 生命周期
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -1072,7 +1072,7 @@ Instance.dispose()
 Instance.disposeAll()
 ```
 
-### 8.6 Instance 在 HTTP 请求中的注入
+### Instance 在 HTTP 请求中的注入
 
 **源码位置**: `server/server.ts:197-221`
 
@@ -1171,7 +1171,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 
 ## 十、源码索引
 
-### 10.1 核心模块
+### 核心模块
 
 | 模块 | 路径 | 主要功能 |
 |------|------|---------|
@@ -1189,7 +1189,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 | Session | `src/session/index.ts` | Session 生命周期管理 |
 | Global | `src/global/index.ts` | 全局路径配置 |
 
-### 10.2 API 路由
+### API 路由
 
 | 路由 | 路径 | 端点 |
 |------|------|------|
@@ -1201,7 +1201,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 
 ## 十一、结论
 
-### 11.1 核心关系总结
+### 核心关系总结
 
 1. **Directory = 请求入口参数**
    - 用户通过 HTTP 请求传入的物理路径
@@ -1237,7 +1237,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
    - workspaceID 字段可选
    - directory 记录创建时的物理路径
 
-### 11.2 请求处理流程
+### 请求处理流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1276,7 +1276,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 11.3 架构设计意图
+### 架构设计意图
 
 - **多 Workspace 并行开发**: 支持在同一 Project 下创建多个隔离环境
 - **Git 原生集成**: 充分利用 Git worktree 机制实现物理隔离

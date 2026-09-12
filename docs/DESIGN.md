@@ -4,45 +4,45 @@
 > **更新时间**: 2026-09-08
 > **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
 
-## 1. Role
+## Role
 
 ellamaka 是 OpenCode fork，WopalSpace 的执行引擎。它同时承载非 WopalSpace 与 WopalSpace 两种运行模式，负责配置加载、capability composition、ontology 运行时物化、plugin 执行与权限系统。
 
 不负责：空间初始化、ontology 内容设计、空间运行态维护——这些归属 wopal-cli、Space Ontology 和 `.wopal-space/`。
 
-### 1.1 设计文档关系
+### 设计文档关系
 
 | 文档                    | 职责                                                                  | 关系                                       |
 | ----------------------- | --------------------------------------------------------------------- | ------------------------------------------ |
 | **BRANDING.md**         | 品牌化定制真相源：逐文件、逐行、逐模式记录所有上游注入变更            | 定制实现细节的唯一权威；本文件不重复其内容 |
 | **DESIGN.md**（本文件） | 架构概览：适配点总表、配置契约、ontology 加载契约、状态归属           | 描述"是什么"和"有什么"，不描述"怎么改"     |
-| **DISTRIBUTION.md**     | 发布/分发设计：产品 SemVer、OpenCode upstream、build identity、兼容选择、workflow、artifact contract、安装路径、R2 CDN | 版本身份与分发唯一真相源               |
+| **DESIGN-distribution.md**     | 发布/分发设计：产品 SemVer、OpenCode upstream、build identity、兼容选择、workflow、artifact contract、安装路径、R2 CDN | 版本身份与分发唯一真相源               |
 
 定制实现细节（哪些文件改了、用什么模式注入、改动行数）一律见 **BRANDING.md**，本文件仅保留适配点索引和节号引用。
 
-## 2. WopalSpace Adaptations
+## WopalSpace Adaptations
 
 ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool、plugin 能力。WopalSpace 适配通过以下最小 fork delta 实现。详细注入模式、改动行数和具体代码见 **BRANDING.md**。
 
 | 适配点                    | 概要                                                                                              | BRANDING.md 节号  |
 | ------------------------- | ------------------------------------------------------------------------------------------------- | ----------------- |
-| WopalSpace 自动检测       | CLI 从 cwd 检测单一空间；sidecar 按 instance directory 解析独立空间根                             | §5                |
-| 全局路径分离              | `$WOPAL_HOME/config` + `$WOPAL_HOME/ellamaka/{data,cache,state}`                                  | §5                |
-| 非 WopalSpace 模式        | 配置入口迁移至 WOPAL_HOME；capability loading 保持 OpenCode-compatible 并叠加 WOPAL_HOME 全局能力 | §6.2              |
-| WopalSpace 模式           | 从 instance space root 加载 `.wopal/` 配置和能力；空间根与任意子目录共享同一 context              | §6.1              |
-| Instance 运行模式         | 按 directory 检测空间根；server 不使用进程 env 表达当前空间                                       | §8                |
-| Agent/Command/Plugin 加载 | 从 `.wopal/` 加载同名可覆盖内置                                                                   | §2, §5.1          |
-| 权限合并                  | defaults → global → space settings → agent frontmatter                                            | §3（本文件）      |
-| 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | §4.8              |
+| WopalSpace 自动检测       | CLI 从 cwd 检测单一空间；sidecar 按 instance directory 解析独立空间根                             | [Upstream Merge Boundary](./BRANDING.md#wopalspace-自动检测) |
+| 全局路径分离              | `$WOPAL_HOME/config` + `$WOPAL_HOME/ellamaka/{data,cache,state}`                                  | [WopalSpace Adaptations](./BRANDING.md#路径体系)             |
+| 非 WopalSpace 模式        | 配置入口迁移至 WOPAL_HOME；capability loading 保持 OpenCode-compatible 并叠加 WOPAL_HOME 全局能力 | [非 WopalSpace 模式配置加载](./BRANDING.md#非-wopalspace-模式配置加载) |
+| WopalSpace 模式           | 从 instance space root 加载 `.wopal/` 配置和能力；空间根与任意子目录共享同一 context              | [WopalSpace 模式配置加载](./BRANDING.md#wopalspace-模式配置加载) |
+| Instance 运行模式         | 按 directory 检测空间根；server 不使用进程 env 表达当前空间                                       | [Unified Reload & Lifecycle](./BRANDING.md#运行时模式集成)        |
+| Agent/Command/Plugin 加载 | 从 `.wopal/` 加载同名可覆盖内置                                                                   | [Ontology Loading Contract](#ontology-loading-contract) |
+| 权限合并                  | defaults → global → space settings → agent frontmatter                                            | [Configuration Contract](#configuration-contract)    |
+| 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Web UI 与 ellamaka-app](./BRANDING.md#安装与自动更新)         |
 | Skill 加载                | base/user 并发解析，space overlay 按序覆盖                                                        | —                 |
-| Branding & build          | BINARY_NAME、构建包装、CLI 品牌常量                                                               | §2–§4             |
-| TUI 空间配置              | `settings.jsonc` 的 `tui` 字段和主题目录                                                          | §4.7              |
-| Web UI 产品化             | Fork 上游 `packages/app` 为 `packages/ellamaka-app`，作为官方 Web 工作台形态                  | §9（本文件），§15 |
-| Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | §7.1（本文件）    |
+| Branding & build          | BINARY_NAME、构建包装、CLI 品牌常量                                                               | [WopalSpace Adaptations](./BRANDING.md#路径体系)–[Ontology Loading Contract](./BRANDING.md#cli-身份与-logo) |
+| TUI 空间配置              | `settings.jsonc` 的 `tui` 字段和主题目录                                                          | [State Ownership](./BRANDING.md#tui-配置与品牌)         |
+| Web UI 产品化             | Fork 上游 `packages/app` 为 `packages/ellamaka-app`，作为官方 Web 工作台形态                  | [Web UI 与 ellamaka-app](#web-ui-与-ellamaka-app)，[ellamaka-app Web UI](./BRANDING.md#ellamaka-app-web-ui) |
+| Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约) |
 
-上游文件改动遵循：新文件优先、提前返回 guard、回调注入、禁止格式化重排。完整策略和合并保护文件清单见 **BRANDING.md §12**。
+上游文件改动遵循：新文件优先、提前返回 guard、回调注入、禁止格式化重排。完整策略和合并保护文件清单见 **[上游合并策略](./BRANDING.md#上游合并策略)**。
 
-## 2.1 品牌与构建包结构
+## 品牌与构建包结构
 
 ellamaka 的品牌身份与构建发布分属两个包，沿运行时/构建期边界划分：
 
@@ -59,7 +59,7 @@ ellamaka 的品牌身份与构建发布分属两个包，沿运行时/构建期�
 
 历史上本结构由三个包承载（`packages/ellamaka`/`@wopal/ellamaka-build`、`@wopal/ellamaka-script`、`@wopal/ellamaka-release`），2026-09-01 收编定案：`ellamaka-build` 更名 `ellamaka-brand`，`ellamaka-script` 的 `Script` 收编为 `ellamaka-release` 的 `build-env` 模块。
 
-## 3. Configuration Contract
+## Configuration Contract
 
 Ellamaka 运行时包含两种模式：
 
@@ -78,7 +78,7 @@ WopalSpace 模式下配置加载优先级（低→高）：
 
 权限合并同此优先链，按最后匹配项生效。非 WopalSpace 模式的配置文件入口迁移至 `$WOPAL_HOME/config/settings.jsonc`，不加载 opencode XDG 全局配置；agents、commands、plugins、skills 与外部技能继续遵循 OpenCode-compatible capability loading，并由 `$WOPAL_HOME` 提供 Ellamaka 全局覆盖层。
 
-## 4. Ontology Loading Contract
+## Ontology Loading Contract
 
 | 加载面   | 来源                                             | 行为                                           |
 | -------- | ------------------------------------------------ | ---------------------------------------------- |
@@ -88,7 +88,7 @@ WopalSpace 模式下配置加载优先级（低→高）：
 | Settings | `.wopal/config/settings.jsonc`                   | `ellamaka` 字段配置 engine，`tui` 字段配置 TUI |
 | Skills   | `$WOPAL_HOME/skills/` → `<space>/.wopal/skills/` | 并发解析 + 按序合并，右侧优先                  |
 
-## 5. Upstream Merge Boundary
+## Upstream Merge Boundary
 
 > **状态**: 已放弃跟踪上游（2026-08-31 起）。ellamaka 不再从 `upstream/dev` 合并 OpenCode 变更，`dev` 分支不再作为上游跟踪线。以下历史机制仅作记录，不再执行。
 
@@ -98,9 +98,9 @@ WopalSpace 模式下配置加载优先级（低→高）：
 | 合并方向 | 无（已放弃上游合并）                                                                  |
 | 参考来源 | 后续如需参考 OpenCode 模块代码，从 `labs/ref-repos/opencode/` 读取对应模块            |
 
-详细合并流程、合并保护文件清单、定制代码最小侵入原则、冲突热点和验证清单见 **BRANDING.md §12**。
+详细合并流程、合并保护文件清单、定制代码最小侵入原则、冲突热点和验证清单见 **[上游合并策略](./BRANDING.md#上游合并策略)**。
 
-## 6. Distribution
+## Distribution
 
 Ellamaka CLI 构建为多平台 standalone binary，Desktop 构建为原生安装包。两者分别使用标准 SemVer、namespaced tag、workflow 和 latest feed。Desktop 与 CLI 是同一产品的两种形态，运行时版本保证为 wopal-cli `>= MIN_WOPAL_CLI_VERSION` 与 CLI 主版本 `vX.Y` 与 Desktop 一致。`wopal ellamaka install` 默认安装完整产品，`--cli` 只安装外部 CLI。
 
@@ -108,9 +108,9 @@ Ellamaka CLI 构建为多平台 standalone binary，Desktop 构建为原生安�
 
 onboarding 将 ontology base capabilities 物化到 `WOPAL_HOME` 后，ellamaka 按现有 user/base + space overlay 链路加载。外部 CLI 的安装收据位于 `$WOPAL_HOME/ellamaka/state/`，`bin/` 只保存 executable。
 
-详细 artifact contract 见 `docs/DISTRIBUTION.md`。
+详细 artifact contract 见 `docs/DESIGN-distribution.md`。
 
-## 7. State Ownership
+## State Ownership
 
 | 状态                             | 位置                                                  | Owner                                                                                 |
 | -------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -124,7 +124,7 @@ onboarding 将 ontology base capabilities 物化到 `WOPAL_HOME` 后，ellamaka 
 | 空间 ontology                    | `<space>/.wopal/`                                     | Space Ontology，ellamaka 加载                                                         |
 | 空间运行态                       | `<space>/.wopal-space/`                               | space runtime；wopal-plugin 按 instance root 写日志，Ellamaka engine 不拥有其目录结构 |
 
-### 7.1 Runtime API 与 SDK 契约
+### Runtime API 与 SDK 契约
 
 Ellamaka 的 HTTP API 是 Workbench 和外部集成使用运行时能力的唯一网络表面。领域 schema 同时驱动 Effect HttpApi 路由、运行时校验、OpenAPI 和生成 SDK。Root API 承载全局控制能力，Instance API 承载工作目录相关运行时能力。
 
@@ -138,7 +138,7 @@ Wopal CLI adapter 作为 Runtime 的领域服务使用 `wopal ... --api-version`
 
 完整的路径语义、schema、错误、版本、SDK 生成和端点门禁见 [API-CONTRACT.md](./API-CONTRACT.md)。
 
-### 7.2 Sidecar Instance Context
+### Sidecar Instance Context
 
 一个 sidecar 同时服务多个 directory instance。配置加载和插件创建从当前 directory 直接检测可选的 `wopalSpaceRoot`。空间根与空间内任意子目录得到同一个 root；非 WopalSpace instance 不继承其他空间状态。
 
@@ -146,7 +146,7 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 `WOPAL_HOME` 是 sidecar 的进程级安装根。它拥有全局配置、全局能力和运行时存储。`WOPAL_SPACE` 与 `WOPAL_SPACE_ROOT` 只服务单目录 CLI 兼容边界，不承担 server request routing 或 plugin context 所有权。
 
-## 8. Unified Reload & Lifecycle
+## Unified Reload & Lifecycle
 
 后端把运行时单元的可重载能力统一为一个模型：一个 `ReloadController` 管理若干 `ReloadUnit`，每个单元独立用同一套生命周期协议重载。单元是进程内的可重载边界：
 
@@ -172,35 +172,35 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 DSH 容器装配与融合细则见 [DESIGN-ellamaka-dsh.md](./DESIGN-ellamaka-dsh.md)。
 
-## 9. Web UI 与 ellamaka-app
+## Web UI 与 ellamaka-app
 
-### 9.1 定位
+### 定位
 
 WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。`ellamaka-app`（`packages/ellamaka-app/`）是该形态的官方实现，fork 自上游 `packages/app`，以正式技术栈承载三栏 IDE 工作台、多空间并行与 TUI+Chat 融合的产品形态。
 
-### 9.2 架构决策
+### 架构决策
 
 `ellamaka-app` 通过 fork 上游 `packages/app` 获得，而非在既有原型上迭代。这一选择让定制代码与上游解耦：它复用现有基础设施（core/sdk/ui/i18n/terminal/theme），Web UI 形态随 ellamaka 独立演进，不受上游 `packages/app` 更新节奏约束。
 
-### 9.3 详细规约
+### 详细规约
 
 关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
 
-- 中文版：[WORKBENCH.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/WORKBENCH.md)
+- 中文版：[DESIGN-workbench.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/DESIGN-workbench.md)
 
-> 上游 `packages/app` 已放弃跟踪（见 §5），`ellamaka-app` 独立演进。后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
+> 上游 `packages/app` 已放弃跟踪（见 [Upstream Merge Boundary](#upstream-merge-boundary)），`ellamaka-app` 独立演进。后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
 
 ---
 
-## 10. Related Documents
+## Related Documents
 
 | 文档                              | 引用目的                                                       |
 | --------------------------------- | -------------------------------------------------------------- |
 | `./BRANDING.md`                   | 品牌化定制唯一真相源—                                          |
 | `./API-CONTRACT.md`               | Runtime API、OpenAPI、生成 SDK 与 Wopal CLI adapter 契约       |
-| `./WORKBENCH.md`                  | ellamaka 自定义工作台 app 设计                                 |
+| `./DESIGN-workbench.md`                  | ellamaka 自定义工作台 app 设计                                 |
 | `./DESIGN-ellamaka-dsh.md`            | ellamaka 与 dsh 融合架构（DSH 容器装配、插件供应链、Bun 宿主 HMR） |
-| `./DISTRIBUTION.md`               | 产品 SemVer、OpenCode upstream、构建身份、兼容选择、release、artifact、安装契约 |
+| `./DESIGN-distribution.md`               | 产品 SemVer、OpenCode upstream、构建身份、兼容选择、release、artifact、安装契约 |
 | `../../wopal-cli/docs/DESIGN.md`  | wopal-cli 如何消费 ellamaka release                            |
 | `packages/opencode/AGENTS.md`     | engine package 内部规则                                        |
 | `packages/ellamaka-app/AGENTS.md` | ellamaka 官方 web UI 包级开发规则                              |

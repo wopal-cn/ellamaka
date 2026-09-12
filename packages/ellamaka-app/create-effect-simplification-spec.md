@@ -233,7 +233,7 @@ Acceptance criteria:
 
 ## Detailed Work Items By Area
 
-### 1. Normalize Tab State
+### Normalize Tab State
 
 Files:
 
@@ -256,7 +256,7 @@ Acceptance criteria:
 - Newly created and restored tabs are normalized before they enter local state
 - Tab rendering still matches current behavior for valid and edge-case inputs
 
-### 2. Key Session-Owned State
+### Key Session-Owned State
 
 Files:
 
@@ -284,7 +284,7 @@ Acceptance criteria:
 - Changing sessions resets only the intended session-local state
 - Scroll and editor state that should persist are not accidentally reset
 
-### 3. Derive Workspace Order
+### Derive Workspace Order
 
 Files:
 
@@ -307,7 +307,7 @@ Acceptance criteria:
 - Workspace order updates correctly when workspaces appear, disappear, or are reordered by the user
 - User overrides persist without requiring a sync-back effect
 
-### 4. Remove Child-Store Mirrors
+### Remove Child-Store Mirrors
 
 Files:
 
@@ -336,7 +336,7 @@ Acceptance criteria:
 - Reload work can be followed from the event source to the handler without a reactive relay
 - State remains correct on first load, child creation, and subsequent updates
 
-### 5. Key File-Scoped State
+### Key File-Scoped State
 
 Files:
 
@@ -358,7 +358,7 @@ Acceptance criteria:
 - Switching scopes resets only scope-local state
 - No previous-scope data appears after a scope change
 
-### 6. Split Layout Side Effects
+### Split Layout Side Effects
 
 Files:
 
@@ -382,7 +382,7 @@ Acceptance criteria:
 - Event-driven branches execute from direct handlers
 - Remaining effects in this area each have one clear external sync purpose
 
-### 7. Remove Duplicate Triggers
+### Remove Duplicate Triggers
 
 Files:
 
@@ -413,7 +413,7 @@ Acceptance criteria:
 - Scroll behavior still works, including hash-based navigation
 - No duplicate firing is introduced
 
-### 8. Make Prompt Filtering Reactive
+### Make Prompt Filtering Reactive
 
 Files:
 
@@ -436,7 +436,7 @@ Acceptance criteria:
 - Filtered slash-command results update correctly as the input changes
 - The editor sync effect at `:690` still behaves correctly
 
-### 9. Clean Up Smaller Derived-State Cases
+### Clean Up Smaller Derived-State Cases
 
 Files:
 

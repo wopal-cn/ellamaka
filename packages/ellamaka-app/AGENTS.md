@@ -5,22 +5,22 @@ description: Ellamaka Web UI built with SolidJS, Vite, and Tailwind CSS
 
 # Agent Development Rules
 
-## 1. Canonical References
+## Canonical References
 
 - Project design: `../../docs/DESIGN.md`
-- Workbench design: `../../docs/WORKBENCH.md`
-- Desktop design: `../../docs/DESKTOP.md` — authoritative for Electron hosting and the shared sidecar/PTY lifecycle.
+- Workbench design: `../../docs/DESIGN-workbench.md`
+- Desktop design: `../../docs/DESIGN-desktop.md` — authoritative for Electron hosting and the shared sidecar/PTY lifecycle.
 - Parent rules: `../../AGENTS.md`
 - Backend rules: `../opencode/AGENTS.md`
 - Desktop package rules: `../ellamaka-desktop/AGENTS.md` — required before a coordinated renderer/shell change.
 
-## 2. Architecture and Directories
+## Architecture and Directories
 
 Execution chain: Vite dev server → SolidJS SPA → `@opencode-ai/sdk` → backend (`packages/opencode`) HTTP/WS API.
 
 ### Desktop Integration Boundary
 
-`ellamaka-app` serves both browser Workbench and the `/workbench` renderer hosted by `ellamaka-desktop`. Electron owns the native window, preload API, and local sidecar lifetime; this package owns the shared Workbench layout, interaction, and PTY client lifecycle. Treat changes to platform integration, desktop startup/routing, macOS window chrome, sidecar readiness, or PTY create/probe/reconnect/release semantics as cross-package work: read `../../docs/DESKTOP.md` and `../ellamaka-desktop/AGENTS.md` before changing either side, and preserve the same PTY ownership contract in Web and Desktop.
+`ellamaka-app` serves both browser Workbench and the `/workbench` renderer hosted by `ellamaka-desktop`. Electron owns the native window, preload API, and local sidecar lifetime; this package owns the shared Workbench layout, interaction, and PTY client lifecycle. Treat changes to platform integration, desktop startup/routing, macOS window chrome, sidecar readiness, or PTY create/probe/reconnect/release semantics as cross-package work: read `../../docs/DESIGN-desktop.md` and `../ellamaka-desktop/AGENTS.md` before changing either side, and preserve the same PTY ownership contract in Web and Desktop.
 
 | Directory | Responsibility |
 |---|---|
@@ -34,7 +34,7 @@ Execution chain: Vite dev server → SolidJS SPA → `@opencode-ai/sdk` → back
 | `e2e/` | Playwright e2e tests |
 | `script/` | Build, validation, and development scripts; `check-workbench-boundaries.ts` is the Workbench boundary static gate |
 
-## 3. Development Commands
+## Development Commands
 
 | Scenario | Command | When |
 |---|---|---|
@@ -51,17 +51,17 @@ Unit tests must run through `bun run test:unit` (or `test:ci`), never raw `bun t
 
 Frontend-backend dev verification: `./scripts/dev.sh help`
 
-## 4. Implementation Rules
+## Implementation Rules
 
 - Backend communication goes through `@opencode-ai/sdk`; components must not call fetch against the backend directly.
 - Typecheck uses `tsgo -b`; never run `tsc` directly.
 - Extend upstream shared code through adapters, callbacks, or small injection points; never copy entire Session, command, Dialog, or navigation flows.
-- `packages/ui` is never modified for Workbench presentation. All adaptation happens inside `ellamaka-app` through component wrappers, extension points (`FileComponentProvider`, `ThemeProvider.registerTheme`), and scoped CSS overrides. Whether a chat block is self-built or reuses an official renderer is a pragmatic per-block decision recorded in `docs/WORKBENCH.md` §4.6.6.
+- `packages/ui` is never modified for Workbench presentation. All adaptation happens inside `ellamaka-app` through component wrappers, extension points (`FileComponentProvider`, `ThemeProvider.registerTheme`), and scoped CSS overrides. Whether a chat block is self-built or reuses an official renderer is a pragmatic per-block decision recorded in [Agent 内容块类型](../../docs/DESIGN-workbench.md#agent-内容块类型).
 - SSE event handling: `server.connected` only restores transport and **does not trigger global refresh**; only `global.disposed` triggers full reconciliation. When changing SSE event handling, verify: UI state is preserved after reconnect, and `global.disposed` still triggers full refresh.
 - SSE events are tiered by type: high-frequency property changes (title, message stream) are handled locally by the corresponding component; structural events (`session.created` / `session.deleted` / `session.updated` with `timeArchived`) trigger SessionTree refresh. SSE events must not trigger unrelated Panel or tree-level reloads.
 - Canvas rendering must use an integral `devicePixelRatio`. Any canvas renderer that computes `canvas.width = cssSize * dpr` + `ctx.scale(dpr)` suffers from subpixel resampling when dpr is non-integral: the browser truncates the backing store to an integer while the context scale stays fractional, causing the compositor to resample the canvas texture and produce grid stripes aligned to character cells. Electron window zoom (e.g. 110%) compounds this by making `window.devicePixelRatio = nativeDpr × zoomFactor` non-integral (e.g. 2.2). The `Terminal` component already rounds `renderer.devicePixelRatio` to an integer; that fix must not be removed. Any new canvas rendering path (direct `<canvas>` usage or a new terminal renderer library) must also round the dpr before passing it to the renderer.
 
-### 4.1 Workbench Chat Styling Discipline
+### Workbench Chat Styling Discipline
 
 These rules exist because chat transcript styling regressions (background disappearing, hover scrollbar jitter, theme-breaking code blocks) were caused by editing CSS against an imagined DOM instead of the rendered one. Follow them for every change under `src/index.css` that touches `src/pages/session/` chat blocks.
 
@@ -71,7 +71,7 @@ These rules exist because chat transcript styling regressions (background disapp
 - **Hover-reveal scrollbars must reserve gutter space.** A scrollbar that appears on hover without `scrollbar-gutter: stable` shifts the content box and makes the block jump. Any `overflow: auto` content region that hides its scrollbar until hover must also set `scrollbar-gutter: stable` (or an equivalent layout reservation) so hover never changes layout.
 - **Self-verify before handing off.** After editing chat CSS, run `bun run lint:css` (0 errors) and `bun run typecheck`, run the affected component tests, and confirm the visual result against the running Workbench (screenshot) before asking the user to review. Do not hand over an unverified styling change.
 
-## 5. Mandatory Workbench Boundaries
+## Mandatory Workbench Boundaries
 
 This section applies to all code under `src/pages/workbench/` and to Workbench adaptations made in `src/components/`, `src/context/`, or `src/pages/session/`.
 
@@ -82,7 +82,7 @@ The implementation priority is fixed:
 3. Preserve a single state owner and a single transaction entry point.
 4. Address presentation, interaction, and styling last.
 
-### 5.1 State Ownership
+### State Ownership
 
 Every state category has exactly one canonical owner. Caches, projections, and persisted copies must not override canonical data.
 
@@ -96,7 +96,7 @@ Every state category has exactly one canonical owner. Caches, projections, and p
 
 `sessionStore` is read-only to UI consumers. Only the Session Projection adapter and SSE reconciliation may write to it; components, Dialogs, command handlers, and Workbench Actions must not fabricate or directly edit server-owned fields.
 
-### 5.2 Identity and Directory Scope
+### Identity and Directory Scope
 
 General is not an alias for an empty path. Domain boundaries must use an explicit discriminated type:
 
@@ -114,7 +114,7 @@ type SpaceScope =
 - A Space loads the union of global capabilities and capabilities defined by that Space. Validation must compare complete source paths, not just counts.
 - Convert strings from routes, localStorage, or the server into `SpaceScope` at the boundary. Internal code must not propagate the implicit contract that an empty string means General.
 
-### 5.3 Dependency Direction and Shared Boundaries
+### Dependency Direction and Shared Boundaries
 
 The only allowed primary dependency direction is:
 
@@ -130,7 +130,7 @@ UI components -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / 
 - Shared components return generic results via callbacks such as `onCompleted` or `onForked`. A Workbench adapter then calls the Action.
 - Migration adapters must live under Workbench, state their owner, deletion condition, and corresponding Plan Task. New callers must not adopt the legacy entry point.
 
-### 5.4 Directory SDK and Context
+### Directory SDK and Context
 
 - Each Panel subtree consumes one canonical `SDKProvider` bound to that Panel's `directory`.
 - Workbench global surfaces such as StatusPopover and TopBar obtain directory context from the active `SpaceScope` and active Panel selector. They must not read the Context of the last mounted Panel.
@@ -139,7 +139,7 @@ UI components -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / 
 - When the directory changes, asynchronous results for the old directory must not update the new projection.
 - Plugin, MCP, and configuration state must be keyed by normalized directory. Mount order and visibility are not scope.
 
-### 5.5 Command Scope
+### Command Scope
 
 - Workbench global commands are registered exactly once in the Workbench Shell.
 - At execution time, read the active `SpaceScope`, Panel, and Session from the canonical selector. Do not capture a Panel's mount-time props in the command closure.
@@ -147,7 +147,7 @@ UI components -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / 
 - Unsupported commands are not registered. Do not use no-op handlers to make a command appear available.
 - Shared Session commands accept only generic action adapters. Do not add Workbench-specific parameters to shared interfaces.
 
-### 5.6 Transactions, Async Races, and PTY Lifecycle
+### Transactions, Async Races, and PTY Lifecycle
 
 Operations spanning Stores, SDK, and PTYs are not database transactions. `WorkbenchActions` must implement an explicit consistency boundary:
 
@@ -174,7 +174,7 @@ Operations spanning Stores, SDK, and PTYs are not database transactions. `Workbe
 - **TUI Background Keepalive & User Control Invariant**: When switching to background views (such as `viewMode === "chat"`), changing tabs, or backgrounding the browser, as long as `panel.tuiPtyId` exists, `view-registry` must maintain the `<Terminal>` component mounted in a hidden DOM node (`display: none`) with an active WebSocket connection to keep the PTY alive. Unmounting `<Terminal>` or clearing `tuiPtyId` on view mode switches is strictly forbidden. Disconnection and cleanup are allowed ONLY when the user explicitly closes TUI/panel/tab or the shell process exits.
 - Every PTY lifecycle action test must cover: success path + **effect does not rebuild PTY** + stale generation + idempotency when backend already cleaned up.
 
-### 5.7 Persistence Rules
+### Persistence Rules
 
 Allowed to persist:
 
@@ -193,9 +193,9 @@ The persistence schema must have a version and explicit migrations. Legacy reads
 
 Workbench Chat model selection is isolated by Session. An explicit user selection is the authoritative model for that Session and must not be overwritten by an Agent default, a hidden Panel mount, or a same-value callback from a controlled selector. Without an explicit selection, resolve the model in this fixed order: the last visible user message's model, the Agent default, then an available-model fallback. Same-value Agent updates must be idempotent and must not write model persistence.
 
-### 5.8 Core Design Constraints
+### Core Design Constraints
 
-The following constraints are derived from the Workbench design document (`../../docs/WORKBENCH.md`). They are cornerstones of architectural stability and must be observed during development. For full design intent and interaction flows, see the design document.
+The following constraints are derived from the Workbench design document (`../../docs/DESIGN-workbench.md`). They are cornerstones of architectural stability and must be observed during development. For full design intent and interaction flows, see the design document.
 
 - **Derived state has no duplicate copy**: TUI liveness marker, Split Terminal process highlight, Session binding state, and directory health indication are all derived from canonical fields (e.g. `panel.tuiPtyId`, `panel.splitPtyId`, `boundSessionId`). Do not store duplicate markers in the UI layer.
 - **View switching does not release PTY**: TUI ↔ Chat ↔ Context switching and Split Terminal collapse/expand only toggle visibility. PTY processes and WebSocket subscribers are not destroyed. PTY release only happens on Panel close, Space Tab close, or Session unbinding.
@@ -211,7 +211,7 @@ The following constraints are derived from the Workbench design document (`../..
 - **Single-tab mutual exclusion**: `WorkbenchSingletonGuard` acquires an exclusive lock via the Web Locks API. A second tab opening the workbench sees a notice page and does not initialize. The lock is released automatically by the browser when the tab closes.
 - **Chat focus ownership**: only the active Chat Panel in the current Space Tab may programmatically focus or restore the Prompt. Hidden, keep-alive, or inactive Panels must relinquish shared-input focus restoration through a generic callback. Panel activation must not clear a user's message-text selection, terminal focus, or an already placed editor caret.
 
-### 5.9 Tests and Acceptance Evidence
+### Tests and Acceptance Evidence
 
 Workbench behavior changes follow RED, GREEN, REFACTOR:
 
@@ -221,7 +221,7 @@ Workbench behavior changes follow RED, GREEN, REFACTOR:
 - Directory-state validation asserts normalized complete plugin and MCP paths and their sources, not only counts.
 - Tests must cover the `General -> Space A -> Space B -> General` round trip. General contains global capabilities only; each Space contains global plus its own capabilities.
 - Tests must cover multiple Panels, hidden Spaces, fork behavior, command targets, Session Projection reconnects, PTY close behavior, and late asynchronous results.
-- PTY lifecycle action tests: see §5.6.
+- PTY lifecycle action tests: see [Transactions, Async Races, and PTY Lifecycle](#transactions-async-races-and-pty-lifecycle).
 - Regression tests must confirm the real failure reason before the fix and rerun after the fix. Do not treat a harness error as a business RED.
 
 Minimum verification chain (mandatory for all Workbench changes):
@@ -232,7 +232,7 @@ bun run test:unit --force-exit
 bun run typecheck
 ```
 
-### 5.10 Change Discipline and Blocking Patterns
+### Change Discipline and Blocking Patterns
 
 - Before editing, state the behavior's owner, input scope, and single transaction entry point. Do not begin if these are unknown.
 - One patch solves one verifiable behavior. Router reconstruction, command registration, fork binding, and Store refactoring require separate verification.
@@ -253,6 +253,6 @@ The following patterns are blocking issues:
 - Persisting complete Sessions or directory capability lists.
 - Claiming correctness from static matching, typecheck, or equal counts alone.
 
-## 6. User-Supplied Rules
+## User-Supplied Rules
 
 - Always use parallel tools when applicable.

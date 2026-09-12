@@ -5,22 +5,22 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 
 # 代理开发规则
 
-## 1. 权威参考
+## 权威参考
 
 - 项目设计：`../../docs/DESIGN.md`
-- Workbench 设计：`../../docs/WORKBENCH.md`
-- Desktop 设计：`../../docs/DESKTOP.md` —— Electron 承载方式与共享 sidecar/PTY 生命周期的权威来源。
+- Workbench 设计：`../../docs/DESIGN-workbench.md`
+- Desktop 设计：`../../docs/DESIGN-desktop.md` —— Electron 承载方式与共享 sidecar/PTY 生命周期的权威来源。
 - 父级规则：`../../AGENTS.md`
 - 后端规则：`../opencode/AGENTS.md`
 - Desktop 包规则：`../ellamaka-desktop/AGENTS.md` —— 协同修改 renderer 与桌面壳层前必须阅读。
 
-## 2. 架构与目录
+## 架构与目录
 
 执行链：Vite dev server → SolidJS SPA → `@opencode-ai/sdk` → backend（`packages/opencode`）HTTP/WS API。
 
 ### Desktop 集成边界
 
-`ellamaka-app` 同时服务浏览器 Workbench 与由 `ellamaka-desktop` 承载的 `/workbench` renderer。Electron 负责原生窗口、preload API 和本地 sidecar 生命周期；本包负责共享的 Workbench 布局、交互与 PTY 客户端生命周期。平台集成、Desktop 启动/路由、macOS 窗口壳层、sidecar 就绪状态，或 PTY 创建/探测/重连/释放语义的变更都属于跨包工作：修改任一侧前必须阅读 `../../docs/DESKTOP.md` 和 `../ellamaka-desktop/AGENTS.md`，并保持 Web 与 Desktop 相同的 PTY 所有权契约。
+`ellamaka-app` 同时服务浏览器 Workbench 与由 `ellamaka-desktop` 承载的 `/workbench` renderer。Electron 负责原生窗口、preload API 和本地 sidecar 生命周期；本包负责共享的 Workbench 布局、交互与 PTY 客户端生命周期。平台集成、Desktop 启动/路由、macOS 窗口壳层、sidecar 就绪状态，或 PTY 创建/探测/重连/释放语义的变更都属于跨包工作：修改任一侧前必须阅读 `../../docs/DESIGN-desktop.md` 和 `../ellamaka-desktop/AGENTS.md`，并保持 Web 与 Desktop 相同的 PTY 所有权契约。
 
 | 目录 | 职责 |
 |---|---|
@@ -34,7 +34,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 | `e2e/` | Playwright e2e 测试 |
 | `script/` | 构建、检查与开发辅助脚本；`check-workbench-boundaries.ts` 是 Workbench 边界静态门禁 |
 
-## 3. 开发命令
+## 开发命令
 
 | 场景 | 命令 | 何时 |
 |---|---|---|
@@ -50,7 +50,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 
 前后端开发验证: `./scripts/dev.sh help`
 
-## 4. 实现规则
+## 实现规则
 
 - 后端通信通过 `@opencode-ai/sdk`；禁止组件裸调 fetch 到 backend。
 - 类型检查使用 `tsgo -b`，禁止直接运行 `tsc`。
@@ -59,7 +59,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 - SSE 事件按类型分级处理：高频属性变更（标题、消息流）由对应组件局部处理；结构性事件（`session.created`/`session.deleted`/带 `timeArchived` 的 `session.updated`）才触发 SessionTree 刷新。禁止用 SSE 事件触发无关 Panel 或树级重载。
 - Canvas 渲染必须使用整数 `devicePixelRatio`。ghostty-web（及任何 `canvas.width = cssSize * dpr` + `ctx.scale(dpr)` 模式的 canvas 渲染器）在非整数 dpr 下，浏览器会把 canvas 物理像素截断为整数，而 context scale 仍用原始小数，导致合成器对 canvas 纹理做亚像素重采样，产生按字符单元格周期排列的网格条纹。Electron 窗口缩放（如 110%）会使 `window.devicePixelRatio = nativeDpr × zoomFactor` 变成非整数（如 2.2），必然触发此问题。`Terminal` 组件已对 `renderer.devicePixelRatio` 做整数化处理，禁止移除该修复；新增任何 canvas 渲染路径（直接用 `<canvas>` 或引入新终端渲染库）同样必须将传给渲染器的 dpr 取整。
 
-## 5. 工作台强制边界
+## 工作台强制边界
 
 本节适用于 `src/pages/workbench/` 内全部代码，也适用于为了 Workbench 修改 `src/components/`、`src/context/` 和 `src/pages/session/` 时产生的适配代码。
 
@@ -70,7 +70,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 3. 保持单一状态所有者和单一事务入口。
 4. 最后处理展示、交互和样式。
 
-### 5.1 状态所有权
+### 状态所有权
 
 每类状态只能有一个权威所有者。缓存、投影和持久化副本不得反向覆盖权威数据。
 
@@ -84,7 +84,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 
 `sessionStore` 对 UI 只读。只有 Session Projection adapter 和 SSE reconciliation 可以写入；组件、Dialog、命令处理器和 Workbench Action 都不能伪造或直接修改服务端字段。
 
-### 5.2 身份与目录作用域
+### 身份与目录作用域
 
 General 不是空路径的别名。业务边界必须使用显式可辨识类型表达作用域：
 
@@ -102,7 +102,7 @@ type SpaceScope =
 - Space 加载全局能力与本 Space 定义能力的并集，验收时必须核对每个来源的完整路径。
 - 从路由、localStorage 或服务端读取字符串后，必须在边界处转换为 `SpaceScope`；内部代码不得继续传播"空字符串代表 General"的隐式契约。
 
-### 5.3 依赖方向与共享边界
+### 依赖方向与共享边界
 
 唯一允许的主依赖方向为：
 
@@ -118,7 +118,7 @@ UI 组件 -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / Proj
 - 共享组件通过 `onCompleted`、`onForked` 等通用回调返回结果；Workbench adapter 再调用 Action。
 - 迁移期兼容 adapter 必须位于 Workbench 目录，写明 owner、删除条件和对应 Plan Task，不得让新调用者继续依赖旧入口。
 
-### 5.4 目录 SDK 与上下文
+### 目录 SDK 与上下文
 
 - 每个 Panel 子树只能消费与该 Panel `directory` 绑定的一个权威 `SDKProvider`。
 - StatusPopover、TopBar 等 Workbench 全局表面必须通过当前活动 `SpaceScope` 和活动 Panel selector 获得目录上下文，不能读取最后挂载 Panel 的 Context。
@@ -127,7 +127,7 @@ UI 组件 -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / Proj
 - directory 改变时，旧目录请求的异步结果不得写入新目录投影。
 - 插件、MCP 和配置状态必须以规范化 directory 为 key；不得使用组件挂载顺序或当前可见性作为作用域依据。
 
-### 5.5 命令作用域
+### 命令作用域
 
 - Workbench 全局命令只允许在 Workbench Shell 注册一次。
 - 命令执行时必须从权威 selector 读取活动 `SpaceScope`、Panel 和 Session，不能闭包捕获某个 Panel 挂载时的 props。
@@ -135,7 +135,7 @@ UI 组件 -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / Proj
 - 不支持的命令不注册，禁止用空函数占位后让命令看似可用。
 - 共享 Session 命令只接受通用 action adapter，不得扩展 Workbench 专属参数污染共享接口。
 
-### 5.6 事务、异步竞态与 PTY 生命周期
+### 事务、异步竞态与 PTY 生命周期
 
 跨 Store、SDK 和 PTY 的操作不是数据库原子事务。`WorkbenchActions` 必须显式实现一致性边界：
 
@@ -164,7 +164,7 @@ UI 组件 -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / Proj
 - **TUI 后台保活与用户自主掌控（Keepalive Invariants）**：`tui` 视图在面板切至后台（如 `viewMode === "chat"`）、Tab 切换或网页后台时，只要 `panel.tuiPtyId` 存在，`view-registry` 必须维持 `<Terminal>` 组件在隐藏 DOM 节点（`display: none`）中挂载并保持 WebSocket 连接在线保活。严禁在切视角时误卸载 `<Terminal>` 或误清 `tuiPtyId`。只有在用户显式点击关闭 TUI、关闭面板、关闭 Tab 或终端内部子进程 `exit` 退出时，方可销毁连接与清理状态。
 - 每个 PTY 生命周期 action 的测试必须覆盖：成功路径 + **effect 不重建 PTY** + stale generation + 后端已清理时的幂等性。
 
-### 5.7 持久化规则
+### 持久化规则
 
 允许持久化：
 
@@ -183,9 +183,9 @@ UI 组件 -> WorkbenchActions -> Store / PtyManager / directory-bound SDK / Proj
 
 Workbench Chat 的模型选择按 Session 隔离。用户显式选择是当前 Session 的权威模型，不得被 Agent 默认模型、隐藏 Panel 挂载或受控选择器的同值回调覆盖；没有显式选择时，解析顺序固定为最后一条可见用户消息的模型、Agent 默认模型、可用模型兜底。同值 Agent 更新必须幂等，不得产生模型持久化写入。
 
-### 5.8 核心设计约束
+### 核心设计约束
 
-以下约束源自 Workbench 设计文档（`../../docs/WORKBENCH.md`），是架构稳定性的基石，开发时必须遵守。完整设计意图与交互流程见设计文档。
+以下约束源自 Workbench 设计文档（`../../docs/DESIGN-workbench.md`），是架构稳定性的基石，开发时必须遵守。完整设计意图与交互流程见设计文档。
 
 - **派生状态不另存副本**：TUI 存活标记、Split Terminal 进程高亮、Session 绑定状态、目录健康指示等均从权威字段派生（如 `panel.tuiPtyId`、`panel.splitPtyId`、`boundSessionId`），不得在 UI 层另存重复标记。
 - **视图切换不释放 PTY**：TUI ↔ Chat ↔ Context 切换、Split Terminal 收起/展开，只切换可见性，不销毁 PTY 进程或 WebSocket subscriber。PTY 释放只发生在 Panel 关闭、Space Tab 关闭或 Session 解绑场景。
@@ -203,7 +203,7 @@ Workbench Chat 的模型选择按 Session 隔离。用户显式选择是当前 S
 - **单 Tab 互斥**：`WorkbenchSingletonGuard` 通过 Web Locks API 获取独占锁，第二个 Tab 打开时显示提示页不初始化。Tab 关闭时浏览器自动释放锁。
 - **Chat 焦点所有权**：只有当前 Space Tab 的活动 Chat Panel 可以自动聚焦或恢复 Prompt 焦点。隐藏、keep-alive 或非活动 Panel 必须通过通用 callback 放弃共享输入组件的焦点恢复；Panel 切换不得清除消息文本选择、终端焦点或用户已放置的编辑器光标。
 
-### 5.9 测试与验收证据
+### 测试与验收证据
 
 Workbench 行为变更严格执行 RED、GREEN、REFACTOR：
 
@@ -213,7 +213,7 @@ Workbench 行为变更严格执行 RED、GREEN、REFACTOR：
 - directory 状态验收必须断言插件和 MCP 的规范化完整路径及来源，不得只断言数量。
 - 测试必须覆盖 `General -> Space A -> Space B -> General` 往返，确保 General 只含全局能力，Space 为全局与本 Space 能力的并集。
 - 测试必须覆盖多 Panel、隐藏 Space、fork、命令目标、Session Projection 重连、PTY 关闭和晚到异步结果。
-- PTY 生命周期 action 的测试见 §5.6。
+- PTY 生命周期 action 的测试见 [事务、异步竞态与 PTY 生命周期](#56-transactions-async-races-and-pty-lifecycle)。
 - 回归测试在修复前必须确认真实失败原因，修复后必须重新运行；不能把 harness error 误判为业务 RED。
 
 最小验证链（所有 Workbench 变更必须通过）：
@@ -224,7 +224,7 @@ bun run test:unit --force-exit
 bun run typecheck
 ```
 
-### 5.10 修改纪律与禁止模式
+### 修改纪律与禁止模式
 
 - 修改前先写出本次行为的状态所有者、输入作用域和唯一事务入口；无法回答时不得开始改代码。
 - 一个补丁只解决一个可验证行为。router 重建、命令注册、fork 绑定和 Store 重构必须分开验证，禁止打包成"顺手修复"。
@@ -245,6 +245,6 @@ bun run typecheck
 - 持久化完整 Session 或 directory 能力列表。
 - 用静态匹配通过、typecheck 通过或数量一致宣称功能正确。
 
-## 6. 用户补充规则
+## 用户补充规则
 
 - 适用时始终并行使用工具。

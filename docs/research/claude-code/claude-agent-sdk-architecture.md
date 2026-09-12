@@ -7,7 +7,7 @@
 
 ---
 
-## 1. 定位与本质
+## 定位与本质
 
 Claude Agent SDK（前身为 Claude Code SDK）是 Claude Code CLI 核心引擎的**可编程封装**。它将 Claude Code 的自主 agent loop、内置工具、权限系统、会话管理全部暴露为 Python / TypeScript API。
 
@@ -24,9 +24,9 @@ Claude Agent SDK（前身为 Claude Code SDK）是 Claude Code CLI 核心引擎�
 
 ---
 
-## 2. 核心架构：Agent Loop
+## 核心架构：Agent Loop
 
-### 2.1 循环模型
+### 循环模型
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -52,7 +52,7 @@ Claude Agent SDK（前身为 Claude Code SDK）是 Claude Code CLI 核心引擎�
 
 每个 turn = 一次 Claude 输出（含 tool calls）+ 工具执行 + 结果回传。循环在 Claude 产出无 tool call 的纯文本响应时结束。
 
-### 2.2 消息流
+### 消息流
 
 ```
 SystemMessage(init)           ← 会话元数据、session_id
@@ -64,7 +64,7 @@ UserMessage × N               ← 工具执行结果回传
 ResultMessage                 ← 最终结果 + 费用 + 终止原因
 ```
 
-### 2.3 消息类型
+### 消息类型
 
 | 类型 | 含义 | 关键字段 |
 |------|------|----------|
@@ -74,7 +74,7 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
 | `StreamEvent` | 原始 API 流式事件 | `event.type`: `content_block_delta` 等 |
 | `ResultMessage` | 最终结果 | `result`, `total_cost_usd`, `usage`, `num_turns`, `session_id` |
 
-### 2.4 终止原因（ResultMessage.subtype）
+### 终止原因（ResultMessage.subtype）
 
 | subtype | 含义 | `result` 可用？ |
 |---------|------|----------------|
@@ -86,9 +86,9 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
 
 ---
 
-## 3. 与 Claude Code CLI 的关系
+## 与 Claude Code CLI 的关系
 
-### 3.1 共享引擎架构
+### 共享引擎架构
 
 ```
               ┌──────────────────────────┐
@@ -119,7 +119,7 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
               └──────────────────────────┘
 ```
 
-### 3.2 能力共享矩阵
+### 能力共享矩阵
 
 | 能力 | CLI | SDK | 备注 |
 |------|-----|-----|------|
@@ -140,7 +140,7 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
 | Structured Output | ✅ | ✅ | JSON Schema 约束输出 |
 | Streaming | ✅ | ✅ | 输入（async generator）+ 输出（StreamEvent） |
 
-### 3.3 关键差异
+### 关键差异
 
 | 维度 | CLI | SDK |
 |------|-----|-----|
@@ -153,9 +153,9 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
 
 ---
 
-## 4. 工具体系
+## 工具体系
 
-### 4.1 工具层次
+### 工具层次
 
 ```
                     ┌─────────────────────────────┐
@@ -170,7 +170,7 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
     └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
-### 4.2 内置工具一览
+### 内置工具一览
 
 | 类别 | 工具 | 功能 |
 |------|------|------|
@@ -181,7 +181,7 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
 | **发现** | `ToolSearch` | 动态发现并按需加载工具（避免预加载所有定义） |
 | **编排** | `Agent`, `Skill`, `AskUserQuestion`, `TodoWrite` | 生成子代理、调用技能、向用户提问、任务追踪 |
 
-### 4.3 工具权限链
+### 工具权限链
 
 工具调用前按以下顺序检查：
 
@@ -193,13 +193,13 @@ ResultMessage                 ← 最终结果 + 费用 + 终止原因
 ⑤ canUseTool Callback → 最终兜底
 ```
 
-### 4.4 工具并行执行
+### 工具并行执行
 
 - **只读工具**（Read, Glob, Grep, MCP readOnly）→ 可并行
 - **写操作**（Edit, Write, Bash）→ 串行执行
 - **自定义工具** → 默认串行，标注 `readOnlyHint: true` 后可并行
 
-### 4.5 自定义工具（In-Process MCP Server）
+### 自定义工具（In-Process MCP Server）
 
 自定义工具通过 SDK 内置的 in-process MCP Server 暴露，统一了工具协议：
 
@@ -220,9 +220,9 @@ server = create_sdk_mcp_server(name="weather", version="1.0.0", tools=[get_tempe
 
 ---
 
-## 5. 扩展机制
+## 扩展机制
 
-### 5.1 扩展机制全景
+### 扩展机制全景
 
 | 机制 | 定义方式 | 调用方式 | 上下文隔离 | 适用场景 |
 |------|----------|----------|-----------|----------|
@@ -233,7 +233,7 @@ server = create_sdk_mcp_server(name="weather", version="1.0.0", tools=[get_tempe
 | **Plugins** | `.claude-plugin/plugin.json` 包 | `plugins` 选项加载 | — | 可分发的扩展集合 |
 | **Hooks** | 编程回调 / settings.json shell 命令 | SDK 事件驱动 | ❌ 进程内 | 拦截、审计、修改 |
 
-### 5.2 Subagents 详解
+### Subagents 详解
 
 子代理是独立的 agent 实例，拥有**全新会话上下文**，只有最终摘要返回给父级。
 
@@ -260,7 +260,7 @@ AgentDefinition(
 
 **限制**：子代理不能嵌套（不能生成自己的子代理）。
 
-### 5.3 Hooks 详解
+### Hooks 详解
 
 Hooks 是类型化的回调函数，在 agent 生命周期的特定点触发。
 
@@ -293,7 +293,7 @@ Hooks 是类型化的回调函数，在 agent 生命周期的特定点触发。
 
 **注意**：多个 hook 时 `deny` 优先级高于 `ask` 高于 `allow`。
 
-### 5.4 Skills
+### Skills
 
 Skills 是基于文件系统的可复用能力包，以 `SKILL.md` 文件定义。
 
@@ -308,7 +308,7 @@ Skills 是基于文件系统的可复用能力包，以 `SKILL.md` 文件定义�
 - 必须通过文件系统定义（无编程 API）
 - 需 `settingSources` + `allowedTools: ["Skill"]` 启用
 
-### 5.5 Plugins
+### Plugins
 
 Plugins 是可分发的扩展包，可包含多种扩展类型：
 
@@ -329,9 +329,9 @@ my-plugin/
 
 ---
 
-## 6. 会话与上下文管理
+## 会话与上下文管理
 
-### 6.1 会话模型
+### 会话模型
 
 ```
 Session (JSONL on disk)
@@ -349,7 +349,7 @@ Session (JSONL on disk)
 | TypeScript (V1) | `continue: true` — 恢复最近会话 |
 | TypeScript (V2 preview) | `createSession()` — session 对象 + send/stream |
 
-### 6.2 上下文窗口消耗
+### 上下文窗口消耗
 
 | 来源 | 加载时机 | 影响 |
 |------|----------|------|
@@ -359,7 +359,7 @@ Session (JSONL on disk)
 | 对话历史 | 跨 turn 累积 | 随 turn 增长 |
 | Skill 描述 | 会话启动 | 短摘要；完整内容按需加载 |
 
-### 6.3 自动压缩（Compaction）
+### 自动压缩（Compaction）
 
 上下文接近极限时，SDK 自动摘要旧历史：
 
@@ -368,7 +368,7 @@ Session (JSONL on disk)
 - 可通过 CLAUDE.md 中的指令指导压缩保留策略
 - `PreCompact` hook 可在压缩前执行自定义逻辑
 
-### 6.4 上下文优化策略
+### 上下文优化策略
 
 | 策略 | 效果 |
 |------|------|
@@ -379,9 +379,9 @@ Session (JSONL on disk)
 
 ---
 
-## 7. 权限系统
+## 权限系统
 
-### 7.1 权限模式
+### 权限模式
 
 | 模式 | 行为 | 适用场景 |
 |------|------|----------|
@@ -392,7 +392,7 @@ Session (JSONL on disk)
 | `plan` | 不执行工具，只生成计划 | 代码审查 |
 | `auto` (TS only) | 模型分类器自动批准/拒绝 | 自主 agent + 安全护栏 |
 
-### 7.2 工具名匹配规则
+### 工具名匹配规则
 
 内置工具直接使用名称（`"Read"`, `"Bash"`）。MCP 工具使用命名空间格式：
 
@@ -404,9 +404,9 @@ mcp__{server_name}__{tool_name}
 
 ---
 
-## 8. 系统提示词
+## 系统提示词
 
-### 8.1 三种定制方式
+### 三种定制方式
 
 | 方式 | 持久性 | 适用场景 |
 |------|--------|----------|
@@ -420,16 +420,16 @@ mcp__{server_name}__{tool_name}
 
 ---
 
-## 9. 输入/输出模式
+## 输入/输出模式
 
-### 9.1 输入模式
+### 输入模式
 
 | 模式 | 特性 | 适用场景 |
 |------|------|----------|
 | **Streaming Input** (推荐) | 持久交互会话，支持图片、中断、消息队列 | 交互式应用 |
 | **Single Message** | 一次性 prompt，通过 session resume 实现多轮 | Lambda、无状态环境 |
 
-### 9.2 输出流式
+### 输出流式
 
 启用 `includePartialMessages` / `include_partial_messages` 后接收原始 API 流式事件（`StreamEvent`），可实时显示文本和工具调用进度。
 
@@ -439,16 +439,16 @@ mcp__{server_name}__{tool_name}
 
 ---
 
-## 10. 部署架构
+## 部署架构
 
-### 10.1 运行时要求
+### 运行时要求
 
 - Python 3.10+ / Node.js 18+
 - Node.js（SDK 捆绑的 Claude Code CLI 需要）
 - 出站 HTTPS 到 `api.anthropic.com`
 - 推荐：1GiB RAM, 5GiB 磁盘, 1 CPU
 
-### 10.2 部署模式
+### 部署模式
 
 | 模式 | 特征 | 适用场景 |
 |------|------|----------|
@@ -457,7 +457,7 @@ mcp__{server_name}__{tool_name}
 | **Hybrid** | 临时容器 + 状态恢复 | 项目管理、深度研究 |
 | **Single Container** | 多 Agent 共享容器 | 模拟、对抗博弈 |
 
-### 10.3 沙箱化
+### 沙箱化
 
 SDK 支持**编程式沙箱配置**（TypeScript `sandboxSettings`），可控制：
 - 进程隔离
@@ -469,7 +469,7 @@ SDK 支持**编程式沙箱配置**（TypeScript `sandboxSettings`），可控�
 
 ---
 
-## 11. 与 OpenCode 的对比启示
+## 与 OpenCode 的对比启示
 
 | 维度 | Claude Agent SDK | OpenCode |
 |------|-----------------|----------|

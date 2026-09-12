@@ -105,13 +105,13 @@ All commands run from `packages/ellamaka-desktop/`.
 ## Build Steps
 
 ```bash
-# 1. Build sidecar first (required)
+# Build sidecar first (required)
 cd ../opencode && bun script/build-node.ts
 
-# 2. Build desktop app
+# Build desktop app
 cd ../ellamaka-desktop && bun run build
 
-# 3. Package macOS installer (dev, unsigned)
+# Package macOS installer (dev, unsigned)
 bun run package:mac
 ```
 
@@ -143,7 +143,7 @@ bash scripts/check-app-baseline.sh
 
 ## Verification Contract
 
-See `docs/DESKTOP.md` §11. Automated checks run in CI. Manual runtime verification:
+See [验证契约](../../docs/DESIGN-desktop.md#验证契约). Automated checks run in CI. Manual runtime verification:
 
 | # | Check | How |
 |---|-------|-----|

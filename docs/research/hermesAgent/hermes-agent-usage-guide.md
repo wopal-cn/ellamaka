@@ -6,7 +6,7 @@
 
 ---
 
-## 1. 概述
+## 概述
 
 Hermes Agent 是一个 **自我进化的 AI Agent**——能够自主学习、持久记忆、跨平台运行的通用智能助手。
 
@@ -24,15 +24,15 @@ Hermes Agent 是一个 **自我进化的 AI Agent**——能够自主学习、�
 
 ---
 
-## 2. 安装
+## 安装
 
-### 2.1 系统要求
+### 系统要求
 
 - **Python**: 3.11+
 - **操作系统**: macOS / Linux / Windows（终端执行功能在 macOS/Linux 上最佳）
 - **推荐**: 已有虚拟环境（如 `.venv`）
 
-### 2.2 安装方式
+### 安装方式
 
 ```bash
 # 方式一：pip 安装
@@ -48,7 +48,7 @@ pip install -e .
 - `[voice]` — 语音输入/输出（需要额外依赖）
 - `[matrix]` — Matrix 消息平台（需要额外依赖）
 
-### 2.3 验证安装
+### 验证安装
 
 ```bash
 hermes version
@@ -57,9 +57,9 @@ hermes version
 
 ---
 
-## 3. 首次配置
+## 首次配置
 
-### 3.1 配置向导
+### 配置向导
 
 ```bash
 hermes setup
@@ -72,7 +72,7 @@ hermes setup
 4. **消息平台** — 配置 Telegram / Discord / Slack 等（可选）
 5. **工具设置** — 配置 TTS、Web 搜索、图像生成等（可选）
 
-### 3.2 手动配置
+### 手动配置
 
 #### config.yaml 配置文件
 
@@ -161,9 +161,9 @@ security:
 
 ---
 
-## 4. 运行模式
+## 运行模式
 
-### 4.1 单次对话
+### 单次对话
 
 ```bash
 hermes-agent "解释什么是量子纠缠"
@@ -171,7 +171,7 @@ hermes-agent "解释什么是量子纠缠"
 
 适用于一次性查询，无需进入交互模式。
 
-### 4.2 交互式 CLI
+### 交互式 CLI
 
 ```bash
 hermes
@@ -186,7 +186,7 @@ hermes-agent --interactive
 - 文件拖放/粘贴图片
 - 多轮对话持久化
 
-### 4.3 Profile 模式
+### Profile 模式
 
 Profile 是完全隔离的多实例配置，每个 Profile 有独立的：
 - 配置文件（`~/.hermes/profiles/<name>/config.yaml`）
@@ -218,9 +218,9 @@ hermes profile import <file>        # 从 zip 导入 profile
 
 ---
 
-## 5. Profile 管理
+## Profile 管理
 
-### 5.1 Profile 结构
+### Profile 结构
 
 ```
 ~/.hermes/
@@ -242,7 +242,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 └── active_profile        # 当前激活的 profile 名称
 ```
 
-### 5.2 Profile 操作
+### Profile 操作
 
 | 操作 | 命令 |
 |------|------|
@@ -256,7 +256,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 | 导出 | `hermes profile export <name>` |
 | 导入 | `hermes profile import <file>` |
 
-### 5.3 配置隔离
+### 配置隔离
 
 每个 Profile 的配置完全独立：
 - 不同模型（例如 coder 用 Claude，researcher 用 Gemini）
@@ -266,9 +266,9 @@ hermes profile import <file>        # 从 zip 导入 profile
 
 ---
 
-## 6. 常用命令
+## 常用命令
 
-### 6.1 Session 管理
+### Session 管理
 
 | 命令 | 别名 | 说明 |
 |------|------|------|
@@ -289,7 +289,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 | `/status` | — | 显示会话状态 |
 | `/resume [name]` | — | 恢复之前的会话 |
 
-### 6.2 配置管理
+### 配置管理
 
 | 命令 | 说明 |
 |------|------|
@@ -305,7 +305,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 | `/skin [name]` | 切换显示主题 |
 | `/voice [on|off|tts|status]` | 切换语音模式 |
 
-### 6.3 工具与技能
+### 工具与技能
 
 | 命令 | 说明 |
 |------|------|
@@ -317,7 +317,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 | `/browser [connect|disconnect|status]` | 连接本地 Chrome CDP |
 | `/plugins` | 列出已安装插件 |
 
-### 6.4 信息查询
+### 信息查询
 
 | 命令 | 说明 |
 |------|------|
@@ -328,7 +328,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 | `/paste` | 从剪贴板粘贴图片 |
 | `/image <path>` | 附加本地图片 |
 
-### 6.5 退出
+### 退出
 
 | 命令 | 别名 | 说明 |
 |------|------|------|
@@ -336,9 +336,9 @@ hermes profile import <file>        # 从 zip 导入 profile
 
 ---
 
-## 7. 工具使用
+## 工具使用
 
-### 7.1 核心 26 工具
+### 核心 26 工具
 
 | 类别 | 工具 | 说明 |
 |------|------|------|
@@ -379,7 +379,7 @@ hermes profile import <file>        # 从 zip 导入 profile
 | | `ha_list_services` | 列出可用服务 |
 | | `ha_call_service` | 调用智能家居服务 |
 
-### 7.2 不可用工具说明
+### 不可用工具说明
 
 以下工具需要额外配置或依赖：
 
@@ -395,9 +395,9 @@ hermes profile import <file>        # 从 zip 导入 profile
 
 ---
 
-## 8. 配置详解
+## 配置详解
 
-### 8.1 model 配置
+### model 配置
 
 ```yaml
 model:
@@ -420,7 +420,7 @@ model:
 | `minimax` | MiniMax |
 | `custom` | 自定义 OpenAI-compatible 端点 |
 
-### 8.2 terminal 配置
+### terminal 配置
 
 ```yaml
 terminal:
@@ -433,7 +433,7 @@ terminal:
   container_disk: 51200  # 磁盘 MB
 ```
 
-### 8.3 compression 配置
+### compression 配置
 
 ```yaml
 compression:
@@ -444,7 +444,7 @@ compression:
   summary_model: ""      # 空则使用主模型
 ```
 
-### 8.4 tts 配置
+### tts 配置
 
 ```yaml
 tts:
@@ -455,7 +455,7 @@ tts:
     voice_id: "pNInz6obpgDQGcFmaJgB"
 ```
 
-### 8.5 display 配置
+### display 配置
 
 ```yaml
 display:
@@ -468,9 +468,9 @@ display:
 
 ---
 
-## 9. 常见问题
+## 常见问题
 
-### 9.1 API Key 问题
+### API Key 问题
 
 **问题**：启动时报错 "no API keys or providers found"
 
@@ -481,7 +481,7 @@ display:
    OPENROUTER_API_KEY=sk-or-...
    ```
 
-### 9.2 模型切换
+### 模型切换
 
 **临时切换**（仅当前会话）：
 ```
@@ -493,7 +493,7 @@ display:
 /model claude-sonnet-4.6 --global
 ```
 
-### 9.3 工具不可用
+### 工具不可用
 
 **问题**：某些工具返回 "not available"
 
@@ -502,7 +502,7 @@ display:
 2. 检查 `~/.hermes/.env` 是否有必需的 API Key
 3. 运行 `hermes setup tools` 配置工具
 
-### 9.4 上下文过长
+### 上下文过长
 
 **现象**：对话过长后响应变慢或报错
 
@@ -511,7 +511,7 @@ display:
 - 手动压缩：`/compress`
 - 减少保护消息数：修改 `compression.protect_last_n`
 
-### 9.5 危险命令审批
+### 危险命令审批
 
 **现象**：执行 `rm` 等命令需要确认
 
@@ -522,9 +522,9 @@ display:
 
 ---
 
-## 10. 快速参考
+## 快速参考
 
-### 10.1 常用命令速查
+### 常用命令速查
 
 ```
 hermes setup              # 首次配置
@@ -546,7 +546,7 @@ hermes update             # 更新到最新版本
 hermes uninstall          # 卸载 Hermes
 ```
 
-### 10.2 配置文件位置
+### 配置文件位置
 
 | 文件 | 路径 | 用途 |
 |------|------|------|
