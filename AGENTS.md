@@ -15,7 +15,6 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - WORKBENCH: `docs/DESIGN-workbench.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
 - DISTRIBUTION: `docs/DESIGN-distribution.md`
-- Upstream Merge logs: `docs/UPSTREAM-MERGE-LOG.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
 - `.gitattributes` — merge-strategy history notes; all `merge=ours` rules removed 2026-09-01 (upstream tracking ended; the driver silently discarded one side of conflicted files)
 - opencode package rules: `packages/opencode/AGENTS.md`
@@ -31,9 +30,9 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | `packages/opencode/` | Inherited OpenCode engine main package; see `packages/opencode/AGENTS.md` for internal rules |
 | `packages/ellamaka-core/` | Shared core, flags, global paths, installation/runtime primitives |
 | `packages/ui/` | Inherited UI component library; only modify when engine/TUI requires |
-| `packages/plugin/`, `packages/ellamaka-script/` | Workspace support packages |
+| `packages/plugin/` | Workspace support package |
 | `packages/sdk/` | SDK workspace; JS SDK regeneration uses existing script |
-| `packages/ellamaka/` | Brand constants, logo, build wrapper, WopalSpace auto-detection, install path detection, and package-level tests |
+| `packages/ellamaka-brand/` | Brand constants, logo, build wrapper, WopalSpace auto-detection, install path detection, and package-level tests |
 | `packages/ellamaka-app/` | Workbench Web UI frontend; see `packages/ellamaka-app/AGENTS.md` for internal rules |
 | `packages/ellamaka-desktop/` | Electron desktop app hosting ellamaka-app Workbench and local Ellamaka sidecar; see `packages/ellamaka-desktop/AGENTS.md` |
 | `docs/` | Project DESIGN, BRANDING, DISTRIBUTION, references, research, and plans |
@@ -78,7 +77,7 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | Full-repo typecheck | `bun run typecheck` |
 | opencode package tests | `bun test --timeout 30000 --force-exit` (from `packages/opencode`) |
 | opencode build | `bun run build` (from `packages/opencode`) |
-| ellamaka package tests | `bun test` (from `packages/ellamaka`) |
+| ellamaka-brand package tests | `bun test` (from `packages/ellamaka-brand`) |
 | Build ellamaka-branded CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
 | Build CLI binary | `./scripts/build.sh cli` |
 | Build desktop app | `./scripts/build.sh desktop` |
@@ -86,7 +85,6 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | Release Desktop | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
 | Withdraw a released version | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
 | Dev server (TUI/Workbench/Desktop) | `./scripts/dev.sh` |
-| Post-upstream clean check | `./scripts/check-cleanup.sh` |
 | Desktop package tests | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
 
 Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/build.sh help` for full parameter documentation.
@@ -167,7 +165,6 @@ Behaviors an agent cannot verify automatically (GUI interaction, onboarding flow
 
 | Entry | Command | Isolation |
 |-------|---------|-----------|
-| Desktop (onboarding sandbox) | `ELLAMAKA_TEST_ONBOARDING=1 ./scripts/dev.sh desktop` | `WOPAL_HOME` → `/tmp/wopal-onboarding-sandbox`; forces the onboarding flow and never touches the real `~/.wopal`; the sandbox starts empty, so no sidecar build is needed |
 | Desktop (regular) | `./scripts/dev.sh desktop` | Uses the real environment; first run needs `--rebuild` to build the sidecar |
 | Workbench / backend | `./scripts/dev.sh serve` | Port 4096; `--cdp-debug` opens 9222 CDP |
 | TUI | `./scripts/dev.sh tui` | In-process backend by default |

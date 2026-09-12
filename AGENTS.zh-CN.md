@@ -15,7 +15,6 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - WORKBENCH: `docs/DESIGN-workbench.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
 - DISTRIBUTION: `docs/DESIGN-distribution.md`
-- Upstream Merge logs: `docs/UPSTREAM-MERGE-LOG.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
 - `.gitattributes` — fork 独有文件的 merge 保护规则（`merge=ours`）
 - opencode package rules: `packages/opencode/AGENTS.md`
@@ -31,9 +30,9 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | `packages/opencode/` | OpenCode inherited engine 主包；内部规则见 `packages/opencode/AGENTS.md` |
 | `packages/ellamaka-core/` | shared core、flags、global paths、installation/runtime 基础能力 |
 | `packages/ui/` | inherited UI 组件库；只在 engine/TUI 需要时改动 |
-| `packages/plugin/`, `packages/ellamaka-script/` | workspace support packages |
+| `packages/plugin/` | workspace support package |
 | `packages/sdk/` | SDK workspace；JS SDK regeneration 使用既有脚本 |
-| `packages/ellamaka/` | 品牌常量、品牌字模、构建包装、WopalSpace 自动检测、安装路径判断及包级测试 |
+| `packages/ellamaka-brand/` | 品牌常量、品牌字模、构建包装、WopalSpace 自动检测、安装路径判断及包级测试 |
 | `packages/ellamaka-app/` | Workbench Web UI 前端；内部规则见 `packages/ellamaka-app/AGENTS.md` |
 | `packages/ellamaka-desktop/` | Electron 桌面应用，承载 ellamaka-app Workbench 和本地 Ellamaka sidecar；内部规则见 `packages/ellamaka-desktop/AGENTS.md` |
 | `docs/` | project DESIGN、BRANDING、DISTRIBUTION、references、research 和 plans |
@@ -78,7 +77,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | 全仓类型检查 | `bun run typecheck` |
 | opencode 包测试 | `bun test --timeout 30000 --force-exit`（from `packages/opencode`） |
 | opencode 构建 | `bun run build`（from `packages/opencode`） |
-| ellamaka 包测试 | `bun test`（from `packages/ellamaka`） |
+| ellamaka-brand 包测试 | `bun test`（from `packages/ellamaka-brand`） |
 | 构建 ellamaka 品牌 CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
 | 构建 CLI 二进制 | `./scripts/build.sh cli` |
 | 构建桌面应用 | `./scripts/build.sh desktop` |
@@ -86,7 +85,6 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | 发布 Desktop（一步制） | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
 | 撤回已发布版本 | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
 | 开发服务（TUI/Workbench/桌面） | `./scripts/dev.sh` |
-| 上游合并后精简检查 | `./scripts/check-cleanup.sh` |
 | 桌面包测试 | `bun test --preload ./electron-mock.ts --force-exit src`（from `packages/ellamaka-desktop`） |
 
 测试不能从 repo root 运行。`./scripts/dev.sh help` 和 `./scripts/build.sh help` 查看完整参数说明。
@@ -161,7 +159,6 @@ Agent 无法自动验证的行为（GUI 交互、引导流程、桌面壳）通�
 
 | 入口 | 命令 | 环境隔离 |
 |------|------|----------|
-| Desktop（引导沙箱） | `ELLAMAKA_TEST_ONBOARDING=1 ./scripts/dev.sh desktop` | `WOPAL_HOME` → `/tmp/wopal-onboarding-sandbox`；强制进入引导流程，不触碰真实 `~/.wopal`；沙箱为空，无需构建 sidecar |
 | Desktop（常规） | `./scripts/dev.sh desktop` | 使用真实环境；首次需加 `--rebuild` 构建 sidecar |
 | Workbench / 后端 | `./scripts/dev.sh serve` | 端口 4096；`--cdp-debug` 开启 9222 CDP |
 | TUI | `./scripts/dev.sh tui` | 默认内嵌后端 |

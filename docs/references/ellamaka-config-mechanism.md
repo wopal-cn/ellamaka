@@ -21,7 +21,7 @@ ellamaka 有两种运行模式，配置加载链路完全不同：
 
 > CLI flag 使用 `--disable-wopalspace`（无 `no-` 前缀）而非 `--no-wopal-space`：yargs 对 `--no-XXX` 有内置取反解析，会把 `--no-wopal-space` 解析为未声明的 `wopalSpace` 字段，触发 `.strict()` 报错并打印 help。
 
-实现位于 `packages/ellamaka/detect.ts` 的 `detectWopalSpace(cwd)` 函数，返回 `{ root, wopalDir }` 或 undefined。在 `packages/opencode/src/index.ts` 的 yargs 中间件中调用，检测到则设置 `WOPAL_SPACE=1` 和 `WOPAL_SPACE_ROOT=<空间根>`。
+实现位于 `packages/ellamaka-brand/detect.ts` 的 `detectWopalSpace(cwd)` 函数，返回 `{ root, wopalDir }` 或 undefined。在 `packages/opencode/src/index.ts` 的 yargs 中间件中调用，检测到则设置 `WOPAL_SPACE=1` 和 `WOPAL_SPACE_ROOT=<空间根>`。
 
 ### 普通模式链路
 
