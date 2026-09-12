@@ -2,7 +2,7 @@
 
 > **状态**: Active
 > **更新时间**: 2026-09-08
-> **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
+> **上级架构**: `../../../docs/products/wopal-space/DESIGN.md`
 
 ## Role
 

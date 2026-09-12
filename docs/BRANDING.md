@@ -2,7 +2,7 @@
 
 > **状态**: Active
 > **更新时间**: 2026-09-01
-> **上级架构**: `../../../docs/products/wopal-space/DESIGN-wopalspace.md`
+> **上级架构**: `../../../docs/products/wopal-space/DESIGN.md`
 > **配套文档**: `./DESIGN.md`（架构概览）、`./DESIGN-distribution.md`（分发与版本身份契约）、`./BRANDING.md`（品牌化真相源）
 
 本文档是 ellamaka 品牌化定制的唯一真相源。记录每项定制设计的**目的、内容、要求和实现逻辑**。ellamaka 已放弃跟踪上游（见 [上游合并策略](#上游合并策略)），需要参考上游实现时从 `labs/ref-repos/opencode/` 读取，本文档不依赖 `git diff upstream/dev`。

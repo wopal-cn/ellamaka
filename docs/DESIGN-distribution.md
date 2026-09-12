@@ -580,7 +580,7 @@ Desktop 保留自己的 manifest policy gate。electron-updater 负责平台 fee
 | 文档 | 说明 |
 | ---- | ---- |
 | `../../../docs/products/wopal-space/DESIGN-distribution.md` | 产品级分发总设计：R2 架构、缓存策略、完整性模型、版本体系、跨产品协调、Release 索引策略 |
-| `../../../docs/products/wopal-space/DESIGN-wopalspace.md` | 产品级架构与版本体系 |
+| `../../../docs/products/wopal-space/DESIGN.md` | 产品级架构与版本体系 |
 | `../../../docs/products/wopal-space/DESIGN-onboarding.md` | onboarding 架构、setup 完整流程、版本兼容矩阵维护 |
 | `./DESIGN-desktop.md` | ellamaka-desktop 架构、状态所有权、PTY 生命周期与验证契约 |
 | [`./BRANDING.md`](./BRANDING.md#ellamaka-desktop-桌面应用) | ellamaka 品牌注入点清单与桌面分发身份 |

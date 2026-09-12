@@ -2,7 +2,7 @@
 
 > **状态**：Active
 > **更新时间**：2026-09-10
-> **上级架构**：[`../../../docs/products/wopal-space/DESIGN-wopalspace.md`](../../../docs/products/wopal-space/DESIGN-wopalspace.md)（架构与职责边界）
+> **上级架构**：[`../../../docs/products/wopal-space/DESIGN.md`](../../../docs/products/wopal-space/DESIGN.md)（架构与职责边界）
 
 ## 目的
 
