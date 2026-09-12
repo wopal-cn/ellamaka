@@ -1,8 +1,19 @@
 # Ellamaka
 
 > **状态**: Active
-> **更新时间**: 2026-09-08
+> **更新时间**: 2026-09-12
 > **上级架构**: `../../../docs/products/wopal-space/DESIGN.md`
+> **子设计**:
+>
+> - `./DESIGN-desktop.md` — 官方桌面应用架构
+> - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
+> - `./DESIGN-ellamaka-dsh.md` — ellamaka 与 dsh 融合架构
+> - `./DESIGN-onboarding.md` — Desktop onboarding 目标实现
+> - `./DESIGN-workbench.md` — Workbench 工作台设计
+> **配套文档**:
+>
+> - `./BRANDING.md` — 品牌化定制真相源
+> - `./API-CONTRACT.md` — Runtime API 与 SDK 契约
 
 ## Role
 
@@ -57,7 +68,7 @@ ellamaka 的品牌身份与构建发布分属两个包，沿运行时/构建期�
 - `ellamaka-release` 不被任何运行时热路径引用；它依赖 `ellamaka-brand`（构建期读品牌常量），方向单一，无环。
 - 品牌常量消费一律走包路径 `@wopal/ellamaka-brand/branding` 等导出，禁止相对路径跨包引用。
 
-历史上本结构由三个包承载（`packages/ellamaka`/`@wopal/ellamaka-build`、`@wopal/ellamaka-script`、`@wopal/ellamaka-release`），2026-09-01 收编定案：`ellamaka-build` 更名 `ellamaka-brand`，`ellamaka-script` 的 `Script` 收编为 `ellamaka-release` 的 `build-env` 模块。
+品牌身份与构建发布由两个包承载：`ellamaka-brand` 负责运行时品牌真相源，`ellamaka-release` 负责构建期与发布期。品牌常量消费一律走包路径导出。
 
 ## Configuration Contract
 
@@ -90,13 +101,13 @@ WopalSpace 模式下配置加载优先级（低→高）：
 
 ## Upstream Merge Boundary
 
-> **状态**: 已放弃跟踪上游（2026-08-31 起）。ellamaka 不再从 `upstream/dev` 合并 OpenCode 变更，`dev` 分支不再作为上游跟踪线。以下历史机制仅作记录，不再执行。
+ellamaka 不从 `upstream/dev` 合并 OpenCode 变更，`dev` 分支不承担上游跟踪职责。需要参考 OpenCode 模块代码时，从 `labs/ref-repos/opencode/` 读取对应模块。
 
 | 规则     | 说明                                                                                  |
 | -------- | ------------------------------------------------------------------------------------- |
-| 分支     | `main` = 定制稳定线；`dev` = 不再跟踪 upstream/dev                                    |
-| 合并方向 | 无（已放弃上游合并）                                                                  |
-| 参考来源 | 后续如需参考 OpenCode 模块代码，从 `labs/ref-repos/opencode/` 读取对应模块            |
+| 分支     | `main` = 定制稳定线；`dev` = 不承担上游跟踪职责                                        |
+| 合并方向 | 无                                                                                    |
+| 参考来源 | OpenCode 模块代码参考 `labs/ref-repos/opencode/`                                      |
 
 详细合并流程、合并保护文件清单、定制代码最小侵入原则、冲突热点和验证清单见 **[上游合并策略](./BRANDING.md#上游合并策略)**。
 
@@ -186,9 +197,9 @@ WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。`ellamaka-a
 
 关于 `ellamaka-app` 工作台（Workbench）的具体界面、视图模型（TUI/Chat/Split 面板模型）、详细目录架构、能力迁移规约以及与 `wopal-cli` 的协同，请参阅独立的详细设计规范文档：
 
-- 中文版：[DESIGN-workbench.md](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/docs/DESIGN-workbench.md)
+- 中文版：[DESIGN-workbench.md](./DESIGN-workbench.md)
 
-> 上游 `packages/app` 已放弃跟踪（见 [Upstream Merge Boundary](#upstream-merge-boundary)），`ellamaka-app` 独立演进。后续如需参考上游 UI 代码，从 `labs/ref-repos/opencode/packages/app` 读取。
+> `ellamaka-app` 独立演进，不跟随上游 `packages/app`。需要参考上游 UI 代码时，从 `labs/ref-repos/opencode/packages/app` 读取。
 
 ---
 
@@ -198,9 +209,6 @@ WopalSpace 需要 Web UI 作为 TUI 之外的第二种用户界面。`ellamaka-a
 | --------------------------------- | -------------------------------------------------------------- |
 | `./BRANDING.md`                   | 品牌化定制唯一真相源—                                          |
 | `./API-CONTRACT.md`               | Runtime API、OpenAPI、生成 SDK 与 Wopal CLI adapter 契约       |
-| `./DESIGN-workbench.md`                  | ellamaka 自定义工作台 app 设计                                 |
-| `./DESIGN-ellamaka-dsh.md`            | ellamaka 与 dsh 融合架构（DSH 容器装配、插件供应链、Bun 宿主 HMR） |
-| `./DESIGN-distribution.md`               | 产品 SemVer、OpenCode upstream、构建身份、兼容选择、release、artifact、安装契约 |
 | `../../wopal-cli/docs/DESIGN.md`  | wopal-cli 如何消费 ellamaka release                            |
 | `packages/opencode/AGENTS.md`     | engine package 内部规则                                        |
 | `packages/ellamaka-app/AGENTS.md` | ellamaka 官方 web UI 包级开发规则                              |

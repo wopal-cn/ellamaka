@@ -1,10 +1,11 @@
 # ellamaka-desktop 设计
 
 > **状态**: Draft
-> **更新时间**: 2026-08-03
+> **更新时间**: 2026-09-12
+> **上级**: `./DESIGN.md`
 > **目标包**: `packages/ellamaka-desktop`
-> **上游基线**: 上游 `packages/desktop` 已删除（2026-08-31），参考代码从 `labs/ref-repos/opencode/packages/desktop` 读取；历史复制参照为 OpenCode `v1.15.13` / `385cb694419f98103af0e8fc6187ddcbcbb6eecb`
-> **相关文档**: [ellamaka-desktop 桌面应用](./BRANDING.md#ellamaka-desktop-桌面应用)、`ELLAMAKA-WORKBENCH.zh-CN.md`、`DESIGN.md`、`DESIGN-distribution.md`
+> **上游基线**: 参考代码从 `labs/ref-repos/opencode/packages/desktop` 读取；参照 OpenCode `v1.15.13` / `385cb694419f98103af0e8fc6187ddcbcbb6eecb`
+> **相关文档**: [ellamaka-desktop 桌面应用](./BRANDING.md#ellamaka-desktop-桌面应用)、`./DESIGN-distribution.md`
 
 本文档描述 ellamaka 官方桌面应用的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
 
@@ -280,7 +281,7 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 
 ## 上游关系
 
-`ellamaka-desktop` 在 `release/upstreams.lock.json` 中记录历史复制基线及其来源 commit。ellamaka 已放弃跟踪上游（2026-08-31，见 [上游合并策略](./BRANDING.md#上游合并策略)），上游 `packages/desktop` 已删除，参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
+`ellamaka-desktop` 在 `release/upstreams.lock.json` 中记录复制基线及其来源 commit。ellamaka 不跟随上游同步（2026-08-31 起，见 [上游合并策略](./BRANDING.md#上游合并策略)），上游 `packages/desktop` 由参考实现替代，参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
 
 - Electron 安全更新保持优先级，并通过完整桌面回归验证。
 - 修复按依赖、接口和行为逐项回移。
@@ -481,7 +482,6 @@ Onboarding 过程中若 Desktop 意外退出，下次启动从保存的 UI 状�
 ### 相关文档
 
 - 完整 onboarding 架构与步骤行为：`../../../docs/products/wopal-space/DESIGN-onboarding.md`
-- 状态、阶段、IPC 与组件规范：`DESIGN-onboarding.md`（本目录）
 - Machine capability 契约：`../../wopal-cli/docs/CAPABILITY-PROTOCOL.md`
 
 ### 启动时版本兼容检查

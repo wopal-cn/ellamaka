@@ -1,8 +1,9 @@
 # Desktop Onboarding — 目标实现规范
 
 > **状态**: Target Shape
-> **更新时间**: 2026-08-04
-> **上级文档**:
+> **更新时间**: 2026-09-12
+> **上级**: `./DESIGN.md`
+> **上级架构**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-onboarding.md` — 统一入口架构与职责边界
 > - `./DESIGN-desktop.md` — Desktop 启动、窗口与 sidecar 生命周期
@@ -120,7 +121,7 @@ Main 将步骤进度广播给 Renderer，并记录到 `$WOPAL_HOME/logs/onboardi
 
 ### 依赖安装
 
-Onboarding 不预装插件与 dsh 依赖（2026-09-01 决策，原提前物化方案已废弃）。依赖安装由 ellamaka 运行时兜底统一负责：
+Onboarding 不预装插件与 dsh 依赖（2026-09-01 决策）。依赖安装由 ellamaka 运行时兜底统一负责：
 
 | 依赖 | 运行时兜底 |
 | ---- | ---------- |
