@@ -11,6 +11,8 @@
 
 本文档定义 Ellamaka Desktop onboarding 的目标实现。入口判定只依赖 `onboarding.json`（Desktop-owned UI 状态）；CLI machine operation 的输入、输出和业务语义以 wopal-cli 代码为准。
 
+**边界**：本文档只描述 Desktop 侧的编排（渲染器、IPC、状态机、CLI bootstrap 与子进程生命周期）。`prepare-ontology`、`prepare-runtime`、`initialize-space` 等确定性 operation 的业务语义（含装配物化、类型装配单消费）由 wopal-cli 实现与定义，本文档不重复定义；Desktop 仅按 machine capability 契约调用并展示结果。
+
 ---
 
 ## 实现架构
