@@ -1036,6 +1036,33 @@ describe("deduplicatePluginOrigins", () => {
     expect(result.map((item) => ConfigPlugin.pluginSpecifier(item.spec))).toEqual([a, b])
   })
 
+  test("keeps directory-entry plugins distinct when their entry files share a name", () => {
+    const adapter = "file:///work/space/.wopal/plugins/dsh-adapter/index.ts"
+    const plugin = "file:///work/space/.wopal/plugins/wopal-plugin/index.ts"
+
+    const result = ConfigPlugin.deduplicatePluginOrigins([
+      { spec: adapter, source: "", scope: "global" as const },
+      { spec: plugin, source: "", scope: "local" as const },
+    ])
+
+    expect(result).toHaveLength(2)
+    expect(result.map((item) => ConfigPlugin.pluginSpecifier(item.spec))).toEqual([adapter, plugin])
+  })
+
+  test("treats nested src entry files as the package directory they belong to", () => {
+    const globalSpec = "file:///Users/me/.wopal/plugins/wopal-plugin/src/index.ts"
+    const spaceSpec = "file:///work/space/.wopal/plugins/wopal-plugin/src/index.ts"
+
+    const result = ConfigPlugin.deduplicatePluginOrigins([
+      { spec: globalSpec, source: "/Users/me/.wopal/config/settings.jsonc", scope: "global" as const },
+      { spec: spaceSpec, source: "/work/space/.wopal/config/settings.jsonc", scope: "local" as const },
+    ])
+
+    expect(result).toHaveLength(1)
+    expect(result[0].spec).toBe(spaceSpec)
+    expect(result[0].scope).toBe("local")
+  })
+
   test("only global plugin with no space counterpart stays unchanged", () => {
     const spec = "file:///Users/me/.wopal/plugins/wopal-plugin.ts"
 

@@ -436,9 +436,14 @@ export const layer = Layer.effect(
       )
       const parsed = ConfigParse.jsonc(expanded, source)
       const data = ConfigParse.schema(Info, normalizeLoadedConfig(parsed, source), source)
+
+      // Path-like plugin specs are resolved relative to the config file that declared them. Both load
+      // branches must do this while we still know `source`; a `dir/source` load (WopalSpace settings,
+      // remote/console/managed config) holds the declaring file path in `source`, so resolving it here
+      // keeps merges from later reinterpreting `./plugin.ts` against the process CWD.
+      yield* Effect.promise(() => resolveLoadedPlugins(data, source))
       if (!("path" in options)) return data
 
-      yield* Effect.promise(() => resolveLoadedPlugins(data, options.path))
       if (!data.$schema) {
         data.$schema = "https://opencode.ai/config.json"
         const updated = text.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')

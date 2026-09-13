@@ -85,11 +85,26 @@ export function deduplicatePluginOrigins(plugins: Origin[]): Origin[] {
   return list.toReversed()
 }
 
-// Local (file) plugins are identified by their module id when known, otherwise by their file name so
-// that same-name plugins in different directories (e.g. user-level vs space-level) dedupe to one.
+// Directory-entry files that name the module's location rather than the plugin itself.
+const ENTRY_FILES = new Set(["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"])
+
+// Local (file) plugins are identified by their module id when known, otherwise by the plugin's own
+// name so that same-name plugins in different directories (e.g. user-level vs space-level) dedupe to
+// one. A path that points at a package's entry file (`<plugin>/index.ts`, `<plugin>/src/index.ts`)
+// identifies the plugin by its package directory, since the entry filename alone (`index.ts`) is
+// shared across every directory-style plugin and would merge unrelated plugins into one.
 function pluginFileName(spec: string): string {
   try {
-    return path.basename(new URL(spec).pathname)
+    const segments = new URL(spec).pathname.split("/").filter(Boolean)
+    const file = segments.at(-1)
+    if (!file) return spec
+
+    if (!ENTRY_FILES.has(file)) return file
+
+    // Walk past source/build folders to the directory that actually names the plugin.
+    let i = segments.length - 2
+    while (i >= 0 && ["src", "dist", "lib", "build"].includes(segments[i])) i--
+    return segments[i] ?? file
   } catch {
     return spec
   }
