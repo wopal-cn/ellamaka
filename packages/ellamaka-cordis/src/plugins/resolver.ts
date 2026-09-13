@@ -1,6 +1,6 @@
 /**
  * Minimal dependency resolver for user-plugin installation
- * (DESIGN-ellamaka-dsh §9.4, spike 1 in `.wopal-space/.tmp/dsh-plugin-spike/`).
+ * (DESIGN-dsh-base.md, spike 1 in `.wopal-space/.tmp/dsh-plugin-spike/`).
  *
  * A small BFS resolver over abridged registry packuments replaces Arborist
  * for third-party plugin trees (Arborist busy-loops inside a compiled binary;
@@ -46,7 +46,7 @@ export type FetchLike = (url: string, init?: RequestInit) => Promise<unknown>
 export const DEFAULT_RESOLVER_REGISTRY = "https://registry.npmjs.org/"
 
 /**
- * A registry spec the resolver refuses (DESIGN-ellamaka-dsh「插件供应链」: git/tarball/
+ * A registry spec the resolver refuses (DESIGN-dsh-web.md「插件供应链」: git/tarball/
  * file transports are the phase-2 scope; phase 1 errors with npm guidance).
  * Raised before any network activity.
  */
@@ -59,11 +59,7 @@ export class UnsupportedSpecError extends Error {
 
 /** No packument version satisfies the requested range. */
 export class NoVersionError extends Error {
-  constructor(
-    name: string,
-    range: string,
-    chain: string[],
-  ) {
+  constructor(name: string, range: string, chain: string[]) {
     const via = chain.length > 0 ? ` (required by ${chain.join(" -> ")})` : ""
     super(`dsh plugin resolver: no version of ${name} satisfies "${range}"${via}`)
     this.name = "NoVersionError"
@@ -90,7 +86,10 @@ function createPackumentFetcher(fetchFn: FetchLike, registry: string) {
             headers: { accept: "application/vnd.npm.install-v1+json" },
           })
         } catch (error) {
-          throw new Error(`dsh plugin resolver: failed to fetch packument for ${name} from ${url}: ${(error as Error).message}`, { cause: error })
+          throw new Error(
+            `dsh plugin resolver: failed to fetch packument for ${name} from ${url}: ${(error as Error).message}`,
+            { cause: error },
+          )
         }
         const res = response as { ok?: boolean; status?: number; json?: () => Promise<unknown> }
         if (res.ok === false || (typeof res.status === "number" && res.status >= 400)) {
@@ -210,9 +209,7 @@ export interface ResolvedTree {
 }
 
 /** Root spec accepted by {@link resolveTree}. */
-export type ResolveSpec =
-  | { kind: "registry"; name: string; version?: string }
-  | { kind: "dir"; path: string }
+export type ResolveSpec = { kind: "registry"; name: string; version?: string } | { kind: "dir"; path: string }
 
 /** Options for {@link resolveTree}. */
 export interface ResolveOptions {
@@ -224,7 +221,7 @@ export interface ResolveOptions {
 
 /**
  * Reject the transports the supply chain explicitly does not support
- * (DESIGN-ellamaka-dsh「插件供应链」). Called on the raw version spec before any fetch.
+ * (DESIGN-dsh-web.md「插件供应链」). Called on the raw version spec before any fetch.
  */
 function assertSupportedSpec(spec: string): void {
   if (/^(?:github|git\+|git|file|link|workspace|tarball|https?):/i.test(spec)) {
@@ -265,10 +262,7 @@ export async function resolveTree(spec: ResolveSpec, options: ResolveOptions = {
     // dependency ecosystem into the profile (e.g. dsh-codex-connect's
     // `@earendil-works/pi-ai` peer dragged openai/anthropic/aws-sdk ~191
     // packages) — both slow and semantically wrong.
-    const sections: Array<Record<string, string> | undefined> = [
-      pkg.dependencies,
-      pkg.optionalDependencies,
-    ]
+    const sections: Array<Record<string, string> | undefined> = [pkg.dependencies, pkg.optionalDependencies]
     for (const section of sections) {
       for (const [depName, depRange] of Object.entries(section ?? {})) {
         // Official dsh platform components (`@deepseek-ai/*`) are provided by

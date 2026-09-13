@@ -2,12 +2,12 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 
 /**
- * Pure path & gating helpers for the DSH Runtime Manager (DESIGN-ellamaka-dsh
+ * Pure path & gating helpers for the DSH Runtime Manager (DESIGN-dsh-base.md
  * §3.4.2 / §3.4.4). No I/O: these derive the layout and gate only from their
  * inputs, so they are trivially testable and safe to call before any
  * filesystem work.
  *
- * Layout vocabulary (DESIGN-ellamaka-dsh "唯一 home 与目录所有权"):
+ * Layout vocabulary (DESIGN-dsh-base.md "唯一 home 与目录所有权"):
  * - `$WOPAL_HOME/dsh` is the Ellamaka territory root (`dshHome`) — it is NOT
  *   the DSH home.
  * - `$WOPAL_HOME/dsh/home` is the DSH home (`homeDir`): a 100% official-layout
@@ -105,10 +105,7 @@ export function closureNameForFingerprint(fingerprint: string): string {
  *
  * @throws when the manifest has no fingerprint (nothing to anchor against).
  */
-export function resolveInstallAnchor(
-  wopalHome: string,
-  manifest: { fingerprint?: string },
-): InstallAnchor {
+export function resolveInstallAnchor(wopalHome: string, manifest: { fingerprint?: string }): InstallAnchor {
   const fingerprint = manifest.fingerprint
   if (!fingerprint) {
     throw new Error("dsh runtime: cannot resolve install anchor without a manifest fingerprint")

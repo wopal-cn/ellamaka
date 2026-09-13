@@ -2,7 +2,7 @@
  * VirtualWebServer — a Cordis `webServer` service that saves route tables and
  * upgrade sockets instead of binding a real socket.
  *
- * The DSH single-port scheme (DESIGN-ellamaka-dsh §2.1) mounts the official dsh
+ * The DSH single-port scheme (DESIGN-dsh-base.md) mounts the official dsh
  * web plugins onto the Ellamaka listener. Those plugins register their routes
  * against the `webServer` service; this implementation provides that service
  * without creating a second listening socket. It implements the official
@@ -22,7 +22,7 @@
  * No runtime `@deepseek-ai/*` value is statically imported here: the cordis
  * `Service` registration is replicated via `ctx.reflect.provide`, and the dsh
  * `renderIndexInjections` renderer is resolved lazily from the DSH runtime
- * loader (DESIGN-ellamaka-dsh §3.4.6).
+ * loader (DESIGN-dsh-base.md).
  *
  * @module @wopal/ellamaka-cordis/dsh-virtual-webserver
  */
@@ -63,7 +63,7 @@ export interface VirtualWebServerOptions {
   port: number
   /**
    * The DSH runtime handle to resolve `hostWebserver.renderIndexInjections`
-   * from (DESIGN-ellamaka-dsh §3.4.6). Production mounts inject the closure-resolved
+   * from (DESIGN-dsh-base.md). Production mounts inject the closure-resolved
    * runtime (B-01); when omitted the module falls back to the package closure —
    * a dev-only convenience that packaged hosts must never rely on.
    */
@@ -325,7 +325,11 @@ export class VirtualWebServer {
         const arg = args[at]
         if (Array.isArray(arg)) {
           for (let index = 0; index + 1 < arg.length; index += 2) {
-            if (typeof arg[index] === "string" && String(arg[index]).toLowerCase() === "location" && typeof arg[index + 1] === "string") {
+            if (
+              typeof arg[index] === "string" &&
+              String(arg[index]).toLowerCase() === "location" &&
+              typeof arg[index + 1] === "string"
+            ) {
               arg[index + 1] = rewrite(arg[index + 1] as string)
             }
           }

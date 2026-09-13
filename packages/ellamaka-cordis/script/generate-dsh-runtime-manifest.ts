@@ -11,7 +11,7 @@
  *
  * The manifest carries only the exact direct dependency versions. No lock file
  * is read or embedded: the closure lock is produced at runtime by npm during
- * materialisation (DESIGN-ellamaka-dsh §3.4.3).
+ * materialisation (DESIGN-dsh-base.md).
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -55,9 +55,7 @@ const pkg = readJson(join(pkgRoot, "package.json")) as {
 
 const deps = pkg.dependencies ?? {}
 if (!("@deepseek-ai/dsh" in deps)) {
-  fatal(
-    'package.json dependencies must declare "@deepseek-ai/dsh" as the DSH official runtime direct dependency',
-  )
+  fatal('package.json dependencies must declare "@deepseek-ai/dsh" as the DSH official runtime direct dependency')
 }
 
 const manifest: DshRuntimeManifestV1 = buildDshRuntimeManifest({ dependencies: deps })
@@ -70,9 +68,7 @@ if (checkOnly) {
   }
   const existing = readFileSync(manifestPath, "utf8")
   if (!manifestsTextEqual(existing, output)) {
-    fatal(
-      `--check: generated manifest at ${manifestPath} is out of date; re-run the generator`,
-    )
+    fatal(`--check: generated manifest at ${manifestPath} is out of date; re-run the generator`)
   }
   process.stdout.write(`ok: ${manifestPath} is up to date (fingerprint ${manifest.fingerprint})\n`)
   process.exit(0)

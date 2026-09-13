@@ -19,10 +19,12 @@ description: Ellamaka 文档目录资产地图、权威层级与维护职责
 
 | 文档 | 职责 | 维护职责 |
 |---|---|---|
-| `DESIGN.md` | 架构概览与定制索引：运行时职责、品牌身份、空间检测、配置契约、ontology 加载、状态归属 | 架构变更时同步 |
+| `DESIGN.md` | 架构概览与定制索引：运行时职责、品牌身份、空间检测、配置契约、ontology 加载、状态归属、ellamaka 与 dsh 双核心架构 | 架构变更时同步 |
 | `DESIGN-desktop.md` | 官方桌面应用架构：Electron 主进程、sidecar 承载、窗口与 PTY 生命周期 | 桌面实现变更时同步 |
 | `DESIGN-distribution.md` | 分发与版本身份唯一真相源：产品 SemVer、upstream lock、build identity、manifest、workflow、R2 CDN | 发布机制变更时同步 |
-| `DESIGN-ellamaka-dsh.md` | ellamaka 与 dsh 融合架构：双引擎集成、插件供应链、生产物化 | 融合机制变更时同步 |
+| `DESIGN-dsh-base.md` | dsh 融合基础，两个 profile 共用：文件领地、依赖闭包、物化、模块热加载 | 融合机制变更时同步 |
+| `DESIGN-dsh-web.md` | Web profile：插件供应链、插件市场、wopal 插件包、多 profile 解耦、Workbench 融合 | Web profile 变更时同步 |
+| `DESIGN-ellamaka-tools.md` | 工具容器 profile：能力采用、工具投影、沙箱、按空间配置 | 工具容器变更时同步 |
 | `DESIGN-onboarding.md` | Desktop onboarding 目标实现：入口判定、状态机、CLI machine 调用 | onboarding 流程变更时同步 |
 | `DESIGN-workbench.md` | Workbench 架构选择、状态模型与交互流程 | Workbench 产品设计变更时同步 |
 
@@ -41,7 +43,7 @@ description: Ellamaka 文档目录资产地图、权威层级与维护职责
 | 资产 | 职责 | 维护职责 |
 |---|---|---|
 | `references/ellamaka-config-mechanism.md` | 配置机制深度参考 | 配置机制变更时同步 |
-| `research/deepseek-harness-architecture-and-integration-research.md` | dsh 全景调研，`DESIGN-ellamaka-dsh.md` 的技术依据 | 不主动更新；变更时保持链接一致 |
+| `research/deepseek-harness-architecture-and-integration-research.md` | dsh 全景调研，dsh 设计文档的技术依据 | 不主动更新；变更时保持链接一致 |
 | `research/opencode/` | 上游 OpenCode 架构、机制与 SDK 专题分析 | 不主动更新；变更时保持链接一致 |
 | `research/claude-code/` | Claude Code 架构与 agent SDK 对比研究 | 不主动更新；变更时保持链接一致 |
 | `research/hermesAgent/` | hermes-agent 深度调研 | 不主动更新；变更时保持链接一致 |
@@ -50,14 +52,6 @@ description: Ellamaka 文档目录资产地图、权威层级与维护职责
 | `research/session-timeline-virtual-scroll-issue.zh-CN.md` | Session 时间线虚拟滚动问题分析 | 不主动更新；变更时保持链接一致 |
 
 研究材料承载论证与分析，为设计和实现提供依据，可被设计文档作为权威依据引用。
-
-### 进度索引
-
-| 文档 | 职责 | 维护职责 |
-|---|---|---|
-| `PLAN-TODOS.md` | dsh 双引擎融合的进度索引与批次管理 | 批次推进时更新 |
-
-`PLAN-TODOS.md` 只管总览与执行顺序。设计真相归 `DESIGN-ellamaka-dsh.md`，跨文件、多任务的大步实施归 dev-flow Plan。
 
 ## Implementation Rules
 

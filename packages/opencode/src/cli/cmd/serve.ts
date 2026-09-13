@@ -36,7 +36,7 @@ export const ServeCommand = effectCmd({
     console.log(`${BINARY_NAME} server listening on ${origin}`)
     console.log(`workbench: ${workbenchAuthUrl(origin, Flag.ELLAMAKA_SERVER_PASSWORD)}`)
 
-    // Optional dsh engine (single-process, dual-container, DESIGN-ellamaka-dsh
+    // Optional dsh engine (single-process, dual-container, DESIGN-dsh-base.md
     // §2.1/§2.2). The unified Runtime Manager (in dsh-mount.ts, shared with the
     // `web` command) gates on `ELLAMAKA_DSH` itself — `=0` → disabled with zero
     // file access — and `disabled`/`degraded` never block the server. The
@@ -45,9 +45,7 @@ export const ServeCommand = effectCmd({
     {
       const { mountDshEngine: engine } = yield* Effect.promise(() => import("./dsh-mount"))
       const handle = yield* Effect.promise(() => engine(server, { cors: opts.cors }))
-      yield* Effect.never.pipe(
-        Effect.ensuring(Effect.promise(() => handle?.dispose() ?? Promise.resolve())),
-      )
+      yield* Effect.never.pipe(Effect.ensuring(Effect.promise(() => handle?.dispose() ?? Promise.resolve())))
     }
   }),
 })

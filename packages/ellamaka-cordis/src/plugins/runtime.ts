@@ -11,7 +11,7 @@ import {
 
 /**
  * Plugin Runtime Service: watches the profile composition files and replays
- * include patches into the running containers (DESIGN-ellamaka-dsh A2, D-03).
+ * include patches into the running containers (DESIGN-dsh-base.md A2, D-03).
  *
  * Trigger contract (event driven, Plan Task 5): the watched set is each
  * container's profile composition files — `package.json` (the manifest
@@ -84,9 +84,7 @@ export interface DshPluginServiceOptions {
 }
 
 /** The result of one host-owned composition replay. */
-export type DshPluginReplayResult =
-  | { ok: true }
-  | { ok: false; error: string }
+export type DshPluginReplayResult = { ok: true } | { ok: false; error: string }
 
 /** A running service handle. */
 export interface DshPluginServiceHandle {
@@ -166,7 +164,10 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     // snapshot would race the official watchUserPatches (fresh bytes) and
     // re-apply rows the user just removed.
     const stack = (container as { stackContext?: DshPluginStackContext }).stackContext
-    if (!stack) throw new Error(`dsh plugin runtime: container for profile ${JSON.stringify(container.profile)} has no boot stack context`)
+    if (!stack)
+      throw new Error(
+        `dsh plugin runtime: container for profile ${JSON.stringify(container.profile)} has no boot stack context`,
+      )
     const patches = composeFullPatchStack({
       profileLayers: stack.profileLayers,
       userPatches: readUserPatchLayer(options.home, container.profile),
@@ -175,9 +176,11 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     })
     // Shallow-merge contract (spike 2): spread the previous config, replace
     // only `patches`.
-    const previousConfig = (container.includeEntry as unknown as {
-      options?: { config?: Record<string, unknown> }
-    }).options?.config
+    const previousConfig = (
+      container.includeEntry as unknown as {
+        options?: { config?: Record<string, unknown> }
+      }
+    ).options?.config
     const { patches: _prev, ...rest } = previousConfig ?? {}
     await container.includeEntry.update({
       config: { ...rest, patches },

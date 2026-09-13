@@ -16,7 +16,7 @@ import { dshResolvePluginArgs, type DshResolvedPlugin } from "./dsh-cli"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 
 /**
- * `ellamaka dsh plugin` — the official-order command surface (DESIGN-ellamaka-dsh
+ * `ellamaka dsh plugin` — the official-order command surface (DESIGN-dsh-base.md
  * §632, Plan 223 D-02): `dsh plugin --profile <name> <args...>` with the
  * remaining args forwarded VERBATIM to the ellamaka Bun installer (never pnpm).
  *
@@ -74,7 +74,7 @@ export const DshPluginCommand = effectCmd({
     "manage a profile's dsh plugins via the ellamaka installer (official order: dsh plugin --profile <name> add <package>)",
   instance: false,
   // Engine-free shim: pure profile-file operations, no AppLayer boot
-  // (DESIGN-ellamaka-dsh — `ellamaka dsh` must not start the engine).
+  // (DESIGN-dsh-base.md — `ellamaka dsh` must not start the engine).
   light: true,
   builder: (yargs) =>
     yargs
@@ -151,7 +151,9 @@ export const DshPluginCommand = effectCmd({
         log.success(`Installed ${result.name}@${result.version} (${result.source})`)
         log.info(`Enabled in: ${profiles.join(", ")}`)
         if (result.warning) log.warn(result.warning)
-        log.info("A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.")
+        log.info(
+          "A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.",
+        )
         return
       }
       // Phase-1 transport policy: github sources get a clear error with the
@@ -171,7 +173,9 @@ export const DshPluginCommand = effectCmd({
       log.success(`Installed ${result.name}@${result.version} (${result.source})`)
       log.info(`Enabled in: ${profiles.join(", ")}`)
       if (result.warning) log.warn(result.warning)
-      log.info("A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.")
+      log.info(
+        "A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.",
+      )
       return
     }
 

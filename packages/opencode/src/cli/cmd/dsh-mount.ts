@@ -190,11 +190,11 @@ function resolveEllamakaCommand(): string[] {
 
 /**
  * Mount the full dsh engine (web + tool containers) on a running Ellamaka
- * server under `/dsh` (single-port scheme, DESIGN-ellamaka-dsh §2.1). Shared by
+ * server under `/dsh` (single-port scheme, DESIGN-dsh-base.md). Shared by
  * the `serve` and `web` commands; the TUI uses its tools-only variant in
  * `tui/dsh-mount.ts`.
  *
- * Assembly (DESIGN-ellamaka-dsh §3.4.4/§3.4.5):
+ * Assembly (DESIGN-dsh-base.md):
  * 1. The unified Runtime Manager runs first — it gates on `ELLAMAKA_DSH`
  *    itself (`=0` → `disabled` with zero file access), so it is called
  *    unconditionally; no manual kill-switch check here.
@@ -318,7 +318,9 @@ export async function mountDshEngine(
     // installs change it. A degraded watcher never breaks the engine. The
     // container logger is injected so store/replay failures land in the
     // dsh-plugins log with structure (rook W-02).
-    let pluginService: { replay(): Promise<{ ok: true } | { ok: false; error: string }>; stop(): Promise<void> } | undefined
+    let pluginService:
+      | { replay(): Promise<{ ok: true } | { ok: false; error: string }>; stop(): Promise<void> }
+      | undefined
     try {
       const { startDshPluginService } = await import("@wopal/ellamaka-cordis/plugins/runtime")
       const watcherLog = webHub.ctx.logger("dsh-plugins")
@@ -326,7 +328,12 @@ export async function mountDshEngine(
         home,
         containers: [
           { profile: "web", ctx: webHub.ctx, includeEntry: dsh.includeEntry, stackContext: dsh.stackContext },
-          { profile: "ellamaka-tools", ctx: toolsHub.ctx, includeEntry: toolsHost.includeEntry, stackContext: toolsHost.stackContext },
+          {
+            profile: "ellamaka-tools",
+            ctx: toolsHub.ctx,
+            includeEntry: toolsHost.includeEntry,
+            stackContext: toolsHost.stackContext,
+          },
         ],
         logger: {
           info: (message, extra) => watcherLog.info(message, extra),

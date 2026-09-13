@@ -19,10 +19,12 @@ This directory is ellamaka's design and documentation asset collection. Document
 
 | Document | Responsibility | Maintenance |
 |---|---|---|
-| `DESIGN.md` | Architecture overview and customization index: runtime responsibilities, brand identity, space detection, configuration contract, ontology loading, state ownership | Sync on architecture changes |
+| `DESIGN.md` | Architecture overview and customization index: runtime responsibilities, brand identity, space detection, configuration contract, ontology loading, state ownership, ellamaka and dsh dual-core architecture | Sync on architecture changes |
 | `DESIGN-desktop.md` | Official desktop application architecture: Electron main process, sidecar hosting, window and PTY lifecycle | Sync on desktop implementation changes |
 | `DESIGN-distribution.md` | Single source of truth for distribution and version identity: product SemVer, upstream lock, build identity, manifest, workflows, R2 CDN | Sync on release mechanism changes |
-| `DESIGN-ellamaka-dsh.md` | ellamaka and dsh fusion architecture: dual-engine integration, plugin supply chain, production materialization | Sync on fusion mechanism changes |
+| `DESIGN-dsh-base.md` | dsh fusion foundation shared by both profiles: file territory, dependency closure, materialization, module hot reload | Sync on fusion mechanism changes |
+| `DESIGN-dsh-web.md` | Web profile: plugin supply chain, plugin market, wopal plugin package, multi-profile decoupling, Workbench integration | Sync on Web profile changes |
+| `DESIGN-ellamaka-tools.md` | Tool container profile: capability adoption, tool projection, sandbox, per-space configuration | Sync on tool container changes |
 | `DESIGN-onboarding.md` | Desktop onboarding target implementation: entry determination, state machine, CLI machine invocation | Sync on onboarding flow changes |
 | `DESIGN-workbench.md` | Workbench architecture choices, state model, and interaction flows | Sync on Workbench product design changes |
 
@@ -41,7 +43,7 @@ Companion documents are independent truth sources. They do not belong to the `DE
 | Asset | Responsibility | Maintenance |
 |---|---|---|
 | `references/ellamaka-config-mechanism.md` | In-depth configuration mechanism reference | Sync on configuration mechanism changes |
-| `research/deepseek-harness-architecture-and-integration-research.md` | dsh landscape research; the technical basis for `DESIGN-ellamaka-dsh.md` | Not actively updated; keep links consistent on change |
+| `research/deepseek-harness-architecture-and-integration-research.md` | dsh landscape research; the technical basis for the dsh design documents | Not actively updated; keep links consistent on change |
 | `research/opencode/` | Upstream OpenCode architecture, mechanism, and SDK topic analyses | Not actively updated; keep links consistent on change |
 | `research/claude-code/` | Claude Code architecture and agent SDK comparative research | Not actively updated; keep links consistent on change |
 | `research/hermesAgent/` | hermes-agent in-depth research | Not actively updated; keep links consistent on change |
@@ -50,14 +52,6 @@ Companion documents are independent truth sources. They do not belong to the `DE
 | `research/session-timeline-virtual-scroll-issue.zh-CN.md` | Session timeline virtual scroll issue analysis | Not actively updated; keep links consistent on change |
 
 Research material carries argumentation and analysis, providing the basis for design and implementation, and may be cited by design documents as authoritative evidence.
-
-### Progress Index
-
-| Document | Responsibility | Maintenance |
-|---|---|---|
-| `PLAN-TODOS.md` | Progress index and batch management for the dsh dual-engine fusion | Update as batches progress |
-
-`PLAN-TODOS.md` owns only the overview and execution order. Design truth belongs to `DESIGN-ellamaka-dsh.md`; cross-file, multi-task large-step implementation belongs to dev-flow Plans.
 
 ## Implementation Rules
 

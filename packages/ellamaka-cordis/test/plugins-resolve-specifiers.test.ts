@@ -9,7 +9,7 @@ import { resolveRowSpecifier } from "../src/plugins/resolve-specifiers"
 /**
  * B1 (拆雷) explicit specifier resolution: Bridge-composed rows must reach the
  * Loader as absolute `file://` URLs, resolution order closure -> profiles
- * (DESIGN-ellamaka-dsh 「Bun 下不伪造 loader.internal（拆雷）」, Path 1 per the
+ * (DESIGN-dsh-base.md 「Bun 下不伪造 loader.internal（拆雷）」, Path 1 per the
  * spike record). The fixtures are self-contained under tmpdir — nothing under
  * the real home is read or written.
  */
@@ -21,8 +21,11 @@ function fakeClosure(root: string): { anchor: string; timerMain: string } {
   writeFileSync(anchor, JSON.stringify({ name: "@deepseek-ai/dsh", version: "0.0.0-test" }))
   const timerDir = join(root, "node_modules", "@deepseek-ai", "cordis-plugin-timer")
   mkdirSync(join(timerDir, "lib"), { recursive: true })
-  writeFileSync(join(timerDir, "package.json"), JSON.stringify({ name: "@deepseek-ai/cordis-plugin-timer", version: "1.0.0", main: "./lib/index.js" }))
-  writeFileSync(join(timerDir, "lib", "index.js"), "export const name = \"@deepseek-ai/cordis-plugin-timer\"\n")
+  writeFileSync(
+    join(timerDir, "package.json"),
+    JSON.stringify({ name: "@deepseek-ai/cordis-plugin-timer", version: "1.0.0", main: "./lib/index.js" }),
+  )
+  writeFileSync(join(timerDir, "lib", "index.js"), 'export const name = "@deepseek-ai/cordis-plugin-timer"\n')
   return { anchor, timerMain: join(timerDir, "lib", "index.js") }
 }
 
@@ -50,8 +53,11 @@ describe("resolveRowSpecifier (B1 explicit resolution)", () => {
     const anchor = fakeClosure(root).anchor
     const pluginDir = join(root, "home", "profiles", "node_modules", "fx-plugin")
     mkdirSync(pluginDir, { recursive: true })
-    writeFileSync(join(pluginDir, "package.json"), JSON.stringify({ name: "fx-plugin", version: "1.0.0", main: "index.js" }))
-    writeFileSync(join(pluginDir, "index.js"), "export const name = \"fx-plugin\"\n")
+    writeFileSync(
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "fx-plugin", version: "1.0.0", main: "index.js" }),
+    )
+    writeFileSync(join(pluginDir, "index.js"), 'export const name = "fx-plugin"\n')
     const resolved = resolveRowSpecifier("fx-plugin", { dshRoot: root, installAnchor: anchor })
     expect(resolved.startsWith("file://")).toBe(true)
     expect(resolved.endsWith("/profiles/node_modules/fx-plugin/index.js")).toBe(true)
@@ -62,9 +68,12 @@ describe("resolveRowSpecifier (B1 explicit resolution)", () => {
     const anchor = fakeClosure(root).anchor
     const pluginDir = join(root, "home", "profiles", "node_modules", "@acme", "widget")
     mkdirSync(pluginDir, { recursive: true })
-    writeFileSync(join(pluginDir, "package.json"), JSON.stringify({ name: "@acme/widget", version: "1.0.0", main: "lib/index.js" }))
+    writeFileSync(
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "@acme/widget", version: "1.0.0", main: "lib/index.js" }),
+    )
     mkdirSync(join(pluginDir, "lib"), { recursive: true })
-    writeFileSync(join(pluginDir, "lib", "index.js"), "export const name = \"@acme/widget\"\n")
+    writeFileSync(join(pluginDir, "lib", "index.js"), 'export const name = "@acme/widget"\n')
     const resolved = resolveRowSpecifier("@acme/widget", { dshRoot: root, installAnchor: anchor })
     expect(resolved.endsWith("/profiles/node_modules/@acme/widget/lib/index.js")).toBe(true)
   })
@@ -75,7 +84,10 @@ describe("resolveRowSpecifier (B1 explicit resolution)", () => {
     // The same name also exists under profiles: the closure copy must win.
     const shadowDir = join(root, "home", "profiles", "node_modules", "@deepseek-ai", "cordis-plugin-timer")
     mkdirSync(shadowDir, { recursive: true })
-    writeFileSync(join(shadowDir, "package.json"), JSON.stringify({ name: "@deepseek-ai/cordis-plugin-timer", version: "9.9.9", main: "shadow.js" }))
+    writeFileSync(
+      join(shadowDir, "package.json"),
+      JSON.stringify({ name: "@deepseek-ai/cordis-plugin-timer", version: "9.9.9", main: "shadow.js" }),
+    )
     const resolved = resolveRowSpecifier("@deepseek-ai/cordis-plugin-timer", { dshRoot: root, installAnchor: anchor })
     // realpath: macOS /var is a symlink to /private/var (pathToFileURL resolves it).
     expect(decodeURIComponent(resolved)).toBe(pathToFileURL(realpathSync(timerMain)).href)

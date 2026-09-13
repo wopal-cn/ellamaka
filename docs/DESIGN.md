@@ -7,7 +7,9 @@
 >
 > - `./DESIGN-desktop.md` — 官方桌面应用架构
 > - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
-> - `./DESIGN-ellamaka-dsh.md` — ellamaka 与 dsh 融合架构
+> - `./DESIGN-dsh-base.md` — dsh 融合基础：文件领地、依赖闭包、热加载
+> - `./DESIGN-dsh-web.md` — Web profile：插件供应链与界面承载
+> - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
 > - `./DESIGN-onboarding.md` — Desktop onboarding 目标实现
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 > **配套文档**:
@@ -40,6 +42,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | 构建与发布                | 品牌注入、平台矩阵、构建接口                                                                      | [Release Backbone](./DESIGN-distribution.md#release-backbone) |
 | Web UI 产品化             | `packages/ellamaka-app` 作为官方 Web 工作台形态                                                    | [Web UI 与 ellamaka-app](#web-ui-与-ellamaka-app)、[DESIGN-workbench.md](./DESIGN-workbench.md) |
 | Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约) |
+| DSH 双引擎融合            | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                        | [DSH 双引擎融合](#dsh-双引擎融合)       |
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
@@ -265,7 +268,153 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 **一致性**：materialize/install 与 cold reload 在 shared home 锁上串行；先停旧代、确认终止，再启新代；重载超时或失败只降级该单元，不升级为整进程重启。
 
-DSH 容器装配与融合细则见 [DESIGN-ellamaka-dsh.md](./DESIGN-ellamaka-dsh.md)。
+DSH 容器装配与融合细则见 [DESIGN-dsh-base.md](./DESIGN-dsh-base.md)。
+
+## DSH 双引擎融合
+
+ellamaka 在自己的进程内运行 dsh 引擎。融合的目的是获得沙箱执行、插件生态与动态装载能力，同时保持 ellamaka 的会话所有权与对外契约不变。
+
+### 双容器模型
+
+进程内运行两个相互独立容器，共用 ellamaka 的唯一监听端口：
+
+| 容器 | Profile | 职责 | 会话 |
+|------|---------|------|------|
+| **Web 容器** | `web` | 承载 dsh 完整 Web 界面（会话、账本、检查点、Agent 配置体系） | 有 |
+| **工具容器** | `ellamaka-tools` | 提供纯工具执行后端，供 ellamaka 工具管道调用 | 无 |
+
+```text
+ellamaka 进程（唯一监听端口）
+├── ellamaka 引擎 + Effect HttpApi    → /api/*、/workbench 等原生资源
+│     └── ToolRegistry：内置工具 + dsh-adapter 投影的容器工具
+├── /dsh/* → 受控 Node 路由挂载点 → VirtualWebServer（Web 容器）
+│     ├── /api/*          → dsh 官方 connection 插件
+│     ├── /api/events.*   → dsh 官方 WebSocket 下行通道
+│     ├── /plugins/*      → dsh 官方 modules 插件
+│     ├── /plugins/events → dsh 官方 HMR 插件
+│     └── /*              → dsh 官方 frontend-static
+├── 工具容器（ellamaka-tools profile，无 webserver）
+│     └── globalThis.__ellamakaDshContainer → dsh-adapter 调用工具
+└── DSH Runtime Manager → 依赖闭包物化与容器挂载
+      └── DSH Bridge（编译进 ellamaka 发布物，动态加载官方运行时）
+```
+
+**两个容器必须分离**：Web 界面需要 dsh 的完整 agent-loop 语义（会话账本、检查点、完整插件集）；工具采用只需要工具本体与最小调用上下文。同一个容器无法同时满足两种装配——检查点插件会强制刷新调用方的活动会话。
+
+**入口分工**：
+
+- CLI serve / web：挂载 Web 容器与工具容器
+- Desktop sidecar：挂载 Web 容器与工具容器
+- TUI：只挂工具容器（无 iframe 需求）
+- Workbench：由承载页面的 serve/web 后端或 Desktop sidecar 提供两个容器
+
+### 采用范围
+
+融合只采用 dsh 的工具能力，不采用它的会话语义。
+
+dsh 的会话与账本语义、调度、子代理等引擎能力依赖 dsh 自身的会话模型，与 ellamaka 的会话所有权冲突。契约桥能翻译接口形状，翻译不了引擎语义。这类能力的获取路径是按 ellamaka 的数据模型复刻所需机制，不复用其包。
+
+工具插件不在这个范围内。它们是叶子工具，只消费会话的浅层形状，不依赖 agent-loop 语义。
+
+工具容器与 adapter 投影路径不创建、不持有任何会话，只提供执行能力。
+
+### 组件清单
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| `VirtualWebServer` | `@wopal/ellamaka-cordis` | 实现 dsh 官方 WebServer 接口，提供路由与 upgrade 分发，不创建监听 socket |
+| 受控路由挂载点 | `Listener.mountNodeRoute` | 按前缀分发 HTTP 与 upgrade 到已注册 handler，保留 Effect listener 生命周期 |
+| Ellamaka DSH Bridge | `@wopal/ellamaka-cordis` | 随 CLI 与 Desktop sidecar 编译发布，提供容器、虚拟 WebServer、运行时动态加载与 dsh boot 装配 |
+| DSH Runtime Manager | `@wopal/ellamaka-cordis/runtime` | 所有入口共用的启动入口，负责禁用判断、闭包物化、完整性校验、动态加载与容器挂载 |
+| DSH Plugin Manager | `@wopal/ellamaka-cordis/plugins` | 插件供应链：安装区管理、依赖解析、热挂载与 profile 声明同步 |
+| wopal 插件包 | `@wopal/dsh-wopal-pack` | 配置单与自定义能力随包发布 |
+| DSH 运行时清单 | ellamaka 构建产物 | 构建时从 `packages/ellamaka-cordis/package.json` 派生并锁定 dsh 官方依赖 |
+| dsh 引擎装配 | `@wopal/ellamaka-cordis/dsh-web` | 通过 installAnchor 从物化闭包加载官方运行时，重放 boot 序列，构造两个容器 |
+| dsh-adapter | `.wopal/plugins/dsh-adapter` | 把工具容器中的工具投影进 ellamaka ToolRegistry |
+
+依赖方向单一：ellamaka 依赖 Bridge，Bridge 依赖 dsh 运行时。dsh 不依赖 Bridge，Bridge 不发布为独立包。
+
+### 单端口分发
+
+dsh 的 Web 路由与 ellamaka 原生路由共用 ellamaka 的监听端口：
+
+1. ellamaka Server 提供受控 Node 路由挂载点，保存前缀与 HTTP/upgrade handler。
+2. `VirtualWebServer` 持有 dsh 官方插件注册的路由与 upgrade socket，暴露分发能力。
+3. `mountDshWeb` 返回的 webServer 经 `Listener.mountNodeRoute({ prefix: "/dsh", ... })` 挂到主 listener。
+4. 主服务器剥离 `/dsh` 前缀后，`VirtualWebServer` 看到的是官方 `/api`、`/plugins` 原始路径。
+
+调用方获得 register 与 dispose 能力，不获得原始 `node:http.Server`。upgrade socket 由 `VirtualWebServer` 持有，在 host dispose 与主 listener 停止时销毁，补足 Node `closeAllConnections()` 不覆盖 WebSocket 的行为。
+
+`/dsh` 保持前缀挂载而不升根。这让 dsh 成为前缀自治的独立表面：它内部硬编码的 `/api` 与引擎自己的 API 命名空间不冲突，桌面壳的代理判据与认证的信任域边界都以这个前缀为准。
+
+### 浏览器前缀适配
+
+dsh 前端在隔离 iframe 内加载。`VirtualWebServer` 在 index 注入链末尾注入适配脚本，把 dsh 浏览器的传输映射到 `/dsh/*`：
+
+- `fetch`（字符串、`Request`、`URL` 对象）、`WebSocket`、`EventSource`
+- `document.createElement("script")` 动态加载的插件 bundle
+- 覆盖相对路径与同源绝对 URL；外部 URL 与已带 `/dsh` 的 URL 保持不变
+
+静态资源使用文档相对路径（`./assets/*`），官方靠注入 `<base href="/">` 锚定根。index 变换把根绝对与相对 URL 一并绝对化到 `/dsh` 前缀，免疫 base 标签逃逸，并移除 iframe 不需要的 PWA manifest 链接。
+
+### 浏览器认证
+
+dsh 的 Web 面使用官方 `browser-auth`。进程持有启动令牌，浏览器首次访问 index 必须携带令牌换取一张绑定授权的签名 cookie（HttpOnly、Path=/、SameSite=Strict、默认 30 天）。`/api` 通道叠加主机与来源信任校验（403）和 cookie 认证（401）两层栅栏，静态资源公开。
+
+集成使用官方代码，不自造会话机制：
+
+- **认证入口**：`mountDshWeb` 从官方 connection 服务现算认证路径（`/dsh/?token=...`），令牌不持久化。
+- **出站跳转改写**：官方令牌交换的 303 响应把 location 写死为 `/`。`VirtualWebServer` 对跳转响应的 Location 头做前缀改写，使 iframe 登录不跳出挂载点。
+- **下发通道**：serve 端把入口地址发布到模块级单槽，经 `GET /workbench/dsh-url` 由已认证的 workbench API 现答。令牌只经 ellamaka 的已认证面下发。
+- **前端消费**：`DshSurface` 经 SDK 取地址，来源与活跃 server 一致才采用，否则回落 `<server>/dsh/` 派生。同源判定把回环别名归一化（localhost、127.0.0.1、[::1] 同主机同端口视为同源）。
+- **开发拓扑**：cookie 是 SameSite=Strict，Vite 开发端口到后端端口的跨站 iframe 带不上 cookie。开发配置把 `/dsh` 代理到后端，使 iframe 与 cookie 同源。代理同时把 Origin 头对齐目标来源，因为官方信任栅栏要求 Origin 与 Host 一致。
+
+### 认证的双信任域
+
+ellamaka 的基础认证与 dsh 的 browser-auth 各守各的门。基础认证守外层，即令牌的分发面；cookie 守内层，即 dsh 自己的 `/api` 通道与 index。
+
+iframe 内运行的是 dsh 自己的前端代码，它的请求不携带 ellamaka 前端的认证凭证，因此内层必须有一张 dsh 自己认可的凭证。用户感知上是统一的：一次外层登录，令牌与 cookie 在后台流转。
+
+这个边界由四项机制固化：
+
+- **信任跟随跨域决策**：dsh 的主机信任列表从宿主跨域信任决策派生（服务器跨域配置与命令行参数合并后的来源列表），经 profile 补丁层注入。非回环主机必须命中该列表。默认空列表的行为不变，只信任回环地址。认证机制本身仍归官方实现。
+- **iframe 失效自愈**：前端探测 iframe 内的 401 响应，命中即重取入口地址并重载，令牌地址重载即重新换取 cookie。
+- **挂载认证显式声明**：路由挂载点强制声明认证策略（自带完整认证或明确公开），不允许默认无认证。
+- **升级与请求共享认证路径**：WebSocket 握手与 `/api` 请求经同一道认证，由官方实现守卫，宿主不设独立认证。
+
+### 桥接 API 规范
+
+从异步侧调用回 Effect 世界的桥接遵守以下形态：
+
+1. **持有 work fiber 必须用 `Effect.forkIn(scope)(work)`**：在 `Effect.scoped` 内取 scope，`forkIn(scope)` 直接返回持有的 fiber。中断经 `runtime.runFork(Fiber.interrupt(fiber))`。禁止用 `runPromise` 驱动长任务。
+2. **顶层 `Effect.runFork` / `runPromise` / `runCallback` 在运行时未导出**，一律经 `ManagedRuntime` 实例方法调用。
+3. **`Effect.scope` 必须在 `Effect.scoped` 内获取**，否则以空缺陷终止。
+4. **异步本地存储上下文**：effect 体内发起的桥接调用沿传播链天然继承实例上下文；纯异步侧发起的轮次需要捕获与恢复。
+5. **取消语义**：中断后清理函数按子先父后顺序确定性执行，`forkIn(scope)` 的并发子任务级联清理。容器入口只启动，不拥有中断权。
+
+### 生成 SDK 的双文件一致性
+
+生成客户端由两个文件共同决定一个字段的线上行为：类型层与运行时的参数映射层。
+
+**类型存在不等于运行时会发送**。接口新增字段后如果只重新生成类型，或生成中断留下半新状态，运行时的映射层缺少对应键会让客户端在编码时静默丢弃该字段，没有报错也没有日志。
+
+验收方式是对新增字段在两个文件中都能检索到，或全量重新生成后比对差异。
+
+### 权限规则的合并顺序
+
+权限评估是最后匹配者生效，规则表顺序等于 frontmatter 声明顺序经合并后的位置。
+
+同一个 agent 的配置可以来自多份副本（`$WOPAL_HOME` 与空间 `.wopal`），按加载顺序深度合并。后加载副本的键保留其声明位置，一条显式的收窄规则可能被先声明但合并后靠后的通配规则压过，静默放行。
+
+需要收窄通配的显式规则必须保证在合并后的规则表中位于通配之后。最稳妥的写法是 frontmatter 不声明通配，只写显式例外，引擎默认值已经提供通配兜底。
+
+验收方式是查询活实例的 agent 定义，确认显式规则位于相关通配之后。
+
+### 与其他设计的关系
+
+- 文件领地、依赖闭包、物化与热加载机制见 [DESIGN-dsh-base.md](./DESIGN-dsh-base.md)。
+- 工具容器的装配、工具投影与沙箱策略见 [DESIGN-ellamaka-tools.md](./DESIGN-ellamaka-tools.md)。
+- Web profile 的插件供应链、插件包与界面承载见 [DESIGN-dsh-web.md](./DESIGN-dsh-web.md)。
 
 ## Web UI 与 ellamaka-app
 

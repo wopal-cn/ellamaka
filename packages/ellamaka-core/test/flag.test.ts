@@ -11,7 +11,7 @@ const catalogVariables = [
 
 const originalCatalogVariables = new Map(catalogVariables.map((key) => [key, process.env[key]]))
 
-// ELLAMAKA_DSH is a kill switch, default ON (DESIGN-ellamaka-dsh §3.4, constraint
+// ELLAMAKA_DSH is a kill switch, default ON (DESIGN-dsh-base.md, constraint
 // #11). `ELLAMAKA_DSH=0` disables dsh; unset or any non-"0" value enables it.
 describe("ELLAMAKA_DSH kill switch", () => {
   afterEach(() => {

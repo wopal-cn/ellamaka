@@ -8,12 +8,7 @@ import { createServer, type Server } from "node:http"
 import { once } from "node:events"
 import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
-import {
-  bootDshWeb,
-  migrateToolsProfileApprovalPatch,
-  mountDshWeb,
-  mountDshTools,
-} from "../src/dsh-web"
+import { bootDshWeb, migrateToolsProfileApprovalPatch, mountDshWeb, mountDshTools } from "../src/dsh-web"
 
 /** Attach a VirtualWebServer to a raw server and return its base URL. */
 async function attachAndListen(webServer: { attach(server: Server): void }) {
@@ -101,7 +96,7 @@ function makeSessionFake(id: string, cwd: string, seeded: { type: string; data: 
 /**
  * Mount the dsh web engine virtually: the official web profile registers its
  * routes on a VirtualWebServer instead of a second listening socket (final
- * scheme, DESIGN-ellamaka-dsh §2.1). Uses a temp DSH_HOME so the test never touches
+ * scheme, DESIGN-dsh-base.md). Uses a temp DSH_HOME so the test never touches
  * the user's ~/.dsh.
  */
 describe("dsh web engine", () => {
@@ -124,36 +119,36 @@ describe("dsh web engine", () => {
       // The official web profile registered its routes on the VirtualWebServer.
       const { server, baseUrl } = await attachAndListen(host.webServer)
       try {
-      // rc.1 browser-auth: a tokenless index request is 401; the launch-token
-      // entry URL exchanges the token for a signed cookie (official flow).
-      const unauth = await fetch(baseUrl + "/", { redirect: "manual" })
-      expect(unauth.status).toBe(401)
+        // rc.1 browser-auth: a tokenless index request is 401; the launch-token
+        // entry URL exchanges the token for a signed cookie (official flow).
+        const unauth = await fetch(baseUrl + "/", { redirect: "manual" })
+        expect(unauth.status).toBe(401)
 
-      // The handle exposes the authenticated iframe entry path with a token.
-      const entry = new URL(host.authenticatedPath, "http://dsh.invalid")
-      expect(entry.pathname).toBe("/dsh/")
-      expect(entry.searchParams.get("token")).toBeTruthy()
+        // The handle exposes the authenticated iframe entry path with a token.
+        const entry = new URL(host.authenticatedPath, "http://dsh.invalid")
+        expect(entry.pathname).toBe("/dsh/")
+        expect(entry.searchParams.get("token")).toBeTruthy()
 
-      const cookie = await loginCookie(baseUrl, host.authenticatedPath)
+        const cookie = await loginCookie(baseUrl, host.authenticatedPath)
 
-      // The minted cookie serves the index; static asset URLs carry /dsh and
-      // the manifest link stays dropped.
-      const root = await fetch(baseUrl + "/", { headers: { cookie } })
-      expect(root.status).toBe(200)
-      const html = await root.text()
-      expect(html).toContain("__DSH_BOOT__")
-      expect(html).toContain("/dsh/assets/")
-      expect(html).toContain("/dsh/favicon.svg")
-      expect(html).not.toContain("manifest.webmanifest")
+        // The minted cookie serves the index; static asset URLs carry /dsh and
+        // the manifest link stays dropped.
+        const root = await fetch(baseUrl + "/", { headers: { cookie } })
+        expect(root.status).toBe(200)
+        const html = await root.text()
+        expect(html).toContain("__DSH_BOOT__")
+        expect(html).toContain("/dsh/assets/")
+        expect(html).toContain("/dsh/favicon.svg")
+        expect(html).not.toContain("manifest.webmanifest")
 
-      // The /api RPC channel routes through the virtual server once the
-      // cookie rides along (the official Host/Origin fence + browserAuth).
-      // rc.1 ships no host.describe (ApiProxy removed); the exact Fetch route
-      // /api/session.export answers 400 on a missing sessionId — any server
-      // answer other than 401/403/404 proves the authenticated path reaches
-      // the route owner.
-      const rpc = await fetch(baseUrl + "/api/session.export", { headers: { cookie } })
-      expect(rpc.status).toBe(400)
+        // The /api RPC channel routes through the virtual server once the
+        // cookie rides along (the official Host/Origin fence + browserAuth).
+        // rc.1 ships no host.describe (ApiProxy removed); the exact Fetch route
+        // /api/session.export answers 400 on a missing sessionId — any server
+        // answer other than 401/403/404 proves the authenticated path reaches
+        // the route owner.
+        const rpc = await fetch(baseUrl + "/api/session.export", { headers: { cookie } })
+        expect(rpc.status).toBe(400)
       } finally {
         server.close()
       }
@@ -167,9 +162,7 @@ describe("dsh web engine", () => {
       // container before the Loader mounts plugin rows, so dshmarket's
       // `apply()` probe sees desktopProfiles and takes its Desktop path
       // (which calls desktopPnpm.runPlugin instead of spawning the CLI).
-      const desktopProfiles = ctx.get("desktopProfiles") as
-        | { current: { name: string; dir: string } }
-        | undefined
+      const desktopProfiles = ctx.get("desktopProfiles") as { current: { name: string; dir: string } } | undefined
       expect(desktopProfiles).toBeDefined()
       expect(desktopProfiles!.current.name).toBe("web")
       expect(desktopProfiles!.current.dir).toBe(join(home, "home", "profiles", "web"))
@@ -184,7 +177,7 @@ describe("dsh web engine", () => {
 
   test("mountDshWeb with an explicit installAnchor discovers presets from that closure", async () => {
     // Packaged-CLI scheme: the anchor lives in the materialised closure under
-    // the dsh home, not in the module graph (DESIGN-ellamaka-dsh §2.2). The preset
+    // the dsh home, not in the module graph (DESIGN-dsh-base.md). The preset
     // roster itself is bundled inside @deepseek-ai/dsh-agent-presets (rc.1);
     // this test pins that the mounted roster resolves from the mount's own
     // closure and carries the shipped `standard` preset.
@@ -242,7 +235,7 @@ describe("dsh web engine", () => {
         const adapterMatch = html.match(/<script>\(\(\) => \{\n  const prefix = "\/dsh"[\s\S]*?<\/script>/)
         expect(adapterMatch).not.toBeNull()
         const adapterBody = adapterMatch![0].replace(/^<script>/, "").replace(/<\/script>$/, "")
-        expect(adapterBody).toContain("const prefix = \"/dsh\"")
+        expect(adapterBody).toContain('const prefix = "/dsh"')
         expect(adapterBody).toContain("globalThis.fetch")
 
         // Extract the adapter body and run it in an isolated VM with fake
@@ -250,8 +243,7 @@ describe("dsh web engine", () => {
         // the injected script actually adapts same-origin URLs to /dsh.
         const calls = { fetch: [], ws: [], es: [] }
         runInIsolatedVm(
-          adapterBody +
-            `;fetch("/api/x"); new WebSocket("/api/events.mux"); new EventSource("/plugins/events");`,
+          adapterBody + `;fetch("/api/x"); new WebSocket("/api/events.mux"); new EventSource("/plugins/events");`,
           calls,
         )
         expect(calls.fetch[0][0]).toBe("/dsh/api/x")
@@ -283,11 +275,15 @@ describe("dsh web engine", () => {
       host.webServer.registerUpgrade({
         path: "/test/events.mux",
         handler: (req, socket) => {
-          socket.once("close", () => { socketClosed = true })
+          socket.once("close", () => {
+            socketClosed = true
+          })
         },
       })
       const socket = connect(port, "127.0.0.1")
-      socket.once("close", () => { socketClosed = true })
+      socket.once("close", () => {
+        socketClosed = true
+      })
       socket.write(
         "GET /test/events.mux HTTP/1.1\r\n" +
           "Host: 127.0.0.1\r\n" +
@@ -528,7 +524,9 @@ describe("dsh tools profile", () => {
       expect(unreadEdit.error?.info?.code).toBe("FS_NOT_OBSERVED")
 
       expect((await execute("read", { file_path: "edit.txt" })).isError).toBe(false)
-      expect((await execute("edit", { file_path: "edit.txt", old_string: "before", new_string: "after" })).isError).toBe(false)
+      expect(
+        (await execute("edit", { file_path: "edit.txt", old_string: "before", new_string: "after" })).isError,
+      ).toBe(false)
       expect(readFileSync(join(workspace, "edit.txt"), "utf-8")).toBe("after")
 
       const denied = await execute("write", {
@@ -557,7 +555,9 @@ describe("dsh tools profile", () => {
           error?: { info?: { code?: string } }
         }>
       }
-      const session = makeSessionFake("tools-readonly-session", workspace, [{ type: "sandbox/mode", data: { mode: "read-only" } }])
+      const session = makeSessionFake("tools-readonly-session", workspace, [
+        { type: "sandbox/mode", data: { mode: "read-only" } },
+      ])
       const result = await tools.execute({
         callId: "tools-readonly-write",
         name: "write",
@@ -605,12 +605,21 @@ describe("dsh tools profile", () => {
       expect(tools.schemas().map((tool) => tool.name)).toContain("str_replace_editor")
       expect((await execute({ command: "create", path: editorPath, file_text: "one\ntwo" })).isError).toBe(false)
       expect((await execute({ command: "view", path: editorPath })).isError).toBe(false)
-      expect((await execute({ command: "str_replace", path: editorPath, old_str: "two", new_str: "TWO" })).isError).toBe(false)
-      expect((await execute({ command: "insert", path: editorPath, insert_line: 1, new_str: "between" })).isError).toBe(false)
+      expect(
+        (await execute({ command: "str_replace", path: editorPath, old_str: "two", new_str: "TWO" })).isError,
+      ).toBe(false)
+      expect((await execute({ command: "insert", path: editorPath, insert_line: 1, new_str: "between" })).isError).toBe(
+        false,
+      )
       expect(readFileSync(editorPath, "utf-8")).toBe("one\nbetween\nTWO")
 
       writeFileSync(join(workspace, "unseen.txt"), "before")
-      const unseen = await execute({ command: "str_replace", path: join(workspace, "unseen.txt"), old_str: "before", new_str: "after" })
+      const unseen = await execute({
+        command: "str_replace",
+        path: join(workspace, "unseen.txt"),
+        old_str: "before",
+        new_str: "after",
+      })
       expect(unseen.isError).toBe(true)
       expect(unseen.error?.info?.code).toBe("FS_NOT_OBSERVED")
       expect((await execute({ command: "view", path: "relative.txt" })).isError).toBe(true)
@@ -679,7 +688,9 @@ describe("dsh tools profile", () => {
       expect(bash?.parameters.properties).not.toHaveProperty("run_in_background")
       const pwd = await execute({ command: "pwd", description: "Print sandbox workspace directory" })
       expect((pwd.content ?? []).map((block) => block.text ?? "").join("\n")).toContain(workspace)
-      expect((await execute({ command: `printf bash-ok > "${allowed}"`, description: "Write sandbox proof file" })).isError).toBe(false)
+      expect(
+        (await execute({ command: `printf bash-ok > "${allowed}"`, description: "Write sandbox proof file" })).isError,
+      ).toBe(false)
       expect(readFileSync(allowed, "utf-8")).toBe("bash-ok")
 
       // homedir is used (not /tmp) because dsh's `workspace-write` sandbox
@@ -687,7 +698,10 @@ describe("dsh tools profile", () => {
       // only denied under `workspace-write` and only allowed under
       // `danger-full-access`.
       const outsidePath = join(homedir(), `.dsh-tools-bash-${mode}-${Date.now()}.txt`)
-      const result = await execute({ command: `printf outside > "${outsidePath}"`, description: "Write outside the workspace" })
+      const result = await execute({
+        command: `printf outside > "${outsidePath}"`,
+        description: "Write outside the workspace",
+      })
       if (mode === "workspace-write") {
         expect(result.isError).toBe(false)
         expect((result.content ?? []).map((block) => block.text ?? "").join("\n")).toContain(
@@ -805,7 +819,9 @@ describe("dsh tools profile", () => {
 
     try {
       const approval = ctx.get("approval") as { request(req: unknown): Promise<string> }
-const session = makeSessionFake("esc-session-2", workspace, [{ type: "sandbox/mode", data: { mode: "workspace-write" } }])
+      const session = makeSessionFake("esc-session-2", workspace, [
+        { type: "sandbox/mode", data: { mode: "workspace-write" } },
+      ])
       // No turn/start: the service must refuse before appending anything.
       await expect(
         approval.request({

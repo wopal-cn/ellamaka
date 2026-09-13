@@ -15,7 +15,7 @@ import { join } from "node:path"
 // serve handler, so the `web` entry silently shipped without any /dsh mount
 // (packaged `web` fell into the SPA fallback). Every command that owns a
 // server must delegate to the shared assembly — which now runs the unified
-// Runtime Manager (gating on ELLAMAKA_DSH internally, DESIGN-ellamaka-dsh §3.4.4)
+// Runtime Manager (gating on ELLAMAKA_DSH internally, DESIGN-dsh-base.md)
 // and mounts only on `ready`.
 describe("server entry points wire the shared dsh assembly", () => {
   const cases = [
@@ -49,7 +49,7 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).toContain("mountDshEngine")
     // The hub is constructed with the closure-resolved context — never a bare
     // `new CordisHub(null)` that would fall back to the host package closure.
-    expect(source).toContain('new CordisHub(null, { context: new runtime.cordis.Context() })')
+    expect(source).toContain("new CordisHub(null, { context: new runtime.cordis.Context() })")
     expect(source).not.toMatch(/new CordisHub\(null\)/)
   })
 

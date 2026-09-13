@@ -2,7 +2,7 @@
  * The single source of the default DSH runtime lock for every host entry
  * (serve/web/TUI/Desktop sidecar). The lock is a build-time generated file
  * (`packages/ellamaka-cordis/generated/dsh-runtime-lock.json`, produced by
- * `script/generate-dsh-runtime-lock.ts`, DESIGN-ellamaka-dsh §3.4.3).
+ * `script/generate-dsh-runtime-lock.ts`, DESIGN-dsh-base.md).
  *
  * The static JSON import (import attributes) lets bundlers inline the lock
  * into the CLI binary and the Desktop sidecar bundle, so the released artifact
@@ -23,6 +23,4 @@ import { parseDshRuntimeLock } from "./lockfile.js"
  * a malformed or schema-drifted generated file fails fast at load with a clear
  * message instead of silently misbehaving at materialisation time.
  */
-export const DEFAULT_DSH_RUNTIME_LOCK: DshRuntimeLockV1 = parseDshRuntimeLock(
-  JSON.stringify(rawLock),
-)
+export const DEFAULT_DSH_RUNTIME_LOCK: DshRuntimeLockV1 = parseDshRuntimeLock(JSON.stringify(rawLock))

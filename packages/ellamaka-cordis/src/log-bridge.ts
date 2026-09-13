@@ -22,10 +22,14 @@ const CORDIS_LEVEL_DEBUG = 3
 /** Map a cordis LoggerType to the ellamaka level name. */
 function cordisTypeToLevel(type: Message["type"]): EllamakaLogLevel {
   switch (type) {
-    case "error": return "ERROR"
-    case "warn": return "WARN"
-    case "info": return "INFO"
-    case "debug": return "DEBUG"
+    case "error":
+      return "ERROR"
+    case "warn":
+      return "WARN"
+    case "info":
+      return "INFO"
+    case "debug":
+      return "DEBUG"
   }
 }
 
@@ -56,7 +60,7 @@ export interface CordisLogExporterDeps {
 
 /**
  * Build a cordis `Exporter` that routes all plugin `ctx.logger` output to an
- * ellamaka-managed sink, bypassing the ellamaka main log (DESIGN-ellamaka-dsh
+ * ellamaka-managed sink, bypassing the ellamaka main log (DESIGN-dsh-base.md
  * §6.4).
  *
  * The exporter:

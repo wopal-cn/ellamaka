@@ -52,7 +52,7 @@ function authorization() {
 
 /**
  * Mount the DSH web profile onto a real Ellamaka listener under /dsh, mirroring
- * the serve.ts wiring (DESIGN-ellamaka-dsh §2.1 single-port scheme). Runs the real
+ * the serve.ts wiring (DESIGN-dsh-base.md single-port scheme). Runs the real
  * unified Runtime Manager: a complete closure is seeded under a temp WOPAL_HOME
  * (via `seedDshClosure`), the manager fast-path resolves it `ready`, and the
  * web profile mounts with the closure runtime injected — exactly what the CLI
@@ -202,7 +202,9 @@ describe("dsh single-port integration", () => {
     try {
       const socket = connect(port, "127.0.0.1")
       let response = ""
-      socket.on("data", (chunk) => { response += chunk.toString() })
+      socket.on("data", (chunk) => {
+        response += chunk.toString()
+      })
       socket.write(
         "GET /dsh/api/remote.mux HTTP/1.1\r\n" +
           `Host: 127.0.0.1:${port}\r\n` +
@@ -277,7 +279,7 @@ describe("dsh single-port integration", () => {
       const adapterMatch = html.match(/<script>\(\(\) => \{\n  const prefix = "\/dsh"[\s\S]*?<\/script>/)
       expect(adapterMatch).not.toBeNull()
       const adapterBody = adapterMatch![0].replace(/^<script>/, "").replace(/<\/script>$/, "")
-      expect(adapterBody).toContain("const prefix = \"/dsh\"")
+      expect(adapterBody).toContain('const prefix = "/dsh"')
       expect(adapterBody).toContain("globalThis.fetch")
     } finally {
       await mount.dispose()

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 
 // ---------------------------------------------------------------------------
 // Runtime manifest types & pure helpers for the DSH production materialisation
-// (DESIGN-ellamaka-dsh.md §3.4.3).
+// (DESIGN-dsh-base.md).
 //
 // The manifest carries ONLY the DSH official DIRECT dependencies as exact
 // versions (the single editing source is `packages/ellamaka-cordis/package.json`).
@@ -96,9 +96,7 @@ function assertManifestShape(raw: unknown): asserts raw is DshRuntimeManifestV1 
   }
   const m = raw as Partial<DshRuntimeManifestV1>
   if (m.schema !== DSH_RUNTIME_SCHEMA) {
-    throw new Error(
-      `dsh runtime manifest: unsupported schema "${String(m.schema)}" (expected "${DSH_RUNTIME_SCHEMA}")`,
-    )
+    throw new Error(`dsh runtime manifest: unsupported schema "${String(m.schema)}" (expected "${DSH_RUNTIME_SCHEMA}")`)
   }
   if (typeof m.bridgeAbi !== "number") {
     throw new Error("dsh runtime manifest: missing required numeric field `bridgeAbi`")

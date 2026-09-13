@@ -2,7 +2,7 @@
  * The single source of the default DSH runtime manifest for every host entry
  * (serve/web/TUI/Desktop sidecar). The manifest is a build-time generated file
  * (`packages/ellamaka-cordis/generated/dsh-runtime-manifest.json`, produced by
- * `script/generate-dsh-runtime-manifest.ts`, DESIGN-ellamaka-dsh §3.4.3).
+ * `script/generate-dsh-runtime-manifest.ts`, DESIGN-dsh-base.md).
  *
  * The static JSON import (import attributes) lets bundlers inline the manifest
  * into the CLI binary and the Desktop sidecar bundle, so the released artifact
@@ -21,5 +21,4 @@ import { parseDshRuntimeManifest } from "./manifest.js"
  * so a malformed or schema-drifted generated file fails fast at load with a
  * clear message instead of silently misbehaving at mount time.
  */
-export const DEFAULT_DSH_RUNTIME_MANIFEST: DshRuntimeManifestV1 =
-  parseDshRuntimeManifest(JSON.stringify(rawManifest))
+export const DEFAULT_DSH_RUNTIME_MANIFEST: DshRuntimeManifestV1 = parseDshRuntimeManifest(JSON.stringify(rawManifest))

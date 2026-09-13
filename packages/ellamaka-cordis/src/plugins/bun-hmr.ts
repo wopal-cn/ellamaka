@@ -4,7 +4,7 @@ import { composeFullPatchStack, profileDirOf, readUserPatchLayer, type DshPlugin
 import type { DshPluginContainer, DshPluginServiceLogger } from "./runtime.js"
 
 /**
- * Bun host HMR adapter (DESIGN-ellamaka-dsh 「Bun 宿主 HMR 适配器」, B3 收窄).
+ * Bun host HMR adapter (DESIGN-dsh-base.md 「Bun 宿主 HMR 适配器」, B3 收窄).
  *
  * Replaces the official `cordis-plugin-hmr` on the Bun serve path, where the
  * official plugin cannot run (it requires the Node internal loader).
@@ -177,7 +177,10 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         const { healPluginsModuleFallback } = await import("./compose.js")
         healPluginsModuleFallback(options.dshRoot)
         const stack = (container as { stackContext?: DshPluginStackContext }).stackContext
-        if (!stack) return Promise.reject(new Error(`dsh bun-hmr: no boot stack context for profile ${JSON.stringify(container.profile)}`))
+        if (!stack)
+          return Promise.reject(
+            new Error(`dsh bun-hmr: no boot stack context for profile ${JSON.stringify(container.profile)}`),
+          )
         // The user patch layer is the enable/disable surface: re-read FRESH so
         // a replay never re-applies rows the user just removed (same contract
         // as the Plugin Runtime Service, runtime.ts).
@@ -187,13 +190,18 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
           extraPatches: stack.extraPatches,
           homePatches: stack.homePatches,
         })
-        const previousConfig = (container.includeEntry as unknown as {
-          options?: { config?: Record<string, unknown> }
-        }).options?.config
+        const previousConfig = (
+          container.includeEntry as unknown as {
+            options?: { config?: Record<string, unknown> }
+          }
+        ).options?.config
         const { patches: _prev, ...rest } = previousConfig ?? {}
         await container.includeEntry.update({ config: { ...rest, patches } })
       }
-      const watcher = watch(files, { ignoreInitial: true, awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 } })
+      const watcher = watch(files, {
+        ignoreInitial: true,
+        awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
+      })
       const registration: Registration = { watchFilename: dir, watcher, state: { dirty: false }, disposed: false }
       for (const file of files) registrations.set(file, registration)
       watcher.on("all", () => {

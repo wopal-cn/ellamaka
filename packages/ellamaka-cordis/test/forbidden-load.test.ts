@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Module } from "node:module"
 
 /**
- * Runtime gate (DESIGN-ellamaka-dsh §7 current convention 2).
+ * Runtime gate (DESIGN-dsh-base.md current convention 2).
  *
  * The six deeply-coupled dsh packages (agent-loop/session/session-query/
  * compaction/subagent/schedule) must never be loaded at runtime by the
@@ -38,9 +38,7 @@ describe("runtime gate (§7 current convention 2)", () => {
       mod._resolveFilename = orig
     }
 
-    const hits = resolved.filter((request) =>
-      FORBIDDEN.some((name) => request.includes(name)),
-    )
+    const hits = resolved.filter((request) => FORBIDDEN.some((name) => request.includes(name)))
     expect(hits).toEqual([])
   })
 })

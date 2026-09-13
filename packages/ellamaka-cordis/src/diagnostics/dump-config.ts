@@ -3,10 +3,7 @@ import { homedir } from "node:os"
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import type { ConfigDumpLayer as OfficialConfigDumpLayer } from "@deepseek-ai/dsh-app-boot"
-import {
-  createPackageDshRuntimeApi,
-  type DshRuntimeApi,
-} from "../runtime/loader.js"
+import { createPackageDshRuntimeApi, type DshRuntimeApi } from "../runtime/loader.js"
 import { dshHomeDirOf } from "../runtime/status.js"
 
 const require = createRequire(import.meta.url)
@@ -105,7 +102,7 @@ export function composeDshDumpLayers(input: ComposeDshDumpLayersInput): ConfigDu
 
 /**
  * Home patch rows that give plugins an explicit home rooted at the DSH home
- * (`<dshRoot>/home`, official layout; DESIGN-ellamaka-dsh §3.4).
+ * (`<dshRoot>/home`, official layout; DESIGN-dsh-base.md).
  */
 export function homePatches(homeDir: string): Record<string, unknown>[] {
   return [
@@ -239,17 +236,11 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
   // NOT the DSH home; the official-layout home derives from it.
   const dshRoot = options.dshHome ?? join(wopalHome, "dsh")
   const homeDir = dshHomeDirOf(dshRoot)
-  const installAnchor = realpathSync(
-    options.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"),
-  )
+  const installAnchor = realpathSync(options.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"))
 
-  const profile = runtime.appBoot.loadProfile(
-    "ellamaka",
-    options.profileName,
-    installAnchor,
-    homeDir,
-    { userLayer: options.defaultOnly === true ? false : undefined },
-  )
+  const profile = runtime.appBoot.loadProfile("ellamaka", options.profileName, installAnchor, homeDir, {
+    userLayer: options.defaultOnly === true ? false : undefined,
+  })
 
   const rootConfig = join(profile.dir, "cordis.yml")
   // The dump anchors on the same empty root file the boot includes

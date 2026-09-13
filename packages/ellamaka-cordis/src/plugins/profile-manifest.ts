@@ -4,7 +4,7 @@ import { acquireMaterializeLock, releaseMaterializeLock, type LockToken } from "
 
 /**
  * Profile manifest: the OFFICIAL composition source of truth for dsh plugins
- * (DESIGN-ellamaka-dsh 「真相源与目录布局」). The profile directory's `package.json`
+ * (DESIGN-dsh-web.md 「真相源与目录布局」). The profile directory's `package.json`
  * carries the installed packages (`dependencies`) and the activated plugin
  * layers (`dsh.profile.bundles`) — the same files the official CLI, the
  * dshmarket and Ellamaka read and write. No second manifest exists (D-04).
@@ -86,7 +86,10 @@ export function readProfileManifest(profileDir: string): ProfileManifest {
   }
   const raw = parsed as Record<string, unknown>
   const dependencies = raw.dependencies
-  if (dependencies !== undefined && (typeof dependencies !== "object" || dependencies === null || Array.isArray(dependencies))) {
+  if (
+    dependencies !== undefined &&
+    (typeof dependencies !== "object" || dependencies === null || Array.isArray(dependencies))
+  ) {
     throw new Error(`dsh profile manifest: ${file} field "dependencies" must be an object`)
   }
   const dsh = raw.dsh
@@ -172,11 +175,7 @@ function dirnameOfProfileRoot(profileDir: string): string {
   // Defensive layout check: only trust the derivation when the directory
   // names line up with the official layout; otherwise fall back to locking on
   // the profile dir's own ancestor chain (still correct, just less shared).
-  if (
-    basenameOf(profilesDir) === "profiles" &&
-    basenameOf(homeDir) === "home" &&
-    profileName.length > 0
-  ) {
+  if (basenameOf(profilesDir) === "profiles" && basenameOf(homeDir) === "home" && profileName.length > 0) {
     return root
   }
   return root

@@ -1,13 +1,20 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve, sep } from "node:path"
-import { withPluginsLock, writeProfileManifestLocked, readProfileManifest, setDependency, dropPlugin, appendBundle } from "./profile-manifest.js"
+import {
+  withPluginsLock,
+  writeProfileManifestLocked,
+  readProfileManifest,
+  setDependency,
+  dropPlugin,
+  appendBundle,
+} from "./profile-manifest.js"
 import { profileDirOf, healPluginsModuleFallback, removePluginSymlink } from "./compose.js"
 import { resolveTree, type ResolveSpec, type ResolvedTree } from "./resolver.js"
 
 /**
  * Plugin installer: the install/remove pipeline of the dsh plugin supply
- * chain, rewritten to the OFFICIAL end state (DESIGN-ellamaka-dsh 「Bun 安装器流水线」).
+ * chain, rewritten to the OFFICIAL end state (DESIGN-dsh-web.md 「Bun 安装器流水线」).
  *
  * Registry pipeline: resolveTree → per-package extract into a staging dir
  * (pacote in production via the injectable {@link ExtractLike}) → entry +
@@ -246,7 +253,13 @@ function dropBundleRowIfPresent(manifest: Record<string, unknown>, name: string)
  * and drains the staging (same source-multiple-place pattern as the
  * migrate-store `placeEntity` lastUse rule).
  */
-function placeStagedTree(staging: string, entryName: string, tree: ResolvedTree, entityDir: string, copy: boolean): void {
+function placeStagedTree(
+  staging: string,
+  entryName: string,
+  tree: ResolvedTree,
+  entityDir: string,
+  copy: boolean,
+): void {
   mkdirSync(dirname(entityDir), { recursive: true })
   const place = (source: string, target: string) => {
     if (copy) cpSync(source, target, { recursive: true })
@@ -322,14 +335,8 @@ async function installFromRegistry(
       // The staging source is only drained (rename) by the LAST profile;
       // earlier placements copy so the next profile can read it (rook B-01).
       const last = index === profiles.length - 1
-      result = placeIntoProfile(
-        profile,
-        rootPkg.name,
-        rootPkg.version,
-        "registry",
-        isBundle,
-        options,
-        (entityDir) => placeStagedTree(staging, rootPkg.name, tree, entityDir, !last),
+      result = placeIntoProfile(profile, rootPkg.name, rootPkg.version, "registry", isBundle, options, (entityDir) =>
+        placeStagedTree(staging, rootPkg.name, tree, entityDir, !last),
       )
     }
     if (!result) throw new Error("dsh plugin installer: no target profiles")
@@ -364,7 +371,7 @@ function installFromDir(path: string, options: InstallOptions): InstallResult {
   // runners, official @deepseek-ai/* peers). Only the transitive closure of
   // the package's OWN `dependencies` (+ optionalDependencies) is runtime —
   // everything else is pruned during the copy so the profile state matches
-  // the registry pipeline's end state (DESIGN 「Bun 安装器流水线」, resolver
+  // the registry pipeline's end state (DESIGN-dsh-web.md「Bun 安装器流水线」, resolver
   // enqueueDeps semantics). Official peers resolve via the shared heal.
   const closure = collectRuntimeClosure(path)
   const filter = makePruneFilter(path, closure)

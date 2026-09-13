@@ -3,7 +3,7 @@ import type { HubRuntime, CordisHubOptions } from "./types.js"
 import { createPackageDshRuntimeApi } from "./runtime/loader.js"
 
 /** A lazily-resolved cordis module namespace value (never statically imported). */
-let cordisContextValue: typeof import("@deepseek-ai/cordis")["Context"] | undefined
+let cordisContextValue: (typeof import("@deepseek-ai/cordis"))["Context"] | undefined
 
 /**
  * Resolve the cordis `Context` value from the package closure (source/dev mode
@@ -14,7 +14,7 @@ let cordisContextValue: typeof import("@deepseek-ai/cordis")["Context"] | undefi
  * `CordisHubOptions.context`; this fallback is a narrowly-scoped, documented
  * dev-only seam.
  */
-function resolveCordisContext(): typeof import("@deepseek-ai/cordis")["Context"] {
+function resolveCordisContext(): (typeof import("@deepseek-ai/cordis"))["Context"] {
   if (!cordisContextValue) {
     const api = createPackageDshRuntimeApi()
     cordisContextValue = api.cordis.Context
@@ -26,7 +26,7 @@ function resolveCordisContext(): typeof import("@deepseek-ai/cordis")["Context"]
  * Per-instance Cordis container.
  *
  * Each hub owns a fresh cordis `Context` and provides a mount point for
- * bridging work into the Effect world when needed (DESIGN-ellamaka-dsh §6.2).
+ * bridging work into the Effect world when needed (DESIGN-dsh-base.md).
  *
  * Lifecycle:
  * - `mount(plugin, options)` loads a cordis plugin into the hub's context.
@@ -34,7 +34,7 @@ function resolveCordisContext(): typeof import("@deepseek-ai/cordis")["Context"]
  *
  * The hub is the single cordis boundary in the repository: every cordis value
  * import is erased at build time and resolved at runtime via
- * `@wopal/ellamaka-cordis/runtime` (DESIGN-ellamaka-dsh §3.4.6).
+ * `@wopal/ellamaka-cordis/runtime` (DESIGN-dsh-base.md).
  */
 export class CordisHub {
   /** The cordis context backing this hub. */
@@ -63,10 +63,7 @@ export class CordisHub {
    * Returns a promise that settles once the plugin's services are active and
    * rejected on config or startup errors (e.g. duplicate-service registration).
    */
-  mount<T extends object = object>(
-    plugin: Parameters<Context["plugin"]>[0],
-    config?: unknown,
-  ): Promise<void> {
+  mount<T extends object = object>(plugin: Parameters<Context["plugin"]>[0], config?: unknown): Promise<void> {
     const fiber = this.ctx.plugin(plugin as never, config as never)
     return fiber as unknown as Promise<void>
   }

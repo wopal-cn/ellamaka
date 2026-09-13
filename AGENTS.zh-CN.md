@@ -8,8 +8,9 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## Canonical References
 
 - DESIGN: `docs/DESIGN.md`
-- DSH FUSION DESIGN: `docs/DESIGN-ellamaka-dsh.md`（ellamaka 与 dsh 双引擎融合架构）
-- PLAN TODOS: `docs/PLAN-TODOS.md`
+- DSH FUSION: `docs/DESIGN-dsh-base.md`（融合基础：文件领地、依赖闭包、热加载）
+- DSH WEB PROFILE: `docs/DESIGN-dsh-web.md`（插件供应链、插件市场、Workbench 融合）
+- TOOL CONTAINER: `docs/DESIGN-ellamaka-tools.md`（能力采用、工具投影、沙箱）
 - API CONTRACT: `docs/API-CONTRACT.md`
 - WORKBENCH: `docs/DESIGN-workbench.md`
 - ONBOARDING: `docs/DESIGN-onboarding.md`
@@ -126,14 +127,26 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 
 ### Cordis 开发约束
 
-- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本锁 4.0.1）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）禁止被主线代码 import、禁止运行时加载、禁止作为插件挂载——required peer 仅供类型解析（如 SessionId）不算违反，以运行时加载探针为零为验收（`forbidden-load.test.ts`）——见 [设计约束](./docs/DESIGN-ellamaka-dsh.md#设计约束)
-- **桥接形态**：Effect↔async 桥接一律遵守 [桥接 API 规范](./docs/DESIGN-ellamaka-dsh.md#桥接-api-规范)（`Effect.forkIn(scope)(work)` 持有 work Fiber；中断经 `runtime.runFork(Fiber.interrupt(fiber))`；禁止 `runPromise` 驱动长任务）
-- **契约纪律**：契约在 `@wopal/ellamaka-cordis` 内自持（形状借鉴 dsh，不 import dsh 契约包、不跟随 rc 演进）；外部插件须通过契约符合性冒烟测试方可挂载（[采用边界](./docs/DESIGN-ellamaka-dsh.md#采用边界)）
+- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本锁 4.0.1）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）禁止被主线代码 import、禁止运行时加载、禁止作为插件挂载——required peer 仅供类型解析（如 SessionId）不算违反，以运行时加载探针为零为验收（`forbidden-load.test.ts`）——见 [ellamaka 主设计](./docs/DESIGN.md)
+- **桥接形态**：Effect↔async 桥接一律遵守 [ellamaka 主设计](./docs/DESIGN.md) 中的桥接 API 规范（`Effect.forkIn(scope)(work)` 持有 work Fiber；中断经 `runtime.runFork(Fiber.interrupt(fiber))`；禁止 `runPromise` 驱动长任务）
+- **契约纪律**：契约在 `@wopal/ellamaka-cordis` 内自持（形状借鉴 dsh，不 import dsh 契约包、不跟随 rc 演进）；外部插件须通过契约符合性冒烟测试方可挂载（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md)）
 - **测试门禁**：cordis 集成测试放 `packages/opencode/test/cordis/`；桥接包变更保持 opencode 既有测试零回归
+- **事件折叠为最后者生效**：dsh 会话事件（`sandbox/mode`、`approval/policy`）按最后一条折叠。「恢复默认」必须显式追加默认值；「等于默认」与「未选择」是两种语义，绝不共用代码路径（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md) 的审批桥接与折叠不变量）。断言「值相同则不追加」的测试锁死了错误语义，除非日志中本就没有任何覆盖。
+- **依赖清单是构建产物**：`packages/ellamaka-cordis/package.json` 的 dependencies 是 DSH 直接依赖版本的唯一编辑源。构建从中派生 `dsh-runtime-manifest.json` 并解析出 `dsh-runtime-lock.json`。禁止维护第二份手工清单，禁止在运行时解析依赖树。升级流程：改版本 → `bun install` → 构建。
+- **桥接只做加法**：新桥接一律以新增文件或包装层落地，删除桥接即完整回滚。禁止为了腾位置而重构上游文件。
+- **宿主不修理运行中的 dsh home**：闭包物化归 Runtime Manager 在启动时完成，闭包缺失或损坏自动触发。禁止要求用户运行修复脚本，禁止手工编辑 `$WOPAL_HOME/dsh` 内容来修启动故障。
+- **Bun 宿主兼容门禁**：发布态 `ellamaka serve` 是单 Bun 进程。用户插件不得要求 Node 私有模块加载器或 `--expose-internals`。`plugin add` 必须在写入 profile 声明与触碰运行中容器之前完成静态依赖扫描与隔离挂载预检；不兼容插件拒绝安装并给出可操作诊断。禁止伪造 `loader.internal`、禁止切换到 Node、禁止降级整台宿主来绕过。官方 Node 专用的 `cordis-plugin-hmr` 是宿主侧例外：Bun 路径以 Bridge 的 HMR 适配器替代，该例外不得转嫁给第三方插件。
+- **插件安装零外部工具链**：安装器禁止转发 pnpm 或 npm。它复用 Runtime Manager 的 pacote 下载与 registry 测速基建，用户插件的依赖树由内置最小解析器在运行时解析。
+- **安装共享、启用按 profile**：安装是进程级动作（安装/升级/卸载全局一次），激活按容器经 profile bundle 清单声明。禁止同一进程内运行同一包的两个版本。
+- **工具容器不创建会话**：工具调用走专用 `ellamaka-tools` profile。容器不创建、不持有任何 dsh 会话，adapter 只传递工具实测消费的最小 per-call context。web 容器保持完整 profile，禁止复用为工具后端。禁用清单是 profile 的用户补丁层：ellamaka 仅在模板为空时播种，永不覆盖用户编辑。
+- **`ELLAMAKA_DSH` 是唯一启用开关**：默认开启。serve、web、TUI 与 Desktop sidecar 统一经 `ELLAMAKA_DSH=0` 禁用。禁止引入第二条启用分支。
+- **DSH 领地只有 `$WOPAL_HOME/dsh`**：依赖闭包、profile 定义与运行时数据都在这里。宿主在进程启动时设置 `DSH_HOME=$WOPAL_HOME/dsh/home`；集成代码不为自己的路径读取该环境变量。`~/.dsh` 归官方 dsh CLI，禁止在其中创建、修改或删除任何内容。
+- **多 profile 隔离**：核心容器（web 与 `ellamaka-tools`）保持同进程。实验性第三方 profile 以独立进程运行并带独立 DSH_HOME，不进入主 Web 容器、不与主引擎共享 home 或 profiles——运行中引擎的 `profiles/` 是引擎领地。闭包只读、可共享；home 必须隔离。
+- **壳单端口不变量**：renderer 只从唯一 http origin（server 端口）加载 UI。壳不承载引擎逻辑，不新开第二个监听端口。引擎产物只有一个形态——完整 CLI 二进制，禁止维护第二套分叉的引擎构建产物。`/dsh` 保持前缀挂载不升根，`/` 是设备协商前门（移动 UA → `/dsh/`，桌面 UA → `/workbench`）。
 
 ### 日志规范
 
-- **插件日志**：cordis 插件内一律用内建 `ctx.logger`（自动以插件名命名），禁止 `console.log`、禁止手动创建 Logger；容器级 Exporter 在装配层统一桥接到 ellamaka `Log` 体系（[工具容器装配](./docs/DESIGN-ellamaka-dsh.md#工具容器装配)），插件不关心日志输出目标
+- **插件日志**：cordis 插件内一律用内建 `ctx.logger`（自动以插件名命名），禁止 `console.log`、禁止手动创建 Logger；容器级 Exporter 在装配层统一桥接到 ellamaka `Log` 体系（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md)），插件不关心日志输出目标
 - **必须打**：生命周期状态变更（init/created/disposed/mount/unmount）、错误与异常（含降级路径）、关键决策（选型/回退/跳过）
 - **禁止打**：循环内逐项操作（逐文件/逐条）、成功路径的常规操作（每次加载/每次搜索）、可从上下文推导的信息
 - **聚合**：循环内需观测时，循环外打一次汇总（`log.info("reverted", { count })`），不在循环体内逐项打

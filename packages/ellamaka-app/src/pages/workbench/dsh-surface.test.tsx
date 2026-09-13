@@ -47,26 +47,24 @@ describe("dshIframeSrc", () => {
       "http://127.0.0.1:4097/dsh/?token=abc",
     )
     // In the proxied dev topology the entry retargets onto the page origin.
-    expect(
-      dshIframeSrc("http://localhost:4097", "http://127.0.0.1:4097/dsh/?token=abc", "http://localhost:3000"),
-    ).toBe("http://localhost:3000/dsh/?token=abc")
+    expect(dshIframeSrc("http://localhost:4097", "http://127.0.0.1:4097/dsh/?token=abc", "http://localhost:3000")).toBe(
+      "http://localhost:3000/dsh/?token=abc",
+    )
   })
 
   test("retargets the entry onto the page origin in the proxied dev topology", () => {
     // The backend reports :4097; the Vite page proxies /dsh on :3000 — the
     // SameSite=Strict cookie forces iframe and cookie onto one origin.
-    expect(
-      dshIframeSrc("http://127.0.0.1:4097", "http://127.0.0.1:4097/dsh/?token=abc", "http://localhost:3000"),
-    ).toBe("http://localhost:3000/dsh/?token=abc")
-    // Tokenless fallback derivation also lands on the page origin.
-    expect(dshIframeSrc("http://127.0.0.1:4097", undefined, "http://localhost:3000")).toBe(
-      "http://localhost:3000/dsh/",
+    expect(dshIframeSrc("http://127.0.0.1:4097", "http://127.0.0.1:4097/dsh/?token=abc", "http://localhost:3000")).toBe(
+      "http://localhost:3000/dsh/?token=abc",
     )
+    // Tokenless fallback derivation also lands on the page origin.
+    expect(dshIframeSrc("http://127.0.0.1:4097", undefined, "http://localhost:3000")).toBe("http://localhost:3000/dsh/")
     // The packaged Desktop renderer owns the proxy through its privileged
     // `oc://renderer` origin.
-    expect(
-      dshIframeSrc("http://127.0.0.1:4097", "http://127.0.0.1:4097/dsh/?token=abc", "oc://renderer"),
-    ).toBe("oc://renderer/dsh/?token=abc")
+    expect(dshIframeSrc("http://127.0.0.1:4097", "http://127.0.0.1:4097/dsh/?token=abc", "oc://renderer")).toBe(
+      "oc://renderer/dsh/?token=abc",
+    )
     expect(dshIframeSrc("http://127.0.0.1:4097", undefined, "oc://renderer")).toBe("oc://renderer/dsh/")
   })
 
@@ -89,7 +87,6 @@ describe("DshIframe", () => {
     host.remove()
   })
 })
-
 
 /**
  * DshSurface keep-alive contract (DESIGN-dsh-poc §10): the DSH iframe is the
@@ -115,9 +112,7 @@ describe("dshSurfaceStyle keep-alive", () => {
  */
 describe("dsh 401 self-heal probe (auth-fix-2)", () => {
   test("detects the official dsh 401 body text", () => {
-    expect(
-      looksLikeDsh401("dsh web authentication required; reopen the URL printed by dsh web.\n"),
-    ).toBe(true)
+    expect(looksLikeDsh401("dsh web authentication required; reopen the URL printed by dsh web.\n")).toBe(true)
   })
 
   test("does not treat healthy content or empty documents as a 401", () => {
@@ -200,7 +195,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
   // B-01 regression: the initial iframe src is retargeted onto the serving
   // page origin, but the heal used to hand the RAW backend entry to
   // selfHealDshIframe — the frame jumped to the backend origin, a cross-site
-  // iframe cannot carry the SameSite=Strict cookie (DESIGN-ellamaka-dsh dev
+  // iframe cannot carry the SameSite=Strict cookie (DESIGN-dsh-base.md dev
   // topology), and the frame stayed 401 with the episode gate closed. The
   // heal target must ride the same dshIframeSrc retarget as the initial src.
   test("healTargetUrl keeps the heal on the vite proxy origin (B-01)", () => {
