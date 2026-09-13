@@ -1,11 +1,10 @@
 # ellamaka-desktop 设计
 
 > **状态**: Draft
-> **更新时间**: 2026-09-12
+> **更新时间**: 2026-09-13
 > **上级**: `./DESIGN.md`
 > **目标包**: `packages/ellamaka-desktop`
-> **上游基线**: 参考代码从 `labs/ref-repos/opencode/packages/desktop` 读取；参照 OpenCode `v1.15.13` / `385cb694419f98103af0e8fc6187ddcbcbb6eecb`
-> **相关文档**: [ellamaka-desktop 桌面应用](./BRANDING.md#ellamaka-desktop-桌面应用)、`./DESIGN-distribution.md`
+> **相关文档**: `./DESIGN-distribution.md`、`./DESIGN-workbench.md`（Workbench 界面设计）
 
 本文档描述 ellamaka 官方桌面应用的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
 
@@ -23,31 +22,24 @@
 
 ### 包定位
 
-`packages/desktop/`（上游基线）已删除（2026-08-31）。ellamaka 不再保留上游桌面目录，后续如需参考 OpenCode 桌面代码，从 `labs/ref-repos/opencode/packages/desktop` 读取。
+| 包       | 路径                         | 角色                       | 修改规则             |
+| -------- | ---------------------------- | -------------------------- | -------------------- |
+| 品牌产品 | `packages/ellamaka-desktop/` | 可编辑的 Ellamaka 桌面应用 | 正常开发、修改、定制 |
 
-| 包       | 路径                         | 角色                            | 修改规则                                                          |
-| -------- | ---------------------------- | ------------------------------- | ----------------------------------------------------------------- |
-| 品牌产品 | `packages/ellamaka-desktop/` | 可编辑的 Ellamaka 桌面应用      | 正常开发、修改、定制                                              |
-
-**基线使用规则**：
-
-- 上游安全修复或兼容修复以 `labs/ref-repos/opencode/packages/desktop` 为参考，评估后手工移植到 `packages/ellamaka-desktop/`。
-- `packages/desktop/` 已加入 `CLEANUP_PATHS`，不在构建图中，turbo 不为其编排 Task。
+需要参考 OpenCode 桌面实现时，从 `labs/ref-repos/opencode/packages/desktop` 读取。上游安全修复或兼容修复经评估后手工移植到 `packages/ellamaka-desktop/`。
 
 ### 独立复制模式
 
-`packages/ellamaka-desktop` 从 OpenCode v1.15.13 的 `packages/desktop` 独立复制。它与 `ellamaka-app` 采用相同的品牌包模式，集中承载 Ellamaka 桌面定制。
+`packages/ellamaka-desktop` 与 `ellamaka-app` 采用相同的品牌包模式，集中承载 Ellamaka 桌面定制。
 
-| 维度     | 上游基线                     | ellamaka-desktop                                |
-| -------- | ---------------------------- | ----------------------------------------------- |
-| 包路径   | `packages/desktop`（已删，参考 `labs/ref-repos/opencode/packages/desktop`） | `packages/ellamaka-desktop`                     |
-| 包名     | `@opencode-ai/desktop`       | `@wopal/ellamaka-desktop`                       |
-| 桌面框架 | 初始复制时为 Electron 41.2.1 | Electron；具体版本由 Desktop 自身依赖与测试决定 |
-| 渲染应用 | `@opencode-ai/app`（已删，参考 `labs/ref-repos/opencode/packages/app`） | `@wopal/ellamaka-app`                           |
-| 本地服务 | OpenCode node sidecar        | Ellamaka/WopalSpace node sidecar                |
-| 默认界面 | OpenCode 主界面              | Ellamaka Workbench `/workbench`                 |
-
-OpenCode v1.15.13 的 desktop 已经采用 Electron。Tauri 运行时不属于 ellamaka-desktop 的基线。
+| 维度     | 上游 `packages/desktop`                             | `packages/ellamaka-desktop`     |
+| -------- | --------------------------------------------------- | ------------------------------- |
+| 包路径   | 参考 `labs/ref-repos/opencode/packages/desktop`     | `packages/ellamaka-desktop`     |
+| 包名     | `@opencode-ai/desktop`                              | `@wopal/ellamaka-desktop`       |
+| 桌面框架 | Electron                                            | Electron，版本由本包依赖与测试决定 |
+| 渲染应用 | 参考 `labs/ref-repos/opencode/packages/app`         | `@wopal/ellamaka-app`           |
+| 本地服务 | OpenCode node sidecar                               | Ellamaka/WopalSpace node sidecar |
+| 默认界面 | OpenCode 主界面                                     | Ellamaka Workbench `/workbench` |
 
 ### Source 协同与产品版本
 
@@ -281,13 +273,13 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 
 ## 上游关系
 
-`ellamaka-desktop` 在 `release/upstreams.lock.json` 中记录复制基线及其来源 commit。ellamaka 不跟随上游同步（2026-08-31 起，见 [上游合并策略](./BRANDING.md#上游合并策略)），上游 `packages/desktop` 由参考实现替代，参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
+`ellamaka-desktop` 在 `release/upstreams.lock.json` 中记录复制基线及其来源 commit。参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性移植：
 
 - Electron 安全更新保持优先级，并通过完整桌面回归验证。
 - 修复按依赖、接口和行为逐项回移。
 - Ellamaka 如升级 OpenCode Engine baseline，sidecar 与 Engine API 共同升级评估。
 
-包级 `AGENTS.md` 维护开发命令、测试方式、生命周期规则和上游基线。`BRANDING.md` 继续记录品牌差异与分发身份，本文件维护桌面架构和运行时行为。
+包级 `AGENTS.md` 维护开发命令、测试方式、生命周期规则和上游基线。品牌差异与分发身份见 `DESIGN.md` 品牌身份与 `DESIGN-distribution.md`，本文件维护桌面架构和运行时行为。
 
 ## SidecarSupervisor 状态机
 

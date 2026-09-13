@@ -85,8 +85,8 @@ See `AGENTS.md` for details.
 |---|---|
 | `docs/DESIGN.md` | Architecture design & WopalSpace adaptation |
 | `docs/DESIGN-distribution.md` | Release process & artifact specs |
-| `docs/BRANDING.md` | Branding changes inventory |
-| `docs/UPSTREAM-MERGE-LOG.md` | Upstream merge history |
+| `docs/DESIGN-workbench.md` | Workbench design |
+| `docs/API-CONTRACT.md` | Runtime API & SDK contract |
 
 ## License
 

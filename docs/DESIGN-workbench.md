@@ -1,7 +1,7 @@
 # Ellamaka Workbench 设计规范
 
 > **状态**：核心设计文档，描述 Workbench 的架构选择、状态模型与交互流程。
-> **更新时间**：2026-09-12
+> **更新时间**：2026-09-13
 > **上级**：`./DESIGN.md`
 > **相关文档**：`./DESIGN-desktop.md`（Electron 桌面承载与共享 PTY 生命周期）、`packages/ellamaka-app/AGENTS.md`（开发规则）
 >
@@ -11,9 +11,15 @@
 
 ## 方向与核心理念
 
-Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面（fork 自上游 `packages/app`）。
+Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面。该包从上游 `packages/app` 独立复制而来，是 Ellamaka 自有的应用副本。
 
-**根本边界**：ellamaka 不跟随上游同步（见 [上游合并策略](./BRANDING.md#上游合并策略)），`packages/ellamaka-app` 是 Ellamaka 自有的应用副本，独立演进，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。需要参考上游 UI 实现时，从 `labs/ref-repos/opencode/packages/app` 读取。
+**根本边界**：`packages/ellamaka-app` 独立演进，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。需要参考上游 UI 实现时，从 `labs/ref-repos/opencode/packages/app` 读取。
+
+| 维度     | 上游 `packages/app` | `packages/ellamaka-app`     |
+| -------- | ------------------- | --------------------------- |
+| 包名     | `@opencode-ai/app`  | `@wopal/ellamaka-app`       |
+| 功能范围 | 通用 AI Agent UI    | WopalSpace 工作台与空间管理 |
+| 构建嵌入 | opencode 二进制     | ellamaka 二进制             |
 
 **核心概念**：
 
@@ -73,9 +79,22 @@ packages/ellamaka-app/           ← ellamaka 定制 web UI
 
 ### 与上游关系
 
-- **上游参考来源**：ellamaka 不跟随上游同步（2026-08-31 起）。需要观察上游产品变化或审查差异时，从 `labs/ref-repos/opencode/packages/app` 读取对应实现。
+- **上游参考来源**：需要观察上游产品变化或审查差异时，从 `labs/ref-repos/opencode/packages/app` 读取对应实现。
 - **选择性参考**：从参考仓库的 `packages/app` 中，通过差异审查，将符合 Ellamaka 产品方向的能力重新实现或移植到 `packages/ellamaka-app/`。Ellamaka 已形成独立体验的区域继续由自有设计主导。
-- **依赖维护**：`package.json` 中的 `workspace:*` 依赖由本仓库统一维护，不再与上游对齐。
+- **依赖维护**：`package.json` 中的 `workspace:*` 依赖由本仓库统一维护。
+
+### 构建嵌入
+
+`packages/ellamaka-release/src/cli/build.ts` 的 `--web-ui` 参数选择嵌入源：
+
+```bash
+bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app  # ellamaka 官方 Web UI
+bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌入 Web UI
+```
+
+默认值是 `ellamaka-app`。Vite build 产出 dist，经 `opencode-web-ui.gen.ts` 编译入二进制。
+
+未嵌入静态 UI 时，服务端 UI 路由直接返回 404，不隐式反向代理至上游公网服务。反向代理目标由品牌层变量 `UI_UPSTREAM_URL` 声明：默认 `null` 禁用代理；仅在部署品牌方自有的 Workbench 静态托管服务时显式声明域名，复用路由透传机制。
 
 ---
 
@@ -208,7 +227,7 @@ Chat 的信息组织借鉴 Kilo Code 在紧凑开发界面中的成熟经验：�
 
 #### 所有权与组件边界
 
-`packages/ellamaka-app/` 拥有 Workbench Chat 的完整呈现层，可根据产品目标深入定制。上游实现参考 `labs/ref-repos/opencode/packages/app`（不跟随同步，见 [上游合并策略](./BRANDING.md#上游合并策略)）。
+`packages/ellamaka-app/` 拥有 Workbench Chat 的完整呈现层，可根据产品目标深入定制。上游实现参考 `labs/ref-repos/opencode/packages/app`。
 
 **核心决策：`packages/ui` 零修改；内容块在自建与复用官方组件之间务实选择。**
 

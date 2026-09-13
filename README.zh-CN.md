@@ -84,8 +84,8 @@ ellamaka
 |---|---|
 | `docs/DESIGN.md` | 架构设计与 WopalSpace 适配 |
 | `docs/DESIGN-distribution.md` | 发布流程与产物规格 |
-| `docs/BRANDING.md` | 品牌化改造清单 |
-| `docs/UPSTREAM-MERGE-LOG.md` | 上游合并历史 |
+| `docs/DESIGN-workbench.md` | Workbench 工作台设计 |
+| `docs/API-CONTRACT.md` | Runtime API 与 SDK 契约 |
 
 ## 许可证
 

@@ -8,15 +8,14 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## Canonical References
 
 - DESIGN: `docs/DESIGN.md`
-- DSH POC DESIGN: `docs/DESIGN-ellamaka-dsh.md`（双引擎融合实验：桥/吸收双轨、dsh 工具插件边缘通道）
+- DSH FUSION DESIGN: `docs/DESIGN-ellamaka-dsh.md`（ellamaka 与 dsh 双引擎融合架构）
 - PLAN TODOS: `docs/PLAN-TODOS.md`
 - API CONTRACT: `docs/API-CONTRACT.md`
-- BRANDING: `docs/BRANDING.md`
 - WORKBENCH: `docs/DESIGN-workbench.md`
+- ONBOARDING: `docs/DESIGN-onboarding.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
 - DISTRIBUTION: `docs/DESIGN-distribution.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
-- `.gitattributes` — fork 独有文件的 merge 保护规则（`merge=ours`）
 - opencode package rules: `packages/opencode/AGENTS.md`
 - ellamaka-app package rules: `packages/ellamaka-app/AGENTS.md`
 - desktop package rules: `packages/ellamaka-desktop/AGENTS.md`
@@ -35,7 +34,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | `packages/ellamaka-brand/` | 品牌常量、品牌字模、构建包装、WopalSpace 自动检测、安装路径判断及包级测试 |
 | `packages/ellamaka-app/` | Workbench Web UI 前端；内部规则见 `packages/ellamaka-app/AGENTS.md` |
 | `packages/ellamaka-desktop/` | Electron 桌面应用，承载 ellamaka-app Workbench 和本地 Ellamaka sidecar；内部规则见 `packages/ellamaka-desktop/AGENTS.md` |
-| `docs/` | project DESIGN、BRANDING、DISTRIBUTION、references、research 和 plans |
+| `docs/` | project DESIGN、API 契约、references、research 和 plans |
 
 ### Wopal 集成模块
 
@@ -98,7 +97,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - 新模块需要访问 upstream 内部能力时优先用回调/闭包注入，不直接暴露 upstream Service 类型边界。
 - 复用 upstream 逻辑时提取共享 helper，不复制大段 upstream 流程。
 - 禁止对 upstream 文件做无关格式化重排、import 重排、dependency 重排或 object key 重排。
-- `.gitattributes` 配置了 fork 独有文件的 `merge=ours` 保护，上游合并时自动保留 ellamaka 版本，禁止删除或修改该规则。
+- `.gitattributes` 不包含 `merge=ours` 规则；冲突一律显式逐文件解决，禁止添加 merge 策略驱动。
 
 ### HTTP API 与 SDK 契约
 
@@ -106,7 +105,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - 端点归入 `HttpApiGroup`。全局 WopalSpace 控制能力归 Root API，Session、文件、项目、PTY 和工作目录能力归 Instance API。handler 只转换 HTTP 与领域服务。
 - 路径表达领域资源与自然从属关系。查询条件属于 query 参数。文件系统、Shell、CLI 执行和目录 provision 由所属领域服务拥有，不形成浏览器可直接调用的通用原语。
 - SDK 由 Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts` 自动生成。应用代码使用生成客户端；`packages/sdk/js/src/v2/gen/**` 由生成管线拥有。
-- 新增或修改端点必须测试 schema、成功结果、领域错误和 middleware 边界，重新生成 SDK，并同步更新 DESIGN 与 BRANDING。
+- 新增或修改端点必须测试 schema、成功结果、领域错误和 middleware 边界，重新生成 SDK，并同步更新相关 DESIGN 文档。
 
 ### Workbench 前端开发
 
@@ -150,7 +149,7 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - 尽量避免 mocks；测试真实实现，不要把实现逻辑复制进测试。
 - 测试从对应 package 目录运行，不要从 repo root 运行。
 - 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明：`WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
-- 上游合并后区分 upstream known failures、环境问题和 ellamaka 新引入问题。
+- 选用 OpenCode 参考仓库代码时，区分参考实现的已知失败、环境问题和 ellamaka 特有问题。
 - 测试安全运行规则（防挂起与孤儿进程）见空间 `REGULATIONS.md`。
 
 ### 手动验证入口

@@ -8,7 +8,7 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 ## Canonical References
 
 - Parent Rules: `../../AGENTS.md`
-- Branding Design: `../../docs/BRANDING.md`
+- Brand Identity: `../../docs/DESIGN.md` (Brand Identity section)
 - Project Design: `../../docs/DESIGN.md`
 
 ## Architecture and Directories
@@ -40,8 +40,7 @@ This package is responsible for ellamaka's brand identity injection and build. U
 - `detect.ts` detects WopalSpace by checking whether `.wopal/.git` is a regular file (worktree marker); stops at the home directory or filesystem root.
 - `isWopalInstall()` uses the `WOPAL_HOME` environment variable (supports `~/` prefix); path-based check replaces channel-name prefix matching.
 - `packages/ellamaka-release/src/cli/build.ts` is the sole build entry point; never run upstream build scripts directly. Build parameters are controlled via `--arch` and `--web-ui`.
-- `--web-ui ellamaka-app` embeds the ellamaka Web UI, `--web-ui app` embeds the upstream app baseline, and `--web-ui none` skips Web UI embedding.
-- After adding brand constants or changing channel naming, check whether `../../docs/BRANDING.md` needs a corresponding update.
+- After adding brand constants or changing channel naming, update the Brand Identity section of `../../docs/DESIGN.md`.
 
 ## Testing
 

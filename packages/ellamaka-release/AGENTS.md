@@ -9,7 +9,6 @@ description: Centralized build/release tooling for the ellamaka fork (identity, 
 
 - Parent Rules: `../../AGENTS.md`
 - Distribution / release contract: `../../docs/DESIGN-distribution.md`
-- Branding: `../../docs/BRANDING.md`
 
 ## Purpose
 

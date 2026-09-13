@@ -8,15 +8,14 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 ## Canonical References
 
 - DESIGN: `docs/DESIGN.md`
-- DSH POC DESIGN: `docs/DESIGN-ellamaka-dsh.md` (dual-engine fusion experiment: bridge/absorb dual-track, edge-channel usage of dsh tool plugins)
+- DSH FUSION DESIGN: `docs/DESIGN-ellamaka-dsh.md` (ellamaka and dsh dual-engine fusion architecture)
 - PLAN TODOS: `docs/PLAN-TODOS.md`
 - API CONTRACT: `docs/API-CONTRACT.md`
-- BRANDING: `docs/BRANDING.md`
 - WORKBENCH: `docs/DESIGN-workbench.md`
+- ONBOARDING: `docs/DESIGN-onboarding.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
 - DISTRIBUTION: `docs/DESIGN-distribution.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
-- `.gitattributes` — merge-strategy history notes; all `merge=ours` rules removed 2026-09-01 (upstream tracking ended; the driver silently discarded one side of conflicted files)
 - opencode package rules: `packages/opencode/AGENTS.md`
 - ellamaka-app package rules: `packages/ellamaka-app/AGENTS.md`
 - desktop package rules: `packages/ellamaka-desktop/AGENTS.md`
@@ -35,7 +34,7 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | `packages/ellamaka-brand/` | Brand constants, logo, build wrapper, WopalSpace auto-detection, install path detection, and package-level tests |
 | `packages/ellamaka-app/` | Workbench Web UI frontend; see `packages/ellamaka-app/AGENTS.md` for internal rules |
 | `packages/ellamaka-desktop/` | Electron desktop app hosting ellamaka-app Workbench and local Ellamaka sidecar; see `packages/ellamaka-desktop/AGENTS.md` |
-| `docs/` | Project DESIGN, BRANDING, DISTRIBUTION, references, research, and plans |
+| `docs/` | Project DESIGN, API contract, references, research, and plans |
 
 ### Wopal Integration Modules
 
@@ -98,7 +97,7 @@ Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/buil
 - When new modules need access to upstream internal capabilities, prefer callback/closure injection over directly exposing upstream Service type boundaries.
 - Extract shared helpers when reusing upstream logic; do not copy large upstream flows.
 - Do not perform unrelated formatting, import reordering, dependency reordering, or object key reordering on upstream files.
-- `.gitattributes` no longer carries any `merge=ours` rules (removed 2026-09-01: upstream tracking has ended, and the driver silently discarded main-side changes — including a security fix — during conflict resolution). Conflicts must surface and be resolved explicitly, file by file; do not re-add merge strategy drivers.
+- `.gitattributes` carries no `merge=ours` rules; conflicts surface and are resolved explicitly, file by file. Do not add merge strategy drivers.
 
 ### HTTP API and SDK Contract
 
@@ -106,7 +105,7 @@ Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/buil
 - Endpoints belong to `HttpApiGroup`. Global WopalSpace control capabilities belong to the Root API. Session, file, project, PTY, and working-directory capabilities belong to the Instance API. Handlers only translate between HTTP and domain services.
 - Paths express domain resources and their natural relationships. Query parameters express query conditions. Filesystem access, shell execution, CLI invocation, and directory provisioning are owned by their domain services rather than exposed as browser-callable primitives.
 - The SDK is generated through Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts`. Application code uses the generated client; `packages/sdk/js/src/v2/gen/**` is owned by the generation pipeline.
-- Every endpoint addition or modification tests its schemas, success result, domain errors, and middleware boundary, regenerates the SDK, and updates DESIGN and BRANDING.
+- Every endpoint addition or modification tests its schemas, success result, domain errors, and middleware boundary, regenerates the SDK, and updates the relevant DESIGN documents.
 - **SDK regeneration is all-or-nothing**: after any payload schema change, always run `bun script/build.ts` from `packages/sdk/js` (never hand-edit gen files). A field is shipped only when BOTH `types.gen.ts` and `sdk.gen.ts` contain it — the type layer alone is not proof; a stale `buildClientParams` mapping silently drops the field at encoding time with no error (see [生成 SDK 的双文件一致性](./docs/DESIGN-ellamaka-dsh.md#生成-sdk-的双文件一致性)). Verify with `rg "<fieldName>" src/v2/gen/` hitting both files, or diff the regenerated output.
 - **Permission rules: explicit beats wildcard only by position**: evaluation is LAST-wins over the merged ruleset, and one agent's frontmatter can come from multiple copies (`~/.wopal` home + space `.wopal`) deep-merged in load order. Frontmatter must not declare `"*": allow`-style wildcards (engine defaults already provide the wildcard fallback); only explicit narrowings. After changing permission frontmatter, verify on the live instance via `GET /agent` that the explicit rule sits after any wildcard in the merged list (see [权限规则的合并顺序语义](./docs/DESIGN-ellamaka-dsh.md#权限规则的合并顺序语义)).
 
@@ -156,7 +155,7 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - Avoid mocks as much as possible; test real implementations, do not duplicate logic into tests.
 - Tests must run from the corresponding package directory, never from repo root.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.
-- After upstream merges, distinguish upstream known failures, environment issues, and newly-introduced ellamaka issues.
+- When selecting code from the OpenCode reference repo, distinguish reference-implementation known failures, environment issues, and ellamaka-specific problems.
 - Test safety rules (preventing hangs and orphan processes) are in the space `REGULATIONS.md`.
 
 ### Manual Verification Entry Points

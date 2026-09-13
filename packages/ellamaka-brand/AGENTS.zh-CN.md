@@ -8,7 +8,7 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 ## Canonical References
 
 - Parent Rules: `../../AGENTS.md`
-- Branding Design: `../../docs/BRANDING.md`
+- Brand Identity: `../../docs/DESIGN.md`（品牌身份章节）
 - Project Design: `../../docs/DESIGN.md`
 
 ## Architecture and Directories
@@ -38,8 +38,7 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 - `detect.ts` 通过检测 `.wopal/.git` 是否为普通文件（worktree marker）判断 WopalSpace，停止条件为 home 目录或文件系统根。
 - `isWopalInstall()` 使用 `WOPAL_HOME` 环境变量（支持 `~/` 前缀），路径判断替代 channel 名前缀判断。
 - `build.ts` 是唯一构建入口，禁止直接运行上游构建脚本；构建参数通过 `--arch` 和 `--web-ui` 控制。
-- `--web-ui ellamaka-app` 嵌入 ellamaka Web UI，`--web-ui app` 嵌入上游 app 基线，`--web-ui none` 跳过 Web UI 嵌入。
-- 新增品牌常量或修改 channel 命名后，检查 `../../docs/BRANDING.md` 是否需要同步更新。
+- 新增品牌常量或修改 channel 命名后，同步更新 `../../docs/DESIGN.md` 的品牌身份章节。
 
 ## Testing
 

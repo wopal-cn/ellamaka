@@ -132,7 +132,7 @@ Runtime API 面向 Workbench 暴露 Ellamaka 领域资源与投影，而不是�
 4. 在 API 组合根和 handler layer 注册 group，继承正确的 Authorization 与 Instance Context middleware。
 5. 重新生成 SDK，不手写 `src/v2/gen/**`。
 6. 测试 schema 验证、成功路径、领域错误、授权或工作区路由边界，以及生成客户端调用。
-7. 更新对应领域设计、BRANDING 注入记录和本契约的变更记录。
+7. 更新对应领域设计、本契约的变更记录，以及受影响的品牌身份描述（见 `DESIGN.md` 品牌身份）。
 
 ## 现有端点迁移
 
@@ -142,8 +142,7 @@ Runtime API 面向 Workbench 暴露 Ellamaka 领域资源与投影，而不是�
 
 | 文档 | 职责 |
 |---|---|
-| `docs/DESIGN.md` | Ellamaka 的运行时职责、状态归属和 API 架构概览。 |
-| `docs/BRANDING.md` | WopalSpace API 的现有注入点和实现事实。 |
+| `docs/DESIGN.md` | Ellamaka 的运行时职责、状态归属、品牌身份和 API 架构概览。 |
 | `../../../projects/wopal-cli/docs/CAPABILITY-PROTOCOL.md` | CLI capability 的机器输入、JSON 输出和版本规则。 |
 | `packages/opencode/src/server/routes/instance/httpapi/AGENTS.md` | Effect HttpApi 的实现模式。 |
 | `packages/sdk/js/script/build.ts` | OpenAPI 到 JavaScript SDK 的生成入口。 |
