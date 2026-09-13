@@ -747,7 +747,7 @@ ellamaka-app workbench 侧栏需要展示用户通过 `wopal-cli` 注册的 Wopa
   spaces: Array<{
     name: string // 空间名(注册表 key)
     path: string // 空间根目录绝对路径
-    type?: string // 空间类型:"coding" | "common" 等(wopal CLI 定义)
+    type?: string // 空间类型:"coding" | "content" 等(wopal CLI 定义)
   }>
 }
 ```
