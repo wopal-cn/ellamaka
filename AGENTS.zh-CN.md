@@ -18,6 +18,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - DISTRIBUTION: `docs/DESIGN-distribution.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
 - opencode package rules: `packages/opencode/AGENTS.md`
+- ellamaka-cordis package rules: `packages/ellamaka-cordis/AGENTS.md`
 - ellamaka-app package rules: `packages/ellamaka-app/AGENTS.md`
 - desktop package rules: `packages/ellamaka-desktop/AGENTS.md`
 
@@ -127,10 +128,10 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 
 ### Cordis 开发约束
 
-- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本锁 4.0.1）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）禁止被主线代码 import、禁止运行时加载、禁止作为插件挂载——required peer 仅供类型解析（如 SessionId）不算违反，以运行时加载探针为零为验收（`forbidden-load.test.ts`）——见 [ellamaka 主设计](./docs/DESIGN.md)
+- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本以该包 `package.json` 为准，不在文档中复述）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）禁止被主线代码 import、禁止运行时加载、禁止作为插件挂载——required peer 仅供类型解析（如 SessionId）不算违反，以运行时加载探针为零为验收（`forbidden-load.test.ts`）——见 [ellamaka 主设计](./docs/DESIGN.md)
 - **桥接形态**：Effect↔async 桥接一律遵守 [ellamaka 主设计](./docs/DESIGN.md) 中的桥接 API 规范（`Effect.forkIn(scope)(work)` 持有 work Fiber；中断经 `runtime.runFork(Fiber.interrupt(fiber))`；禁止 `runPromise` 驱动长任务）
 - **契约纪律**：契约在 `@wopal/ellamaka-cordis` 内自持（形状借鉴 dsh，不 import dsh 契约包、不跟随 rc 演进）；外部插件须通过契约符合性冒烟测试方可挂载（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md)）
-- **测试门禁**：cordis 集成测试放 `packages/opencode/test/cordis/`；桥接包变更保持 opencode 既有测试零回归
+- **测试门禁**：桥接包自带测试放 `packages/ellamaka-cordis/test/`；跨包行为由 opencode 侧的 `test/cli/serve/dsh-mount.test.ts`、`test/cli/cmd/tui/dsh-mount.test.ts`、`test/server/dsh-single-port.test.ts` 等承接；桥接包变更保持这些测试零回归
 - **事件折叠为最后者生效**：dsh 会话事件（`sandbox/mode`、`approval/policy`）按最后一条折叠。「恢复默认」必须显式追加默认值；「等于默认」与「未选择」是两种语义，绝不共用代码路径（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md) 的审批桥接与折叠不变量）。断言「值相同则不追加」的测试锁死了错误语义，除非日志中本就没有任何覆盖。
 - **依赖清单是构建产物**：`packages/ellamaka-cordis/package.json` 的 dependencies 是 DSH 直接依赖版本的唯一编辑源。构建从中派生 `dsh-runtime-manifest.json` 并解析出 `dsh-runtime-lock.json`。禁止维护第二份手工清单，禁止在运行时解析依赖树。升级流程：改版本 → `bun install` → 构建。
 - **桥接只做加法**：新桥接一律以新增文件或包装层落地，删除桥接即完整回滚。禁止为了腾位置而重构上游文件。
