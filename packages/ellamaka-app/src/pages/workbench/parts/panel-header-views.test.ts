@@ -20,4 +20,16 @@ describe("getPanelHeaderViews", () => {
     expect(getPanelHeaderViews(views, "bound", "pty-tui-1").find((view) => view.id === "tui")?.hasOpenTui).toBe(true)
     expect(getPanelHeaderViews(views, "bound").find((view) => view.id === "tui")?.hasOpenTui).toBe(false)
   })
+
+  test("disables TUI and Context for draft bindings; chat stays enabled", () => {
+    const result = getPanelHeaderViews(views, "bound", undefined, "draft:panel-1.abc-1")
+    expect(result.find((view) => view.id === "tui")?.disabled).toBe(true)
+    expect(result.find((view) => view.id === "context")?.disabled).toBe(true)
+    expect(result.find((view) => view.id === "chat")?.disabled).toBe(false)
+  })
+
+  test("keeps everything enabled for real sessions", () => {
+    const result = getPanelHeaderViews(views, "bound", undefined, "ses_real")
+    expect(result.every((view) => !view.disabled)).toBe(true)
+  })
 })

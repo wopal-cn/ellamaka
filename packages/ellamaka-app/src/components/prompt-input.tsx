@@ -105,6 +105,8 @@ interface PromptInputProps {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  /** Draft-session adoption callback; see createPromptSubmit. */
+  adoptSession?: (directory: string, session: { id: string }) => Promise<boolean> | boolean
 }
 
 const SANDBOX_CHOICE_KEY = "sandbox-choice"
@@ -1268,6 +1270,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
+    adoptSession: props.adoptSession,
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {

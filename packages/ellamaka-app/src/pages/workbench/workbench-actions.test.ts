@@ -102,6 +102,7 @@ const unusedSessionPort = {
   project: () => {},
   rename: async () => {},
   remove: async () => {},
+  discardProjection: () => {},
 }
 
 describe("WorkbenchActions", () => {
@@ -146,6 +147,7 @@ describe("WorkbenchActions", () => {
         project: () => {},
         rename: async () => {},
         remove: async () => {},
+        discardProjection: () => {},
       },
     })
 

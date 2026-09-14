@@ -418,3 +418,72 @@ describe("WorkbenchStore hydrate/migrate", () => {
     expect(store.tabs.some((t) => t.path === normPath)).toBe(true)
   })
 })
+
+describe("draft binding hydration", () => {
+  const draftFixture = (): PersistedWorkbench => ({
+    ...fixture(),
+    spaces: {
+      "/fixtures/space-a": {
+        activePanelID: "panel-a",
+        panels: [
+          {
+            id: "panel-a",
+            slotState: "bound" as const,
+            boundSessionId: "draft:panel-a",
+            mode: "chat" as const,
+            viewMode: "chat",
+            directory: "/fixtures/space-a/project-a",
+            width: 2,
+            tuiPtyId: "pty-stale",
+            termPtyId: "term-stale",
+            splitPtyId: "split-stale",
+            splitTerminal: true,
+          },
+          {
+            id: "panel-b",
+            slotState: "bound" as const,
+            boundSessionId: "session-real",
+            mode: "chat" as const,
+            viewMode: "chat",
+            directory: "/fixtures/space-a/project-a",
+            width: 3,
+          },
+        ],
+      },
+    },
+  })
+
+  test("creation-time hydration strips draft bindings back to empty panels", () => {
+    const store = createWorkbenchStore(draftFixture())
+    const panelA = store.spaceState("/fixtures/space-a")?.panels.find((p) => p.id === "panel-a")
+
+    expect(panelA).toEqual({
+      id: "panel-a",
+      slotState: "empty",
+      mode: "",
+      directory: "/fixtures/space-a/project-a",
+      width: 2,
+    })
+  })
+
+  test("hydrate() strips draft bindings and keeps real bindings untouched", () => {
+    const store = createWorkbenchStore()
+    store.hydrate(draftFixture())
+    const space = store.spaceState("/fixtures/space-a")
+    const panelA = space?.panels.find((p) => p.id === "panel-a")
+    const panelB = space?.panels.find((p) => p.id === "panel-b")
+
+    expect(panelA?.slotState).toBe("empty")
+    expect(panelA?.boundSessionId).toBeUndefined()
+    expect(panelA?.tuiPtyId).toBeUndefined()
+    expect(panelA?.splitTerminal).toBeFalsy()
+    expect(panelB?.boundSessionId).toBe("session-real")
+  })
+
+  test("snapshots never contain draft bindings after hydration", () => {
+    const store = createWorkbenchStore(draftFixture())
+    const snap = store.snapshot()
+    const ids = Object.values(snap.spaces).flatMap((s) => s.panels.map((p) => p.boundSessionId))
+    expect(ids.some((id) => id?.startsWith("draft:"))).toBe(false)
+  })
+})

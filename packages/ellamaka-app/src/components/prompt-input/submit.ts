@@ -15,6 +15,7 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { setSessionModel } from "@/utils/session-model-tracker"
 import { drainPendingSessionSandbox, NEW_SESSION_SANDBOX_KEY, type SandboxPreset } from "./sandbox-control"
+import { isDraftSessionId } from "@/utils/draft-session"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
@@ -201,6 +202,13 @@ type PromptSubmitInput = {
   onQueue?: (draft: FollowupDraft) => void
   onAbort?: () => void
   onSubmit?: () => void
+  /**
+   * Draft-session adoption: when the composer belongs to an unpersisted
+   * workbench draft (draft: prefixed session id), the real session is created
+   * on first submit and handed to the panel via this callback. Returning
+   * false aborts the submit.
+   */
+  adoptSession?: (directory: string, session: Session) => Promise<boolean> | boolean
 }
 
 type CommentItem = {
@@ -325,7 +333,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk.directory
-    const isNewSession = !params.id
+    // A draft-session composer carries a synthetic draft: id. It behaves like
+    // a new session (nothing persisted yet, lazy creation on this submit) but
+    // must not run the new-session navigate/handoff flow — the panel adopts
+    // the created session via adoptSession instead.
+    const isDraftSession = isDraftSessionId(params.id)
+    const isNewSession = !params.id || isDraftSession
     const shouldAutoAccept = isNewSession && input.autoAccept()
     const worktreeSelection = input.newSessionWorktree?.() || "main"
 
@@ -387,9 +400,16 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         seed(sessionDirectory, created)
         session = created
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
-        local.session.promote(sessionDirectory, session.id)
-        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        if (isDraftSession) {
+          // The workbench panel owns the binding transition (draft → real
+          // session); it decides whether the submit may proceed.
+          const adopted = await input.adoptSession?.(sessionDirectory, created)
+          if (!adopted) return
+        } else {
+          local.session.promote(sessionDirectory, session.id)
+          layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+          navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        }
       }
     }
     if (!session) {
