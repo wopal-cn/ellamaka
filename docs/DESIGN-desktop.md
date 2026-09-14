@@ -472,7 +472,7 @@ Onboarding 过程中若 Desktop 意外退出，下次启动从保存的 UI 状�
 ### 相关文档
 
 - 完整 onboarding 架构与步骤行为：`../../../docs/products/wopal-space/DESIGN-onboarding.md`
-- Machine capability 契约：`../../wopal-cli/docs/CAPABILITY-PROTOCOL.md`
+- Machine capability 契约：`../../wopal-cli/docs/DESIGN-capability.md`
 
 ### 启动时版本兼容检查
 

@@ -143,6 +143,6 @@ Runtime API 面向 Workbench 暴露 Ellamaka 领域资源与投影，而不是�
 | 文档 | 职责 |
 |---|---|
 | `docs/DESIGN.md` | Ellamaka 的运行时职责、状态归属、品牌身份和 API 架构概览。 |
-| `../../../projects/wopal-cli/docs/CAPABILITY-PROTOCOL.md` | CLI capability 的机器输入、JSON 输出和版本规则。 |
+| `../../../projects/wopal-cli/docs/DESIGN-capability.md` | CLI capability 的机器输入、JSON 输出和版本规则。 |
 | `packages/opencode/src/server/routes/instance/httpapi/AGENTS.md` | Effect HttpApi 的实现模式。 |
 | `packages/sdk/js/script/build.ts` | OpenAPI 到 JavaScript SDK 的生成入口。 |
