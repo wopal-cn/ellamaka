@@ -1,12 +1,12 @@
 # Ellamaka — Distribution
 
-> **状态**: Active
-> **更新**: 2026-09-12
-> **上级架构**:
+> **Status**: Active
+> **Updated**: 2026-09-14
+> **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
 > - `../../../docs/products/wopal-space/DESIGN-onboarding.md`
-> **上级**: `./DESIGN.md`
+> **Parent**: `./DESIGN.md`
 
 本文件是 Ellamaka 产品分发与版本身份的唯一真相源。它定义 Ellamaka CLI 与 Desktop 的 release backbone、产品 SemVer、OpenCode upstream lock、构建身份、manifest 契约、兼容规则、不可变发布与更新授权。产品级通用规则（WOPAL_HOME、R2 bucket/URL/缓存、归档格式、跨产品协调总则）见 `./DESIGN-distribution.md`，本文只保留 ellamaka 特有语义。
 
@@ -578,8 +578,6 @@ Desktop 保留自己的 manifest policy gate。electron-updater 负责平台 fee
 
 | 文档 | 说明 |
 | ---- | ---- |
-| `../../../docs/products/wopal-space/DESIGN-distribution.md` | 产品级分发总设计：R2 架构、缓存策略、完整性模型、版本体系、跨产品协调、Release 索引策略 |
 | `../../../docs/products/wopal-space/DESIGN.md` | 产品级架构与版本体系 |
-| `../../../docs/products/wopal-space/DESIGN-onboarding.md` | onboarding 架构、setup 完整流程、版本兼容矩阵维护 |
 | `../../wopal-cli/docs/DESIGN-distribution.md` | wopal-cli 对 ellamaka release 的消费契约 |
 | `../../../.wopal/docs/DESIGN-distribution.md` | ontology materialization 与 runtime handoff 边界 |

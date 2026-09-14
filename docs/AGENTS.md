@@ -28,7 +28,7 @@ This directory is ellamaka's design and documentation asset collection. Document
 | `DESIGN-onboarding.md` | Desktop onboarding target implementation: entry determination, state machine, CLI machine invocation | Sync on onboarding flow changes |
 | `DESIGN-workbench.md` | Workbench architecture choices, state model, and interaction flows | Sync on Workbench product design changes |
 
-`DESIGN.md` is the document tree entry point and enumerates every sub-design in its header. Each sub-design points back with `上级: ./DESIGN.md`. Adding or removing a sub-design updates both sides.
+`DESIGN.md` is the document tree entry point and enumerates every sub-design in its header. Each sub-design points back with `Parent: ./DESIGN.md`. Adding or removing a sub-design updates both sides.
 
 ### Companion Documents
 

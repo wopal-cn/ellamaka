@@ -1,9 +1,8 @@
 # Web profile 设计
 
-> **状态**: Active
-> **更新时间**: 2026-09-13
-> **上级**: `./DESIGN.md`
-> **技术依据**: `research/deepseek-harness-architecture-and-integration-research.md`
+> **Status**: Active
+> **Updated**: 2026-09-14
+> **Parent**: `./DESIGN.md`
 
 `web` profile 承载 dsh 的完整界面与会话能力。它是用户直接使用的 dsh 表面，也是插件生态的落点。
 
@@ -307,8 +306,6 @@ dsh 前端插件体系与 Workbench 是两套框架，组件经 Web Component �
 
 | 文档 | 引用目的 |
 |------|---------|
-| `./DESIGN.md` | 融合架构、双引擎与跨 profile 运行时机制 |
-| `./DESIGN-dsh-base.md` | 文件领地、依赖闭包、物化与热加载机制 |
 | `./DESIGN-ellamaka-tools.md` | 工具容器 profile 的装配与投影 |
 | `./DESIGN-workbench.md` | Workbench 工作台设计 |
 | `research/deepseek-harness-architecture-and-integration-research.md` | dsh 全景调研 |

@@ -1,11 +1,10 @@
 # Ellamaka Workbench 设计规范
 
-> **状态**：核心设计文档，描述 Workbench 的架构选择、状态模型与交互流程。
-> **更新时间**：2026-09-13
-> **上级**：`./DESIGN.md`
-> **相关文档**：`./DESIGN-desktop.md`（Electron 桌面承载与共享 PTY 生命周期）、`packages/ellamaka-app/AGENTS.md`（开发规则）
+> **Status**: Active
+> **Updated**: 2026-09-14
+> **Parent**: `./DESIGN.md`
 >
-> 本文专注"是什么"和"为什么"——架构选择、状态模型、交互流程与异常处理设计。具体开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
+> 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
 
 ---
 
@@ -142,9 +141,8 @@ Split Terminal 是面板的**底部辅助终端子区域**，不是独立面板�
 - **从属关系**：依附于其所属面板，生命周期随面板走。面板关闭时 Split Terminal 资源释放。
 - **不可承载 Chat**：只能运行裸 Shell 终端，不能放置 Chat 会话或 TUI 视图。
 - **独立状态保持**：可见性（`splitTerminal` 布尔值）与高度（`splitHeight` 像素值）持久化；PTY 进程由 sidecar 管理，刷新后 Renderer 重建终端渲染状态，并在宽限期内重新连接原 PTY。
-- **视图切换不释放**：在 `bound` 槽位中切换主视图（TUI ↔ Chat ↔ Context）时，Split Terminal 的 PTY 进程保持运行，只切换可见性。切回时复用同一终端连接。
-- **操作行为**：面板头部右侧的终端图标用于切换 `splitTerminal` 的开关。收起时只隐藏渲染区域，Terminal 连接继续作为 subscriber 存活，保留 PTY 进程与终端上下文；再次展开时复用同一终端。
-- **进程存活高亮**：终端图标不采用右侧小绿点形式，而是**直接以图标本身的颜色进行状态指示**。当辅助终端 PTY 进程存活时，图标渲染为高亮绿；进程退出或被销毁时恢复为默认 muted 灰色。该颜色状态与 `splitTerminal` 本身的折叠/展开（pressed 灰色背景）在视觉上解耦。
+- **视图切换与收起不释放 PTY**：切换主视图或收起 Split Terminal 时 PTY 进程保持运行，只改变可见性，再次展开时复用同一终端连接。详见生命周期规则表。
+- **进程存活高亮**：终端图标以自身颜色进行状态指示，不采用附加小绿点的形式。PTY 进程存活时为高亮绿，退出或销毁后恢复为默认 muted 灰色。该颜色状态与 `splitTerminal` 折叠/展开的视觉反馈解耦。
 
 ### 视图注册机制 (View Registry)
 
@@ -189,14 +187,6 @@ Workbench 内嵌终端由 `ghostty-web` 的 canvas 渲染。canvas 只能按完�
 用户也可以在普通 terminal 或 Split Terminal 内手动启动 `ellamaka`。此时该终端不能仅凭 alternate screen 判断为 TUI（vim、less 等也会使用 alternate screen）；必须同时满足：TUI 通过 OSC 标题将终端标为 `Ellamaka` / `ellamaka | …`，且 `ghostty-web` 当前 buffer 为 alternate。满足后动态切换为 full-bleed，并把滚轮映射为 TUI 的 `Ctrl+Alt+Y` / `Ctrl+Alt+E` 消息历史滚动命令；退出 TUI 切回 normal buffer 后立即恢复普通 terminal 行为。
 
 该规则集中在 `src/components/terminal-scrollbar.ts`，并由 `src/components/terminal.tsx` 对 `FitAddon.proposeDimensions()` 和 Ghostty Renderer 注入。适配器必须先检查私有 Renderer 的运行时形状，依赖升级后形状不匹配时安全跳过。禁止在 Panel、TUI 视图或主题 CSS 中重复实现尺寸补偿。
-
-**回归验收**：
-
-- 打开 TUI 后，Panel 的右边和底边不得出现由字符网格或 canvas 滚动条预留造成的可见空带。
-- 改变浏览器窗口、Panel 列宽、Split Terminal 高度后，TUI 仍贴齐右边与底边。
-- 改变 Electron zoom 或在非整数缩放显示器上运行时，统一背景区域不得出现字符格大小的横竖缝隙。
-- 普通 terminal 与 Split Terminal 不出现横向/纵向滚动条，也不因 TUI 的满铺规则裁切字符行。
-- 单元测试至少覆盖：默认滚动条预留被移除、TUI 在小于半格余量时仍向上补足一行/列、普通 terminal 保持向下取整，以及分数 DPR 只多覆盖一个物理像素。
 
 ### 终端中文输入法预编辑
 
@@ -528,29 +518,12 @@ PromptNavigator 不依赖新的后端目录接口。初始目录使用当前已�
 
 #### 响应式与无障碍
 
-- 64ch 以上宽度保持完整工具标题、路径和状态；更窄面板按“标题 → 状态 → 路径/参数”的优先级省略次要信息。
+- 64ch 以上宽度保持完整工具标题、路径和状态；更窄面板按"标题 → 状态 → 路径/参数"的优先级省略次要信息。
 - 工具块头部是语义化按钮，使用 `aria-expanded` 表达展开状态。运行状态通过文本和图标共同表达。
 - 流式正文使用受控 `aria-live`。高频工具输出不逐行播报；状态变化通过简短状态文本通知辅助技术。
 - 所有可点击文件、复制、展开和打开详情操作支持键盘访问。焦点进入内部滚动区后可自然返回块头部。
 - 颜色作为辅助信息。错误、成功、运行和等待状态同时具备图标或文字标识。
 - 动画遵守 `prefers-reduced-motion`。折叠动画只改变内容可见性和高度，不造成主内容横向位移。
-
-#### 体验验收
-
-Workbench Chat 达到以下目标状态：
-
-1. 用户在不阅读内容的情况下，可以分辨最终回复、思考、Shell、文件编辑、子代理和错误。
-2. 同一视觉层级使用稳定字号。正文与块标题为 14px，元数据与过程详情为 13px，代码与 Shell 输出为 13px mono。
-3. Agent 最终回复保持连续文档感。过程块形成清晰节奏，并避免每个段落都成为独立重卡片。
-4. 亮色、暗色和自定义主题均由 Workbench token 驱动，不出现 Kilo/VS Code 专用颜色或独立皮肤。
-5. 单 Panel、双 Panel 和三 Panel 下，标题、路径、工具输出和 Composer 保持可读且不横向溢出。
-6. 长回复、连续 Shell 输出、多文件 patch 和子代理运行期间，虚拟列表滚动稳定，用户选择与焦点不被流式更新清除。
-7. 历史会话默认呈现简洁摘要。用户可按需展开并追溯每项 Agent 活动；PromptNavigator 打开后通过现有分页能力覆盖完整历史。
-8. 长对话左侧显示消息刻度轨。用户可以从刻度或浮层目录跳转到任意历史提示词，并清楚看到用户提示词与 Agent 回复摘要。
-9. 提示词导航使用 Ellamaka 的字体、配色、圆角与阴影；底部 Composer 的布局、样式和交互保持不变。
-10. Chat 只调用 Ellamaka 现有 Session、Message、Question 和 Permission SDK 能力。实现不以补充后端端点或 Kilo Code 专有事件为前提。
-11. 转录投影测试覆盖 `parentID` 归属、partial turn、上下文压缩、历史前插、全部 SDK Part 类型、未知工具和未知 Part 的安全回退。
-12. 实时测试覆盖 `message.updated`、`message.part.updated`、`message.part.delta`、`message.part.removed`、`session.diff`、Question/Permission 请求和子 Session 活动，确保顺序稳定、内容不重复且完成态不丢失。
 
 ---
 
@@ -673,7 +646,7 @@ Renderer 中的 PTY 关联由 `pty-manager.tsx` 统一管理，后台进程生�
 
 WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确认 sidecar 中的 PTY 状态，再决定重连或回退：
 
-- **瞬时断连**：刷新、Renderer 重载或短暂网络中断只关闭 WebSocket。前端保留 PTY ID，sidecar 进入 Grace，Terminal 在宽限期内重新连接原 PTY。
+- **瞬时断连**：刷新、Renderer 重载或短暂网络中断只关闭 WebSocket。前端保留 PTY ID，Terminal 在宽限期内重新连接原 PTY。
 - **进程退出**：用户在 TUI 或 Shell 中输入 `exit` 后，sidecar 发布 `pty.exited` / `pty.deleted` 并从 Session Registry 删除 PTY。前端探测得到 404 后清除 PTY ID，并将 TUI 主视图回退到 `chat`。
 - **连接关闭处理**：`<Terminal>` 的普通 `onClose` 不直接调用 `pty.remove`。它进入断连状态并触发探测或重连；只有确认 PTY 已退出时才清理持久化关联。
 - **原子状态回退**：确认 PTY 已退出后，前端先清 PTY Manager 缓存，再通过 SolidJS `batch` 提交布局守卫与 PTY ID。TUI 必须先切 `viewMode=chat` 再清 `tuiPtyId`；Split Terminal 必须先设 `splitTerminal=false` 再清 `splitPtyId`，避免创建 effect 观察到中间状态并抢跑创建新 PTY。
@@ -730,35 +703,32 @@ Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.del
 ### Headbar 标题栏、单空间 Session Tree 与侧栏架构
 
 - **Headbar 标题栏与 Web 兼容性**：
-  - **macOS 红绿灯避让与双层 Layout 契约**：Workbench 顶栏 `<header>` 必须保持 `flex-col` 双层结构。第一层为 `workbench-macos-window-chrome`（28px 高度），在 macOS 桌面端为红绿灯提供专有拖拽避让高度；第二层为 `workbench-titlebar-toolbar`。Logo、Space Tabs 与右侧操作按钮必须全部收纳于第二层 toolbar 内，严禁绝对定位逃逸至第一层拖拽区。
-  - 保持原有的品牌 Logo 样式，与空间 Tabs 在第二行 Headbar Toolbar 中平行布设。
-  - Headbar 右侧增加 `空间列表` 下拉框与 `用户登录 Logo (头像预留)`，确保网页版 Web 界面与 Electron 桌面端具备完全一致的控件呈现与交互。
-  - Tab 栏末尾的 `+` 按钮**严格锁定为添加 Panel (面板) 的功能**，不改变其既有逻辑。
-- **侧栏 44px 固定竖向 Activity Bar 架构**：
-  - 侧栏最左侧为 44px 固定的竖向图标列 (Vertical Activity Bar)，绝无横向菜单。
-  - 垂直方向保留 `💬 会话 (Sessions)` 与 `🔧 空间维护 (Maintenance)` 图标，支持用户切换侧栏视图或展开/收起面板。
+  - **macOS 红绿灯避让与双层 Layout 契约**：Workbench 顶栏 `<header>` 保持双层结构。第一层为 macOS 桌面端提供红绿灯拖拽避让高度；第二层为标题栏工具栏，收纳 Logo、Space Tabs 与右侧操作按钮。严禁绝对定位逃逸至第一层拖拽区。
+  - 品牌 Logo 与空间 Tabs 在标题栏工具栏中平行布设。
+  - Headbar 右侧提供 `空间列表` 下拉框与用户头像位，网页版与 Electron 桌面端保持一致的控件呈现与交互。
+  - Tab 栏末尾的 `+` 按钮严格锁定为添加 Panel 的功能。
+- **侧栏固定竖向 Activity Bar 架构**：
+  - 侧栏最左侧为固定宽度的竖向图标列，不使用横向菜单。
+  - 垂直方向提供 `会话 (Sessions)` 与 `空间维护 (Maintenance)` 入口，用于切换侧栏视图或展开/收起面板。
 - **单空间会话隔离 (Current-Space Session Tree)**：
-  - 会话树在视图层**永远只显示当前激活的空间相关会话**，跨空间会话不混排展现。
-  - 保留所有既有的图标（圆点 / Git 分支 / 文件夹）、状态颜色（muted 灰 / accent 绿）、`dirHealth` 提示、Pin 置顶、右键上下文菜单与拖拽体验。
+  - 会话树在视图层只显示当前激活空间的会话，跨空间会话不混排展现。
+  - 保留既有图标（圆点 / Git 分支 / 文件夹）、状态颜色、`dirHealth` 提示、Pin 置顶、右键上下文菜单与拖拽体验。
 - **内置独立会话的工作目录 ($WOPAL_HOME/general_tasks/)**：
-  - 后端 Session 存在关联物理目录的强约束限制（`directory` 为 `notNull()`）。
-  - 通用日常对话由 `POST /workbench/sessions` 的服务端 provisioner 创建 `$WOPAL_HOME/general_tasks/` 下隔离目录。
+  - 后端 Session 存在关联物理目录的强约束（`directory` 为 `notNull()`）。
+  - 通用日常对话由 `POST /workbench/sessions` 的服务端 provisioner 创建 `$WOPAL_HOME/general_tasks/` 下的隔离目录。
 
-### Statusbar 真实代码契约与异常诊断中心
+### Statusbar 诊断与状态中心
 
 Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `status-bar-diagnostics.tsx`，采用响应式三分区结构：
 
-- **左区（元数据层级链）**：由 `getStatusBarSegments` 动态算出当前激活 Panel 的工作现场元数据层级链。
-  - **格式**：`P{激活面板序号}/{面板总数} / 会话标题`
-  - 各层级段用斜杠 `/` (`text-v2-text-text-faint`) 分隔。
-  - 若未绑定 Session，仅展示 `P{激活面板序号}/{面板总数}`。
+- **左区（元数据层级链）**：由 `getStatusBarSegments` 动态算出当前激活 Panel 的元数据层级链，格式为 `P{激活面板序号}/{面板总数} / 会话标题`。未绑定 Session 时仅展示面板序号。
 - **中区（居中异常诊断与提示中心 `StatusBarDiagnosticsCenter`）**：
-  - **定位与安全防护**：采用绝对居中定位 (`absolute left-1/2 -translate-x-1/2`)。只读订阅全局消息队列 `wb.diagnostics`，防范冒泡导致面板 ErrorBoundary 卸载。
-  - **缺省淡出提示**：无消息时，前 5 秒呈现默认引导文本（“提示：双击会话或拖拽会话到面板中即可在工作台打开”），5 秒后自动淡出清空。
-  - **消息等级与图标分类**：支持 `error` (图标 `circle-x`, 颜色 `text-icon-critical-base`)、`warning` (图标 `warning`, 颜色 `text-icon-warning-base`) 与 `info` (图标 `bubble-5`) 三级。触发按钮仅渲染最新一条消息 `latest().text`，超出 1 条时显示气泡统计徽章（如 `+2`）。
-  - **交互式诊断 Popover**：点击居中按钮展开顶部 Popover（宽 400px，最大高 320px，倒序 `[...list()].reverse()` 渲染）。
-  - **可恢复与清除机制**：每个条目呈现图标、文本、时间戳 (`formatTime`) 及 `source` 来源；若携带 `onRetry` 句柄，提供异步重试操作（重试成功后自动剔除该条目）；右侧支持单条目关闭与底部一键 `clearAllDiagnostics()`。
-- **右区（服务器状态与控制）**：带有左边框分割 (`border-l border-v2-border-border-base pl-2`)，结合 `StatusBarStatusPopover` 呈现在线指示器（小绿点）与服务器名称 `server.name`。
+  - **定位与安全防护**：绝对居中定位，不受左右侧栏折叠与标题长度影响。只读订阅全局消息队列 `wb.diagnostics`，防范冒泡导致面板 ErrorBoundary 卸载。
+  - **缺省淡出提示**：无消息时先呈现引导文本，随后自动淡出清空。
+  - **消息等级与图标分类**：支持 `error`、`warning` 与 `info` 三级，各带对应图标与语义色。触发按钮仅渲染最新一条消息，超出 1 条时显示计数徽章。
+  - **交互式诊断 Popover**：点击居中按钮展开顶部 Popover，倒序渲染全部活动消息。
+  - **可恢复与清除机制**：每个条目呈现图标、文本、时间戳及来源；携带重试句柄的条目提供异步重试（成功后自动剔除）；支持单条目关闭与一键全部清除。
+- **右区（服务器状态与控制）**：与左区以左边框分隔，呈现在线指示器与服务器名称。
 
 ### 浏览器生命周期与单 Tab 互斥
 
@@ -773,17 +743,14 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 - Workbench 不使用 `beforeunload` 阻止刷新或关闭，也不推断浏览器离开的具体原因。
 - `pagehide` 只调用 `wb.flushPersisted()`，把包含 PTY ID 重连提示的最新布局同步写入 `localStorage`。
-- 页面销毁使 PTY WebSocket 自然断开。Sidecar 在最后一个 subscriber 断开后进入 10 秒 Grace。
-- 刷新后的页面在 Grace 内探测并连接原 PTY，sidecar 取消回收任务。
-- Tab 关闭后没有新连接，sidecar 在 Grace 结束时终止 PTY。
+- 页面销毁使 PTY WebSocket 自然断开，进入 Sidecar 断连宽限语义。
 - Panel 和 Space 的显式关闭继续调用 `disposePty()` / `disposePanel()` / `disposeSpace()`，立即释放进程。
 
 **刷新时序**：
 
 1. `pagehide` 同步 flush Workbench 布局和 PTY ID 提示。
 2. WebSocket 断开，sidecar 启动 PTY Grace。
-3. 新页面水合布局并通过 `ptyManager.ensure()` 探测旧 ID。
-4. 探测成功后重新连接，sidecar 取消 Grace 回收任务。
+3. 新页面水合布局并通过 `ptyManager.ensure()` 探测旧 ID，成功后重连并取消回收任务。
 
 浏览器关闭、Renderer 崩溃和 Electron 窗口关闭使用相同的断连回收语义。桌面应用退出时由 Electron Main Process 停止 sidecar，立即释放全部 PTY。详见 `DESIGN-desktop.md`。
 
@@ -809,17 +776,13 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 1. 在 `bound` 槽位的面板中，点击头部 `TUI | Chat | Context` 主视图按钮，或点击 `TUI` 左侧的终端图标展开/收起下方 Split Terminal。
 2. 主视图按钮仅切换 `panel.view`。终端图标仅切换 `panel.splitTerminal`，不会抢占当前主视图。
-3. **切换视图不释放任何 PTY**：
-   - 从 TUI 切到 Chat：已挂载的 TUI Terminal 保持隐藏和连接状态，前端同时挂载 `PanelChat` 导入聊天数据。
-   - 切回 TUI：恢复同一 Terminal 的可见性，终端上下文保持不变。
-   - Split Terminal 收起时只隐藏渲染区域并保留 WebSocket subscriber；再次展开时复用同一连接。
+3. 切换视图不释放任何 PTY：从 TUI 切到 Chat 时已挂载的 Terminal 保持隐藏和连接状态，切回时恢复同一 Terminal 的可见性与上下文。PTY 生命周期见生命周期规则表。
 
 ### 切换 Space Tab
 
 1. 用户点击顶部 Space Tab 切换激活 Space。
 2. 当前 Space 变为 `visibility: hidden; inert`，新激活 Space 变为可见。
-3. **不销毁任何 Panel、PTY、Chat 状态**。切回原 Tab 即恢复全部上下文。
-4. 若当前 Space 有正在运行的会话，切换不会中断它们。
+3. 不销毁任何 Panel、PTY 或 Chat 状态，正在运行的会话不中断；切回原 Tab 即恢复全部上下文。
 
 ### 关闭面板与会话解绑
 
@@ -850,7 +813,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 ## 异常处理与健壮自愈机制
 
-为了保证 Workbench 在各种运行状况（网络抖动、CLI 版本变化、环境配置损坏）下均能稳定可靠运行，系统遵循本章的异常防御与诊断设计。
+Workbench 在运行状况异常（网络抖动、CLI 版本变化、环境配置损坏）下的异常防御与诊断设计。
 
 ### 异常分类与应对原则
 
@@ -877,21 +840,3 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 2. **运行时保持**：CLI 状态不改变服务端健康语义。CLI 不可用时，Session Runtime 继续服务 General Session、Chat、TUI 与 PTY。Session Projection 将无法归属 Space 的会话作为 General 返回。
 3. **受控降级**：Space 列表刷新、受控 Space location 和其他 CLI 控制能力在 CLI 不可用期间暂停。状态栏诊断中心保留修复入口，并说明最低兼容版本。
 4. **用户确认的修复**：用户点击修复后，`POST /global/cli/repair` 对不兼容 CLI 执行 `wopal update`，并在需要时调用第一方 installer。服务端重新探测 CLI；Workbench 在探测成功后自动恢复 Space Control，不重启 sidecar 或当前 Workbench。
-
-### 状态栏居中诊断与信息中心
-
-为了简化 UI 结构并提供随时可见的系统诊断与信息，我们将侧边栏底部的提示信息区移除，并在常驻状态栏的**正居中位置**建立统一的"信息与异常诊断中心"：
-
-1. **防爆隔离**：对 SolidJS 的 `createResource` 异步接口使用 `createMemo` 包裹安全读取，当 error 发生时返回空值，严禁冒泡导致面板 ErrorBoundary 崩溃卸载。
-2. **全局消息队列 Store**：在全局 Store 中维护一个全局消息队列（`messages: LogMessage[]`），支持三种消息类型：
-   - **信息 (Info)**：如"刷新成功"、"会话已归档"等瞬态系统提示。支持配置自动淡出定时器（如 5 秒后自动清除）。
-   - **警告 (Warning)**：如"工作目录不存在"等非阻塞限制提示。
-   - **错误 (Error)**：如"目录列表加载失败"等组件级异步接口报错。
-3. **居中信息提示区 UI**：
-   - 在状态栏正中央（使用绝对定位居中，保证不受左右侧边栏折叠与路径长度影响）常驻显示**最新的一条消息**。
-   - 伴随对应类型的图标（信息、警告、错误），文字精简。若消息数 $> 1$，在右侧附加徽标件数显示（如 `+2`）。
-4. **交互式气泡列表 (Interactive Popover)**：
-   - 用户点击状态栏居中消息区时，在状态栏上方弹出一个**气泡弹出框 (Popover)**。
-   - 气泡框中以垂直列表形式展示所有当前的活动消息。
-   - 每个错误和警告条目右侧提供 **"重试"**（若支持，如 API 重新请求）和 **"清除"**（Dismiss）操作链接。
-   - **自愈消除**：重试操作必须明确返回成功结果后才删除条目。后台恢复同样自动清除对应诊断。

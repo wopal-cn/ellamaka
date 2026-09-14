@@ -1,8 +1,8 @@
 # 工具容器 profile 设计
 
-> **状态**: Active
-> **更新时间**: 2026-09-13
-> **上级**: `./DESIGN.md`
+> **Status**: Active
+> **Updated**: 2026-09-14
+> **Parent**: `./DESIGN.md`
 
 ellamaka 通过 `ellamaka-tools` 这个 dsh profile 获得沙箱执行能力。工具容器不承载界面，不创建、不持有任何会话，只对外提供工具执行后端。
 
@@ -173,6 +173,4 @@ dsh 沙箱后端支持三个平台：
 
 | 文档 | 引用目的 |
 |------|---------|
-| `./DESIGN.md` | 融合架构与双容器模型 |
-| `./DESIGN-dsh-base.md` | profile 目录结构、依赖闭包与热加载机制 |
 | `./DESIGN-dsh-web.md` | Web profile 的插件供应链与界面承载 |

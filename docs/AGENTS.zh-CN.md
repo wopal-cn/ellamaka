@@ -28,7 +28,7 @@ description: Ellamaka 文档目录资产地图、权威层级与维护职责
 | `DESIGN-onboarding.md` | Desktop onboarding 目标实现：入口判定、状态机、CLI machine 调用 | onboarding 流程变更时同步 |
 | `DESIGN-workbench.md` | Workbench 架构选择、状态模型与交互流程 | Workbench 产品设计变更时同步 |
 
-`DESIGN.md` 是文档树入口，头部枚举全部子设计；子设计头部以 `上级: ./DESIGN.md` 指回。新增或删除子设计时两侧同步。
+`DESIGN.md` 是文档树入口，头部枚举全部子设计；子设计头部以 `Parent: ./DESIGN.md` 指回。新增或删除子设计时两侧同步。
 
 ### 配套文档
 

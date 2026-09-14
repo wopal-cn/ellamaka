@@ -1,9 +1,9 @@
 # Ellamaka
 
-> **状态**: Active
-> **更新时间**: 2026-09-13
-> **上级架构**: `../../../docs/products/wopal-space/DESIGN.md`
-> **子设计**:
+> **Status**: Active
+> **Updated**: 2026-09-14
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Sub-DESIGNs**:
 >
 > - `./DESIGN-desktop.md` — 官方桌面应用架构
 > - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
@@ -12,7 +12,7 @@
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
 > - `./DESIGN-onboarding.md` — Desktop onboarding 目标实现
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
-> **配套文档**:
+> **Companion Documents**:
 >
 > - `./API-CONTRACT.md` — Runtime API 与 SDK 契约
 

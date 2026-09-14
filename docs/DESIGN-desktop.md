@@ -1,12 +1,10 @@
 # ellamaka-desktop 设计
 
-> **状态**: Draft
-> **更新时间**: 2026-09-13
-> **上级**: `./DESIGN.md`
-> **目标包**: `packages/ellamaka-desktop`
-> **相关文档**: `./DESIGN-distribution.md`、`./DESIGN-workbench.md`（Workbench 界面设计）
+> **Status**: Draft
+> **Updated**: 2026-09-14
+> **Parent**: `./DESIGN.md`
 
-本文档描述 ellamaka 官方桌面应用的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
+本文档描述 `packages/ellamaka-desktop` 的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
 
 ## 设计目标
 

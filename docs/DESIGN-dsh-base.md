@@ -1,9 +1,8 @@
 # DSH 融合基础设计
 
-> **状态**: Active
-> **更新时间**: 2026-09-13
-> **上级**: `./DESIGN.md`
-> **技术依据**: `research/deepseek-harness-architecture-and-integration-research.md`
+> **Status**: Active
+> **Updated**: 2026-09-14
+> **Parent**: `./DESIGN.md`
 
 ellamaka 在自己的进程里运行 dsh 引擎，形成双引擎融合。本文描述两个 profile 共同依赖的宿主基座：dsh 的文件领地、依赖闭包与物化、模块热加载机制，以及 profile 目录的组织方式。
 

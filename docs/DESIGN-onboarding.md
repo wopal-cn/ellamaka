@@ -1,15 +1,14 @@
 # Desktop Onboarding — 目标实现规范
 
-> **状态**: Target Shape
-> **更新时间**: 2026-09-12
-> **上级**: `./DESIGN.md`
-> **上级架构**:
+> **Status**: Target Shape
+> **Updated**: 2026-09-14
+> **Parent**: `./DESIGN.md`
+> **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-onboarding.md` — 统一入口架构与职责边界
 > - `./DESIGN-desktop.md` — Desktop 启动、窗口与 sidecar 生命周期
->   **CLI machine 契约**: `../../../projects/wopal-cli/src/lib/setup-machine.ts`
 
-本文档定义 Ellamaka Desktop onboarding 的目标实现。入口判定只依赖 `onboarding.json`（Desktop-owned UI 状态）；CLI machine operation 的输入、输出和业务语义以 wopal-cli 代码为准。
+本文档定义 Ellamaka Desktop onboarding 的目标实现。入口判定只依赖 `onboarding.json`（Desktop-owned UI 状态）；CLI machine operation 的输入、输出和业务语义以 wopal-cli 代码为准，其契约见 `../../../projects/wopal-cli/src/lib/setup-machine.ts`。
 
 **边界**：本文档只描述 Desktop 侧的编排（渲染器、IPC、状态机、CLI bootstrap 与子进程生命周期）。`prepare-ontology`、`prepare-runtime`、`initialize-space` 等确定性 operation 的业务语义（含装配物化、类型装配单消费）由 wopal-cli 实现与定义，本文档不重复定义；Desktop 仅按 machine capability 契约调用并展示结果。
 
