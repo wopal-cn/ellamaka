@@ -1,6 +1,6 @@
 # Desktop Onboarding — 目标实现规范
 
-> **Status**: Target Shape
+> **Status**: Active
 > **Updated**: 2026-09-14
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**:
