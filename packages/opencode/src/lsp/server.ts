@@ -80,7 +80,7 @@ export const Deno: Info = {
   async spawn(root) {
     const deno = which("deno")
     if (!deno) {
-      log.debug("deno not found, please install deno first")
+      log.trace("io", "deno not found, please install deno first")
       return
     }
     return {
@@ -100,7 +100,7 @@ export const Typescript: Info = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
   async spawn(root, ctx) {
     const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
-    log.debug("typescript server", { tsserver })
+    log.trace("io", "typescript server", { tsserver })
     if (!tsserver) return
     const bin = await Npm.which("typescript-language-server")
     if (!bin) return
@@ -157,7 +157,7 @@ export const ESLint: Info = {
   async spawn(root, ctx, flags) {
     const eslint = Module.resolve("eslint", ctx.directory)
     if (!eslint) return
-    log.debug("spawning eslint server")
+    log.trace("io", "spawning eslint server")
     const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
     if (!(await Filesystem.exists(serverPath))) {
       if (flags.disableLspDownload) return
@@ -182,7 +182,7 @@ export const ESLint: Info = {
 
       const stats = await fs.stat(finalPath).catch(() => undefined)
       if (stats) {
-        log.debug("removing old eslint installation", { path: finalPath })
+        log.trace("io", "removing old eslint installation", { path: finalPath })
         await fs.rm(finalPath, { force: true, recursive: true })
       }
       await fs.rename(extractedPath, finalPath)

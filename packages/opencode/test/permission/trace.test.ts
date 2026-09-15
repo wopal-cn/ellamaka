@@ -47,7 +47,9 @@ it.instance(
       yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = previousLog)))
       const dir = yield* tmpdirScoped()
       Global.Path.log = dir
-      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "TRACE" }))
+      yield* Effect.promise(() =>
+        Log.init({ print: false, dev: false, role: "serve", level: "TRACE", trace: "permission" }),
+      )
 
       const marker = "permission-trace-probe"
       Log.Default.info(marker)
@@ -82,7 +84,9 @@ it.instance(
       yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = previousLog)))
       const dir = yield* tmpdirScoped()
       Global.Path.log = dir
-      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "TRACE" }))
+      yield* Effect.promise(() =>
+        Log.init({ print: false, dev: false, role: "serve", level: "TRACE", trace: "permission" }),
+      )
 
       const marker = "permission-ask-probe"
       Log.Default.info(marker)

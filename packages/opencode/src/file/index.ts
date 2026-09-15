@@ -284,7 +284,7 @@ const getImageMimeType = (file: string) => mime[ext(file)] || "image/" + ext(fil
 
 function shouldEncode(mimeType: string) {
   const type = mimeType.toLowerCase()
-  log.debug("shouldEncode", { type })
+  log.trace("io", "shouldEncode", { type })
   if (!type) return false
   if (type.startsWith("text/")) return false
   if (type.includes("charset=")) return false

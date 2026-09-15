@@ -27,16 +27,46 @@ const maxLogLineLength = 16 * 1024
 const truncationMarker = "…[truncated]"
 
 /**
- * TRACE categories are the only consumer of the category selector. A selector
- * limits which `Log.trace` records emit; `all` (or `*`) traces every category.
- * The selector is empty unless a caller opts in, so normal operation never
- * emits a trace record.
+ * TRACE categories are a closed registry. Each one names a diagnostic area
+ * that used to flood the operator log, so `--trace` must name the areas it
+ * wants instead of the level implying "everything".
+ *
+ * Adding a category is a deliberate act: it must have at least one call site
+ * and a place in the operator documentation.
  */
+export const TraceCategory = {
+  Bus: "bus",
+  Permission: "permission",
+  Session: "session",
+  Llm: "llm",
+  Plugin: "plugin",
+  Io: "io",
+} as const
+
+export type TraceCategory = (typeof TraceCategory)[keyof typeof TraceCategory]
+
+const traceCategoryList: readonly TraceCategory[] = Object.values(TraceCategory)
+
+/** Selects every registered category in one token. */
 export const ALL_TRACE_CATEGORIES = "all"
 
-let level: Level = "INFO"
-let traceCategories: Set<string> = new Set()
+/** The categories accepted by `--trace` and by `Log.trace`. */
+export function traceCategories(): readonly TraceCategory[] {
+  return traceCategoryList
+}
 
+export function isTraceCategory(value: string): value is TraceCategory {
+  return (traceCategoryList as readonly string[]).includes(value)
+}
+
+let level: Level = "INFO"
+let selectedTraceCategories: Set<string> = new Set()
+
+/**
+ * Turns a raw selector into a set of category tokens. Unknown tokens are kept
+ * out of the set so a typo can never widen what is emitted; `*` and `all`
+ * become the explicit all-category token.
+ */
 export function normalizeTraceCategories(input?: string | readonly string[]): Set<string> {
   if (input === undefined) return new Set()
   const raw = typeof input === "string" ? input.split(",") : input
@@ -44,10 +74,11 @@ export function normalizeTraceCategories(input?: string | readonly string[]): Se
   for (const token of raw) {
     const category = token.trim().toLowerCase()
     if (category.length === 0) continue
-    if (category === "*") {
+    if (category === "*" || category === ALL_TRACE_CATEGORIES) {
       result.add(ALL_TRACE_CATEGORIES)
       continue
     }
+    if (!isTraceCategory(category)) continue
     result.add(category)
   }
   return result
@@ -62,10 +93,10 @@ export function normalizeTraceCategories(input?: string | readonly string[]): Se
 export function setLevel(next: Level, categories?: string | readonly string[]) {
   level = next
   if (categories !== undefined) {
-    traceCategories = normalizeTraceCategories(categories)
+    selectedTraceCategories = normalizeTraceCategories(categories)
     return
   }
-  if (next !== "TRACE") traceCategories = new Set()
+  if (next !== "TRACE") selectedTraceCategories = new Set()
 }
 
 function shouldLog(input: Level): boolean {
@@ -73,15 +104,16 @@ function shouldLog(input: Level): boolean {
 }
 
 /**
- * A trace record emits only when TRACE is the effective level and the category
- * is selected. An explicit TRACE level with no selector means every category,
- * so `--log-level TRACE` alone is usable without repeating `--trace all`.
+ * A trace record emits only when TRACE is the effective level AND a category
+ * was explicitly selected. The level alone emits nothing: `--log-level TRACE`
+ * without `--trace` is an error at the CLI, and this guard keeps a stray
+ * programmatic `setLevel("TRACE")` from opening every area.
  */
 function shouldTrace(category: string): boolean {
   if (level !== "TRACE") return false
-  if (traceCategories.size === 0) return true
-  if (traceCategories.has(ALL_TRACE_CATEGORIES)) return true
-  return traceCategories.has(category.trim().toLowerCase())
+  if (selectedTraceCategories.size === 0) return false
+  if (selectedTraceCategories.has(ALL_TRACE_CATEGORIES)) return true
+  return selectedTraceCategories.has(category.trim().toLowerCase())
 }
 
 /**
@@ -98,7 +130,7 @@ export type Logger = {
   info(message?: any, extra?: Record<string, any>): void
   error(message?: any, extra?: Record<string, any>): void
   warn(message?: any, extra?: Record<string, any>): void
-  trace(category: string, message?: any, extra?: Record<string, any>): void
+  trace(category: TraceCategory, message?: any, extra?: Record<string, any>): void
   tag(key: string, value: string): Logger
   clone(): Logger
   time(
@@ -434,7 +466,7 @@ export function create(tags?: Record<string, any>) {
         emit("WARN  " + build(message, extra))
       }
     },
-    trace(category: string, message?: any, extra?: Record<string, any>) {
+    trace(category: TraceCategory, message?: any, extra?: Record<string, any>) {
       const normalized = normalizeCategory(category)
       if (shouldTrace(normalized)) {
         emit("TRACE " + build(message, { category: normalized, ...extra }))

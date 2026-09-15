@@ -9,7 +9,9 @@ start ACP (Agent Client Protocol) server
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --port                port to listen on                                     [数字] [默认值: 0]
@@ -39,7 +41,9 @@ manage MCP (Model Context Protocol) servers
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -56,7 +60,9 @@ attach to a running ellamaka server
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --dir                 directory to run in                                             [字符串]
@@ -81,7 +87,10 @@ run ellamaka with a message
   -h, --help                          show help                                               [布尔]
   -v, --version                       show version number                                     [布尔]
       --print-logs                    print logs to stderr                                    [布尔]
-      --log-level                     log level  [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level                     log level
+                                        [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace                         trace categories (comma-separated, e.g. session,llm); run
+                                      \`--trace\` alone to list them                          [字符串]
       --pure                          run without external plugins                            [布尔]
       --disable-wopalspace            disable WopalSpace mode (use native opencode behavior)  [布尔]
       --command                       the command to run, use message for args              [字符串]
@@ -145,7 +154,9 @@ debugging and troubleshooting tools
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -164,7 +175,9 @@ manage AI providers and credentials
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -182,7 +195,9 @@ manage agents
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -199,7 +214,9 @@ upgrade ellamaka to the latest or a specific version
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
   -m, --method              installation method to use
@@ -215,7 +232,9 @@ uninstall ellamaka and remove all related files
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
   -c, --keep-config         keep configuration files                          [布尔] [默认值: false]
@@ -233,7 +252,9 @@ starts a headless ellamaka server
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --port                port to listen on                                     [数字] [默认值: 0]
@@ -254,7 +275,9 @@ start ellamaka server and open web interface
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --port                port to listen on                                     [数字] [默认值: 0]
@@ -278,7 +301,9 @@ list all available models
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --verbose             use more verbose model output (includes metadata like costs)      [布尔]
@@ -294,7 +319,9 @@ show token usage and cost statistics
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --days                show stats for the last N days (default: all time)                [数字]
@@ -317,7 +344,9 @@ export session data as JSON
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --sanitize            redact sensitive transcript and file data                         [布尔]"
@@ -335,7 +364,9 @@ import session data from JSON file or URL
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -353,7 +384,9 @@ manage GitHub agent
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -370,7 +403,9 @@ fetch and checkout a GitHub PR branch, then run ellamaka
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -388,7 +423,9 @@ manage sessions
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -405,7 +442,9 @@ install plugin and update config
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
   -g, --global              install in global config                          [布尔] [默认值: false]
@@ -429,7 +468,9 @@ database tools
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --format              Output format           [字符串] [可选值: "json", "tsv"] [默认值: "tsv"]"
@@ -444,7 +485,9 @@ list MCP servers and their status
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -458,7 +501,9 @@ add an MCP server
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -478,7 +523,9 @@ authenticate with an OAuth-enabled MCP server
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -495,7 +542,9 @@ remove OAuth credentials for an MCP server
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -509,7 +558,9 @@ list providers and credentials
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -526,7 +577,9 @@ log in to a provider
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
   -p, --provider            provider id or name to log in to (skips provider selection)     [字符串]
@@ -542,7 +595,9 @@ log out from a configured provider
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -556,7 +611,9 @@ create a new agent
   -h, --help                  show help                                                       [布尔]
   -v, --version               show version number                                             [布尔]
       --print-logs            print logs to stderr                                            [布尔]
-      --log-level             log level          [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level             log level [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace                 trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                              alone to list them                                            [字符串]
       --pure                  run without external plugins                                    [布尔]
       --disable-wopalspace    disable WopalSpace mode (use native opencode behavior)          [布尔]
       --path                  directory path to generate the agent file                     [字符串]
@@ -577,7 +634,9 @@ list all available agents
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -591,7 +650,9 @@ list sessions
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
   -n, --max-count           limit to N most recent sessions                                   [数字]
@@ -610,7 +671,9 @@ delete a session
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -624,7 +687,9 @@ install the GitHub agent
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;
@@ -638,7 +703,9 @@ run the GitHub agent
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]
       --event               GitHub mock event to run the agent for                          [字符串]
@@ -654,7 +721,9 @@ print the database path
   -h, --help                show help                                                         [布尔]
   -v, --version             show version number                                               [布尔]
       --print-logs          print logs to stderr                                              [布尔]
-      --log-level           log level            [字符串] [可选值: "DEBUG", "INFO", "WARN", "ERROR"]
+      --log-level           log level   [字符串] [可选值: "TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+      --trace               trace categories (comma-separated, e.g. session,llm); run \`--trace\`
+                            alone to list them                                              [字符串]
       --pure                run without external plugins                                      [布尔]
       --disable-wopalspace  disable WopalSpace mode (use native opencode behavior)            [布尔]"
 `;

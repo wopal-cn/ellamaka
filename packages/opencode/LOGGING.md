@@ -16,27 +16,43 @@ copies of one another:
 - `--log-level DEBUG` is for bounded implementation diagnostics. It must never
   be required to understand normal operation, and it must not carry request,
   prompt, permission-pattern, session, OAuth, or third-party stderr payloads.
-- `--log-level TRACE` (or `--trace <categories>`) is the opt-in fifth level for
-  the diagnostics deliberately removed from INFO/DEBUG. It is never active by
-  default; see "Trace" below.
+- `--trace <categories>` is the opt-in fifth level for the diagnostics
+  deliberately removed from INFO/DEBUG. It is never active by default; see
+  "Trace" below.
 
 ## Trace
 
 `TRACE` is the fifth level, below `DEBUG`. It carries the high-volume lifecycle
-records that normal operation must not emit — event-bus publishes and
-permission decisions — and is off unless a caller asks for it.
+records that normal operation must not emit, and is off unless a caller names
+the areas it wants.
 
-- `--log-level TRACE` enables every trace category.
-- `--trace permission,bus` enables only the named categories and implicitly
-  promotes the effective level to `TRACE`. An explicit `--log-level` still wins,
-  so a leftover `--trace` selector cannot silently upgrade an `INFO` run.
-- Categories are free-form short tokens. A record is emitted only when the
-  effective level is `TRACE` and its category is selected (or the selector is
-  `all`/`*`, or no selector was given alongside an explicit `TRACE`).
+**The level alone emits nothing.** `--log-level TRACE` without `--trace` is
+rejected: "trace everything" is precisely the flood this level exists to
+remove. Run `--trace` with no value to list the categories.
+
+The categories are a closed registry (`Log.TraceCategory`). Each covers one of
+the areas that historically dominated the serve log; a new category requires a
+call site and a line in this document.
+
+| Category     | Covers                                    |
+| ------------ | ----------------------------------------- |
+| `bus`        | Event-bus publish                         |
+| `permission` | Permission decisions and replies          |
+| `session`    | Session prompt loop and processor turns   |
+| `llm`        | Model/runtime selection per request       |
+| `plugin`     | Plugin load, MCP connect, OAuth setup     |
+| `io`         | File, formatter, language-server activity |
+
+- `--trace session,llm` enables exactly those categories and promotes the
+  effective level to `TRACE`. An explicit `--log-level` still wins, so a
+  leftover `--trace` selector cannot silently upgrade an `INFO` run.
+- `--trace all` (or `*`) is the explicit escape hatch for all categories.
+- An unknown category is an error listing the valid names, never a silent
+  widening of the selector.
 
 Trace records are structured and bounded like every other record: each carries
-a normalized `category=` marker, and a category longer than a short token is
-truncated. They inherit the shared redaction and length limits.
+a normalized `category=` marker. They inherit the shared redaction and length
+limits.
 
 Trace must never carry raw payloads or user data:
 
@@ -46,6 +62,14 @@ Trace must never carry raw payloads or user data:
   `escalated` marker, and a count, plus the `reply` outcome. The evaluated
   pattern, command, path, session id, and pending request contents are never
   written.
+- Session/LLM: the step counter and runtime/model identifiers. Message content,
+  prompts, and tool arguments are never written.
+
+To emit a trace record from Effect-based code, use the logger bridge
+(`EffectLogger.create(...).trace(category, message, extra)`). Effect filters
+sub-Info levels before any logger sees them, so the bridge carries the category
+as an annotation and routes it to `Log.trace`; do not call `Effect.logTrace`
+expecting a trace record.
 
 DSH has only four levels, so the host `TRACE` level is mapped to DSH `DEBUG` at
 the boundary. This keeps a `--trace` run from silently dropping DSH diagnostics

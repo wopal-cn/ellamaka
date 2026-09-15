@@ -42,7 +42,7 @@ import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
 import { DshInitCommand } from "./cli/cmd/dsh-init"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
-import { resolveLogLevel } from "./cli/log-level"
+import { resolveLogLevel, resolveTrace } from "./cli/log-level"
 import { Effect } from "effect"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
@@ -99,7 +99,7 @@ const cli = yargs(args)
     choices: ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"],
   })
   .option("trace", {
-    describe: "trace categories (comma-separated, e.g. permission,bus); enables TRACE",
+    describe: "trace categories (comma-separated, e.g. session,llm); run `--trace` alone to list them",
     type: "string",
   })
   .option("pure", {
@@ -132,10 +132,6 @@ const cli = yargs(args)
     if (opts.logLevel) {
       process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     }
-    const trace = typeof opts.trace === "string" && opts.trace.trim().length > 0 ? opts.trace : undefined
-    if (trace) {
-      process.env.OPENCODE_TRACE = trace
-    }
     const requested = opts.logLevel
     const requestedLevel: Log.Level | undefined =
       requested === "TRACE" ||
@@ -145,6 +141,27 @@ const cli = yargs(args)
       requested === "ERROR"
         ? requested
         : undefined
+
+    // TRACE names its categories: a bare `--log-level TRACE` is rejected so an
+    // accidental run cannot open every diagnostic area at once. `--trace` with
+    // no value is the discovery path.
+    const rawTrace: string | boolean | undefined =
+      typeof opts.trace === "string" ? opts.trace : opts.trace === true ? true : undefined
+    const resolvedTrace = resolveTrace({ requested: requestedLevel, trace: rawTrace })
+    if (resolvedTrace.kind === "error") {
+      process.stderr.write(resolvedTrace.message + EOL)
+      process.exit(1)
+    }
+    if (resolvedTrace.kind === "list") {
+      process.stderr.write(
+        ["Available trace categories:", ...Log.traceCategories().map((category) => `  ${category}`)].join(EOL) + EOL,
+      )
+      process.exit(0)
+    }
+    const trace = resolvedTrace.categories
+    if (trace) {
+      process.env.OPENCODE_TRACE = trace
+    }
 
     await Log.init({
       print: process.argv.includes("--print-logs"),

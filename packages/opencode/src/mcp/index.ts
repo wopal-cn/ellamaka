@@ -330,7 +330,7 @@ export const layer = Layer.effect(
           },
           {
             onRedirect: async (url) => {
-              log.debug("oauth redirect requested", { key })
+              log.trace("plugin", "oauth redirect requested", { key })
             },
           },
           auth,
@@ -406,7 +406,7 @@ export const layer = Layer.effect(
           }),
         )
         if (result) {
-          log.debug("connected", { key, transport: result.transportName })
+          log.trace("plugin", "connected", { key, transport: result.transportName })
           return { client: result.client as MCPClient | undefined, status: { status: "connected" } as Status }
         }
         // If this was an auth error, stop trying other transports
@@ -457,11 +457,11 @@ export const layer = Layer.effect(
 
     const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCP.Info) {
       if (mcp.enabled === false) {
-        log.debug("mcp server disabled", { key })
+        log.trace("plugin", "mcp server disabled", { key })
         return DISABLED_RESULT
       }
 
-      log.debug("found", { key, type: mcp.type })
+      log.trace("plugin", "found", { key, type: mcp.type })
 
       const { client: mcpClient, status } =
         mcp.type === "remote"
@@ -478,7 +478,7 @@ export const layer = Layer.effect(
         return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
       }
 
-      log.debug("created client", { key, toolCount: listed.length })
+      log.trace("plugin", "created client", { key, toolCount: listed.length })
       return { mcpClient, status, defs: listed } satisfies CreateResult
     })
     const cfgSvc = yield* Config.Service
@@ -509,7 +509,7 @@ export const layer = Layer.effect(
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        log.debug("tools list changed notification received", { server: name })
+        log.trace("plugin", "tools list changed notification received", { server: name })
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         const listed = await bridge.promise(defs(name, client, timeout))
@@ -859,7 +859,7 @@ export const layer = Layer.effect(
         return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
       }
 
-      log.debug("opening browser for oauth", { mcpName })
+      log.trace("plugin", "opening browser for oauth", { mcpName })
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
 
@@ -925,7 +925,7 @@ export const layer = Layer.effect(
       yield* auth.remove(mcpName)
       McpOAuthCallback.cancelPending(mcpName)
       pendingOAuthTransports.delete(mcpName)
-      log.debug("removed oauth credentials", { mcpName })
+      log.trace("plugin", "removed oauth credentials", { mcpName })
     })
 
     const supportsOAuth = Effect.fn("MCP.supportsOAuth")(function* (mcpName: string) {

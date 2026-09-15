@@ -1281,7 +1281,7 @@ export const layer = Layer.effect(
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
-          yield* slog.debug("loop", { step })
+          yield* slog.trace("session", "loop", { step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
@@ -1317,7 +1317,7 @@ export const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
-            yield* slog.debug("exiting loop")
+            yield* slog.trace("session", "exiting loop")
             break
           }
 

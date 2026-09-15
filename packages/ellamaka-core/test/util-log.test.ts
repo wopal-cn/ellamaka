@@ -93,11 +93,35 @@ describe("dev log directory resolution", () => {
 
 /**
  * TRACE is the fifth, opt-in level below DEBUG. It exists so operators can
- * widen diagnostics (event-bus publishes, permission decisions) without
- * restoring the per-decision INFO/DEBUG flood removed from normal operation.
- * A category selector keeps that widening bounded: `--trace permission,bus`
- * must emit only those categories.
+ * widen diagnostics (event-bus publishes, permission decisions, session/LLM
+ * runtime loops) without restoring the flood removed from normal operation.
+ *
+ * The categories are a closed registry: a caller cannot invent one, and the
+ * level alone never emits anything. `--trace` must name what it wants, so an
+ * accidental `--log-level TRACE` cannot open every category at once.
  */
+describe("trace category registry", () => {
+  test("exposes the built-in categories as a stable list", () => {
+    expect(Log.traceCategories()).toEqual(["bus", "permission", "session", "llm", "plugin", "io"])
+  })
+
+  test("resolves a known category", () => {
+    expect(Log.isTraceCategory("bus")).toBe(true)
+    expect(Log.isTraceCategory("permission")).toBe(true)
+    expect(Log.isTraceCategory("io")).toBe(true)
+  })
+
+  test("rejects an unknown category", () => {
+    expect(Log.isTraceCategory("nope")).toBe(false)
+    expect(Log.isTraceCategory("")).toBe(false)
+  })
+
+  test("selectors normalize case and whitespace against the registry", () => {
+    expect([...Log.normalizeTraceCategories(" BUS , Permission ")].sort()).toEqual(["bus", "permission"])
+    expect([...Log.normalizeTraceCategories("all")].sort()).toEqual(["all"])
+  })
+})
+
 describe("trace level and category filtering", () => {
   async function capture(run: () => void) {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "log-trace-"))
@@ -130,16 +154,18 @@ describe("trace level and category filtering", () => {
     expect(content).not.toContain("at-debug")
   })
 
-  test("treats an explicit TRACE level without a selector as every category", async () => {
+  test("emits nothing at TRACE when no category was selected", async () => {
     const content = await capture(() => {
       Log.setLevel("TRACE")
       const log = Log.create({ service: "trace-probe" })
-      log.trace("bus", "all-categories-bus")
-      log.trace("permission", "all-categories-permission")
+      log.trace("bus", "no-selector-bus")
+      log.trace("permission", "no-selector-permission")
+      log.trace("session", "no-selector-session")
     })
 
-    expect(content).toContain("all-categories-bus")
-    expect(content).toContain("all-categories-permission")
+    expect(content).not.toContain("no-selector-bus")
+    expect(content).not.toContain("no-selector-permission")
+    expect(content).not.toContain("no-selector-session")
   })
 
   test("emits only the selected categories when a selector is set", async () => {
@@ -171,12 +197,12 @@ describe("trace level and category filtering", () => {
       const log = Log.create({ service: "trace-probe" })
       log.trace("permission", "csv-permission")
       log.trace("bus", "csv-bus")
-      log.trace("other", "csv-other")
+      log.trace("session", "csv-session")
     })
 
     expect(content).toContain("csv-permission")
     expect(content).toContain("csv-bus")
-    expect(content).not.toContain("csv-other")
+    expect(content).not.toContain("csv-session")
   })
 
   test("treats `all` as an explicit all-category selector", async () => {
@@ -185,10 +211,29 @@ describe("trace level and category filtering", () => {
       const log = Log.create({ service: "trace-probe" })
       log.trace("permission", "all-selector-permission")
       log.trace("bus", "all-selector-bus")
+      log.trace("session", "all-selector-session")
+      log.trace("llm", "all-selector-llm")
     })
 
     expect(content).toContain("all-selector-permission")
     expect(content).toContain("all-selector-bus")
+    expect(content).toContain("all-selector-session")
+    expect(content).toContain("all-selector-llm")
+  })
+
+  test("ignores an unknown category in the selector without emitting it", async () => {
+    const content = await capture(() => {
+      Log.setLevel("TRACE", ["bus", "not-a-category"])
+      const log = Log.create({ service: "trace-probe" })
+      log.trace("bus", "known-category")
+      // Deliberately bypass the type: untyped callers (or a future refactor)
+      // must still be stopped by the runtime registry check.
+      // @ts-expect-error unknown categories are not part of the registry
+      log.trace("not-a-category", "unknown-category")
+    })
+
+    expect(content).toContain("known-category")
+    expect(content).not.toContain("unknown-category")
   })
 
   test("resets the selector on re-init so it never leaks across runs", async () => {
@@ -201,7 +246,9 @@ describe("trace level and category filtering", () => {
       log.trace("permission", "reset-permission")
     })
 
-    expect(content).toContain("reset-bus")
-    expect(content).toContain("reset-permission")
+    // The selector was cleared with the non-TRACE level, so a bare TRACE
+    // level now emits nothing.
+    expect(content).not.toContain("reset-bus")
+    expect(content).not.toContain("reset-permission")
   })
 })

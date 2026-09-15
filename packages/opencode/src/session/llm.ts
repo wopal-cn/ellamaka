@@ -237,36 +237,30 @@ const live: Layer.Layer<
           abort: input.abort,
         })
         if (native.type === "supported") {
-          yield* Effect.logDebug("llm runtime selected").pipe(
-            Effect.annotateLogs({
-              "llm.runtime": "native",
-              "llm.provider": input.model.providerID,
-              "llm.model": input.model.id,
-            }),
-          )
+          l.trace("llm", "runtime selected", {
+            runtime: "native",
+            provider: input.model.providerID,
+            model: input.model.id,
+          })
           return {
             type: "native" as const,
             stream: native.stream,
           }
         }
-        yield* Effect.logDebug("llm runtime selected").pipe(
-          Effect.annotateLogs({
-            "llm.runtime": "ai-sdk",
-            "llm.provider": input.model.providerID,
-            "llm.model": input.model.id,
-            "llm.native_unsupported_reason": native.reason,
-          }),
-        )
+        l.trace("llm", "runtime selected", {
+          runtime: "ai-sdk",
+          provider: input.model.providerID,
+          model: input.model.id,
+          nativeUnsupportedReason: native.reason,
+        })
         l.debug("native runtime unavailable; falling back to ai-sdk", { reason: native.reason })
       }
 
-      yield* Effect.logDebug("llm runtime selected").pipe(
-        Effect.annotateLogs({
-          "llm.runtime": "ai-sdk",
-          "llm.provider": input.model.providerID,
-          "llm.model": input.model.id,
-        }),
-      )
+      l.trace("llm", "runtime selected", {
+        runtime: "ai-sdk",
+        provider: input.model.providerID,
+        model: input.model.id,
+      })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {

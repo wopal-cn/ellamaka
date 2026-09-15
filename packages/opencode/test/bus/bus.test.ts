@@ -55,7 +55,7 @@ describe("Bus", () => {
       yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = previousLog)))
       const dir = yield* tmpdirScoped()
       Global.Path.log = dir
-      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "TRACE" }))
+      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "TRACE", trace: "bus" }))
 
       const marker = "bus-trace-probe"
       Log.Default.info(marker)
