@@ -187,5 +187,8 @@ export function buildSessionPort(
       await client.session.delete({ sessionID: serverSession.id })
       projection.remove(serverSession.id)
     },
+    discardProjection: ({ sessionID }) => {
+      projection.remove(sessionID)
+    },
   }
 }

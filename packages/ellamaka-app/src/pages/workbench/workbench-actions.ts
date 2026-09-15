@@ -1,6 +1,7 @@
 import { batch, createSignal } from "solid-js"
 import { scopeKey, scopePath, type SpaceScope } from "./workbench-scope"
 import type { WorkbenchPanel } from "./workbench-store"
+import { draftSessionId, isDraftSessionId } from "@/utils/draft-session"
 
 export type WorkbenchActionPtyKind = "tui" | "term" | "split"
 export type WorkbenchPtyProbeResult = "alive" | "dead" | "unknown"
@@ -88,6 +89,15 @@ export type WorkbenchActionSessionPort = {
   project: (input: { scope: SpaceScope; session: WorkbenchActionSession }) => void
   rename: (input: { scope: SpaceScope; sessionID: string; directory: string; title: string }) => Promise<void>
   remove: (input: { scope: SpaceScope; session: WorkbenchActionSession }) => Promise<void>
+  /**
+   * Local-only projection removal. Unlike `remove` (which deletes the
+   * session on the server first), this must never hit the network — it
+   * exists so synthetic draft projections can be dropped from the
+   * session store without any backend side effects. Optional so older
+   * port implementations (tests) remain valid; draft cleanup is skipped
+   * when absent.
+   */
+  discardProjection?: (input: { scope: SpaceScope; sessionID: string }) => void
 }
 
 export type WorkbenchActionResult = {
@@ -195,6 +205,17 @@ export function createWorkbenchActions(input: {
     return panel
   }
 
+  /**
+   * Drop the synthetic draft projection for a panel's current binding, if
+   * any. Draft sessions exist only in the local projection store — this is
+   * the ONLY cleanup they need, and it must never touch the network
+   * (session.remove would delete the server-side session).
+   */
+  const discardDraftProjection = (scope: SpaceScope, panel: WorkbenchActionPanel | undefined) => {
+    if (!panel || !isDraftSessionId(panel.boundSessionId)) return
+    input.session.discardProjection?.({ scope, sessionID: panel.boundSessionId! })
+  }
+
   const unbindPanel = async (scope: SpaceScope, panelID: string): Promise<WorkbenchActionResult> => {
     const panel = input.store.panel(scope, panelID)
     if (!panel || (panel.slotState === "empty" && !panel.boundSessionId)) {
@@ -215,6 +236,7 @@ export function createWorkbenchActions(input: {
     const generation = nextGeneration(scope, panelID)
     await disposePanel(scope, panelSnap)
     if (!isCurrent(scope, panelID, generation)) return { status: "stale", panelID }
+    discardDraftProjection(scope, panel)
     input.store.commitSessionUnbinding(scope, panelID)
     return { status: "committed", panelID }
   }
@@ -315,6 +337,9 @@ export function createWorkbenchActions(input: {
           return { status: "stale", panelID: options.panelID }
         }
         input.session.project({ scope: options.scope, session })
+        // Rebinding over a draft (createSession from PanelLoader on a draft
+        // panel): drop the synthetic projection before the swap.
+        discardDraftProjection(options.scope, panel)
         input.store.commitSessionBinding(options.scope, options.panelID, session)
         input.store.setActivePanel(options.scope, options.panelID)
       } catch (error) {
@@ -351,6 +376,7 @@ export function createWorkbenchActions(input: {
       if (!stillCurrent) {
         return { status: "stale", panelID: options.panelID }
       }
+      discardDraftProjection(options.scope, panel)
       input.store.removePanel(options.scope, options.panelID)
       return { status: "committed", panelID: options.panelID }
     },
@@ -360,6 +386,93 @@ export function createWorkbenchActions(input: {
     }) {
       if (!runtime.canWrite()) return Promise.resolve({ status: "offline", panelID: options.panelID } satisfies WorkbenchActionResult)
       return unbindPanel(options.scope, options.panelID)
+    },
+    async startDraftSession(options: {
+      scope: SpaceScope
+      panelID: string
+    }): Promise<WorkbenchActionResult> {
+      if (!runtime.canWrite()) return { status: "offline", panelID: options.panelID }
+      const panel = input.store.panel(options.scope, options.panelID)
+      if (!panel) return { status: "stale", panelID: options.panelID }
+      const generation = nextGeneration(options.scope, options.panelID)
+      const panelSnap = snapshotPanel(panel)
+      const draftID = draftSessionId(options.panelID)
+      // Flip viewMode to chat BEFORE clearing PTY ids. The TUI view effect
+      // skips panels whose viewMode is not "tui"; clearing the PTY id first
+      // would expose a (viewMode=tui, ptyId=undefined) intermediate state and
+      // resurrect the outgoing session's TUI process.
+      input.store.commitPanelMode?.(options.scope, options.panelID, "chat")
+      input.store.commitPanelPty(options.scope, options.panelID, "tui", undefined)
+      input.store.commitPanelPty(options.scope, options.panelID, "term", undefined)
+      input.store.commitPanelPty(options.scope, options.panelID, "split", undefined)
+      input.store.commitSplitTerminal?.(options.scope, options.panelID, false)
+      // Draft binding reuses the panel's current directory: the directory
+      // provider key (panelID\ndirectory) stays stable so the panel subtree
+      // is not keyed-remounted by this transition.
+      // Drop the previous binding's draft projection first (consecutive
+      // /new): the projection store only appends, so the stale synthetic
+      // session would otherwise linger forever.
+      discardDraftProjection(options.scope, panel)
+      input.session.project({
+        scope: options.scope,
+        session: {
+          id: draftID,
+          title: "New chat",
+          directory: panel.directory,
+          type: "chat",
+          directoryHealth: "healthy",
+          createdAt: Date.now(),
+          lastActiveAt: Date.now(),
+        },
+      })
+      input.store.commitSessionBinding(options.scope, options.panelID, {
+        id: draftID,
+        title: "New chat",
+        directory: panel.directory,
+        type: "chat",
+      })
+      input.store.setActivePanel(options.scope, options.panelID)
+      // Dispose AFTER the rebind commit: the panel is already showing the
+      // draft chat, so releasing the outgoing session's PTYs cannot race the
+      // TUI view effect (viewMode is "chat" and tuiPtyId is gone by now).
+      await disposePanel(options.scope, panelSnap)
+      if (!isCurrent(options.scope, options.panelID, generation)) {
+        return { status: "stale", panelID: options.panelID }
+      }
+      return { status: "committed", panelID: options.panelID }
+    },
+    adoptSession(options: {
+      scope: SpaceScope
+      panelID: string
+      draftSessionID: string
+      session: WorkbenchActionSession
+    }): WorkbenchActionResult {
+      if (!runtime.canWrite()) return { status: "offline", panelID: options.panelID }
+      const panel = input.store.panel(options.scope, options.panelID)
+      // Guard: the panel must still hold exactly this draft. If the user
+      // started another session meanwhile (second /new generates a fresh
+      // token), refuse to swap the binding.
+      if (!panel || panel.slotState !== "bound" || panel.boundSessionId !== options.draftSessionID) {
+        return { status: "unchanged", panelID: options.panelID }
+      }
+      if (!isDraftSessionId(options.draftSessionID)) {
+        return { status: "unchanged", panelID: options.panelID }
+      }
+      // Drop the draft projection: the synthetic session must never linger
+      // in the server-owned session store past adoption.
+      input.session.discardProjection?.({ scope: options.scope, sessionID: options.draftSessionID })
+      input.session.project({
+        scope: options.scope,
+        session: {
+          ...options.session,
+          directoryHealth: options.session.directoryHealth ?? "healthy",
+          createdAt: options.session.createdAt ?? Date.now(),
+          lastActiveAt: options.session.lastActiveAt ?? Date.now(),
+        },
+      })
+      input.store.commitSessionBinding(options.scope, options.panelID, options.session)
+      input.store.setActivePanel(options.scope, options.panelID)
+      return { status: "committed", panelID: options.panelID }
     },
     async unbindSessionEverywhere(sessionID: string): Promise<WorkbenchActionStatus & { affectedPanelCount: number }> {
       if (!runtime.canWrite()) return { status: "offline", affectedPanelCount: 0 }
@@ -383,6 +496,9 @@ export function createWorkbenchActions(input: {
       await Promise.all(pending.map(({ panel }) => disposePanel(scope, panel)))
       if (pending.some(({ panel, generation }) => !isCurrent(scope, panel.id, generation))) {
         return { status: "stale" }
+      }
+      for (const panel of input.store.panels(scope)) {
+        discardDraftProjection(scope, panel)
       }
       input.store.removeSpace(scope)
       return { status: "committed" }
@@ -410,6 +526,9 @@ export function createWorkbenchActions(input: {
       const emptyPanel = panels.find((p) => p.slotState === "empty")
       const targetPanelID = emptyPanel?.id ?? input.store.addPanel(options.scope)
       if (targetPanelID) {
+        // targetPanelID is fresh or empty; a draft binding here can only be
+        // a stale leftover — discard before the swap.
+        discardDraftProjection(options.scope, input.store.panel(options.scope, targetPanelID))
         input.store.commitSessionBinding(options.scope, targetPanelID, session)
         input.store.setActivePanel(options.scope, targetPanelID)
         return { status: "committed", panelID: targetPanelID }
@@ -420,6 +539,7 @@ export function createWorkbenchActions(input: {
       if (!isCurrent(options.scope, options.sourcePanelID, replaceGeneration)) {
         return { status: "stale", panelID: options.sourcePanelID }
       }
+      discardDraftProjection(options.scope, sourcePanel)
       input.store.commitSessionBinding(options.scope, options.sourcePanelID, session)
       input.store.setActivePanel(options.scope, options.sourcePanelID)
       return { status: "committed", panelID: options.sourcePanelID }
@@ -490,6 +610,9 @@ export function createWorkbenchActions(input: {
         return { status: "stale", panelID: options.panelID }
       }
       input.session.project({ scope: options.scope, session })
+      // Rebinding over a draft (session picked from the tree): drop the
+      // synthetic projection before the swap.
+      discardDraftProjection(options.scope, panel)
       input.store.commitSessionBinding(options.scope, options.panelID, session)
       input.store.setActivePanel(options.scope, options.panelID)
       return { status: "committed", panelID: options.panelID }

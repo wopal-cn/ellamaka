@@ -48,7 +48,9 @@ export const useWorkbenchCommands = () => {
       onSelect: () => {
         const active = actions.activeTarget()
         if (active) {
-          void actions.createSession({
+          // Lazy session creation: bind an unpersisted draft immediately and
+          // let the first message create the real session (adoptSession).
+          void actions.startDraftSession({
             scope: active.scope,
             panelID: active.panelID,
           })

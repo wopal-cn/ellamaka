@@ -29,6 +29,7 @@ export function SessionContextHeaderTrigger(props: {
   sessionId: string
   directory: string
   active: boolean
+  disabled?: boolean
   onClick: (e: MouseEvent) => void
 }) {
   const serverSync = useServerSync()
@@ -78,9 +79,11 @@ export function SessionContextHeaderTrigger(props: {
         classList={{
           [toneClass[tone()]]: true,
           "cursor-pointer hover:bg-v2-overlay-simple-overlay-hover": !props.active,
+          "cursor-not-allowed opacity-50": !!props.disabled,
           "bg-v2-overlay-simple-overlay-pressed text-v2-text-text-strong font-semibold shadow-xs": props.active,
         }}
         aria-label={language.t("context.usage.view")}
+        disabled={props.disabled}
         onClick={props.onClick}
       >
         <Show when={percentage() !== undefined} fallback={<span>—</span>}>

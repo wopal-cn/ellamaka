@@ -1,6 +1,7 @@
 import { batch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { GENERAL_SPACE_NAME, normalizeSpacePath } from "./workbench-scope"
+import { isDraftSessionId } from "@/utils/draft-session"
 
 export type PanelMode = "" | "tui" | "chat"
 export type PanelSlotState = "empty" | "bound"
@@ -106,6 +107,19 @@ function hydratePanel(
 ): WorkbenchPanel {
   const viewMode = panel.viewMode ?? (panel.tuiPtyId ? "tui" : undefined)
   const normDir = normalizeSpacePath(panel.directory) || panel.directory
+  // Draft bindings are unpersisted by design. If one leaked into a snapshot
+  // (e.g. the tab was closed before the app could persist), restore the
+  // panel to a clean empty state: the synthetic session does not exist on
+  // the server, so binding to it would wedge the panel on "restoring…".
+  if (isDraftSessionId(panel.boundSessionId)) {
+    return {
+      id: panel.id,
+      slotState: "empty",
+      mode: "",
+      directory: normDir,
+      width: panel.width,
+    }
+  }
   return {
     ...panel,
     directory: normDir,

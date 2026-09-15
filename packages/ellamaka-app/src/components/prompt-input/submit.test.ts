@@ -80,6 +80,12 @@ beforeAll(async () => {
 
   mock.module("@wopal/ellamaka-core/util/encode", () => ({
     base64Encode: (value: string) => value,
+    // bun's mock.module is global for the whole test run; an incomplete mock
+    // here broke any file loaded after this one that imports base64Decode.
+    base64Decode: (value: string) => value,
+    hash: async (content: string) => content,
+    checksum: () => undefined,
+    sampledChecksum: () => undefined,
   }))
 
   mock.module("@/context/local", () => ({

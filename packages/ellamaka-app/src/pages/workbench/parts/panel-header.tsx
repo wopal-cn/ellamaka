@@ -8,6 +8,7 @@ import { useWorkbenchState } from "../view-store"
 import { useWorkbenchActions } from "../workbench-actions"
 import { scopeFromTab } from "../workbench-scope"
 import { getPanelHeaderViews } from "./panel-header-views"
+import { isDraftSessionId } from "@/utils/draft-session"
 import { listViews } from "../view-registry"
 import { DialogClosePanel } from "./session-tree-dialogs"
 import { SessionContextHeaderTrigger } from "./session-context-header-trigger"
@@ -48,7 +49,9 @@ export function PanelHeader(props: {
     }
     return t("workbench.panel.number", { number: num })
   }
-  const headerViews = () => getPanelHeaderViews(listViews(), props.panel.slotState, props.panel.tuiPtyId)
+  const headerViews = () =>
+    getPanelHeaderViews(listViews(), props.panel.slotState, props.panel.tuiPtyId, props.panel.boundSessionId)
+  const isDraftPanel = createMemo(() => isDraftSessionId(props.panel.boundSessionId))
   const hasOpenSplitPty = createMemo(() => !!props.panel.splitPtyId)
 
   const handleClose = () => {
@@ -91,7 +94,7 @@ export function PanelHeader(props: {
 
       <div class="grow" />
 
-      <Show when={props.panel.slotState === "bound"}>
+      <Show when={props.panel.slotState === "bound" && !isDraftPanel()}>
         <IconButtonV2
           variant="ghost"
           size="small"
@@ -145,6 +148,7 @@ export function PanelHeader(props: {
                     sessionId={sessionId}
                     directory={props.panel.directory}
                     active={isActiveView()}
+                    disabled={view.disabled}
                     onClick={(e) => {
                       e.stopPropagation()
                       if (view.disabled) return

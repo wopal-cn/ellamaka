@@ -8,6 +8,7 @@ import { PanelChat } from "./parts/panel-chat"
 import { type WorkbenchPanel } from "./view-store"
 import type { Session } from "./session-store"
 import { useWorkbenchActions } from "./workbench-actions"
+import { isDraftSessionId } from "@/utils/draft-session"
 import { scopeFromTab } from "./workbench-scope"
 import { reportWorkbenchError } from "./workbench-error"
 import { useServer } from "@/context/server"
@@ -134,6 +135,9 @@ export function registerDefaultViews(registry: ViewRegistry) {
       createEffect(() => {
         if (ctx.panel.slotState !== "bound") return
         if (!ctx.isVisible()) return
+        // Draft sessions are not persisted; there is no TUI process to
+        // attach to until the first message creates a real session.
+        if (isDraftSessionId(ctx.session?.id)) return
 
         // Maintain local ptyId signal synchronized with store tuiPtyId regardless of viewMode.
         // This keeps the <Terminal> component mounted in hidden DOM state (display: none) when
@@ -223,10 +227,19 @@ export function registerDefaultViews(registry: ViewRegistry) {
             <Show
               when={ptyError()}
               fallback={
-                <div class="flex flex-col items-center justify-center h-full text-v2-text-text-muted gap-2">
-                  <div class="workbench-spinner rounded-full h-4 w-4 border-2 border-v2-text-text-muted border-t-transparent" />
-                  <span class="text-11-regular">Starting TUI...</span>
-                </div>
+                // Draft sessions have no TUI process; the header disables the
+                // TUI entry, so this placeholder only shows on legacy state.
+                isDraftSessionId(ctx.session?.id) ? (
+                  <div class="flex flex-col items-center justify-center h-full text-v2-text-text-muted gap-2">
+                    <IconV2 name="edit" class="size-6 opacity-40" />
+                    <span class="text-11-regular">Send a message to start this session</span>
+                  </div>
+                ) : (
+                  <div class="flex flex-col items-center justify-center h-full text-v2-text-text-muted gap-2">
+                    <div class="workbench-spinner rounded-full h-4 w-4 border-2 border-v2-text-text-muted border-t-transparent" />
+                    <span class="text-11-regular">Starting TUI...</span>
+                  </div>
+                )
               }
             >
               {(error) => (

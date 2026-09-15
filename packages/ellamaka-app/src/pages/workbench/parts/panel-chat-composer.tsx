@@ -35,6 +35,8 @@ export function PanelChatComposer(props: {
     disabled: boolean
     onRestore: (id: string) => void
   }
+  /** Draft-session adoption callback; see createPromptSubmit. */
+  adoptSession?: (directory: string, session: { id: string }) => Promise<boolean> | boolean
 }) {
   return (
     <div class="contents [&_[data-component=session-prompt-dock]]:!bg-v2-background-bg-deep">
@@ -52,6 +54,7 @@ export function PanelChatComposer(props: {
         setPromptDockRef={props.setPromptDockRef}
         followup={props.followup}
         revert={props.revert}
+        adoptSession={props.adoptSession}
       />
     </div>
   )

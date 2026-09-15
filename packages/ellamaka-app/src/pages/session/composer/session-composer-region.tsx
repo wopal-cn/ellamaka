@@ -49,6 +49,8 @@ export function SessionComposerRegion(props: {
     onRestore: (id: string) => void
   }
   setPromptDockRef: (el: HTMLDivElement) => void
+  /** Draft-session adoption callback; see createPromptSubmit. */
+  adoptSession?: (directory: string, session: { id: string }) => Promise<boolean> | boolean
 }) {
   const navigate = useNavigate()
   const layout = useLayout()
@@ -100,15 +102,28 @@ export function SessionComposerRegion(props: {
     }
   }
 
+  let hasBeenReady = false
+
   createEffect(() => {
     route.sessionKey()
     const ready = props.ready
     const delay = 140
 
     clear()
-    setStore("ready", false)
-    if (!ready) return
-
+    if (!ready) {
+      // Only the first readiness acquisition replays the dock entrance.
+      // In-panel session swaps (draft adoption, fork rebind) flip the
+      // session id while the composer stays mounted; collapsing it here
+      // would collapse → 140ms → re-expand, which reads as a screen flash.
+      // Once the dock is up, keep it up across id changes.
+      if (!hasBeenReady) setStore("ready", false)
+      return
+    }
+    if (hasBeenReady && store.ready) {
+      // Already expanded from a previous session in this panel: stay up.
+      return
+    }
+    hasBeenReady = true
     frame = requestAnimationFrame(() => {
       frame = undefined
       timer = window.setTimeout(() => {
@@ -274,6 +289,7 @@ export function SessionComposerRegion(props: {
                     onQueue={props.followup?.onQueue}
                     onAbort={props.followup?.onAbort}
                     onSubmit={props.onSubmit}
+                    adoptSession={props.adoptSession}
                   />
                 </PromptSurfaceGate>
               }

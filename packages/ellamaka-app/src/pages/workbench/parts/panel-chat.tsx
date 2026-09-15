@@ -1,6 +1,6 @@
 import { createMemo, createEffect, createSignal, onCleanup, Show, batch, on } from "solid-js"
 import type { JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { MemoryRouter, Route, createMemoryHistory } from "@solidjs/router"
 
 import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
@@ -35,6 +35,7 @@ import { useSessionHistoryLoader } from "@/hooks/use-session-history-loader"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { same } from "@/utils/same"
 import { PanelChatComposer } from "./panel-chat-composer"
+import { isDraftSessionId } from "@/utils/draft-session"
 import { EmbeddedSessionSurfaceProvider } from "@/pages/session/session-surface-context"
 import type { WorkbenchPanel } from "../view-store"
 import { useWorkbenchState } from "../view-store"
@@ -119,7 +120,37 @@ function PanelChatInner(props: {
   })
 
   const composer = createSessionComposerState()
-  const sessionWorking = createMemo(() => sync.data.session_working(props.session.id))
+  const sessionWorking = createMemo(() => !isDraftSessionId(props.session.id) && sync.data.session_working(props.session.id))
+  // Adopt a real server session when the user sends the first message of a
+  // draft chat. The composer's submit flow created the session; the panel
+  // swaps the draft binding for the real one and keeps the submit going.
+  const adoptDraftSession = async (directory: string, session: { id: string }) => {
+    // Pre-seed the real session's message slot BEFORE the binding swap:
+    // messagesReady() keys on message[id] being defined, so without this the
+    // timeline + composer gates flip closed for one network round trip and
+    // the whole panel visibly blanks.
+    sync.set("message", session.id, [])
+    const result = actions.adoptSession({
+      scope: scope(),
+      panelID: props.panel.id,
+      draftSessionID: props.session.id,
+      session: {
+        id: session.id,
+        title: "New chat",
+        directory,
+        type: "chat",
+      },
+    })
+    if (result.status !== "committed") {
+      // Adopt refused (panel re-bound meanwhile): undo the pre-seed so the
+      // orphan slot cannot shadow the session that owns it now.
+      sync.set("message", produce((message) => {
+        delete message[session.id]
+      }))
+      return false
+    }
+    return true
+  }
   const [followState, setFollowState] = createSignal(initialChatFollowState)
   const autoScroll = createAutoScroll({
     working: sessionWorking,
@@ -291,7 +322,11 @@ function PanelChatInner(props: {
   let inputRef: HTMLDivElement | undefined
 
   const messages = createMemo(() => sync.data.message[props.session.id] ?? [])
-  const messagesReady = createMemo(() => sync.data.message[props.session.id] !== undefined)
+  // Draft sessions have no server-side message history; treat them as ready
+  // immediately so the composer is usable before any session is persisted.
+  const messagesReady = createMemo(
+    () => isDraftSessionId(props.session.id) || sync.data.message[props.session.id] !== undefined,
+  )
 
   const info = createMemo(() => sync.data.session.find((item) => item.id === props.session.id))
   const isChildSession = createMemo(() => !!info()?.parentID)
@@ -690,6 +725,7 @@ function PanelChatInner(props: {
         setPromptDockRef={() => {}}
         onSubmit={resumeScroll}
         onResponseSubmit={resumeScroll}
+        adoptSession={isDraftSessionId(props.session.id) ? adoptDraftSession : undefined}
         followup={{
           queue: queueEnabled,
           items: followupDock(),
@@ -809,7 +845,7 @@ function PanelChatDataProvider(props: {
   // Drive the load explicitly via createEffect keyed on the session id.
   createEffect(() => {
     const id = props.session.id
-    if (!id) return
+    if (!id || isDraftSessionId(id)) return
     void sync.session.sync(id)
   })
 
@@ -819,6 +855,7 @@ function PanelChatDataProvider(props: {
     const version = sync.session.reconnectVersion
     if (version === 0 || version === reconciledVersion || !props.isVisible()) return
     reconciledVersion = version
+    if (isDraftSessionId(props.session.id)) return
     void sync.session.sync(props.session.id, { force: true })
   })
 

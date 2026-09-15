@@ -1,4 +1,5 @@
 import type { PanelSlotState } from "../view-store"
+import { isDraftSessionId } from "@/utils/draft-session"
 
 export function shouldAcceptSessionDrop(input: {
   targetSlotState: PanelSlotState
@@ -21,6 +22,8 @@ export function shouldRestoreBoundSession(input: {
   boundSessionId?: string
   hasLocalSession: boolean
 }) {
+  // Draft bindings are synthetic; there is nothing on the server to restore.
+  if (isDraftSessionId(input.boundSessionId)) return false
   return input.slotState === "bound" && !!input.boundSessionId && !input.hasLocalSession
 }
 

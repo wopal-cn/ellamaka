@@ -17,6 +17,7 @@ import { showToast } from "@wopal/ui/toast"
 import { findLast } from "@wopal/ellamaka-core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
+import { isDraftSessionId } from "@/utils/draft-session"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
@@ -55,6 +56,12 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
   const { params, tabs, view } = useSessionLayout()
 
   const getSessionID = () => actions.sessionID?.() ?? params.id
+  // Synthetic workbench draft ids are not server sessions; anything that
+  // would round-trip to the backend must treat them as absent.
+  const getRealSessionID = () => {
+    const id = getSessionID()
+    return id && !isDraftSessionId(id) ? id : undefined
+  }
 
   const info = () => {
     const id = getSessionID()
@@ -174,7 +181,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
   }
 
   const share = async () => {
-    const sessionID = getSessionID()
+    const sessionID = getRealSessionID()
     if (!sessionID) return
 
     const existing = info()?.share?.url
@@ -200,7 +207,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
   }
 
   const unshare = async () => {
-    const sessionID = getSessionID()
+    const sessionID = getRealSessionID()
     if (!sessionID) return
 
     await sdk.client.session
@@ -367,7 +374,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
           ? language.t("toast.session.share.success.description")
           : language.t("command.session.share.description"),
         slash: "share",
-        disabled: !getSessionID(),
+        disabled: !getRealSessionID(),
         onSelect: share,
       }),
       sessionCommand({
@@ -375,7 +382,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
         title: language.t("command.session.unshare"),
         description: language.t("command.session.unshare.description"),
         slash: "unshare",
-        disabled: !getSessionID() || !info()?.share?.url,
+        disabled: !getRealSessionID() || !info()?.share?.url,
         onSelect: unshare,
       }),
     ]
