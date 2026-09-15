@@ -129,21 +129,19 @@ OpenCode baseline 不是每次 build/release 的人工输入。仓库维护受�
       "version": "1.15.13",
       "gitCommit": "385cb694419f98103af0e8fc6187ddcbcbb6eecb"
     }
-  },
-  "componentBaselines": {}
+  }
 }
 ```
 
-`componentBaselines` 记录仍按独立复制策略冻结的上游目录来源，只用于 drift 检查和审计，不参与产品版本排序或 CLI 兼容过滤。上游 `packages/app`、`packages/desktop` 已删除（2026-08-31），不再作为冻结 component baseline；参考代码从 `labs/ref-repos/opencode/` 读取。
+lock 只记录 Engine baseline 一处来源。上游代码不按目录冻结复制：参考代码从 `labs/ref-repos/opencode/` 读取，不进入本仓库版本控制。
 
-只有"正式采用新的 OpenCode Engine baseline"时才更新 `sources.opencode`：专用命令接收目标 OpenCode version，解析上游 tag 对应的完整 commit，校验后写入 lock；baseline 更新与上游合并在同一变更中审查和提交。component baseline 使用独立的显式更新动作，禁止被 Engine baseline 升级顺带改写。release workflow 禁止通过 input、环境变量或网络上的"最新 OpenCode tag"覆盖 lock。
+只有"正式采用新的 OpenCode Engine baseline"时才更新 `sources.opencode`：专用命令接收目标 OpenCode version，解析上游 tag 对应的完整 commit，校验后写入 lock；baseline 更新与上游合并在同一变更中审查和提交。release workflow 禁止通过 input、环境变量或网络上的"最新 OpenCode tag"覆盖 lock。
 
 发布前必须验证：
 
 1. lock 通过 schema 校验，所有 version 均为稳定 SemVer，commit 均为完整 40 位 SHA。
 2. `sources.opencode.gitCommit` 存在，并且是 Ellamaka release commit 的祖先。
-3. 冻结目录检查分别读取自己的 `componentBaselines[<path>].gitCommit`，并验证工作树目录与该 upstream snapshot 一致。
-4. release context 保存整个 lock snapshot；公开 manifest 的 `releaseIdentity.upstream` 与构建内嵌 Engine metadata 必须等于 `sources.opencode`。
+3. release context 保存整个 lock snapshot；公开 manifest 的 `releaseIdentity.upstream` 与构建内嵌 Engine metadata 必须等于 `sources.opencode`。
 
 ### Release Context
 
@@ -219,7 +217,7 @@ CLI rc 与 stable 走完全相同的 release job：同一 versioned path（`ella
 
 CLI 发布流程（release job）：
 
-1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 `sources.opencode.gitCommit` 是当前 release commit 的祖先，并对每个冻结 component baseline 执行目录 drift check。
+1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 `sources.opencode.gitCommit` 是当前 release commit 的祖先。
 2. 构建 CLI（`BINARY_NAME=ellamaka OPENCODE_VERSION=<ver> OPENCODE_RELEASE=true bun packages/ellamaka-release/src/cli/build.ts --arch primary --web-ui ellamaka-app`），产出 8 平台产物。
 3. 运行 `bun packages/ellamaka-release/src/cli/manifest.ts manifest` 生成 `manifest.json`、`checksums.txt`、`release-notes.md`。
 4. 按 manifest-last 提交点协议发布：staging 上传 → 回读校验 → 禁止覆盖写入 versioned path → 最后写 `manifest.json` 作为提交点（契约细节见 [构建接口](./DESIGN-distribution.md#构建接口)）。
