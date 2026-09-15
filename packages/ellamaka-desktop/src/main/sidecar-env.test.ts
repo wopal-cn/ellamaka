@@ -1,4 +1,6 @@
 import { describe, expect, mock, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 
 // server.ts transitively imports electron-store (via ./store), which is not
 // installed in the bun test environment. Provide a minimal in-memory store so
@@ -35,7 +37,7 @@ mock.module("./shell-env", () => ({
   resolveShellPath: (shellEnv: Record<string, string> | null, appPath: string | undefined) => shellEnv?.PATH ?? appPath,
 }))
 
-const { createSidecarEnv, preferAppEnv } = await import("./server")
+const { createSidecarEnv, createSidecarOutputForwarder, preferAppEnv } = await import("./server")
 const {
   captureSidecarExperimentalConfig,
   clearSidecarCredentials,
@@ -156,6 +158,42 @@ describe("createSidecarEnv", () => {
     const env = createSidecarEnv("secret")
 
     expect(env.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY).toBe("false")
+  })
+})
+
+describe("sidecar diagnostic routing", () => {
+  test("suppresses Node's raw warning printer after the structured logger is installed", () => {
+    const server = readFileSync(join(import.meta.dir, "server.ts"), "utf8")
+    const sidecar = readFileSync(join(import.meta.dir, "sidecar.ts"), "utf8")
+
+    expect(server).toContain('"--no-warnings"')
+    expect(sidecar).toContain('await Log.init({\n      print: false,')
+    expect(sidecar).not.toContain("console.warn(")
+    expect(sidecar).toContain("logger: dshPluginLogger(")
+  })
+
+  test("bounds repetitive sidecar stdout or stderr relays with an explicit summary", () => {
+    const output: string[] = []
+    let now = 0
+    const forward = createSidecarOutputForwarder((message) => output.push(message), {
+      windowMs: 1_000,
+      maxPerWindow: 2,
+      now: () => now,
+    })
+
+    forward.write("first\n")
+    forward.write("first\n")
+    forward.write("second\n")
+    forward.write("third\n")
+    now = 1_001
+    forward.write("after-window\n")
+
+    expect(output).toEqual([
+      "first",
+      "second",
+      "sidecar output suppressed 2 records in 1000ms",
+      "after-window",
+    ])
   })
 })
 

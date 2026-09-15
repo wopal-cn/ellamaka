@@ -40,6 +40,16 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).toContain('entry: opts.entry ?? "serve"')
   })
 
+  test("dsh-mount keeps runtime and plugin diagnostics in separate bounded files", () => {
+    const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
+    expect(source).toContain('"dsh-runtime.log"')
+    expect(source).toContain("runtimeLogFile")
+    expect(source).toContain("logFile: runtimeLogFile")
+    // The profile mounts intentionally continue to receive the plugin file.
+    expect(source).toContain("mountDshWeb(webHub.ctx, {")
+    expect(source).toContain("mountDshTools(toolsHub.ctx, {")
+  })
+
   test("dsh-mount wraps init+mount in a degrade boundary (B-06) and injects the closure context (B-01)", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
     // A broken closure must never crash the CLI host: the assembly is wrapped

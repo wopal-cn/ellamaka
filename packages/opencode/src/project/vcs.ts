@@ -325,8 +325,6 @@ export const layer: Layer.Layer<Service, never, Git.Service | Bus.Service> = Lay
           concurrency: 2,
         })
         const value = { current, root }
-        log.info("initialized", { branch: value.current, default_branch: value.root?.name })
-
         yield* (yield* bus.subscribe(FileWatcher.Event.Updated)).pipe(
           Stream.filter((evt) => evt.properties.file.endsWith("HEAD")),
           Stream.runForEach((_evt) =>

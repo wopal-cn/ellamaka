@@ -7,13 +7,10 @@ import { lazy } from "@wopal/ellamaka-core/util/lazy"
 import { Plugin } from "@/plugin"
 import { Shell } from "@/shell/shell"
 import type { Proc } from "#pty"
-import * as Log from "@wopal/ellamaka-core/util/log"
 import { PtyID } from "./schema"
 import { PtyCommand } from "./command"
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { NonNegativeInt, PositiveInt } from "@wopal/ellamaka-core/schema"
-
-const log = Log.create({ service: "pty" })
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
 const BUFFER_CHUNK = 64 * 1024
@@ -179,7 +176,6 @@ export const makeLayer = (graceMs: number = DEFAULT_GRACE_MS) =>
       const session = yield* requireSession(id)
       s.sessions.delete(id)
       cancelReaper(session)
-      log.info("removing session", { id })
       session.info.status = "exited"
       teardown(session)
       yield* bus.publish(Event.Deleted, { id: session.info.id })
@@ -238,8 +234,6 @@ export const makeLayer = (graceMs: number = DEFAULT_GRACE_MS) =>
         env.LANG = "C.UTF-8"
       }
       const resolvedCommand = PtyCommand.resolvePtyCommand(command, process.platform, env)
-      log.info("creating session", { id, cmd: command, args, cwd })
-
       const { spawn } = yield* Effect.promise(() => pty())
       const proc = yield* Effect.sync(() =>
         spawn(resolvedCommand, args, {
@@ -300,7 +294,6 @@ export const makeLayer = (graceMs: number = DEFAULT_GRACE_MS) =>
       })
       proc.onExit(({ exitCode }) => {
         if (session.info.status === "exited") return
-        log.info("session exited", { id, exitCode })
         session.info.status = "exited"
         bridge.fork(bus.publish(Event.Exited, { id, exitCode }))
         bridge.fork(remove(id))
@@ -343,8 +336,6 @@ export const makeLayer = (graceMs: number = DEFAULT_GRACE_MS) =>
           }),
         ),
       )
-      log.info("client connected to session", { id })
-
       const sub = sock(ws)
       session.subscribers.delete(sub)
       session.subscribers.set(sub, ws)
@@ -392,7 +383,6 @@ export const makeLayer = (graceMs: number = DEFAULT_GRACE_MS) =>
           session.process.write(typeof message === "string" ? message : new TextDecoder().decode(message))
         },
         onClose: () => {
-          log.info("client disconnected from session", { id })
           cleanup()
           if (session.subscribers.size === 0) {
             startReaper(session)

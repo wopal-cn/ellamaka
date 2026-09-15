@@ -56,7 +56,7 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | Path.Pat
         const index = new URL("index.json", base).href
         const host = base.slice(0, -1)
 
-        log.info("fetching index", { url: index })
+        log.debug("fetching index", { url: index })
 
         const data = yield* HttpClientRequest.get(index).pipe(
           HttpClientRequest.acceptJson,

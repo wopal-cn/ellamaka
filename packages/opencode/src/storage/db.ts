@@ -5,7 +5,6 @@ export * from "drizzle-orm"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LocalContext } from "@/util/local-context"
 import { Global } from "@wopal/ellamaka-core/global"
-import * as Log from "@wopal/ellamaka-core/util/log"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
 import path from "path"
 import { readFileSync, readdirSync, existsSync } from "fs"
@@ -20,8 +19,6 @@ declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: strin
 export const NotFoundError = NamedError.create("NotFoundError", {
   message: Schema.String,
 })
-
-const log = Log.create({ service: "db" })
 
 type DatabaseFlags = Pick<RuntimeFlags.Info, "disableChannelDb" | "skipMigrations">
 
@@ -100,8 +97,6 @@ export const Client = Object.assign(
     if (loaded) return client as Client
 
     const dbPath = getPath(flags)
-    log.info("opening database", { path: dbPath })
-
     const db = init(dbPath)
 
     db.run("PRAGMA journal_mode = WAL")
@@ -117,10 +112,6 @@ export const Client = Object.assign(
         ? OPENCODE_MIGRATIONS
         : migrations(path.join(import.meta.dirname, "../../migration"))
     if (entries.length > 0) {
-      log.info("applying migrations", {
-        count: entries.length,
-        mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
-      })
       if (flags.skipMigrations) {
         for (const item of entries) {
           item.sql = "select 1;"

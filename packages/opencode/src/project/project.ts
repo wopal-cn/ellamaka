@@ -3,7 +3,6 @@ import { Database } from "@/storage/db"
 import { ProjectTable } from "./project.sql"
 import { PermissionTable, SessionTable } from "../session/session.sql"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
-import * as Log from "@wopal/ellamaka-core/util/log"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
@@ -21,8 +20,6 @@ import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@wopal/ellamaka-core/schema"
 import { serviceUse } from "@wopal/ellamaka-core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-
-const log = Log.create({ service: "project" })
 
 const ProjectVcs = Schema.Literal("git")
 
@@ -233,8 +230,6 @@ export const layer = Layer.effect(
     })
 
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
-      log.info("fromDirectory", { directory })
-
       const data = yield* projectV2.resolve(AbsolutePath.make(directory))
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 

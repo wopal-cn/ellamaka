@@ -1,6 +1,6 @@
 import { Global } from "@wopal/ellamaka-core/global"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { GlobalBus } from "@/bus/global"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
@@ -17,6 +17,13 @@ export interface DshMountOptions {
   wopalHome?: string
   /** Path to the dedicated dsh-plugins log file. */
   logFile?: string
+  /** Path to the dedicated DSH runtime-manager log file. */
+  runtimeLogFile?: string
+}
+
+function configuredDshLogLevel(): "DEBUG" | "INFO" | "WARN" | "ERROR" {
+  const value = process.env.OPENCODE_LOG_LEVEL
+  return value === "DEBUG" || value === "INFO" || value === "WARN" || value === "ERROR" ? value : "WARN"
 }
 
 export interface DshMountHandle {
@@ -40,6 +47,7 @@ export interface DshMountHandle {
 export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<DshMountHandle | undefined> {
   const wopalHome = opts.wopalHome ?? Global.Path.wopalHome
   const logFile = opts.logFile ?? join(Global.Path.log, "dsh-plugins.log")
+  const runtimeLogFile = opts.runtimeLogFile ?? join(dirname(logFile), "dsh-runtime.log")
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
@@ -53,7 +61,9 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
 
   const status = await initializeDshRuntime({
     wopalHome,
-    logFile,
+    logFile: runtimeLogFile,
+    logLevel: configuredDshLogLevel(),
+    print: process.argv.includes("--print-logs"),
     entry: "tui",
     manifest,
   })
@@ -81,6 +91,7 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
       home,
       port: 0,
       logFile,
+      logLevel: configuredDshLogLevel(),
       installAnchor: anchor.path,
       runtime,
     })

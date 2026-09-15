@@ -158,6 +158,28 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - **Structured**: carry context in the `extra` field (`log.info("reverting", { file, hash })`), never concatenate into the message; use fixed verb phrases for the message so it is searchable
 - **Never swallow errors silently**: a `catch` must log (error or warn); no empty catch
 - **Level**: default `INFO`; `debug` is diagnostic-only and not emitted in production
+- **Trace is opt-in per category**: `TRACE` is the fifth level, below `DEBUG`. It carries the high-volume lifecycle records that normal operation must not emit. Emit them via `log.trace(category, message, extra)` (Effect code: `EffectLogger.create(...).trace(...)`). The level alone emits nothing — a record is written only when a category is explicitly selected. Categories are a closed registry (`Log.TraceCategory`): `bus`, `permission`, `session`, `llm`, `plugin`, `io`. Never introduce a category without a call site and a row in LOGGING.md
+- **Trace never carries payloads or user data**: bus trace records the event type only; permission trace records the permission name, decision `action` (`allow|ask|deny`), an `escalated` marker, a count, and the reply outcome; session/LLM trace records the step counter and runtime/model identifiers. Never write the event payload, prompt or message content, tool arguments, evaluated pattern, command, path, session id, or pending request contents. An explicit `--log-level` always wins over `--trace` promotion
+- **Authority**: [packages/opencode/LOGGING.md](./packages/opencode/LOGGING.md) is the detailed serve-logging policy (channels, DSH classification, trace categories). Update it in the same change as any logging-behavior edit
+
+### Debugging Logs
+
+When diagnosing serve, TUI, or sidecar behavior, widen output through the log level rather than adding temporary records to the code. TRACE always names its categories; `--log-level TRACE` without `--trace` is rejected on purpose.
+
+| Scenario | Command | Notes |
+|----------|---------|-------|
+| List trace categories | `ellamaka serve --trace` | Prints the registry and exits |
+| Default (quiet, structured) | `ellamaka serve` | `INFO`, warnings, and failures only |
+| Permission + event lifecycle | `ellamaka serve --trace permission,bus` | Promotes the level to `TRACE`; other categories stay silent |
+| Session/LLM loop detail | `ellamaka serve --trace session,llm` | The loops that historically flooded the log |
+| Plugin and I/O startup | `ellamaka serve --trace plugin,io` | Plugin load, MCP connect, LSP/format activity |
+| Every category (escape hatch) | `ellamaka serve --trace all` | Must be explicit; no implicit all |
+| Implementation diagnostics | `ellamaka serve --log-level DEBUG` | Bounded, still redacted |
+| Override trace promotion | `ellamaka serve --log-level INFO --trace bus` | Explicit level wins; no `TRACE` records emit |
+
+- Log locations: non-dev CLI writes `serve-*` / `tui-*` / `sidecar-*` under `$WOPAL_HOME/logs/`; dev mode writes to `.wopal-space/logs/dev/<scope>/`. Cleanup keeps the latest 10 timestamped files collectively.
+- DSH has four levels, so host `TRACE` maps to DSH `DEBUG` at the boundary; DSH log files are `$WOPAL_HOME/logs/dsh-runtime.log` and `dsh-plugins.log`.
+- If a category's records are missing, confirm the category is in the selector (an explicit `--log-level` overrides `--trace`, and an unknown category is rejected at startup).
 
 ## Testing & Verification
 

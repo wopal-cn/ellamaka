@@ -80,7 +80,7 @@ export const Deno: Info = {
   async spawn(root) {
     const deno = which("deno")
     if (!deno) {
-      log.info("deno not found, please install deno first")
+      log.trace("io", "deno not found, please install deno first")
       return
     }
     return {
@@ -100,7 +100,7 @@ export const Typescript: Info = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
   async spawn(root, ctx) {
     const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
-    log.info("typescript server", { tsserver })
+    log.trace("io", "typescript server", { tsserver })
     if (!tsserver) return
     const bin = await Npm.which("typescript-language-server")
     if (!bin) return
@@ -157,7 +157,7 @@ export const ESLint: Info = {
   async spawn(root, ctx, flags) {
     const eslint = Module.resolve("eslint", ctx.directory)
     if (!eslint) return
-    log.info("spawning eslint server")
+    log.trace("io", "spawning eslint server")
     const serverPath = path.join(Global.Path.bin, "vscode-eslint", "server", "out", "eslintServer.js")
     if (!(await Filesystem.exists(serverPath))) {
       if (flags.disableLspDownload) return
@@ -182,7 +182,7 @@ export const ESLint: Info = {
 
       const stats = await fs.stat(finalPath).catch(() => undefined)
       if (stats) {
-        log.info("removing old eslint installation", { path: finalPath })
+        log.trace("io", "removing old eslint installation", { path: finalPath })
         await fs.rm(finalPath, { force: true, recursive: true })
       }
       await fs.rename(extractedPath, finalPath)
@@ -275,7 +275,7 @@ export const Oxlint: Info = {
       }
     }
 
-    log.info("oxlint not found, please install oxlint")
+    log.debug("oxlint not found, please install oxlint")
     return
   },
 }
@@ -391,7 +391,7 @@ export const Rubocop: Info = {
       const ruby = which("ruby")
       const gem = which("gem")
       if (!ruby || !gem) {
-        log.info("Ruby not found, please install Ruby first")
+        log.debug("Ruby not found, please install Ruby first")
         return
       }
       if (flags.disableLspDownload) return
@@ -726,11 +726,11 @@ export const Razor: Info = {
 
     const razor = await findVscodeRazorExtension()
     if (!razor) {
-      log.info("VS Code C# extension with Razor support not found, skipping Razor LSP")
+      log.debug("VS Code C# extension with Razor support not found, skipping Razor LSP")
       return
     }
 
-    log.info("using VS Code Razor extension for roslyn-language-server", { extension: razor.extension })
+    log.debug("using VS Code Razor extension for roslyn-language-server", { extension: razor.extension })
     return {
       process: spawn(
         bin,
@@ -951,7 +951,7 @@ export const RustAnalyzer: Info = {
   async spawn(root) {
     const bin = which("rust-analyzer")
     if (!bin) {
-      log.info("rust-analyzer not found in path, please install it")
+      log.debug("rust-analyzer not found in path, please install it")
       return
     }
     return {
@@ -1142,7 +1142,7 @@ export const Astro: Info = {
   async spawn(root, ctx, flags) {
     const tsserver = Module.resolve("typescript/lib/tsserver.js", ctx.directory)
     if (!tsserver) {
-      log.info("typescript not found, required for Astro language server")
+      log.debug("typescript not found, required for Astro language server")
       return
     }
     const tsdk = path.dirname(tsserver)
@@ -1598,7 +1598,7 @@ export const Prisma: Info = {
   async spawn(root) {
     const prisma = which("prisma")
     if (!prisma) {
-      log.info("prisma not found, please install prisma")
+      log.debug("prisma not found, please install prisma")
       return
     }
     return {
@@ -1616,7 +1616,7 @@ export const Dart: Info = {
   async spawn(root) {
     const dart = which("dart")
     if (!dart) {
-      log.info("dart not found, please install dart first")
+      log.debug("dart not found, please install dart first")
       return
     }
     return {
@@ -1634,7 +1634,7 @@ export const Ocaml: Info = {
   async spawn(root) {
     const bin = which("ocamllsp")
     if (!bin) {
-      log.info("ocamllsp not found, please install ocaml-lsp-server")
+      log.debug("ocamllsp not found, please install ocaml-lsp-server")
       return
     }
     return {
@@ -1872,7 +1872,7 @@ export const Gleam: Info = {
   async spawn(root) {
     const gleam = which("gleam")
     if (!gleam) {
-      log.info("gleam not found, please install gleam first")
+      log.debug("gleam not found, please install gleam first")
       return
     }
     return {
@@ -1893,7 +1893,7 @@ export const Clojure: Info = {
       bin = which("clojure-lsp.exe")
     }
     if (!bin) {
-      log.info("clojure-lsp not found, please install clojure-lsp first")
+      log.debug("clojure-lsp not found, please install clojure-lsp first")
       return
     }
     return {
@@ -1921,7 +1921,7 @@ export const Nixd: Info = {
   async spawn(root) {
     const nixd = which("nixd")
     if (!nixd) {
-      log.info("nixd not found, please install nixd first")
+      log.debug("nixd not found, please install nixd first")
       return
     }
     return {
@@ -2034,7 +2034,7 @@ export const HLS: Info = {
   async spawn(root) {
     const bin = which("haskell-language-server-wrapper")
     if (!bin) {
-      log.info("haskell-language-server-wrapper not found, please install haskell-language-server")
+      log.debug("haskell-language-server-wrapper not found, please install haskell-language-server")
       return
     }
     return {
@@ -2052,7 +2052,7 @@ export const JuliaLS: Info = {
   async spawn(root) {
     const julia = which("julia")
     if (!julia) {
-      log.info("julia not found, please install julia first (https://julialang.org/downloads/)")
+      log.debug("julia not found, please install julia first (https://julialang.org/downloads/)")
       return
     }
     return {

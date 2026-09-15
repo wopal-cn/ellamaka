@@ -146,10 +146,7 @@ it.live("cleanup matches role-prefixed files", () =>
     const dir = yield* tmpdirScoped()
     Global.Path.log = dir
 
-    const list = Array.from(
-      { length: 12 },
-      (_, i) => `serve-2000-01-${String(i + 1).padStart(2, "0")}T000000.log`,
-    )
+    const list = Array.from({ length: 12 }, (_, i) => `serve-2000-01-${String(i + 1).padStart(2, "0")}T000000.log`)
 
     yield* Effect.all(list.map((file) => Effect.promise(() => fs.writeFile(path.join(dir, file), file))))
 
@@ -176,7 +173,10 @@ it.live("init without any log write does not create a log file", () =>
     const file = Log.file()
     expect(file).toMatch(/tui-\d{4}-\d{2}-\d{2}T\d{6}\.log$/)
     const exists = yield* Effect.promise(() =>
-      fs.access(file).then(() => true).catch(() => false),
+      fs
+        .access(file)
+        .then(() => true)
+        .catch(() => false),
     )
     expect(exists).toBe(false)
   }),
@@ -206,5 +206,65 @@ it.live("first log write creates the file and cleanup runs once", () =>
     expect(logFile).toBeDefined()
     const content = yield* Effect.promise(() => fs.readFile(path.join(dir, logFile!), "utf8"))
     expect(content).toContain("first line")
+  }),
+)
+
+it.live("captures process warnings as structured runtime records", () =>
+  Effect.gen(function* () {
+    const log = Global.Path.log
+    yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = log)))
+    const dir = yield* tmpdirScoped()
+    Global.Path.log = dir
+
+    yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve" }))
+    process.emitWarning("structured-warning-probe", { type: "MaxListenersExceededWarning" })
+
+    let content = ""
+    for (let attempt = 0; attempt < 20; attempt++) {
+      content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8").catch(() => ""))
+      if (content.includes("structured-warning-probe")) break
+      yield* Effect.sleep("10 millis")
+    }
+    expect(content).toContain("runtime warning")
+    expect(content).toContain("name=MaxListenersExceededWarning")
+    expect(content).toContain("message=structured-warning-probe")
+  }),
+)
+
+it.live("writes transport failures as bounded summaries", () =>
+  Effect.gen(function* () {
+    const log = Global.Path.log
+    yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = log)))
+    const dir = yield* tmpdirScoped()
+    Global.Path.log = dir
+
+    const requestPayload = "request-payload-must-never-reach-a-log"
+    const responsePayload = "response-payload-must-never-reach-a-log"
+    yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "INFO" }))
+    Log.Default.error("stream error", {
+      error: {
+        name: "AI_APICallError",
+        url: "https://api.example.test/v1/chat/completions?api_key=secret",
+        statusCode: 429,
+        isRetryable: true,
+        requestBodyValues: { messages: [{ role: "user", content: requestPayload }] },
+        responseBody: responsePayload,
+      },
+      output: "x".repeat(32 * 1024),
+    })
+
+    let content = ""
+    for (let attempt = 0; attempt < 20; attempt++) {
+      content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8").catch(() => ""))
+      if (content.includes("stream error")) break
+      yield* Effect.sleep("10 millis")
+    }
+
+    expect(content).toContain('error={"name":"AI_APICallError"')
+    expect(content).toContain('"statusCode":429')
+    expect(content).toContain("[truncated]")
+    expect(content).not.toContain(requestPayload)
+    expect(content).not.toContain(responsePayload)
+    expect(content.split("\n").find((line) => line.includes("stream error"))!.length).toBeLessThanOrEqual(16 * 1024)
   }),
 )

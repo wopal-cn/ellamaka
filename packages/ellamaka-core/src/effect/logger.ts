@@ -10,8 +10,16 @@ export interface Handle {
   readonly info: (msg?: unknown, extra?: Fields) => Effect.Effect<void>
   readonly warn: (msg?: unknown, extra?: Fields) => Effect.Effect<void>
   readonly error: (msg?: unknown, extra?: Fields) => Effect.Effect<void>
+  readonly trace: (category: Log.TraceCategory, msg?: unknown, extra?: Fields) => Effect.Effect<void>
   readonly with: (extra: Fields) => Handle
 }
+
+/**
+ * Effect has no category concept, so a trace call carries its category through
+ * a reserved annotation. It is stripped before the record is written, where the
+ * category becomes a first-class field like it is for direct `Log.trace` calls.
+ */
+const TRACE_CATEGORY_ANNOTATION = "log.trace.category"
 
 const clean = (input?: Fields): Fields =>
   Object.fromEntries(
@@ -48,6 +56,17 @@ export const logger = Logger.make((opts) => {
   const log = svc ? Log.create({ service: svc }) : Log.Default
   const msg = text(opts.message)
 
+  const category = extra[TRACE_CATEGORY_ANNOTATION]
+  delete extra[TRACE_CATEGORY_ANNOTATION]
+
+  // A trace call is routed before the level switch: the annotation says this
+  // record belongs to the opt-in TRACE level, where `Log.trace` applies the
+  // category gate. The Effect level carrying it is an implementation detail,
+  // because Effect filters sub-Info levels before any logger sees them.
+  if (typeof category === "string" && Log.isTraceCategory(category)) {
+    return log.trace(category, msg, extra)
+  }
+
   switch (opts.logLevel) {
     case "Trace":
     case "Debug":
@@ -69,5 +88,10 @@ export const create = (base: Fields = {}): Handle => ({
   info: (msg, extra) => call((item) => Effect.logInfo(item), base, msg, extra),
   warn: (msg, extra) => call((item) => Effect.logWarning(item), base, msg, extra),
   error: (msg, extra) => call((item) => Effect.logError(item), base, msg, extra),
+  // `Effect.logInfo` is the transport, not the severity: the annotation marks
+  // the record as TRACE so the bridge routes it to the opt-in category gate.
+  // Using a sub-Info Effect level here would be dropped before the bridge.
+  trace: (category, msg, extra) =>
+    call((item) => Effect.logInfo(item), base, msg, { ...extra, [TRACE_CATEGORY_ANNOTATION]: category }),
   with: (extra) => create({ ...base, ...extra }),
 })

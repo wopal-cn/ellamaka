@@ -27,6 +27,8 @@ type StartCommand = {
   wopalHome?: string
   /** Path to the dedicated dsh-plugins log file. */
   logFile?: string
+  /** Path to the dedicated DSH runtime-manager log file. */
+  runtimeLogFile?: string
 }
 
 type StopCommand = { type: "stop" }
@@ -56,6 +58,15 @@ type Listener = {
   }): () => void
 }
 
+type WarningLogger = {
+  warn(message?: unknown, extra?: Record<string, unknown>): void
+}
+
+type DshPluginLogger = WarningLogger & {
+  info(message?: unknown, extra?: Record<string, unknown>): void
+  error(message?: unknown, extra?: Record<string, unknown>): void
+}
+
 const parentPort = getParentPort()
 let listener: Listener | undefined
 let dshHost:
@@ -81,6 +92,7 @@ let dshPluginService:
       replay(): Promise<{ ok: true } | { ok: false; error: string }>
     }
   | undefined
+let sidecarLogLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
 
 /**
  * The dsh runtime initialised once per launch (W-02). The manager's
@@ -115,16 +127,23 @@ parentPort.on("message", (event) => {
 async function start(command: StartCommand) {
   try {
     ensureLoopbackNoProxy()
-    useSystemCertificates()
-    useEnvProxy()
     const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
     // Desktop dev.sh 通过 ELAMAKA_DESKTOP_* 环境变量控制日志行为：
     //   ELAMAKA_DESKTOP_DEV=1             → dev 模式（写到 WOPAL_DEBUG_LOG_DIR/ellamaka-dev-sidecar.log）
     //   ELAMAKA_DESKTOP_LOG_LEVEL=<LEVEL> → 日志级别（默认 WARN，向后兼容）
     // 未设置时（打包发布版 / 普通用户）走默认行为，与历史一致。
     const sidecarDev = process.env.ELAMAKA_DESKTOP_DEV === "1"
-    const sidecarLogLevel = (process.env.ELAMAKA_DESKTOP_LOG_LEVEL ?? "WARN") as "DEBUG" | "INFO" | "WARN" | "ERROR"
-    await Log.init({ level: sidecarLogLevel, dev: sidecarDev, devFile: "ellamaka-dev-sidecar.log", role: "sidecar" })
+    sidecarLogLevel = (process.env.ELAMAKA_DESKTOP_LOG_LEVEL ?? "WARN") as "DEBUG" | "INFO" | "WARN" | "ERROR"
+    await Log.init({
+      print: false,
+      level: sidecarLogLevel,
+      dev: sidecarDev,
+      devFile: "ellamaka-dev-sidecar.log",
+      role: "sidecar",
+    })
+    const startupLog = Log.create({ service: "sidecar" })
+    useSystemCertificates(startupLog)
+    useEnvProxy(startupLog)
 
     if (command.needsMigration) {
       await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
@@ -177,11 +196,12 @@ async function start(command: StartCommand) {
   }
 }
 
-/** Resolve the wopal home and dsh-plugins log file for this launch. */
+/** Resolve the wopal home plus separate DSH runtime and plugin log files. */
 function dshLaunch(command: StartCommand) {
   const wopalHome = command.wopalHome ?? process.env.WOPAL_HOME ?? join(homedir(), ".wopal")
   const logFile = command.logFile ?? join(wopalHome, "logs", "dsh-plugins.log")
-  return { wopalHome, logFile, home: join(wopalHome, "dsh") }
+  const runtimeLogFile = command.runtimeLogFile ?? join(wopalHome, "logs", "dsh-runtime.log")
+  return { wopalHome, logFile, runtimeLogFile, home: join(wopalHome, "dsh") }
 }
 
 /**
@@ -268,6 +288,8 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
       port: listener?.port ?? 0,
       installAnchor: launch.anchor.path,
       logFile,
+      logLevel: sidecarLogLevel,
+      getLogLevel: () => sidecarLogLevel,
       runtime,
       ellamakaCommand,
     })
@@ -340,6 +362,8 @@ async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
       port: 0,
       installAnchor: launch.anchor.path,
       logFile,
+      logLevel: sidecarLogLevel,
+      getLogLevel: () => sidecarLogLevel,
       runtime,
     })
     dshToolsHost = {
@@ -368,7 +392,7 @@ async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
  */
 async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof dshLaunchState>> {
   if (dshLaunchState) return dshLaunchState
-  const { wopalHome, logFile } = dshLaunch(command)
+  const { wopalHome, runtimeLogFile } = dshLaunch(command)
   const {
     DEFAULT_DSH_RUNTIME_MANIFEST,
     initializeDshRuntime,
@@ -379,8 +403,14 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
   } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
-  sidecarLog.info("dsh.desktop.init.start", { wopalHome, logFile })
-  const status = await initializeDshRuntime({ wopalHome, logFile, entry: "tui", manifest })
+  sidecarLog.info("dsh.desktop.init.start", { wopalHome, runtimeLogFile })
+  const status = await initializeDshRuntime({
+    wopalHome,
+    logFile: runtimeLogFile,
+    logLevel: sidecarLogLevel,
+    entry: "tui",
+    manifest,
+  })
   setDshStatus(status)
   sidecarLog.info("dsh.desktop.init.status", { status })
   if (status !== "ready") {
@@ -424,6 +454,10 @@ async function startDshPluginWatcher(command: StartCommand): Promise<void> {
           stackContext: dshToolsHost.stackContext,
         },
       ],
+      // The mounted web context owns the dsh-plugins exporter. Routing the
+      // watcher through it avoids the service's console fallback, which the
+      // Desktop main process would otherwise relay as a WARN for every event.
+      logger: dshPluginLogger(dshHost.ctx, sidecarLog),
     })
     dshHost.pluginActivation?.bind(() => dshPluginService!.replay())
     sidecarLog.info("dsh.desktop.watcher.started")
@@ -458,6 +492,7 @@ async function stop() {
 
 async function setLogLevel(level: "DEBUG" | "INFO" | "WARN" | "ERROR") {
   const { Log } = await import("virtual:opencode-server")
+  sidecarLogLevel = level
   Log.setLevel(level)
 }
 
@@ -481,23 +516,51 @@ function ensureLoopbackNoProxy() {
   upsert("no_proxy")
 }
 
-function useSystemCertificates() {
+function useSystemCertificates(log: WarningLogger) {
   try {
     const nodeTls = tls as NodeTlsWithSystemCertificates
     nodeTls.setDefaultCACertificates([
       ...new Set([...nodeTls.getCACertificates("default"), ...nodeTls.getCACertificates("system")]),
     ])
   } catch (error) {
-    console.warn("failed to load system certificates", error)
+    log.warn("failed to load system certificates", {
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
 }
 
-function useEnvProxy() {
+function useEnvProxy(log: WarningLogger) {
   try {
     ;(http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv()
   } catch (error) {
-    console.warn("failed to load proxy environment", error)
+    log.warn("failed to load proxy environment", {
+      error: error instanceof Error ? error.message : String(error),
+    })
   }
+}
+
+function dshPluginLogger(ctx: unknown, fallback: DshPluginLogger): DshPluginLogger {
+  if (typeof ctx !== "object" || ctx === null || !("logger" in ctx) || typeof ctx.logger !== "function") {
+    return fallback
+  }
+  try {
+    const logger = ctx.logger("dsh-plugins")
+    if (
+      typeof logger === "object" &&
+      logger !== null &&
+      "info" in logger &&
+      typeof logger.info === "function" &&
+      "warn" in logger &&
+      typeof logger.warn === "function" &&
+      "error" in logger &&
+      typeof logger.error === "function"
+    ) {
+      return logger as DshPluginLogger
+    }
+  } catch {
+    // The sidecar still has its structured log as a safe fallback.
+  }
+  return fallback
 }
 
 function parseCommand(value: unknown): SidecarCommand | undefined {
@@ -528,6 +591,7 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
     needsMigration: command.needsMigration,
     wopalHome: typeof command.wopalHome === "string" ? command.wopalHome : undefined,
     logFile: typeof command.logFile === "string" ? command.logFile : undefined,
+    runtimeLogFile: typeof command.runtimeLogFile === "string" ? command.runtimeLogFile : undefined,
   }
 }
 

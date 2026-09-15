@@ -7,13 +7,14 @@ import * as Global from "../global"
 import { Schema } from "effect"
 import { Glob } from "./glob"
 
-export const Level = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
+export const Level = Schema.Literals(["TRACE", "DEBUG", "INFO", "WARN", "ERROR"]).annotate({
   identifier: "LogLevel",
   description: "Log level",
 })
 export type Level = Schema.Schema.Type<typeof Level>
 
 const levelPriority: Record<Level, number> = {
+  TRACE: -1,
   DEBUG: 0,
   INFO: 1,
   WARN: 2,
@@ -21,15 +22,107 @@ const levelPriority: Record<Level, number> = {
 }
 const keep = 10
 const initializedRunID = "OPENCODE_LOG_INITIALIZED_RUN_ID"
+const maxLogValueLength = 4096
+const maxLogLineLength = 16 * 1024
+const truncationMarker = "…[truncated]"
+
+/**
+ * TRACE categories are a closed registry. Each one names a diagnostic area
+ * that used to flood the operator log, so `--trace` must name the areas it
+ * wants instead of the level implying "everything".
+ *
+ * Adding a category is a deliberate act: it must have at least one call site
+ * and a place in the operator documentation.
+ */
+export const TraceCategory = {
+  Bus: "bus",
+  Permission: "permission",
+  Session: "session",
+  Llm: "llm",
+  Plugin: "plugin",
+  Io: "io",
+} as const
+
+export type TraceCategory = (typeof TraceCategory)[keyof typeof TraceCategory]
+
+const traceCategoryList: readonly TraceCategory[] = Object.values(TraceCategory)
+
+/** Selects every registered category in one token. */
+export const ALL_TRACE_CATEGORIES = "all"
+
+/** The categories accepted by `--trace` and by `Log.trace`. */
+export function traceCategories(): readonly TraceCategory[] {
+  return traceCategoryList
+}
+
+export function isTraceCategory(value: string): value is TraceCategory {
+  return (traceCategoryList as readonly string[]).includes(value)
+}
 
 let level: Level = "INFO"
+let selectedTraceCategories: Set<string> = new Set()
 
-export function setLevel(next: Level) {
+/**
+ * Turns a raw selector into a set of category tokens. Unknown tokens are kept
+ * out of the set so a typo can never widen what is emitted; `*` and `all`
+ * become the explicit all-category token.
+ */
+export function normalizeTraceCategories(input?: string | readonly string[]): Set<string> {
+  if (input === undefined) return new Set()
+  const raw = typeof input === "string" ? input.split(",") : input
+  const result = new Set<string>()
+  for (const token of raw) {
+    const category = token.trim().toLowerCase()
+    if (category.length === 0) continue
+    if (category === "*" || category === ALL_TRACE_CATEGORIES) {
+      result.add(ALL_TRACE_CATEGORIES)
+      continue
+    }
+    if (!isTraceCategory(category)) continue
+    result.add(category)
+  }
+  return result
+}
+
+/**
+ * Sets the effective level and, when provided, the trace category selector.
+ * Passing an explicit level other than TRACE clears the selector: a caller who
+ * drops back to DEBUG must not keep a stale trace filter that silently
+ * re-activates on a later TRACE.
+ */
+export function setLevel(next: Level, categories?: string | readonly string[]) {
   level = next
+  if (categories !== undefined) {
+    selectedTraceCategories = normalizeTraceCategories(categories)
+    return
+  }
+  if (next !== "TRACE") selectedTraceCategories = new Set()
 }
 
 function shouldLog(input: Level): boolean {
   return levelPriority[input] >= levelPriority[level]
+}
+
+/**
+ * A trace record emits only when TRACE is the effective level AND a category
+ * was explicitly selected. The level alone emits nothing: `--log-level TRACE`
+ * without `--trace` is an error at the CLI, and this guard keeps a stray
+ * programmatic `setLevel("TRACE")` from opening every area.
+ */
+function shouldTrace(category: string): boolean {
+  if (level !== "TRACE") return false
+  if (selectedTraceCategories.size === 0) return false
+  if (selectedTraceCategories.has(ALL_TRACE_CATEGORIES)) return true
+  return selectedTraceCategories.has(category.trim().toLowerCase())
+}
+
+/**
+ * Bounds a category to a single short token so a malformed or hostile category
+ * can never smuggle a multi-line value or payload into the structured record.
+ */
+function normalizeCategory(category: string): string {
+  const normalized = singleLine(category).trim().toLowerCase()
+  return truncate(normalized.length === 0 ? "unknown" : normalized, 32)
 }
 
 export type Logger = {
@@ -37,11 +130,13 @@ export type Logger = {
   info(message?: any, extra?: Record<string, any>): void
   error(message?: any, extra?: Record<string, any>): void
   warn(message?: any, extra?: Record<string, any>): void
+  trace(category: TraceCategory, message?: any, extra?: Record<string, any>): void
   tag(key: string, value: string): Logger
   clone(): Logger
   time(
     message: string,
     extra?: Record<string, any>,
+    logLevel?: "DEBUG" | "INFO",
   ): {
     stop(): void
     [Symbol.dispose](): void
@@ -57,6 +152,8 @@ export interface Options {
   dev?: boolean
   devFile?: string
   level?: Level
+  /** Trace category selector; only meaningful when `level` is TRACE. */
+  trace?: string | readonly string[]
   role?: "serve" | "tui" | "sidecar"
 }
 
@@ -74,6 +171,38 @@ let options: Options | null = null
 let initialized = false
 let initializing: Promise<void> | null = null
 let generation = 0
+let processWarningHandlerInstalled = false
+
+type ProcessWarning = Error & {
+  type?: unknown
+  count?: unknown
+  emitter?: { constructor?: { name?: unknown } }
+}
+
+/**
+ * Runtime warnings (notably MaxListenersExceededWarning) otherwise bypass the
+ * application logger and are printed by Bun/Node directly to stderr. Install
+ * one process-wide handler so normal hosts retain the diagnostic in their
+ * rotating structured log instead of leaking a minified runtime object and
+ * stack into the terminal or Desktop sidecar stderr relay.
+ */
+function installProcessWarningHandler() {
+  if (processWarningHandlerInstalled) return
+  processWarningHandlerInstalled = true
+  process.on("warning", (warning: ProcessWarning) => {
+    const emitterName = warning.emitter?.constructor?.name
+    create({ service: "runtime" }).warn("runtime warning", {
+      name: warning.name,
+      message: warning.message,
+      type: warning.type,
+      count: warning.count,
+      emitter: typeof emitterName === "string" ? emitterName : undefined,
+      // The stack stays a single structured field in the log rather than
+      // becoming unprefixed terminal lines. It is retained for diagnosis.
+      stack: warning.stack ? { trace: warning.stack } : undefined,
+    })
+  })
+}
 
 function localStamp() {
   const now = new Date()
@@ -94,7 +223,10 @@ function dir(options: Options) {
 }
 
 export async function init(next: Options) {
-  if (next.level) level = next.level
+  // A re-init starts a fresh generation. The trace selector must reset with it
+  // so a prior run's filter never silently narrows (or widens) the new one.
+  setLevel(next.level ?? level, next.trace ?? [])
+  installProcessWarningHandler()
   if (next.print) return
   options = next
   // Re-init (e.g. between tests or after a failed first write) must start a
@@ -106,9 +238,7 @@ export async function init(next: Options) {
   // machine commands (e.g. `debug release-info`) never leave empty log files.
   logpath = path.join(
     dir(next),
-    next.dev
-      ? next.devFile ?? "dev.log"
-      : (next.role ? `${next.role}-${localStamp()}.log` : `${localStamp()}.log`),
+    next.dev ? (next.devFile ?? "dev.log") : next.role ? `${next.role}-${localStamp()}.log` : `${localStamp()}.log`,
   )
 }
 
@@ -177,6 +307,113 @@ function formatError(error: Error, depth = 0): string {
     : result
 }
 
+type LogRecord = Record<string, unknown>
+
+function isRecord(value: unknown): value is LogRecord {
+  return typeof value === "object" && value !== null
+}
+
+function truncate(value: string, limit = maxLogValueLength): string {
+  if (value.length <= limit) return value
+  return value.slice(0, Math.max(0, limit - truncationMarker.length)) + truncationMarker
+}
+
+function singleLine(value: string): string {
+  return value.replaceAll("\n", "\\n").replaceAll("\r", "\\r")
+}
+
+function scalar(value: unknown): string | number | boolean | undefined {
+  if (typeof value === "string") return truncate(value, 512)
+  if (typeof value === "number" || typeof value === "boolean") return value
+  return undefined
+}
+
+function stripURLQuery(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const index = value.search(/[?#]/)
+  return truncate(index === -1 ? value : value.slice(0, index), 512)
+}
+
+/**
+ * SDK transport errors can contain `requestBodyValues` (including every model
+ * message) and raw provider response bodies. They are useful to classify by
+ * status/retryability, but are not safe or useful to persist verbatim.
+ */
+function isTransportError(value: unknown): value is LogRecord {
+  if (!isRecord(value)) return false
+  return "requestBodyValues" in value || "requestBody" in value || "responseBody" in value
+}
+
+function summarizeTransportError(value: LogRecord): LogRecord {
+  const data = isRecord(value.data) ? value.data : undefined
+  const providerError = data && isRecord(data.error) ? data.error : undefined
+  const result: LogRecord = {}
+
+  const name = scalar(value.name)
+  const code = scalar(value.code) ?? scalar(providerError?.code)
+  const type = scalar(value.type) ?? scalar(providerError?.type)
+  const statusCode = scalar(value.statusCode)
+  const isRetryable = scalar(value.isRetryable)
+  const url = stripURLQuery(value.url)
+
+  if (name !== undefined) result.name = name
+  if (code !== undefined) result.code = code
+  if (type !== undefined) result.type = type
+  if (statusCode !== undefined) result.statusCode = statusCode
+  if (isRetryable !== undefined) result.isRetryable = isRetryable
+  if (url !== undefined) result.url = url
+  return result
+}
+
+function isSensitiveKey(key: string): boolean {
+  const normalized = key.replaceAll("_", "").replaceAll("-", "").toLowerCase()
+  return (
+    normalized === "requestbody" ||
+    normalized === "requestbodyvalues" ||
+    normalized === "responsebody" ||
+    normalized === "messages" ||
+    normalized === "prompt" ||
+    normalized === "system" ||
+    normalized === "authorization" ||
+    normalized === "apikey" ||
+    normalized === "token" ||
+    normalized === "password" ||
+    normalized === "secret" ||
+    normalized === "cookie"
+  )
+}
+
+function stringify(value: object): string {
+  const seen = new WeakSet<object>()
+  try {
+    const result = JSON.stringify(value, function (key, item) {
+      if (isSensitiveKey(key)) return "[redacted]"
+      if (typeof item === "bigint") return `${item}n`
+      if (typeof item === "object" && item !== null && isTransportError(item)) return summarizeTransportError(item)
+      if (item instanceof Error) return { name: item.name, message: truncate(formatError(item), 512) }
+      if (!isRecord(item)) return item
+      if (seen.has(item)) return "[circular]"
+      seen.add(item)
+      return item
+    })
+    return result ?? "[unserializable]"
+  } catch {
+    return "[unserializable]"
+  }
+}
+
+/**
+ * Formats one structured log value for a single line. The limit is applied to
+ * every value, not just the whole record, so a single SDK error can never turn
+ * a normal serve log into a multi-megabyte request transcript.
+ */
+export function formatLogValue(value: unknown): string {
+  if (isTransportError(value)) return truncate(stringify(summarizeTransportError(value)))
+  if (value instanceof Error) return truncate(singleLine(formatError(value)))
+  if (isRecord(value)) return truncate(stringify(value))
+  return truncate(singleLine(String(value)))
+}
+
 let last = Date.now()
 export function create(tags?: Record<string, any>) {
   tags = tags || {}
@@ -197,16 +434,16 @@ export function create(tags?: Record<string, any>) {
       .filter(([_, value]) => value !== undefined && value !== null)
       .map(([key, value]) => {
         const prefix = `${key}=`
-        if (value instanceof Error) return prefix + formatError(value)
-        if (typeof value === "object") return prefix + JSON.stringify(value)
-        return prefix + value
+        return prefix + formatLogValue(value)
       })
       .join(" ")
     const next = new Date()
     const diff = next.getTime() - last
     last = next.getTime()
     const ts = next.toLocaleString("sv-SE", { timeZone: "Asia/Shanghai" }).replace(" ", "T")
-    return [ts, "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+    const formattedMessage = message === undefined || message === null ? undefined : formatLogValue(message)
+    const line = [ts, "+" + diff + "ms", prefix, formattedMessage].filter(Boolean).join(" ")
+    return truncate(line, maxLogLineLength) + "\n"
   }
   const result: Logger = {
     debug(message?: any, extra?: Record<string, any>) {
@@ -229,6 +466,12 @@ export function create(tags?: Record<string, any>) {
         emit("WARN  " + build(message, extra))
       }
     },
+    trace(category: TraceCategory, message?: any, extra?: Record<string, any>) {
+      const normalized = normalizeCategory(category)
+      if (shouldTrace(normalized)) {
+        emit("TRACE " + build(message, { category: normalized, ...extra }))
+      }
+    },
     tag(key: string, value: string) {
       if (tags) tags[key] = value
       return result
@@ -236,11 +479,15 @@ export function create(tags?: Record<string, any>) {
     clone() {
       return create({ ...tags })
     },
-    time(message: string, extra?: Record<string, any>) {
+    time(message: string, extra?: Record<string, any>, logLevel: "DEBUG" | "INFO" = "INFO") {
       const now = Date.now()
-      result.info(message, { status: "started", ...extra })
+      const writeTime = (msg: any, data: Record<string, any>) => {
+        if (logLevel === "DEBUG") result.debug(msg, data)
+        else result.info(msg, data)
+      }
+      writeTime(message, { status: "started", ...extra })
       function stop() {
-        result.info(message, {
+        writeTime(message, {
           status: "completed",
           duration: Date.now() - now,
           ...extra,

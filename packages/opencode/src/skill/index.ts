@@ -193,7 +193,6 @@ const loadSkills = Effect.fnUntraced(function* (
       details: duplicates,
     })
   }
-  log.info("init", { count: Object.keys(state.skills).length })
 })
 
 const scan = Effect.fnUntraced(function* (

@@ -284,7 +284,7 @@ const getImageMimeType = (file: string) => mime[ext(file)] || "image/" + ext(fil
 
 function shouldEncode(mimeType: string) {
   const type = mimeType.toLowerCase()
-  log.debug("shouldEncode", { type })
+  log.trace("io", "shouldEncode", { type })
   if (!type) return false
   if (type.startsWith("text/")) return false
   if (type.includes("charset=")) return false
@@ -641,8 +641,6 @@ export const layer = Layer.effect(
       const query = input.query.trim()
       const limit = input.limit ?? 100
       const kind = input.type ?? (input.dirs === false ? "file" : "all")
-      log.info("search", { query, kind })
-
       const preferHidden = query.startsWith(".") || query.includes("/.")
 
       if (!query) {
@@ -656,11 +654,9 @@ export const layer = Layer.effect(
       const sorted = fuzzysort.go(query, items, { limit: searchLimit }).map((item) => item.target)
       const output = kind === "directory" ? sortHiddenLast(sorted, preferHidden).slice(0, limit) : sorted
 
-      log.info("search", { query, kind, results: output.length })
       return output
     })
 
-    log.info("init")
     return Service.of({ init, status, read, list, search })
   }),
 )

@@ -139,7 +139,6 @@ export const layer = Layer.effect(
     })
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
-      yield* elog.info("cancel", { sessionID })
       yield* state.cancel(sessionID)
     })
 
@@ -797,7 +796,6 @@ export const layer = Layer.effect(
         if (part.type === "file") {
           if (part.source?.type === "resource") {
             const { clientName, uri } = part.source
-            log.info("mcp resource", { clientName, uri, mime: part.mime })
             const pieces: Draft<MessageV2.Part>[] = [
               {
                 messageID: info.id,
@@ -871,7 +869,6 @@ export const layer = Layer.effect(
               }
               break
             case "file:": {
-              log.info("file", { mime: part.mime })
               const filepath = fileURLToPath(part.url)
               const referenceContext = yield* referenceContextFromFilePart(part, filepath)
               const mime = (yield* fsys.isDir(filepath)) ? "application/x-directory" : part.mime
@@ -1284,7 +1281,7 @@ export const layer = Layer.effect(
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
-          yield* slog.info("loop", { step })
+          yield* slog.trace("session", "loop", { step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID)
 
@@ -1320,7 +1317,7 @@ export const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
-            yield* slog.info("exiting loop")
+            yield* slog.trace("session", "exiting loop")
             break
           }
 
@@ -1568,7 +1565,6 @@ export const layer = Layer.effect(
     })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
-      yield* elog.info("command", { sessionID: input.sessionID, command: input.command, agent: input.agent })
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)

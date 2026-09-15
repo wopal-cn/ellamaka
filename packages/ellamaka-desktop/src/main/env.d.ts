@@ -56,6 +56,7 @@ declare module "virtual:opencode-server" {
   export interface DshInitializeOptions {
     wopalHome: string
     logFile: string
+    logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
     entry: "serve" | "web" | "tui"
     manifest: DshRuntimeManifest
   }
@@ -95,6 +96,8 @@ declare module "virtual:opencode-server" {
     port: number
     installAnchor?: string
     logFile?: string
+    logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
+    getLogLevel?: () => "DEBUG" | "INFO" | "WARN" | "ERROR"
     runtime?: DshRuntimeApi
     disableCodeRuntime?: boolean
     /**
@@ -143,6 +146,11 @@ declare module "virtual:opencode-server" {
       includeEntry: DshPluginIncludeEntry
       stackContext?: unknown
     }>
+    logger?: {
+      info(message: string, extra?: Record<string, unknown>): void
+      warn(message: string, extra?: Record<string, unknown>): void
+      error(message: string, extra?: Record<string, unknown>): void
+    }
     intervalMs?: number
   }
 

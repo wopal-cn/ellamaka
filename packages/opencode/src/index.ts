@@ -42,13 +42,14 @@ import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
 import { DshInitCommand } from "./cli/cmd/dsh-init"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
+import { resolveLogLevel, resolveTrace } from "./cli/log-level"
 import { Effect } from "effect"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@wopal/ellamaka-core/util/opencode-process"
 import { isRecord } from "@/util/record"
 
-const processMetadata = ensureProcessMetadata("main")
+ensureProcessMetadata("main")
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -95,7 +96,11 @@ const cli = yargs(args)
   .option("log-level", {
     describe: "log level",
     type: "string",
-    choices: ["DEBUG", "INFO", "WARN", "ERROR"],
+    choices: ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"],
+  })
+  .option("trace", {
+    describe: "trace categories (comma-separated, e.g. session,llm); run `--trace` alone to list them",
+    type: "string",
   })
   .option("pure", {
     describe: "run without external plugins",
@@ -127,17 +132,49 @@ const cli = yargs(args)
     if (opts.logLevel) {
       process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     }
+    const requested = opts.logLevel
+    const requestedLevel: Log.Level | undefined =
+      requested === "TRACE" ||
+      requested === "DEBUG" ||
+      requested === "INFO" ||
+      requested === "WARN" ||
+      requested === "ERROR"
+        ? requested
+        : undefined
+
+    // TRACE names its categories: a bare `--log-level TRACE` is rejected so an
+    // accidental run cannot open every diagnostic area at once. `--trace` with
+    // no value is the discovery path.
+    const rawTrace: string | boolean | undefined =
+      typeof opts.trace === "string" ? opts.trace : opts.trace === true ? true : undefined
+    const resolvedTrace = resolveTrace({ requested: requestedLevel, trace: rawTrace })
+    if (resolvedTrace.kind === "error") {
+      process.stderr.write(resolvedTrace.message + EOL)
+      process.exit(1)
+    }
+    if (resolvedTrace.kind === "list") {
+      process.stderr.write(
+        ["Available trace categories:", ...Log.traceCategories().map((category) => `  ${category}`)].join(EOL) + EOL,
+      )
+      process.exit(0)
+    }
+    const trace = resolvedTrace.categories
+    if (trace) {
+      process.env.OPENCODE_TRACE = trace
+    }
 
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
       devFile: "ellamaka-dev-tui.log",
       role,
-      level: (() => {
-        if (opts.logLevel) return opts.logLevel as Log.Level
-        if (Installation.isLocal()) return "DEBUG"
-        return "INFO"
-      })(),
+      level: resolveLogLevel({
+        isLocal: Installation.isLocal(),
+        role,
+        requested: requestedLevel,
+        trace,
+      }),
+      trace,
     })
 
     Heap.start()
@@ -145,13 +182,6 @@ const cli = yargs(args)
     process.env.AGENT = "1"
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
-
-    Log.Default.info("opencode", {
-      version: InstallationVersion,
-      args: process.argv.slice(2),
-      process_role: processMetadata.processRole,
-      run_id: processMetadata.runID,
-    })
 
     const marker = Database.getPath()
     if (marker !== ":memory:" && !(await Filesystem.exists(marker))) {
