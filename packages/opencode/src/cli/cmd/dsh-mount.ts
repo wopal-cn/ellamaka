@@ -1,5 +1,6 @@
 import { Global } from "@wopal/ellamaka-core/global"
-import { join } from "node:path"
+import * as Log from "@wopal/ellamaka-core/util/log"
+import { dirname, join } from "node:path"
 import os from "node:os"
 import type { Listener } from "../../server/server"
 import { Effect } from "effect"
@@ -150,6 +151,8 @@ export interface DshEngineMountOptions {
   wopalHome?: string
   /** Override the dsh-plugins log file; defaults to `$WOPAL_HOME/logs/dsh-plugins.log`. */
   logFile?: string
+  /** Override the DSH runtime-manager log; defaults to `$WOPAL_HOME/logs/dsh-runtime.log`. */
+  runtimeLogFile?: string
   /** The entry name the runtime manager logs under; defaults to `serve`. */
   entry?: "serve" | "web"
   /**
@@ -158,6 +161,15 @@ export interface DshEngineMountOptions {
    * trusted authorities from this list — one trust decision, one surface.
    */
   cors?: readonly string[]
+}
+
+function configuredDshLogLevel(): "DEBUG" | "INFO" | "WARN" | "ERROR" {
+  const value = process.env.OPENCODE_LOG_LEVEL
+  // DSH has four levels; the host TRACE level is mapped down to its most
+  // verbose equivalent so `--trace ...` still widens DSH diagnostics instead of
+  // silently falling back to the quiet default.
+  if (value === "TRACE") return "DEBUG"
+  return value === "DEBUG" || value === "INFO" || value === "WARN" || value === "ERROR" ? value : "WARN"
 }
 
 export interface DshEngineHandle {
@@ -212,6 +224,7 @@ export async function mountDshEngine(
 ): Promise<DshEngineHandle | undefined> {
   const wopalHome = opts.wopalHome ?? Global.Path.wopalHome
   const logFile = opts.logFile ?? join(Global.Path.log, "dsh-plugins.log")
+  const runtimeLogFile = opts.runtimeLogFile ?? join(dirname(logFile), "dsh-runtime.log")
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
@@ -225,7 +238,9 @@ export async function mountDshEngine(
 
   const status = await initializeDshRuntime({
     wopalHome,
-    logFile,
+    logFile: runtimeLogFile,
+    logLevel: configuredDshLogLevel(),
+    print: process.argv.includes("--print-logs"),
     entry: opts.entry ?? "serve",
     manifest,
   })
@@ -261,6 +276,7 @@ export async function mountDshEngine(
       home,
       port: server.port,
       logFile,
+      logLevel: configuredDshLogLevel(),
       installAnchor: anchor.path,
       runtime,
       disableCodeRuntime: true,
@@ -300,13 +316,14 @@ export async function mountDshEngine(
         return undefined
       }
     })
-    console.log(`dsh web engine mounted at ${dsh.mountPath}`)
+    Log.Default.info("dsh web engine mounted", { mountPath: dsh.mountPath })
     webHub.ctx.logger("dsh-web").info("dsh engine mounted")
 
     const toolsHost = await mountDshTools(toolsHub.ctx, {
       home,
       port: 0,
       logFile,
+      logLevel: configuredDshLogLevel(),
       installAnchor: anchor.path,
       runtime,
     })
@@ -365,7 +382,9 @@ export async function mountDshEngine(
   } catch (error) {
     // Never crash the host: log, dispose partial resources, and continue
     // without dsh (B-06).
-    console.error(`dsh engine mount failed: ${(error as Error).message}`)
+    Log.Default.error("dsh engine mount failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
     try {
       unmountDsh?.()
       await webHub?.dispose()

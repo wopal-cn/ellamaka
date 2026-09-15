@@ -26,7 +26,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
   const storageDir = path.join(Global.Path.data, "storage")
 
   if (!existsSync(storageDir)) {
-    log.info("storage directory does not exist, skipping migration")
     return {
       projects: 0,
       sessions: 0,
@@ -39,7 +38,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     }
   }
 
-  log.info("starting json to sqlite migration", { storageDir })
   const start = performance.now()
 
   // const db = drizzle({ client: sqlite })
@@ -106,8 +104,7 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     }
   }
 
-  // Pre-scan all files upfront to avoid repeated glob operations
-  log.info("scanning files...")
+  // Pre-scan all files upfront to avoid repeated glob operations.
   const [projectFiles, sessionFiles, messageFiles, partFiles, todoFiles, permFiles, shareFiles] = await Promise.all([
     list("project/*.json"),
     list("session/*/*.json"),
@@ -117,16 +114,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     list("permission/*.json"),
     list("session_share/*.json"),
   ])
-
-  log.info("file scan complete", {
-    projects: projectFiles.length,
-    sessions: sessionFiles.length,
-    messages: messageFiles.length,
-    parts: partFiles.length,
-    todos: todoFiles.length,
-    permissions: permFiles.length,
-    shares: shareFiles.length,
-  })
 
   const total = Math.max(
     1,
@@ -180,8 +167,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.projects += insert(projectValues, ProjectTable, "project")
     step("projects", end - i)
   }
-  log.info("migrated projects", { count: stats.projects, duration: Math.round(performance.now() - start) })
-
   // Migrate sessions (depends on projects)
   // Derive all IDs from directory/file paths, not JSON content, since earlier
   // migrations may have moved sessions to new directories without updating the JSON
@@ -233,7 +218,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.sessions += insert(sessionValues, SessionTable, "session")
     step("sessions", end - i)
   }
-  log.info("migrated sessions", { count: stats.sessions })
   if (orphans.sessions > 0) {
     log.warn("skipped orphaned sessions", { count: orphans.sessions })
   }
@@ -277,8 +261,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.messages += insert(values, MessageTable, "message")
     step("messages", end - i)
   }
-  log.info("migrated messages", { count: stats.messages })
-
   // Migrate parts using pre-scanned file map
   for (let i = 0; i < partFiles.length; i += batchSize) {
     const end = Math.min(i + batchSize, partFiles.length)
@@ -315,8 +297,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.parts += insert(values, PartTable, "part")
     step("parts", end - i)
   }
-  log.info("migrated parts", { count: stats.parts })
-
   // Migrate todos
   const todoSessions = todoFiles.map((file) => path.basename(file, ".json"))
   for (let i = 0; i < todoFiles.length; i += batchSize) {
@@ -352,7 +332,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.todos += insert(values, TodoTable, "todo")
     step("todos", end - i)
   }
-  log.info("migrated todos", { count: stats.todos })
   if (orphans.todos > 0) {
     log.warn("skipped orphaned todos", { count: orphans.todos })
   }
@@ -377,7 +356,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.permissions += insert(permValues, PermissionTable, "permission")
     step("permissions", end - i)
   }
-  log.info("migrated permissions", { count: stats.permissions })
   if (orphans.permissions > 0) {
     log.warn("skipped orphaned permissions", { count: orphans.permissions })
   }
@@ -406,7 +384,6 @@ export async function run(db: SQLiteBunDatabase<any, any> | NodeSQLiteDatabase<a
     stats.shares += insert(shareValues, SessionShareTable, "session_share")
     step("shares", end - i)
   }
-  log.info("migrated session shares", { count: stats.shares })
   if (orphans.shares > 0) {
     log.warn("skipped orphaned session shares", { count: orphans.shares })
   }

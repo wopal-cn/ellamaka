@@ -241,7 +241,7 @@ export const layer = Layer.effect(
           }),
         ),
       )
-      yield* Effect.logInfo("Loaded provider catalog from network").pipe(
+      yield* Effect.logDebug("Loaded provider catalog from network").pipe(
         Effect.annotateLogs("source", source),
         Effect.annotateLogs("providerCount", Object.keys(catalog).length),
       )

@@ -1,10 +1,7 @@
 import { Effect } from "effect"
 import { join } from "node:path"
 import { Global } from "@wopal/ellamaka-core/global"
-import {
-  DEFAULT_DSH_RUNTIME_MANIFEST,
-  initializeDshRuntime,
-} from "@wopal/ellamaka-cordis/runtime"
+import { DEFAULT_DSH_RUNTIME_MANIFEST, initializeDshRuntime } from "@wopal/ellamaka-cordis/runtime"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 
 /**
@@ -43,19 +40,15 @@ export const DshInitCommand = effectCmd({
         }),
     })
     if (status === "ready") {
-      process.stdout.write(
-        `dsh closure ready for ${wopalHome} (${DEFAULT_DSH_RUNTIME_MANIFEST.fingerprint})\n`,
-      )
+      process.stdout.write(`dsh closure ready for ${wopalHome} (${DEFAULT_DSH_RUNTIME_MANIFEST.fingerprint})\n`)
       return
     }
     if (status === "disabled") {
-      process.stdout.write(
-        "dsh is disabled (ELLAMAKA_DSH=0); nothing materialised\n",
-      )
+      process.stdout.write("dsh is disabled (ELLAMAKA_DSH=0); nothing materialised\n")
       return
     }
     return yield* fail(
-      `dsh closure materialisation failed for ${wopalHome}; see the dsh-plugins log for the structured diagnosis`,
+      `dsh closure materialisation failed for ${wopalHome}; see the dsh-runtime log for the structured diagnosis`,
     )
   }),
 })
@@ -69,14 +62,21 @@ export const DshInitCommand = effectCmd({
  * its own diagnosis trail. `env` defaults to `process.env` and is injectable
  * for tests (the manager gates on `ELLAMAKA_DSH` from it).
  */
-export function runDshInit(options: {
-  wopalHome: string
-  logFile?: string
-  env?: Record<string, string | undefined>
-}) {
+export function runDshInit(options: { wopalHome: string; logFile?: string; env?: Record<string, string | undefined> }) {
+  const requested = process.env.OPENCODE_LOG_LEVEL
+  // DSH has four levels; the host TRACE level maps down to DEBUG at the
+  // boundary so `--trace ...` does not accidentally disable DSH diagnostics.
+  const logLevel =
+    requested === "TRACE"
+      ? "DEBUG"
+      : requested === "DEBUG" || requested === "INFO" || requested === "WARN" || requested === "ERROR"
+        ? requested
+        : undefined
   return initializeDshRuntime({
     wopalHome: options.wopalHome,
-    logFile: options.logFile ?? join(options.wopalHome, "logs", "dsh-plugins.log"),
+    logFile: options.logFile ?? join(options.wopalHome, "logs", "dsh-runtime.log"),
+    logLevel,
+    print: process.argv.includes("--print-logs"),
     entry: "init",
     manifest: DEFAULT_DSH_RUNTIME_MANIFEST,
     env: options.env,

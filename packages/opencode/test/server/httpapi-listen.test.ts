@@ -4,7 +4,9 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import * as Log from "@wopal/ellamaka-core/util/log"
+import { GlobalBus } from "../../src/bus/global"
 import { Server } from "../../src/server/server"
+import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
@@ -143,6 +145,52 @@ function stop(listener: Awaited<ReturnType<typeof startListener>>, label: string
   return withTimeout(listener.stop(true), 10_000, label)
 }
 
+async function waitForGlobalEventListeners(count: number, label: string) {
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${label}: expected ${count} global event listeners, found ${GlobalBus.listenerCount("event")}`))
+    }, 2_000)
+
+    const check = () => {
+      if (GlobalBus.listenerCount("event") === count) {
+        clearTimeout(timeout)
+        resolve()
+        return
+      }
+      setTimeout(check, 10)
+    }
+
+    check()
+  })
+}
+
+async function openGlobalEventSocket(listener: Awaited<ReturnType<typeof startNoAuthListener>>) {
+  return await new Promise<net.Socket>((resolve, reject) => {
+    const socket = net.connect(listener.port, listener.hostname)
+    let output = ""
+    const timeout = setTimeout(() => {
+      socket.destroy()
+      reject(new Error("timed out waiting for global SSE connection"))
+    }, 5_000)
+
+    const onError = (error: Error) => {
+      clearTimeout(timeout)
+      reject(error)
+    }
+    socket.once("error", onError)
+    socket.on("data", (chunk: Buffer) => {
+      output += chunk.toString("utf8")
+      if (!output.includes("server.connected")) return
+      clearTimeout(timeout)
+      socket.off("error", onError)
+      resolve(socket)
+    })
+    socket.once("connect", () => {
+      socket.write(`GET ${GlobalPaths.event} HTTP/1.1\r\nHost: ${listener.hostname}:${listener.port}\r\n\r\n`)
+    })
+  })
+}
+
 function waitForMessage(ws: WebSocket, predicate: (message: string) => boolean) {
   const decoder = new TextDecoder()
   let onMessage: ((event: MessageEvent) => void) | undefined
@@ -173,6 +221,27 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
 }
 
 describe("HttpApi Server.listen", () => {
+  test("releases the global SSE listener when a real client disconnects", async () => {
+    const baseline = GlobalBus.listenerCount("event")
+    const listener = await startNoAuthListener()
+    let socket: net.Socket | undefined
+
+    try {
+      socket = await openGlobalEventSocket(listener)
+      await waitForGlobalEventListeners(baseline + 1, "SSE subscription was not established")
+
+      socket.destroy()
+
+      // This assertion intentionally runs before listener.stop(true). The old
+      // response-stream scope only released GlobalBus during server shutdown,
+      // which hid the leak in tests that stopped the listener first.
+      await waitForGlobalEventListeners(baseline, "SSE disconnect did not release its subscription")
+    } finally {
+      socket?.destroy()
+      await stop(listener, "timed out stopping global SSE listener")
+    }
+  })
+
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()

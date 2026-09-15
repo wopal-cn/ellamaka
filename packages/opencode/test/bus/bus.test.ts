@@ -1,5 +1,8 @@
 import { afterEach, describe, expect } from "bun:test"
+import fs from "fs/promises"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
+import { Global } from "@wopal/ellamaka-core/global"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { Deferred, Effect, Layer, Schema } from "effect"
 import { Bus } from "../../src/bus"
 import { BusEvent } from "../../src/bus/bus-event"
@@ -15,6 +18,96 @@ const it = testEffect(Layer.mergeAll(Bus.layer, CrossSpawnSpawner.defaultLayer))
 
 describe("Bus", () => {
   afterEach(() => disposeAllInstances())
+
+  it.instance("omits subscription lifecycle diagnostics at every log level", () =>
+    Effect.gen(function* () {
+      const previousLog = Global.Path.log
+      yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = previousLog)))
+      const dir = yield* tmpdirScoped()
+      Global.Path.log = dir
+      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "DEBUG" }))
+
+      const marker = "bus-info-log-probe"
+      Log.Default.info(marker)
+
+      const bus = yield* Bus.Service
+      const unsubscribe = yield* bus.subscribeCallback(TestEvent.Ping, () => {})
+      yield* Effect.sync(unsubscribe)
+
+      let content = ""
+      for (let attempt = 0; attempt < 20; attempt++) {
+        content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8").catch(() => ""))
+        if (content.includes(marker)) break
+        yield* Effect.sleep("10 millis")
+      }
+      yield* Effect.sleep("20 millis")
+      content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8"))
+
+      expect(content).toContain(marker)
+      expect(content).not.toContain("subscribing")
+      expect(content).not.toContain("unsubscribing")
+    }),
+  )
+
+  it.instance("records publish events at TRACE with the type only", () =>
+    Effect.gen(function* () {
+      const previousLog = Global.Path.log
+      yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = previousLog)))
+      const dir = yield* tmpdirScoped()
+      Global.Path.log = dir
+      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "TRACE" }))
+
+      const marker = "bus-trace-probe"
+      Log.Default.info(marker)
+
+      const bus = yield* Bus.Service
+      yield* bus.publish(TestEvent.Ping, { value: 987654321 })
+
+      let content = ""
+      for (let attempt = 0; attempt < 20; attempt++) {
+        content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8").catch(() => ""))
+        if (content.includes("test.ping")) break
+        yield* Effect.sleep("10 millis")
+      }
+      yield* Effect.sleep("20 millis")
+      content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8"))
+
+      expect(content).toContain(marker)
+      expect(content).toContain("TRACE")
+      expect(content).toContain("test.ping")
+      // The published payload must never be copied into the durable log.
+      expect(content).not.toContain("987654321")
+    }),
+  )
+
+  it.instance("omits publish records below TRACE", () =>
+    Effect.gen(function* () {
+      const previousLog = Global.Path.log
+      yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = previousLog)))
+      const dir = yield* tmpdirScoped()
+      Global.Path.log = dir
+      yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "serve", level: "DEBUG" }))
+
+      const marker = "bus-debug-probe"
+      Log.Default.info(marker)
+
+      const bus = yield* Bus.Service
+      yield* bus.publish(TestEvent.Ping, { value: 424242 })
+
+      let content = ""
+      for (let attempt = 0; attempt < 20; attempt++) {
+        content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8").catch(() => ""))
+        if (content.includes(marker)) break
+        yield* Effect.sleep("10 millis")
+      }
+      yield* Effect.sleep("20 millis")
+      content = yield* Effect.promise(() => fs.readFile(Log.file(), "utf8"))
+
+      expect(content).toContain(marker)
+      expect(content).not.toContain("test.ping")
+      expect(content).not.toContain("424242")
+    }),
+  )
 
   describe("publish + subscribe", () => {
     it.instance("subscriber is live immediately after subscribe returns", () =>

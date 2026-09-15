@@ -159,8 +159,6 @@ export const layer = Layer.effect(
     }) {
       const pending = (yield* InstanceState.get(state)).pending
       const id = QuestionID.ascending()
-      log.info("asking", { id, questions: input.questions.length })
-
       const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
       const info: Request = {
         id,
@@ -190,7 +188,6 @@ export const layer = Layer.effect(
         return yield* new NotFoundError({ requestID: input.requestID })
       }
       pending.delete(input.requestID)
-      log.info("replied", { requestID: input.requestID, answers: input.answers })
       yield* bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
@@ -207,7 +204,6 @@ export const layer = Layer.effect(
         return yield* new NotFoundError({ requestID })
       }
       pending.delete(requestID)
-      log.info("rejected", { requestID })
       yield* bus.publish(Event.Rejected, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,

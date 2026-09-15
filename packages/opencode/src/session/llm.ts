@@ -89,7 +89,7 @@ const live: Layer.Layer<
         .tag("small", (input.small ?? false).toString())
         .tag("agent", input.agent.name)
         .tag("mode", input.agent.mode)
-      l.info("stream", {
+      l.debug("stream", {
         modelID: input.model.id,
         providerID: input.model.providerID,
       })
@@ -237,7 +237,7 @@ const live: Layer.Layer<
           abort: input.abort,
         })
         if (native.type === "supported") {
-          yield* Effect.logInfo("llm runtime selected").pipe(
+          yield* Effect.logDebug("llm runtime selected").pipe(
             Effect.annotateLogs({
               "llm.runtime": "native",
               "llm.provider": input.model.providerID,
@@ -249,7 +249,7 @@ const live: Layer.Layer<
             stream: native.stream,
           }
         }
-        yield* Effect.logInfo("llm runtime selected").pipe(
+        yield* Effect.logDebug("llm runtime selected").pipe(
           Effect.annotateLogs({
             "llm.runtime": "ai-sdk",
             "llm.provider": input.model.providerID,
@@ -257,10 +257,10 @@ const live: Layer.Layer<
             "llm.native_unsupported_reason": native.reason,
           }),
         )
-        l.info("native runtime unavailable; falling back to ai-sdk", { reason: native.reason })
+        l.debug("native runtime unavailable; falling back to ai-sdk", { reason: native.reason })
       }
 
-      yield* Effect.logInfo("llm runtime selected").pipe(
+      yield* Effect.logDebug("llm runtime selected").pipe(
         Effect.annotateLogs({
           "llm.runtime": "ai-sdk",
           "llm.provider": input.model.providerID,

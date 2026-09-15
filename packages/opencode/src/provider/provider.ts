@@ -635,7 +635,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         async discoverModels(): Promise<Record<string, Model>> {
           if (!apiKey) {
-            log.info("gitlab model discovery skipped: no apiKey")
+            log.debug("gitlab model discovery skipped: no apiKey")
             return {}
           }
 
@@ -644,11 +644,11 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             const getHeaders = (): Record<string, string> =>
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
-            log.info("gitlab model discovery starting", { instanceUrl })
+            log.debug("gitlab model discovery starting", { instanceUrl })
             const result = await discoverWorkflowModels({ instanceUrl, getHeaders }, { workingDirectory: directory })
 
             if (!result.models.length) {
-              log.info("gitlab model discovery skipped: no models found", {
+              log.debug("gitlab model discovery skipped: no models found", {
                 project: result.project
                   ? {
                       id: result.project.id,
@@ -704,7 +704,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               }
             }
 
-            log.info("gitlab model discovery complete", {
+            log.debug("gitlab model discovery complete", {
               count: Object.keys(models).length,
               models: Object.keys(models),
             })
@@ -1236,8 +1236,6 @@ export const layer = Layer.effect(
           get: (key: string) => env.get(key),
         }
 
-        log.info("init")
-
         function mergeProvider(providerID: ProviderID, provider: Partial<Info>) {
           const existing = providers[providerID]
           if (existing) {
@@ -1526,7 +1524,7 @@ export const layer = Layer.effect(
             continue
           }
 
-          log.info("found", { providerID })
+          log.debug("found", { providerID })
         }
 
         return {
@@ -1544,9 +1542,13 @@ export const layer = Layer.effect(
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
-        using _ = log.time("getSDK", {
-          providerID: model.providerID,
-        })
+        using _ = log.time(
+          "getSDK",
+          {
+            providerID: model.providerID,
+          },
+          "DEBUG",
+        )
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
 
@@ -1662,7 +1664,7 @@ export const layer = Layer.effect(
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {
-          log.info("using bundled provider", {
+          log.debug("using bundled provider", {
             providerID: model.providerID,
             pkg: model.api.npm,
           })
@@ -1681,7 +1683,7 @@ export const layer = Layer.effect(
           if (!item.entrypoint) throw new Error(`Package ${model.api.npm} has no import entrypoint`)
           installedPath = item.entrypoint
         } else {
-          log.info("loading local provider", { pkg: model.api.npm })
+          log.debug("loading local provider", { pkg: model.api.npm })
           installedPath = model.api.npm
         }
 

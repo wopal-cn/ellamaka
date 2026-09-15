@@ -70,7 +70,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     if (entry?.clientInfo) {
       // Check if client secret has expired
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
-        log.info("client secret expired, need to re-register", { mcpName: this.mcpName })
+        log.warn("client secret expired, need to re-register", { mcpName: this.mcpName })
         return undefined
       }
       return {
@@ -96,10 +96,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
         this.serverUrl,
       ),
     )
-    log.info("saved dynamically registered client", {
-      mcpName: this.mcpName,
-      clientId: info.client_id,
-    })
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
@@ -131,11 +127,10 @@ export class McpOAuthProvider implements OAuthClientProvider {
         this.serverUrl,
       ),
     )
-    log.info("saved oauth tokens", { mcpName: this.mcpName })
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
-    log.info("redirecting to authorization", { mcpName: this.mcpName, url: authorizationUrl.toString() })
+    log.debug("redirecting to authorization", { mcpName: this.mcpName })
     await this.callbacks.onRedirect(authorizationUrl)
   }
 
@@ -173,7 +168,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async invalidateCredentials(type: "all" | "client" | "tokens"): Promise<void> {
-    log.info("invalidating credentials", { mcpName: this.mcpName, type })
+    log.debug("invalidating credentials", { mcpName: this.mcpName, type })
     const entry = await Effect.runPromise(this.auth.get(this.mcpName))
     if (!entry) {
       return

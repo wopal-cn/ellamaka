@@ -282,7 +282,7 @@ export const layer = Layer.effect(
           estimate,
         })
         if (split) keep = split
-        else if (!keep) log.info("tail fallback", { budget, size, total })
+        else if (!keep) log.debug("tail fallback", { budget, size, total })
         break
       }
 
@@ -298,7 +298,7 @@ export const layer = Layer.effect(
     const prune = Effect.fn("SessionCompaction.prune")(function* (input: { sessionID: SessionID }) {
       const cfg = yield* config.get()
       if (!cfg.compaction?.prune) return
-      log.info("pruning")
+      log.debug("pruning")
 
       const msgs = yield* session
         .messages({ sessionID: input.sessionID })
@@ -329,7 +329,7 @@ export const layer = Layer.effect(
         }
       }
 
-      log.info("found", { pruned, total })
+      log.debug("found", { pruned, total })
       if (pruned > PRUNE_MINIMUM) {
         for (const part of toPrune) {
           if (part.state.status === "completed") {
@@ -337,7 +337,7 @@ export const layer = Layer.effect(
             yield* session.updatePart(part)
           }
         }
-        log.info("pruned", { count: toPrune.length })
+        log.debug("pruned", { count: toPrune.length })
       }
     })
 

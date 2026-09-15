@@ -330,7 +330,7 @@ export const layer = Layer.effect(
           },
           {
             onRedirect: async (url) => {
-              log.info("oauth redirect requested", { key, url: url.toString() })
+              log.debug("oauth redirect requested", { key })
             },
           },
           auth,
@@ -366,7 +366,7 @@ export const layer = Layer.effect(
               error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
 
             if (isAuthError) {
-              log.info("mcp server requires authentication", { key, transport: name })
+              log.warn("mcp server requires authentication", { key, transport: name })
 
               if (lastError.message.includes("registration") || lastError.message.includes("client_id")) {
                 lastStatus = {
@@ -406,7 +406,7 @@ export const layer = Layer.effect(
           }),
         )
         if (result) {
-          log.info("connected", { key, transport: result.transportName })
+          log.debug("connected", { key, transport: result.transportName })
           return { client: result.client as MCPClient | undefined, status: { status: "connected" } as Status }
         }
         // If this was an auth error, stop trying other transports
@@ -436,9 +436,10 @@ export const layer = Layer.effect(
           ...mcp.environment,
         },
       })
-      transport.stderr?.on("data", (chunk: Buffer) => {
-        log.info(`mcp stderr: ${chunk.toString()}`, { key })
-      })
+      // Stderr is often a third-party server's progress stream. Drain it so
+      // the pipe cannot block the child, but do not duplicate arbitrary,
+      // potentially sensitive output into the Ellamaka server log.
+      transport.stderr?.on("data", () => {})
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       return yield* connectTransport(transport, connectTimeout).pipe(
@@ -456,11 +457,11 @@ export const layer = Layer.effect(
 
     const create = Effect.fn("MCP.create")(function* (key: string, mcp: ConfigMCP.Info) {
       if (mcp.enabled === false) {
-        log.info("mcp server disabled", { key })
+        log.debug("mcp server disabled", { key })
         return DISABLED_RESULT
       }
 
-      log.info("found", { key, type: mcp.type })
+      log.debug("found", { key, type: mcp.type })
 
       const { client: mcpClient, status } =
         mcp.type === "remote"
@@ -477,7 +478,7 @@ export const layer = Layer.effect(
         return { status: { status: "failed", error: "Failed to get tools" } } satisfies CreateResult
       }
 
-      log.info("create() successfully created client", { key, toolCount: listed.length })
+      log.debug("created client", { key, toolCount: listed.length })
       return { mcpClient, status, defs: listed } satisfies CreateResult
     })
     const cfgSvc = yield* Config.Service
@@ -508,7 +509,7 @@ export const layer = Layer.effect(
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        log.info("tools list changed notification received", { server: name })
+        log.debug("tools list changed notification received", { server: name })
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         const listed = await bridge.promise(defs(name, client, timeout))
@@ -858,7 +859,7 @@ export const layer = Layer.effect(
         return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
       }
 
-      log.info("opening browser for oauth", { mcpName, url: result.authorizationUrl, state: result.oauthState })
+      log.debug("opening browser for oauth", { mcpName })
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
 
@@ -924,7 +925,7 @@ export const layer = Layer.effect(
       yield* auth.remove(mcpName)
       McpOAuthCallback.cancelPending(mcpName)
       pendingOAuthTransports.delete(mcpName)
-      log.info("removed oauth credentials", { mcpName })
+      log.debug("removed oauth credentials", { mcpName })
     })
 
     const supportsOAuth = Effect.fn("MCP.supportsOAuth")(function* (mcpName: string) {

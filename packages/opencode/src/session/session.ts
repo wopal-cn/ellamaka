@@ -572,8 +572,6 @@ export const layer: Layer.Layer<
           updated: Date.now(),
         },
       }
-      log.info("created", result)
-
       yield* sync.run(Event.Created, { sessionID: result.id, info: result })
 
       if (!flags.experimentalWorkspaces) {

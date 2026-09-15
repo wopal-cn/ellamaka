@@ -453,14 +453,12 @@ export const layer = Layer.effect(
     })
 
     const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
-      log.info("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
       return yield* loadConfig(text, { path: filepath }, env)
     })
 
     const loadSettingsFile = Effect.fnUntraced(function* (filepath: string) {
-      log.info("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
       const raw = ConfigParse.jsonc(text, filepath)
@@ -654,8 +652,6 @@ export const layer = Layer.effect(
           }
         }
 
-        log.info("normal mode (opencode compatible)", { directory: ctx.directory })
-
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
@@ -735,7 +731,6 @@ export const layer = Layer.effect(
             if (collected.deps.length > 0) {
               const needInstall = yield* Effect.promise(() => needsPluginDepInstall(dir, collected.fingerprint))
               if (!needInstall) {
-                log.info("plugin deps up to date, skipping install", { dir })
                 skipInstall = true
               } else {
                 pluginDeps = collected.deps

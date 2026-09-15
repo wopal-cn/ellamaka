@@ -10,13 +10,8 @@ import {
   type DshRuntimeStatus,
 } from "./status.js"
 import { acquireMaterializeLock, releaseMaterializeLock, type LockToken } from "./lock.js"
-import {
-  checkClosureIntegrity,
-  materializeClosure,
-  validateClosureOnDisk,
-  type ExtractLike,
-} from "./materializer.js"
-import { createDshLogger, type LogBridge } from "./log.js"
+import { checkClosureIntegrity, materializeClosure, validateClosureOnDisk, type ExtractLike } from "./materializer.js"
+import { createDshLogger, type DshLoggerOptions, type LogBridge } from "./log.js"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest.js"
 
 // Re-export the wiring surface entries consume from `@wopal/ellamaka-cordis/runtime`
@@ -93,6 +88,10 @@ export interface ManagerDeps {
 export interface InitializeDshOptions {
   readonly wopalHome: string
   readonly logFile: string
+  /** Runtime diagnostics follow the host's requested log level. */
+  readonly logLevel?: DshLoggerOptions["minLevel"]
+  /** Mirror runtime diagnostics only for an explicit interactive request. */
+  readonly print?: boolean
   readonly entry: "serve" | "web" | "tui" | "init"
   readonly manifest: DshRuntimeManifestV1
   /** The embedded lock to materialise from; defaults to the build-time lock. */
@@ -145,7 +144,11 @@ export function initializeDshRuntime(options: InitializeDshOptions): Promise<Dsh
 
   // The logger is only constructed after the gate passes, so the enabled paths
   // keep their structured diagnosis while the disabled path stays silent.
-  const log = createDshLogger({ logFile: options.logFile })
+  const log = createDshLogger({
+    logFile: options.logFile,
+    minLevel: options.logLevel,
+    print: options.print,
+  })
   if (!fingerprint) {
     log.error("dsh.init.degraded", { reason: "manifest has no fingerprint" })
     return Promise.resolve("degraded")
@@ -195,22 +198,16 @@ export function initializeDshRuntime(options: InitializeDshOptions): Promise<Dsh
  * caller degrades WITHOUT aborting or releasing anything — the in-flight work
  * keeps running and releases the lock in its own completion handler (B-05).
  */
-function raceTimeout(
-  work: Promise<DshRuntimeStatus>,
-  timeoutMs: number,
-  log: LogBridge,
-): Promise<DshRuntimeStatus> {
-  return withTimeout(
-    work,
-    timeoutMs,
-    `dsh materialisation timed out after ${Math.round(timeoutMs / 1000)}s`,
-  ).catch((error) => {
-    if (error instanceof Error && error.message.startsWith("dsh materialisation timed out")) {
-      log.error("dsh.stage.materialise.timeout", { error })
-      return "degraded" as DshRuntimeStatus
-    }
-    throw error
-  })
+function raceTimeout(work: Promise<DshRuntimeStatus>, timeoutMs: number, log: LogBridge): Promise<DshRuntimeStatus> {
+  return withTimeout(work, timeoutMs, `dsh materialisation timed out after ${Math.round(timeoutMs / 1000)}s`).catch(
+    (error) => {
+      if (error instanceof Error && error.message.startsWith("dsh materialisation timed out")) {
+        log.error("dsh.stage.materialise.timeout", { error })
+        return "degraded" as DshRuntimeStatus
+      }
+      throw error
+    },
+  )
 }
 
 /** The 9-step state machine body. */
@@ -218,7 +215,7 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
   const { log, options } = ctx
 
   // 2. Resolve — the closure dir is derived from the fingerprint.
-  log.info("dsh.stage.resolve", { fingerprint: ctx.fingerprint, closureDir: ctx.closureDir })
+  log.debug("dsh.stage.resolve", { fingerprint: ctx.fingerprint, closureDir: ctx.closureDir })
   const layout = resolveDshLayout(options.wopalHome)
 
   // 3. Inspect — fast path: an intact closure loads with zero network.
@@ -233,12 +230,12 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
     }
   }
   if (anchor) {
-    log.info("dsh.stage.inspect", { status: "hit", closureDir: ctx.closureDir })
+    log.debug("dsh.stage.inspect", { status: "hit", closureDir: ctx.closureDir })
     return finishReady(ctx)
   }
 
   // 4. Lock — cross-process mutex; waiters re-inspect after the holder finishes.
-  log.info("dsh.stage.lock", { lockFile: layout.lockFile })
+  log.debug("dsh.stage.lock", { lockFile: layout.lockFile })
   const token = await acquireMaterializeLock(layout.lockFile, LOCK_WAIT_MS)
   if (!token) {
     log.error("dsh.stage.lock.timeout", { lockFile: layout.lockFile })
@@ -250,7 +247,7 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
     anchor = validateClosureOnDisk({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
     if (anchor) {
       await checkClosureIntegrity({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
-      log.info("dsh.stage.inspect", { status: "waiter-hit", closureDir: ctx.closureDir })
+      log.debug("dsh.stage.inspect", { status: "waiter-hit", closureDir: ctx.closureDir })
       return finishReady(ctx)
     }
 
@@ -258,7 +255,7 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
     // never abandons this: on timeout the caller degrades while this promise
     // keeps running and only releases the lock here, in its own completion
     // handler, so no second process can clear the same staging/ (B-05).
-    log.info("dsh.stage.stage", { stagingDir: layout.stagingDir })
+    log.debug("dsh.stage.stage", { stagingDir: layout.stagingDir })
     const result = await materializeClosure({
       home: options.wopalHome,
       manifest: options.manifest,
@@ -266,8 +263,8 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
       deps: options.deps,
       log,
     })
-    log.info("dsh.stage.verify", { status: "ok", packages: Object.keys(options.manifest.dependencies).length })
-    log.info("dsh.stage.activate", { closureDir: result.closureDir })
+    log.debug("dsh.stage.verify", { status: "ok", packages: Object.keys(options.manifest.dependencies).length })
+    log.debug("dsh.stage.activate", { closureDir: result.closureDir })
     ctx.anchor = result.anchor
 
     // 8+9 — Profile seeding and Load happen inside finishReady (idempotent).
@@ -320,11 +317,11 @@ function finishReady(ctx: ManagerContext): DshRuntimeStatus {
     ctx.log.error("dsh.init.load.failed", { anchor: ctx.anchor, error })
     return "degraded"
   }
-  ctx.log.info("dsh.stage.load", { anchor: ctx.anchor })
+  ctx.log.debug("dsh.stage.load", { anchor: ctx.anchor })
   // Idempotent: creates missing profile templates (fast-path closure hit never
   // seeded them before, DESIGN §3.4.5 step 8 / W-01).
   seedProfiles(layout.profileDir, ctx.log)
-  ctx.log.info("dsh.init.ready", { entry: ctx.options.entry })
+  ctx.log.debug("dsh.init.ready", { entry: ctx.options.entry })
   return "ready"
 }
 
@@ -361,7 +358,7 @@ function seedProfiles(profileDir: string, log: LogBridge): void {
     }
   }
   mkdirSync(join(profileDir, "node_modules"), { recursive: true })
-  log.info("dsh.stage.profile", { profiles: Object.keys(bundlesByProfile).join(",") })
+  log.debug("dsh.stage.profile", { profiles: Object.keys(bundlesByProfile).join(",") })
 }
 
 /** Reject a promise after `ms` with the given message (hard timeout). */

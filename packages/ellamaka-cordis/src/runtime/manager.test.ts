@@ -49,11 +49,7 @@ function runtimeLock(manifest: DshRuntimeManifestV1): string {
   for (const [name, version] of Object.entries(manifest.dependencies)) {
     packages[`node_modules/${name}`] = { version }
   }
-  return JSON.stringify(
-    { name: "ellamaka-dsh-closure", lockfileVersion: 3, requires: true, packages },
-    null,
-    2,
-  )
+  return JSON.stringify({ name: "ellamaka-dsh-closure", lockfileVersion: 3, requires: true, packages }, null, 2)
 }
 
 /** The closure package.json for a direct dependency; dsh carries a bin entry (real shape). */
@@ -115,10 +111,19 @@ function seedClosureAt(home: string, manifest: DshRuntimeManifestV1): string {
   const closureDir = join(layout.closuresDir, closureNameForFingerprint(manifest.fingerprint!))
   mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh"), { recursive: true })
   mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "cordis"), { recursive: true })
-  writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh", version: manifest.dependencies["@deepseek-ai/dsh"], bin: "lib/bin.js" }))
-  writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "cordis", "package.json"), JSON.stringify({ name: "@deepseek-ai/cordis", version: manifest.dependencies["@deepseek-ai/cordis"] }))
+  writeFileSync(
+    join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"),
+    JSON.stringify({ name: "@deepseek-ai/dsh", version: manifest.dependencies["@deepseek-ai/dsh"], bin: "lib/bin.js" }),
+  )
+  writeFileSync(
+    join(closureDir, "node_modules", "@deepseek-ai", "cordis", "package.json"),
+    JSON.stringify({ name: "@deepseek-ai/cordis", version: manifest.dependencies["@deepseek-ai/cordis"] }),
+  )
   writeFileSync(join(closureDir, "runtime-manifest.json"), JSON.stringify(manifest))
-  writeFileSync(join(closureDir, "package.json"), JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: manifest.dependencies }))
+  writeFileSync(
+    join(closureDir, "package.json"),
+    JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: manifest.dependencies }),
+  )
   // The stored lock is the runtime lock (valid npm v3 shape).
   writeFileSync(join(closureDir, "package-lock.json"), runtimeLock(manifest))
   return join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json")
@@ -209,7 +214,10 @@ describe("initializeDshRuntime state machine", () => {
     const closureDir = join(resolveDshLayout(home).closuresDir, closureNameForFingerprint(MANIFEST.fingerprint!))
     mkdirSync(join(closureDir, "node_modules", "@deepseek-ai"), { recursive: true })
     writeFileSync(join(closureDir, "runtime-manifest.json"), JSON.stringify(MANIFEST))
-    writeFileSync(join(closureDir, "package.json"), JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }))
+    writeFileSync(
+      join(closureDir, "package.json"),
+      JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }),
+    )
     writeFileSync(join(closureDir, "package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: {} }))
 
     const status = await initializeDshRuntime(makeBaseOptions(home, testDeps()))
@@ -247,7 +255,10 @@ describe("initializeDshRuntime state machine", () => {
     const anchor = join(
       resolveDshLayout(home).closuresDir,
       closureNameForFingerprint(MANIFEST.fingerprint!),
-      "node_modules", "@deepseek-ai", "dsh", "package.json",
+      "node_modules",
+      "@deepseek-ai",
+      "dsh",
+      "package.json",
     )
     expect(existsSync(anchor)).toBe(true)
   })
@@ -306,95 +317,91 @@ describe("initializeDshRuntime state machine", () => {
 })
 
 describe("B-05: timeout must not abandon a running materialisation while releasing the lock", () => {
-  test(
-    "call A times out -> degraded; call B (same fingerprint) must not materialise or steal the lock while A's work is still running",
-    async () => {
-      const home = tmpHome()
-      let gateCount = 0
-      // A manual latch: all in-flight extracts await the SAME promise; the
-      // resolve callback is captured so the release actually settles every
-      // pending worker. Remaining packages then complete and A's run
-      // settles + activates.
-      let releaseGate: () => void = () => {}
-      const gatePromise = new Promise<void>((resolve) => {
-        releaseGate = resolve
-      })
-      const gatedExtract: ManagerDeps["extract"] = async (spec, dest) => {
-        gateCount++
-        await gatePromise
-        const name = spec.slice(0, spec.lastIndexOf("@"))
-        mkdirSync(dest, { recursive: true })
-        writeFileSync(join(dest, "package.json"), depPkgJson(name))
-      }
-      const options = makeBaseOptions(home, { ...testDeps(), deps: { ...testDeps().deps, extract: gatedExtract }, timeoutMs: 60 })
+  test("call A times out -> degraded; call B (same fingerprint) must not materialise or steal the lock while A's work is still running", async () => {
+    const home = tmpHome()
+    let gateCount = 0
+    // A manual latch: all in-flight extracts await the SAME promise; the
+    // resolve callback is captured so the release actually settles every
+    // pending worker. Remaining packages then complete and A's run
+    // settles + activates.
+    let releaseGate: () => void = () => {}
+    const gatePromise = new Promise<void>((resolve) => {
+      releaseGate = resolve
+    })
+    const gatedExtract: ManagerDeps["extract"] = async (spec, dest) => {
+      gateCount++
+      await gatePromise
+      const name = spec.slice(0, spec.lastIndexOf("@"))
+      mkdirSync(dest, { recursive: true })
+      writeFileSync(join(dest, "package.json"), depPkgJson(name))
+    }
+    const options = makeBaseOptions(home, {
+      ...testDeps(),
+      deps: { ...testDeps().deps, extract: gatedExtract },
+      timeoutMs: 60,
+    })
 
-      // Call A: times out (short timeout) while the materialisation keeps running.
-      const a = await initializeDshRuntime(options)
-      expect(a).toBe("degraded")
-      // Bounded concurrency means several extracts may have started before the
-      // timeout fired; the gate only hangs the first one.
-      expect(gateCount).toBeGreaterThanOrEqual(1)
-      // The lock must still be held by A's in-flight materialisation.
-      const lockPath = resolveDshLayout(home).lockFile
-      expect(existsSync(lockPath)).toBe(true)
+    // Call A: times out (short timeout) while the materialisation keeps running.
+    const a = await initializeDshRuntime(options)
+    expect(a).toBe("degraded")
+    // Bounded concurrency means several extracts may have started before the
+    // timeout fired; the gate only hangs the first one.
+    expect(gateCount).toBeGreaterThanOrEqual(1)
+    // The lock must still be held by A's in-flight materialisation.
+    const lockPath = resolveDshLayout(home).lockFile
+    expect(existsSync(lockPath)).toBe(true)
 
-      // Call B (same fingerprint) shares the durable in-flight promise: it must
-      // NOT start a second materialisation, must NOT steal the lock, and must
-      // NOT clear A's staging. It waits on the same promise (still in flight).
-      const bPromise = initializeDshRuntime(options)
-      // Give B a tick to start; assert the materialisation has not restarted.
-      await new Promise((r) => setTimeout(r, 30))
-      const countBeforeRelease = gateCount
-      // The lock is still held (not stolen).
-      expect(existsSync(lockPath)).toBe(true)
+    // Call B (same fingerprint) shares the durable in-flight promise: it must
+    // NOT start a second materialisation, must NOT steal the lock, and must
+    // NOT clear A's staging. It waits on the same promise (still in flight).
+    const bPromise = initializeDshRuntime(options)
+    // Give B a tick to start; assert the materialisation has not restarted.
+    await new Promise((r) => setTimeout(r, 30))
+    const countBeforeRelease = gateCount
+    // The lock is still held (not stolen).
+    expect(existsSync(lockPath)).toBe(true)
 
-      // A's materialisation finally settles and activates; B then resolves ready.
-      releaseGate()
-      expect(await bPromise).toBe("ready")
-      // No second materialisation happened.
-      expect(gateCount).toBe(countBeforeRelease)
-      // The lock is released once the durable work settled.
-      expect(existsSync(lockPath)).toBe(false)
-      expect(existsSync(resolveDshLayout(home).closuresDir)).toBe(true)
-    },
-    20_000,
-  )
+    // A's materialisation finally settles and activates; B then resolves ready.
+    releaseGate()
+    expect(await bPromise).toBe("ready")
+    // No second materialisation happened.
+    expect(gateCount).toBe(countBeforeRelease)
+    // The lock is released once the durable work settled.
+    expect(existsSync(lockPath)).toBe(false)
+    expect(existsSync(resolveDshLayout(home).closuresDir)).toBe(true)
+  }, 20_000)
 
-  test(
-    "a timed-out caller returns degraded but the in-flight materialisation still completes and releases the lock itself",
-    async () => {
-      const home = tmpHome()
-      // A manual latch: all extracts await the SAME promise; the captured
-      // resolve actually settles every pending worker together. Every extract
-      // then fails, the durable materialisation settles (failed), drains the
-      // lock, and leaves no closure behind.
-      let releaseGate: () => void = () => {}
-      const gatePromise = new Promise<void>((resolve) => {
-        releaseGate = resolve
-      })
-      const gatedFail: ManagerDeps["extract"] = async (spec) => {
-        await gatePromise
-        throw new Error(`extract after gate: ${spec}`)
-      }
-      const options = makeBaseOptions(home, {
-        ...testDeps(),
-        deps: { ...testDeps().deps, extract: gatedFail },
-        timeoutMs: 60,
-      })
-      const a = await initializeDshRuntime(options)
-      expect(a).toBe("degraded")
-      // Lock still held by the in-flight materialisation.
-      expect(existsSync(resolveDshLayout(home).lockFile)).toBe(true)
-      // The durable in-flight entry is still present (B waits, does not re-materialise).
-      releaseGate()
-      // Give the durable work a tick to settle — every worker fails together,
-      // the materialisation drains the lock, and no closure is activated.
-      await new Promise((r) => setTimeout(r, 30))
-      expect(existsSync(resolveDshLayout(home).lockFile)).toBe(false)
-      expect(existsSync(resolveDshLayout(home).closuresDir)).toBe(false)
-    },
-    20_000,
-  )
+  test("a timed-out caller returns degraded but the in-flight materialisation still completes and releases the lock itself", async () => {
+    const home = tmpHome()
+    // A manual latch: all extracts await the SAME promise; the captured
+    // resolve actually settles every pending worker together. Every extract
+    // then fails, the durable materialisation settles (failed), drains the
+    // lock, and leaves no closure behind.
+    let releaseGate: () => void = () => {}
+    const gatePromise = new Promise<void>((resolve) => {
+      releaseGate = resolve
+    })
+    const gatedFail: ManagerDeps["extract"] = async (spec) => {
+      await gatePromise
+      throw new Error(`extract after gate: ${spec}`)
+    }
+    const options = makeBaseOptions(home, {
+      ...testDeps(),
+      deps: { ...testDeps().deps, extract: gatedFail },
+      timeoutMs: 60,
+    })
+    const a = await initializeDshRuntime(options)
+    expect(a).toBe("degraded")
+    // Lock still held by the in-flight materialisation.
+    expect(existsSync(resolveDshLayout(home).lockFile)).toBe(true)
+    // The durable in-flight entry is still present (B waits, does not re-materialise).
+    releaseGate()
+    // Give the durable work a tick to settle — every worker fails together,
+    // the materialisation drains the lock, and no closure is activated.
+    await new Promise((r) => setTimeout(r, 30))
+    expect(existsSync(resolveDshLayout(home).lockFile)).toBe(false)
+    expect(existsSync(resolveDshLayout(home).closuresDir)).toBe(false)
+  }, 20_000)
 })
 
 describe("B-06: loader failure degrades instead of crashing", () => {
@@ -406,10 +413,19 @@ describe("B-06: loader failure degrades instead of crashing", () => {
       mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh"), { recursive: true })
       mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "cordis"), { recursive: true })
       // A dsh package.json with NO resolvable entry point (B-06 loader gate).
-      writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh", version: MANIFEST.dependencies["@deepseek-ai/dsh"] }))
-      writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "cordis", "package.json"), JSON.stringify({ name: "@deepseek-ai/cordis", version: MANIFEST.dependencies["@deepseek-ai/cordis"] }))
+      writeFileSync(
+        join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"),
+        JSON.stringify({ name: "@deepseek-ai/dsh", version: MANIFEST.dependencies["@deepseek-ai/dsh"] }),
+      )
+      writeFileSync(
+        join(closureDir, "node_modules", "@deepseek-ai", "cordis", "package.json"),
+        JSON.stringify({ name: "@deepseek-ai/cordis", version: MANIFEST.dependencies["@deepseek-ai/cordis"] }),
+      )
       writeFileSync(join(closureDir, "runtime-manifest.json"), JSON.stringify(MANIFEST))
-      writeFileSync(join(closureDir, "package.json"), JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }))
+      writeFileSync(
+        join(closureDir, "package.json"),
+        JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }),
+      )
       writeFileSync(join(closureDir, "package-lock.json"), runtimeLock(MANIFEST))
     }
     seed()
@@ -419,6 +435,15 @@ describe("B-06: loader failure degrades instead of crashing", () => {
 })
 
 describe("W-01: ready fast path seeds profiles idempotently", () => {
+  test("honors DEBUG for runtime stage diagnostics", async () => {
+    const home = tmpHome()
+    seedClosure(home)
+    const logFile = join(home, "logs", "dsh-runtime.log")
+
+    expect(await initializeDshRuntime(makeBaseOptions(home, { logFile, logLevel: "DEBUG" }))).toBe("ready")
+    expect(readFileSync(logFile, "utf8")).toContain("[DEBUG] [dsh] dsh.stage.resolve")
+  })
+
   test("complete closure with missing profiles dir -> ready and profiles seeded", async () => {
     const home = tmpHome()
     seedClosure(home)

@@ -417,7 +417,6 @@ export const layer: Layer.Layer<Service, never, AppFileSystem.Service | ChildPro
       })
 
       const tree: Interface["tree"] = Effect.fn("Ripgrep.tree")(function* (input: TreeInput) {
-        log.info("tree", input)
         const list = Array.from(yield* files({ cwd: input.cwd, signal: input.signal }).pipe(Stream.runCollect))
 
         interface Node {

@@ -82,7 +82,6 @@ const MIGRATIONS: Migration[] = [
     for (const projectDir of projectDirs) {
       const full = path.join(project, projectDir)
       if (!(yield* fs.isDir(full))) continue
-      log.info(`migrating project ${projectDir}`)
       let projectID = projectDir
       let worktree = "/"
 
@@ -128,43 +127,31 @@ const MIGRATIONS: Migration[] = [
           ),
         )
 
-        log.info(`migrating sessions for project ${projectID}`)
         for (const sessionFile of yield* fs.glob("storage/session/info/*.json", {
           cwd: full,
           absolute: true,
         })) {
           const dest = path.join(dir, "session", projectID, path.basename(sessionFile))
-          log.info("copying", { sessionFile, dest })
           const session = yield* fs.readJson(sessionFile)
           const info = decodeSession(session, { onExcessProperty: "preserve" })
           yield* fs.writeWithDirs(dest, JSON.stringify(session, null, 2))
           if (Option.isNone(info)) continue
-          log.info(`migrating messages for session ${info.value.id}`)
           for (const msgFile of yield* fs.glob(`storage/session/message/${info.value.id}/*.json`, {
             cwd: full,
             absolute: true,
           })) {
             const next = path.join(dir, "message", info.value.id, path.basename(msgFile))
-            log.info("copying", {
-              msgFile,
-              dest: next,
-            })
             const message = yield* fs.readJson(msgFile)
             const item = decodeMessage(message, { onExcessProperty: "preserve" })
             yield* fs.writeWithDirs(next, JSON.stringify(message, null, 2))
             if (Option.isNone(item)) continue
 
-            log.info(`migrating parts for message ${item.value.id}`)
             for (const partFile of yield* fs.glob(`storage/session/part/${info.value.id}/${item.value.id}/*.json`, {
               cwd: full,
               absolute: true,
             })) {
               const out = path.join(dir, "part", item.value.id, path.basename(partFile))
               const part = yield* fs.readJson(partFile)
-              log.info("copying", {
-                partFile,
-                dest: out,
-              })
               yield* fs.writeWithDirs(out, JSON.stringify(part, null, 2))
             }
           }
@@ -193,7 +180,6 @@ export const layer = Layer.effect(
           Effect.orElseSucceed(() => 0),
         )
         for (let i = migration; i < MIGRATIONS.length; i++) {
-          log.info("running migration", { index: i })
           const step = MIGRATIONS[i]!
           const exit = yield* Effect.exit(step(dir, fs, git))
           if (Exit.isFailure(exit)) {

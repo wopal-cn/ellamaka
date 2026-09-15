@@ -101,7 +101,6 @@ const kinds = [
 const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flags: RuntimeFlags.Info) => {
   if (flags.experimentalLspTy) {
     if (servers["pyright"]) {
-      log.info("LSP server pyright is disabled because OPENCODE_EXPERIMENTAL_LSP_TY is enabled")
       delete servers["pyright"]
     }
   } else {
@@ -152,7 +151,6 @@ export const layer = Layer.effect(
         const servers: Record<string, LSPServer.Info> = {}
 
         if (!cfg.lsp) {
-          log.info("all LSPs are disabled")
         } else {
           for (const server of Object.values(LSPServer)) {
             servers[server.id] = server
@@ -164,7 +162,6 @@ export const layer = Layer.effect(
             for (const [name, item] of Object.entries(cfg.lsp)) {
               const existing = servers[name]
               if (item.disabled) {
-                log.info(`LSP server ${name} is disabled`)
                 delete servers[name]
                 continue
               }
@@ -184,11 +181,6 @@ export const layer = Layer.effect(
             }
           }
 
-          log.info("enabled LSP servers", {
-            serverIds: Object.values(servers)
-              .map((server) => server.id)
-              .join(", "),
-          })
         }
 
         const s: State = {
@@ -230,8 +222,6 @@ export const layer = Layer.effect(
             })
 
           if (!handle) return undefined
-          log.info("spawned lsp server", { serverID: server.id, root })
-
           const client = await LSPClient.create({
             serverID: server.id,
             server: handle,
@@ -344,7 +334,6 @@ export const layer = Layer.effect(
     })
 
     const touchFile = Effect.fn("LSP.touchFile")(function* (input: string, diagnostics?: "document" | "full") {
-      log.info("touching file", { file: input })
       const clients = yield* getClients(input)
       yield* Effect.promise(() =>
         Promise.all(

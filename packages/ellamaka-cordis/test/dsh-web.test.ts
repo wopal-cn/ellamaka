@@ -315,7 +315,14 @@ describe("dsh web engine", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const logFile = join(home, "dsh-plugins.log")
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, logFile, disableCodeRuntime: true })
+    let logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
+    const host = await mountDshWeb(ctx, {
+      home,
+      port: 4097,
+      logFile,
+      getLogLevel: () => logLevel,
+      disableCodeRuntime: true,
+    })
 
     try {
       // The dsh engine boots a webServer service; its startup logs should
@@ -328,13 +335,21 @@ describe("dsh web engine", () => {
       } finally {
         server.close()
       }
-      // Emit a log through the host context's logger — the Exporter routes it
-      // to the dedicated file (dsh plugins log via the same ctx.logger path).
-      ctx.logger("dsh-web-test").info("exporter probe")
+      // Plugin logs are intentionally conservative by default. An engine may
+      // emit high-rate INFO/DEBUG telemetry, so only warnings and errors land
+      // in the dedicated file until the host explicitly raises its log level.
+      ctx.logger("dsh-web-test").info("default-info probe")
+      ctx.logger("dsh-web-test").warn("default-warn probe")
+      // The Desktop debug toggle updates the same live threshold. It must
+      // enable DSH diagnostics without a sidecar restart.
+      logLevel = "DEBUG"
+      ctx.logger("dsh-web-test").info("debug-enabled-info probe")
       // Give the async Exporter a tick to flush.
       await new Promise((r) => setTimeout(r, 200))
       const content = readFileSync(logFile, "utf-8")
-      expect(content).toContain("exporter probe")
+      expect(content).not.toContain("default-info probe")
+      expect(content).toContain("default-warn probe")
+      expect(content).toContain("debug-enabled-info probe")
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()

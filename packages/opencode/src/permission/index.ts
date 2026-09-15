@@ -7,13 +7,16 @@ import { MessageID, SessionID } from "@/session/schema"
 import { PermissionTable } from "@/session/session.sql"
 import { Database } from "@/storage/db"
 import { eq } from "drizzle-orm"
-import * as Log from "@wopal/ellamaka-core/util/log"
 import { Wildcard } from "@wopal/ellamaka-core/util/wildcard"
+import * as Log from "@wopal/ellamaka-core/util/log"
 import { Deferred, Effect, Layer, Schema, Context } from "effect"
 import os from "os"
 import { PermissionV2 } from "@wopal/ellamaka-core/permission"
 import { PermissionID } from "./schema"
 
+// Permission decisions are trace-only. The record carries the permission name
+// and the decision outcome, never the evaluated pattern (which can embed a
+// command, path, or other user data), the session id, or the request contents.
 const log = Log.create({ service: "permission" })
 
 export const Action = PermissionV2.Action.annotate({ identifier: "PermissionAction" })
@@ -195,18 +198,34 @@ export const layer = Layer.effect(
             ? ({ permission: request.permission, pattern, action: "allow" } as Rule)
             : undefined
         const rule = escalatedRule ?? evaluate(request.permission, pattern, ruleset, approved)
-        log.info("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
+          log.trace("permission", "decision", {
+            action: "deny",
+            permission: request.permission,
+            escalated: escalatedRule !== undefined,
+          })
           return yield* new DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
-        if (rule.action === "allow") continue
+        if (rule.action === "allow") {
+          log.trace("permission", "decision", {
+            action: "allow",
+            permission: request.permission,
+            escalated: escalatedRule !== undefined,
+          })
+          continue
+        }
         needsAsk = true
       }
 
       if (!needsAsk) return
 
+      log.trace("permission", "decision", {
+        action: "ask",
+        permission: request.permission,
+        count: request.patterns.length,
+      })
       const id = request.id ?? PermissionID.ascending()
       const info: Request = {
         id,
@@ -217,8 +236,6 @@ export const layer = Layer.effect(
         always: request.always,
         tool: request.tool,
       }
-      log.info("asking", { id, permission: info.permission, patterns: info.patterns })
-
       const deferred = yield* Deferred.make<void, RejectedError | CorrectedError>()
       pending.set(id, { info, deferred })
       yield* bus.publish(Event.Asked, info)
@@ -236,6 +253,11 @@ export const layer = Layer.effect(
       if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
 
       pending.delete(input.requestID)
+      log.trace("permission", "reply", {
+        action: input.reply,
+        permission: existing.info.permission,
+        escalated: existing.info.permission === ESCALATION_PERMISSION,
+      })
       yield* bus.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,

@@ -39,6 +39,8 @@ export type SpawnedServer = {
 const SIDECAR_SERVICE_NAME = "ellamaka server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
 const SIDECAR_STOP_TIMEOUT = 6_000
+const SIDECAR_OUTPUT_WINDOW_MS = 10_000
+const SIDECAR_OUTPUT_MAX_PER_WINDOW = 20
 
 type SpawnLocalServerOptions = {
   needsMigration: boolean
@@ -46,6 +48,65 @@ type SpawnLocalServerOptions = {
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
+}
+
+export interface SidecarOutputForwarder {
+  write(chunk: Buffer | string): void
+  flush(): void
+}
+
+/**
+ * The sidecar protocol uses IPC for state and startup, so stdout/stderr are
+ * diagnostics only. Bound that relay before it reaches electron-log: a broken
+ * dependency must not turn one sidecar warning into thousands of Desktop WARN
+ * entries. The first records are retained and every dropped burst is made
+ * visible as one summary record.
+ */
+export function createSidecarOutputForwarder(
+  onOutput: ((message: string) => void) | undefined,
+  options: {
+    windowMs?: number
+    maxPerWindow?: number
+    now?: () => number
+  } = {},
+): SidecarOutputForwarder {
+  const windowMs = options.windowMs ?? SIDECAR_OUTPUT_WINDOW_MS
+  const maxPerWindow = options.maxPerWindow ?? SIDECAR_OUTPUT_MAX_PER_WINDOW
+  const now = options.now ?? Date.now
+  let windowStarted = now()
+  let emitted = 0
+  let suppressed = 0
+  let previous: string | undefined
+
+  const flush = () => {
+    if (suppressed > 0) onOutput?.(`sidecar output suppressed ${suppressed} records in ${windowMs}ms`)
+    suppressed = 0
+  }
+
+  const rotateWindow = (at: number) => {
+    if (at - windowStarted < windowMs) return
+    flush()
+    windowStarted = at
+    emitted = 0
+    previous = undefined
+  }
+
+  return {
+    write(chunk) {
+      const message = String(chunk).trimEnd()
+      if (!message) return
+      const at = now()
+      rotateWindow(at)
+      if (message === previous || emitted >= maxPerWindow) {
+        suppressed++
+        return
+      }
+      previous = message
+      emitted++
+      onOutput?.(message)
+    },
+    flush,
+  }
 }
 
 export function getWslConfig(): WslConfig {
@@ -94,8 +155,14 @@ export async function spawnLocalServer(
     env: createSidecarEnv(password),
     serviceName: SIDECAR_SERVICE_NAME,
     stdio: "pipe",
-    execArgv: ["--experimental-strip-types", "--expose-internals"],
+    // Node otherwise prints process warnings directly to stderr even when the
+    // sidecar's structured warning handler records them. Keep the raw printer
+    // off so a MaxListeners warning cannot be relayed as an unbounded Desktop
+    // WARN flood; `Log.init()` in the sidecar still captures every warning.
+    execArgv: ["--experimental-strip-types", "--expose-internals", "--no-warnings"],
   })
+  const stdout = createSidecarOutputForwarder(options.onStdout)
+  const stderr = createSidecarOutputForwarder(options.onStderr)
   let exited = false
   const exit = defer<number>()
 
@@ -108,13 +175,15 @@ export async function spawnLocalServer(
   child.once("exit", (code) => {
     exited = true
     app.off("child-process-gone", onProcessGone)
+    stdout.flush()
+    stderr.flush()
     options.onExit?.(code)
     exit.resolve(code)
   })
   child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
 
-  child.stdout?.on("data", (chunk: Buffer) => options.onStdout?.(chunk.toString("utf8").trimEnd()))
-  child.stderr?.on("data", (chunk: Buffer) => options.onStderr?.(chunk.toString("utf8").trimEnd()))
+  child.stdout?.on("data", (chunk: Buffer) => stdout.write(chunk))
+  child.stderr?.on("data", (chunk: Buffer) => stderr.write(chunk))
 
   await new Promise<void>((resolve, reject) => {
     let done = false
@@ -175,6 +244,7 @@ export async function spawnLocalServer(
       // from a possibly-stale child env.
       wopalHome: process.env.WOPAL_HOME,
       logFile: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs", "dsh-plugins.log") : undefined,
+      runtimeLogFile: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs", "dsh-runtime.log") : undefined,
     })
   }).catch((error) => {
     if (!exited) child.kill()

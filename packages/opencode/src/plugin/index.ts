@@ -195,7 +195,7 @@ export const layer = Layer.effect(
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
-          log.info("loading internal plugin", { name: plugin.name })
+          log.debug("loading internal plugin", { name: plugin.name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
             catch: (err) => {
@@ -207,7 +207,7 @@ export const layer = Layer.effect(
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
         if (flags.pure && cfg.plugin_origins?.length) {
-          log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
+          log.debug("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
         }
         if (plugins.length) yield* config.waitForDependencies()
 
@@ -217,7 +217,7 @@ export const layer = Layer.effect(
             kind: "server",
             report: {
               start(candidate) {
-                log.info("loading plugin", { path: candidate.plan.spec })
+                log.debug("loading plugin", { path: candidate.plan.spec })
               },
               missing(candidate, _retry, message) {
                 log.warn("plugin has no server entrypoint", { path: candidate.plan.spec, message })

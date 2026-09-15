@@ -188,7 +188,7 @@ async function startOAuthServer(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     oauthServer!.listen(OAUTH_PORT, () => {
-      log.info("digitalocean oauth server started", { port: OAUTH_PORT })
+      log.debug("digitalocean oauth server started", { port: OAUTH_PORT })
       resolve()
     })
     oauthServer!.on("error", reject)
@@ -197,7 +197,7 @@ async function startOAuthServer(): Promise<void> {
 
 function stopOAuthServer() {
   if (!oauthServer) return
-  oauthServer.close(() => log.info("digitalocean oauth server stopped"))
+  oauthServer.close(() => log.debug("digitalocean oauth server stopped"))
   oauthServer = undefined
 }
 

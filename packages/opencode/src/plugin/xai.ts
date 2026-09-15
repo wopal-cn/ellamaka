@@ -511,7 +511,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
       // swallow behavior the Codex plugin gets from its permanent
       // `oauthServer!.on("error", reject)`.
       server.on("error", (err) => log.warn("xai oauth server error", { error: err }))
-      log.info("xai oauth server started", { host: OAUTH_HOST, port: OAUTH_PORT })
+      log.debug("xai oauth server started", { host: OAUTH_HOST, port: OAUTH_PORT })
       resolve()
     })
     oauthServer = server
@@ -522,7 +522,7 @@ async function startOAuthServer(): Promise<{ port: number; redirectUri: string }
 
 function stopOAuthServer() {
   if (oauthServer) {
-    oauthServer.close(() => log.info("xai oauth server stopped"))
+    oauthServer.close(() => log.debug("xai oauth server stopped"))
     oauthServer = undefined
   }
 }
@@ -607,7 +607,7 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
             if (expiresSoon) {
               if (!refreshPromise) {
                 const refreshToken = currentAuth.refresh
-                log.info("refreshing xai access token")
+                log.debug("refreshing xai access token")
                 refreshPromise = refreshAccessToken(refreshToken, options)
                   .then(async (tokens) => {
                     const refreshedExpires = Date.now() + (tokens.expires_in ?? 3600) * 1000

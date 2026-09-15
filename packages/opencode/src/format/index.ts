@@ -60,11 +60,7 @@ export const layer = Layer.effect(
           const matching = Object.values(formatters).filter((item) => item.extensions.includes(ext))
           const checks = await Promise.all(
             matching.map(async (item) => {
-              log.info("checking", { name: item.name, ext })
               const cmd = await getCommand(item)
-              if (cmd) {
-                log.info("enabled", { name: item.name, ext })
-              }
               return {
                 item,
                 cmd,
@@ -78,13 +74,11 @@ export const layer = Layer.effect(
 
         function formatFile(filepath: string) {
           return Effect.gen(function* () {
-            log.info("formatting", { file: filepath })
             const formatters = yield* Effect.promise(() => getFormatter(path.extname(filepath)))
 
             if (!formatters.length) return false
 
             for (const { item, cmd } of formatters) {
-              log.info("running", { command: cmd })
               const replaced = cmd.map((x) => x.replace("$FILE", filepath))
               const dir = yield* InstanceState.directory
               const result = yield* appProcess
@@ -127,8 +121,6 @@ export const layer = Layer.effect(
         const cfg = yield* config.get()
 
         if (!cfg.formatter) {
-          log.info("all formatters are disabled")
-          log.info("init")
           return {
             formatters,
             isEnabled,
@@ -165,8 +157,6 @@ export const layer = Layer.effect(
             }
           }
         }
-
-        log.info("init")
 
         return {
           formatters,

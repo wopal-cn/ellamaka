@@ -19,10 +19,11 @@
 import type { Context } from "@deepseek-ai/cordis"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
-import { appendFileSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { createCordisLogExporter, type EllamakaLogLevel } from "./log-bridge.js"
+import { createDshLogWriter } from "./runtime/log.js"
 import { VirtualWebServer, DSH_MOUNT_PREFIX } from "./dsh-virtual-webserver.js"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "./runtime/loader.js"
 import {
@@ -362,8 +363,13 @@ export interface DshHostOptions {
    * console exporter.
    */
   logFile?: string
-  /** Minimum log level for the dsh-plugins log; defaults to DEBUG. */
+  /** Minimum log level for the dsh-plugins log; defaults to WARN. */
   logLevel?: EllamakaLogLevel
+  /**
+   * Live minimum-level getter for hosts whose debug control can change after
+   * the DSH containers have mounted (the Desktop sidecar).
+   */
+  getLogLevel?: () => EllamakaLogLevel
   /**
    * Optional extra patch rows applied after the profile layers. Used by
    * callers to disable profile entries that only serve the dsh agent loop
@@ -490,21 +496,20 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // closure-resolved runtime is injected so the exporter never falls back to
   // the host package closure on packaged hosts (B-01).
   if (logFile) {
+    const write = createDshLogWriter({ logFile })
     const exporter = createCordisLogExporter({
       logFile,
-      minLevel: logLevel ?? "DEBUG",
+      // Plugin DEBUG/INFO messages include normal lifecycle chatter. A long-
+      // lived host such as `serve` must not append all of it by default; an
+      // explicit host log level can still opt in when diagnosing a plugin.
+      minLevel: opts.getLogLevel ?? logLevel ?? "WARN",
       profile: profileName,
       runtime,
       write: (line) => {
         try {
-          appendFileSync(logFile, line, "utf-8")
+          write(line)
         } catch {
-          try {
-            mkdirSync(dirname(logFile), { recursive: true })
-            appendFileSync(logFile, line, "utf-8")
-          } catch {
-            // log write failures must never break the dsh mount
-          }
+          // Log write failures must never break the dsh mount.
         }
       },
     })
@@ -756,7 +761,9 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
           .catch((error: unknown) => {
             // The official caller degrades when the file cannot be watched; the
             // container keeps its boot composition (hmr logs via the loader).
-            console.warn("[dsh] user patch-layer watching unavailable:", (error as Error).message)
+            ctx.logger("dsh-web").warn("user patch-layer watching unavailable", {
+              error: (error as Error).message,
+            })
             return async () => {}
           })
 

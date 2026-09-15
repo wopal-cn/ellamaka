@@ -40,7 +40,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         data: { ...event.data },
       }))
       const source = events[0].aggregateID
-      log.info("sync replay requested", {
+      log.debug("sync replay requested", {
         sessionID: source,
         events: events.length,
         first: events[0]?.seq,
@@ -48,7 +48,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         directory: ctx.payload.directory,
       })
       yield* sync.replayAll(events)
-      log.info("sync replay complete", {
+      log.debug("sync replay complete", {
         sessionID: source,
         events: events.length,
         first: events[0]?.seq,
@@ -68,7 +68,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         },
       })
 
-      log.info("sync session stolen", {
+      log.debug("sync session stolen", {
         sessionID: ctx.payload.sessionID,
         workspaceID,
       })

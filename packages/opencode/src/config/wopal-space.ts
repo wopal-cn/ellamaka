@@ -299,8 +299,6 @@ export function tryLoadWopalSpaceConfig(
       return undefined
     }
 
-    log.info("wopal-space mode detected", { directory: ctx.directory })
-
     const directories = settings.directories
     const localWopalDirs = settings.localWopalDirs
 
@@ -331,7 +329,6 @@ export function tryLoadWopalSpaceConfig(
               ),
           )
           loaded = true
-          log.info("loaded ellamaka config", { path: file.path })
         }
       }
       if (!loaded) {
@@ -352,7 +349,6 @@ export function tryLoadWopalSpaceConfig(
 
       const needInstall = yield* Effect.promise(() => needsPluginDepInstall(dir, collected.fingerprint))
       if (!needInstall) {
-        log.info("plugin deps up to date, skipping install", { dir })
         continue
       }
 

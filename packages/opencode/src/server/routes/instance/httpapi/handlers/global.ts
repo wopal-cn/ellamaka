@@ -6,7 +6,7 @@ import { Installation } from "@/installation"
 import { CliContract } from "@/wopal/cli-contract"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
-import * as Log from "@wopal/ellamaka-core/util/log"
+import { NodeHttpServerRequest } from "@effect/platform-node"
 import { getDshStatus } from "@/workbench/dsh-status"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
@@ -15,8 +15,6 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
-
-const log = Log.create({ service: "server" })
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -36,36 +34,88 @@ function parseBody(body: string) {
 }
 
 function eventResponse() {
-  log.info("global event connected")
-  const events = Stream.callback<GlobalBusEvent>((queue) => {
-    const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
-    return Effect.acquireRelease(
-      Effect.sync(() => GlobalBus.on("event", handler)),
-      () => Effect.sync(() => GlobalBus.off("event", handler)),
+  return Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest
+    let subscribed = false
+    let released = false
+    let handler: ((event: GlobalBusEvent) => void) | undefined
+    const response = NodeHttpServerRequest.toServerResponse(request) as unknown
+    const incoming = NodeHttpServerRequest.toIncomingMessage(request) as unknown
+    const closeSources = [response, socketOf(incoming)].filter(isClosableResponse)
+
+    // HttpServerResponse.stream is consumed outside the request fiber by the
+    // Node adapter. Interrupting that fiber on client disconnect therefore does
+    // not reliably run Stream.callback's finalizer. Bind both the real
+    // response and its transport socket close events to the SAME idempotent
+    // cleanup path as the stream finalizer.
+    const release = () => {
+      if (released) return
+      released = true
+      for (const source of closeSources) source.off("close", release)
+      if (subscribed && handler) GlobalBus.off("event", handler)
+      subscribed = false
+    }
+    for (const source of closeSources) source.once("close", release)
+
+    const events = Stream.callback<GlobalBusEvent>((queue) => {
+      handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
+      return Effect.acquireRelease(
+        Effect.sync(() => {
+          if (released || !handler) return
+          GlobalBus.on("event", handler)
+          subscribed = true
+        }),
+        () => Effect.sync(release),
+      )
+    })
+    const heartbeat = Stream.tick("10 seconds").pipe(
+      Stream.drop(1),
+      Stream.map(() => ({ payload: { id: Bus.createID(), type: "server.heartbeat", properties: {} } })),
+    )
+
+    return HttpServerResponse.stream(
+      Stream.make({ payload: { id: Bus.createID(), type: "server.connected", properties: {} } }).pipe(
+        Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
+        Stream.map(eventData),
+        Stream.pipeThroughChannel(Sse.encode()),
+        Stream.encodeText,
+        Stream.ensuring(
+          Effect.sync(() => {
+            release()
+          }),
+        ),
+      ),
+      {
+        contentType: "text/event-stream",
+        headers: {
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+          "X-Content-Type-Options": "nosniff",
+        },
+      },
     )
   })
-  const heartbeat = Stream.tick("10 seconds").pipe(
-    Stream.drop(1),
-    Stream.map(() => ({ payload: { id: Bus.createID(), type: "server.heartbeat", properties: {} } })),
-  )
+}
 
-  return HttpServerResponse.stream(
-    Stream.make({ payload: { id: Bus.createID(), type: "server.connected", properties: {} } }).pipe(
-      Stream.concat(events.pipe(Stream.merge(heartbeat, { haltStrategy: "left" }))),
-      Stream.map(eventData),
-      Stream.pipeThroughChannel(Sse.encode()),
-      Stream.encodeText,
-      Stream.ensuring(Effect.sync(() => log.info("global event disconnected"))),
-    ),
-    {
-      contentType: "text/event-stream",
-      headers: {
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
-        "X-Content-Type-Options": "nosniff",
-      },
-    },
+type ClosableResponse = {
+  once(event: "close", listener: () => void): unknown
+  off(event: "close", listener: () => void): unknown
+}
+
+function isClosableResponse(value: unknown): value is ClosableResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "once" in value &&
+    typeof value.once === "function" &&
+    "off" in value &&
+    typeof value.off === "function"
   )
+}
+
+function socketOf(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !("socket" in value)) return undefined
+  return value.socket
 }
 
 export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handlers) =>
@@ -89,7 +139,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     })
 
     const event = Effect.fn("GlobalHttpApi.event")(function* () {
-      return eventResponse()
+      return yield* eventResponse()
     })
 
     const configGet = Effect.fn("GlobalHttpApi.configGet")(function* () {
