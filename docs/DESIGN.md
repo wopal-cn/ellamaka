@@ -128,6 +128,17 @@ WopalSpace 模式下配置加载优先级（低→高）：
 
 非 WopalSpace 模式下，能力扫描在 OpenCode 生态目录（`.opencode/`、`~/.opencode/`、`~/.config/opencode/`）之后叠加 `$WOPAL_HOME/` 全局能力，后者最后加载并覆盖同名能力。`$WOPAL_HOME/config/` 是纯配置目录，不参与能力扫描。
 
+### External Capability Directories
+
+两个上游惯例目录的跨模式行为不同：
+
+| 目录 | 非 WopalSpace | WopalSpace | 依据 |
+| ---- | ------------- | ---------- | ---- |
+| `.claude/`（含 `~/.claude/`） | 加载 | **不加载** | WopalSpace 模式为强制禁用触发条件之一 |
+| `.agents/`（含 `~/.agents/`） | 加载 | **加载** | 行业标准目录，所有模式常驻 |
+
+`.agents` 在 WopalSpace 模式下的优先级与 `$WOPAL_HOME` 全局能力一致：空间 `<space>/.wopal/skills/` 的同名技能覆盖它。
+
 ellamaka 为 `$WOPAL_HOME/` 与 `<space>/.wopal/` 下的本地插件自动安装其 `package.json` 声明的依赖，其他能力目录保持上游行为。机制细节见 [配置机制参考](./references/ellamaka-config-mechanism.md)。
 
 ## Space Detection Contract
