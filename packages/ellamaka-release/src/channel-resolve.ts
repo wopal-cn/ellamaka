@@ -6,16 +6,20 @@
 // literals of its own.
 //
 // This module MUST stay side-effect-free and Node-loadable: unlike
-// build-env.ts (top-level Bun.file / import.meta.dir / bun version gate), it
-// is imported from pure-Node build contexts (electron.vite.config.ts,
-// electron-builder.config.ts, ellamaka-app/vite.js). No Bun APIs, no fs at
-// module top level, no top-level await.
+// build-env.ts (which runs runtime-specific APIs at module top level), it is
+// imported from pure-Node build contexts (electron.vite.config.ts,
+// electron-builder.config.ts, ellamaka-app/vite.js). No runtime-specific
+// APIs, no fs at module top level, no top-level await.
 
 import { RELEASE_CHANNELS, DEV_CHANNELS } from "./identity.ts"
 
 export type BuildChannel = "stable" | "beta" | "main" | "local"
 
 const VOCABULARY: readonly string[] = [...RELEASE_CHANNELS, ...DEV_CHANNELS]
+
+function isBuildChannel(raw: string | undefined): raw is BuildChannel {
+  return raw !== undefined && VOCABULARY.includes(raw)
+}
 
 /**
  * Resolve a raw channel input against the closed vocabulary.
@@ -26,9 +30,7 @@ const VOCABULARY: readonly string[] = [...RELEASE_CHANNELS, ...DEV_CHANNELS]
  * fold to "local", preserving the dev experience for Vite contexts.
  */
 export function resolveBuildChannel(raw: string | undefined, fallback?: "local"): BuildChannel {
-  if (raw !== undefined && (VOCABULARY as readonly string[]).includes(raw)) {
-    return raw as BuildChannel
-  }
+  if (isBuildChannel(raw)) return raw
   if (fallback === "local") return "local"
   throw new Error(
     `invalid build channel ${JSON.stringify(raw)}; expected one of ${VOCABULARY.join(", ")}`,

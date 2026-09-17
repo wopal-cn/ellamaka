@@ -67,7 +67,8 @@ function readScript(overrides: Record<string, string>): ScriptShape {
     throw new Error(`build-env subprocess exited ${result.exitCode}: ${result.stderr.toString()}`)
   }
   const lines = result.stdout.toString().trim().split("\n")
-  return JSON.parse(lines[lines.length - 1]!) as ScriptShape
+  const shape: ScriptShape = JSON.parse(lines[lines.length - 1]!)
+  return shape
 }
 
 function expectScriptFail(overrides: Record<string, string>): void {

@@ -60,7 +60,7 @@ const VERSION = await (async () => {
   const anchorPkg = await Bun.file(path.resolve(import.meta.dir, "../../ellamaka-cli/package.json"))
     .json()
     .catch(() => null)
-  return (anchorPkg as any)?.version || "0.0.0-dev"
+  return anchorPkg?.version || "0.0.0-dev"
 })()
 
 const bot = ["actions-user", "opencode", "opencode-agent[bot]"]
