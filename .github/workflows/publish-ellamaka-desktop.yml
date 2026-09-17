@@ -15,9 +15,8 @@ on:
         default: "stable"
         type: choice
         options:
-          - main
-          - beta
           - stable
+          - beta
       os:
         description: "Target platform(s) to build"
         required: false
@@ -97,12 +96,35 @@ jobs:
 
             channel="${{ inputs.channel || 'stable' }}"
 
+            # Fail closed on the channel vocabulary (stable|beta). main/local
+            # are local-only build channels: a dispatch with channel=main
+            # would build a development identity (scripts/prebuild.ts) and then
+            # take the stable publish path below, pushing a dev-identity build
+            # to the stable feed with updates disabled. Reject anything outside
+            # the publishable vocabulary before building.
+            case "$channel" in
+              stable|beta) ;;
+              *)
+                echo "ERROR: invalid channel '${channel}' (expected stable or beta); main/local are local-only and never publishable"
+                exit 1
+                ;;
+            esac
+
             if [[ "$channel" == "beta" && ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
               echo "ERROR: beta releases require X.Y.Z-beta.N"
               exit 1
             fi
             if [[ "$channel" == "stable" && "$version" == *-beta.* ]]; then
               echo "ERROR: beta versions require channel=beta"
+              exit 1
+            fi
+
+            # Cross-check the resolved channel against the version-shape-derived
+            # channel (X.Y.Z-beta.N → beta, else stable), mirroring the
+            # build-env fail-closed rule: an explicit channel contradicting the
+            # version shape fails the run before anything is built.
+            if [[ "$channel" != "$inferred_channel" ]]; then
+              echo "ERROR: channel=${channel} contradicts version ${version} (derived channel: ${inferred_channel}); the release channel is decided by the version shape"
               exit 1
             fi
 
