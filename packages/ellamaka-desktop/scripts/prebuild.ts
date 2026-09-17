@@ -15,7 +15,7 @@ await $`bun ./scripts/copy-metainfo.ts ${channel}`
 // → `embed-manifest.ts`, whose static JSON import inlines
 // `generated/dsh-runtime-manifest.json` into the sidecar bundle. Running the
 // generator here guarantees the packaged sidecar carries a manifest that
-// matches the source at build time. Release channels (beta/prod) only verify
+// matches the source at build time. Release channels (beta/stable) only verify
 // (`--check`, read-only); the local `main` channel regenerates when the
 // committed manifest is missing or dirty.
 const resourcesDir = resolve(import.meta.dir, "..", "resources")
@@ -53,15 +53,15 @@ await $`cd ../opencode && bun script/build-node.ts`
 // Generate resources/release-identity.json. Per docs/DISTRIBUTION.md §5.4,
 // Desktop packages embed the same release context that produced the build.
 // For local dev builds (channel "main"), a development identity is written;
-// for beta/prod, a release-context.json (if provided via env) is the source.
+// for beta/stable, a release-context.json (if provided via env) is the source.
 await writeEmbeddedReleaseIdentity(channel)
 
-async function writeEmbeddedReleaseIdentity(channel: "main" | "beta" | "prod") {
+async function writeEmbeddedReleaseIdentity(channel: "main" | "beta" | "stable") {
   const outPath = join(resourcesDir, "release-identity.json")
   const ctxPath = process.env.ELLAMAKA_RELEASE_CONTEXT_PATH
 
   let identity: Record<string, unknown>
-  if ((channel === "beta" || channel === "prod") && ctxPath) {
+  if ((channel === "beta" || channel === "stable") && ctxPath) {
     const ctx = JSON.parse(await Bun.file(ctxPath).text())
     identity = {
       schemaVersion: 2,
@@ -73,7 +73,7 @@ async function writeEmbeddedReleaseIdentity(channel: "main" | "beta" | "prod") {
       build: ctx.build,
     }
   } else {
-    const version = process.env.OPENCODE_VERSION?.trim() || "0.0.0-dev"
+    const version = process.env.ELLAMAKA_VERSION?.trim() || "0.0.0-dev"
     identity = {
       schemaVersion: 2,
       kind: "development",
@@ -81,8 +81,8 @@ async function writeEmbeddedReleaseIdentity(channel: "main" | "beta" | "prod") {
       version,
       channel: channel === "main" ? "main" : "local",
       build: {
-        ...(process.env.OPENCODE_BUILD_ID && /^[0-9a-f]{40}$/.test(process.env.OPENCODE_BUILD_ID)
-          ? { gitCommit: process.env.OPENCODE_BUILD_ID }
+        ...(process.env.ELLAMAKA_BUILD_ID && /^[0-9a-f]{40}$/.test(process.env.ELLAMAKA_BUILD_ID)
+          ? { gitCommit: process.env.ELLAMAKA_BUILD_ID }
           : {}),
         builtAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
       },

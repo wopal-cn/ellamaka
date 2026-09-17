@@ -114,11 +114,11 @@ export function getReleaseInfo(): ReleaseInfo {
     }
   } catch {}
 
-  if (process.env.OPENCODE_VERSION?.trim()) {
-    version = process.env.OPENCODE_VERSION.trim()
+  if (process.env.ELLAMAKA_VERSION?.trim()) {
+    version = process.env.ELLAMAKA_VERSION.trim()
   }
-  if (!build && process.env.OPENCODE_BUILD_ID?.trim()) {
-    build = process.env.OPENCODE_BUILD_ID.trim()
+  if (!build && process.env.ELLAMAKA_BUILD_ID?.trim()) {
+    build = process.env.ELLAMAKA_BUILD_ID.trim()
   }
 
   if (!build) {

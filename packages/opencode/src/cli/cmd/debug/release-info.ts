@@ -52,7 +52,7 @@ function localDevIdentity(): unknown {
     typeof OPENCODE_VERSION === "string" && OPENCODE_VERSION ? OPENCODE_VERSION : "0.0.0-dev"
   const channel =
     typeof OPENCODE_CHANNEL === "string" && OPENCODE_CHANNEL ? OPENCODE_CHANNEL : "local"
-  const devChannel = ["main", "prod", "local"].includes(channel) ? channel : "local"
+  const devChannel = ["main", "local"].includes(channel) ? channel : "local"
   const identity: Record<string, unknown> = {
     schemaVersion: 2,
     kind: "development",
