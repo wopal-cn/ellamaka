@@ -42,20 +42,8 @@ export type FatalRendererError = {
   os?: string
 }
 
-export type OnboardingStepResult = {
-  status: "completed" | "reused" | "skipped" | "failed"
-  result?: Record<string, unknown>
-  error?: {
-    code?: string
-    message?: string
-    suggestion?: string
-    details?: string
-  }
-}
-
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
-  installCli: () => Promise<string>
   awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>
   getWindowConfig: () => Promise<WindowConfig>
   consumeInitialDeepLinks: () => Promise<string[]>
