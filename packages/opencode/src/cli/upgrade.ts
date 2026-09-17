@@ -12,30 +12,17 @@ import semver from "semver"
 const log = Log.create({ service: "upgrade" })
 
 /**
- * Decide whether auto-upgrade should be skipped for the given build channel.
+ * Whether the given build channel participates in update checks at all.
  *
- * Only the stable release channel ("latest") participates in CDN auto-upgrade.
- * Dev builds ("main"), local debug runs ("local"), and any other preview
- * channel are not published to the CDN stable manifest; auto-upgrading them
- * would silently replace a dev/local binary with the stable one, losing the
- * developer's build.
+ * Only the release channel ("latest") is published to the CDN feed; per
+ * DESIGN-distribution.md §"Version Identity", development channels ("main"
+ * from local build.sh builds, "local" from dev.sh source builds, and "prod"
+ * local flavored builds) are never published and must not be compared
+ * against or prompted from the release feed. Cross-channel comparisons are
+ * explicitly forbidden by the distribution design.
  */
-export function shouldSkipAutoUpgrade(channel: string, currentVersion: string): boolean {
-  return channel !== "latest"
-}
-
-/**
- * Whether the update-available notification should be shown for this build.
- *
- * A source checkout ("local" channel) never notifies: there is no binary to
- * upgrade — the install transaction would only replace `~/.wopal/bin/ellamaka`
- * while the running process keeps executing from the source tree, so the
- * dialog would be a dead end. Preview builds ("main"/"beta"/"prod") notify so
- * testers see newer releases; stable notifies per SemVer comparison.
- */
-export function shouldNotifyUpdate(channel: string, currentVersion: string, latest: string): boolean {
-  if (channel === "local") return false
-  return isUpdateAvailable(currentVersion, latest)
+export function isUpdateChannel(channel: string): boolean {
+  return channel === "latest"
 }
 
 /**
@@ -45,10 +32,12 @@ export function shouldNotifyUpdate(channel: string, currentVersion: string, late
  * correctly: a dev build (e.g. "2.0.2-main.20260813") that is numerically
  * ahead of the CDN stable (e.g. "2.0.1") is NOT considered an upgrade. A
  * non-SemVer current value (e.g. the "local" dev channel) cannot be compared
- * and is treated as needing an update.
+ * and is treated as needing an update. An invalid `latest` (malformed CDN
+ * manifest) is treated as "no update" instead of throwing.
  */
 export function isUpdateAvailable(current: string, latest: string): boolean {
   if (!semver.valid(current)) return true
+  if (!semver.valid(latest)) return false
   return semver.lt(current, latest)
 }
 
@@ -71,8 +60,8 @@ export function getWorkspaceAutoupdate(spaceRoot?: string): boolean | "notify" |
     if (!existsSync(filepath)) continue
     const raw = readJsoncConfig(filepath)
     if (raw?.ellamaka && typeof raw.ellamaka === "object") {
-      const auto = (raw.ellamaka as Record<string, unknown>).autoupdate
-      if (auto === false || auto === "notify") return auto as boolean | "notify"
+      const auto = Reflect.get(raw.ellamaka, "autoupdate")
+      if (auto === false || auto === true || auto === "notify") return auto
     }
   }
   return undefined
@@ -87,8 +76,8 @@ export async function upgrade() {
     log.info("autoupdate disabled by config")
     return
   }
-  if (Flag.OPENCODE_DISABLE_AUTOUPDATE) {
-    log.info("autoupdate disabled by OPENCODE_DISABLE_AUTOUPDATE flag")
+  if (Flag.ELLAMAKA_DISABLE_AUTOUPDATE) {
+    log.info("autoupdate disabled by ELLAMAKA_DISABLE_AUTOUPDATE flag")
     return
   }
 
@@ -106,29 +95,19 @@ export async function upgrade() {
     return
   }
 
-  // A source checkout ("local" channel) has no binary to upgrade — the
-  // install transaction would only replace ~/.wopal/bin/ellamaka while the
-  // running process keeps executing from the source tree. Stay silent.
-  if (InstallationChannel === "local") {
-    log.info(`local source build (current ${InstallationVersion}), skip update check`)
+  // Only the release channel ("latest") participates in update checks.
+  // Development channels ("main" from local build.sh builds, "local" from
+  // dev.sh source builds, "prod" local flavored builds) are never published
+  // to the CDN feed; prompting them would compare a local dev build against
+  // the release feed (cross-channel comparison, forbidden by
+  // DESIGN-distribution.md) and upgrading would only replace the managed
+  // ~/.wopal/bin/ellamaka while the running process keeps its dev binary.
+  if (!isUpdateChannel(InstallationChannel)) {
+    log.info(`skip update check for ${InstallationChannel} channel build (current ${InstallationVersion}, latest ${latest})`)
     return
   }
 
-  // Non-stable channels (preview builds) are not published to the CDN stable
-  // manifest. Auto-upgrading them would replace the binary. Notify only.
-  if (shouldSkipAutoUpgrade(InstallationChannel, InstallationVersion)) {
-    log.info(`skip auto-upgrade for ${InstallationChannel} channel build (current ${InstallationVersion}, latest ${latest})`)
-    GlobalBus.emit("event", {
-      directory: "global",
-      payload: {
-        type: Installation.Event.UpdateAvailable.type,
-        properties: { version: latest },
-      },
-    })
-    return
-  }
-
-  if (Flag.OPENCODE_ALWAYS_NOTIFY_UPDATE) {
+  if (Flag.ELLAMAKA_ALWAYS_NOTIFY_UPDATE) {
     log.info(`new version ${latest} (current ${InstallationVersion})`)
     GlobalBus.emit("event", {
       directory: "global",

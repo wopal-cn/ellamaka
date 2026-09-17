@@ -9,8 +9,7 @@ import { testEffect } from "../lib/effect"
 import {
   readJsoncConfig,
   getWorkspaceAutoupdate,
-  shouldSkipAutoUpgrade,
-  shouldNotifyUpdate,
+  isUpdateChannel,
   isUpdateAvailable,
 } from "../../src/cli/upgrade"
 import { mkdirSync, writeFileSync, rmSync } from "fs"
@@ -159,6 +158,17 @@ describe("getWorkspaceAutoupdate", () => {
     rmSync(tmp, { recursive: true, force: true })
   })
 
+  test("workspace autoupdate: true is honored as an explicit override", () => {
+    const tmp = makeTempDir()
+    const configDir = path.join(tmp, ".wopal", "config")
+    mkdirSync(configDir, { recursive: true })
+    writeFileSync(path.join(configDir, "settings.jsonc"), `{ "ellamaka": { "autoupdate": true } }`)
+
+    const result = getWorkspaceAutoupdate(tmp)
+    expect(result).toBe(true)
+    rmSync(tmp, { recursive: true, force: true })
+  })
+
   test("returns undefined when no config files exist", () => {
     const tmp = makeTempDir()
     const result = getWorkspaceAutoupdate(tmp)
@@ -270,43 +280,21 @@ describe("installation upgrade", () => {
   )
 })
 
-describe("shouldSkipAutoUpgrade", () => {
-  test("stable latest channel should NOT skip auto-upgrade", () => {
-    expect(shouldSkipAutoUpgrade("latest", "1.15.13")).toBe(false)
+describe("isUpdateChannel", () => {
+  test("release channel participates in update check", () => {
+    expect(isUpdateChannel("latest")).toBe(true)
   })
 
-  test("local channel (dev.sh) should skip auto-upgrade", () => {
-    expect(shouldSkipAutoUpgrade("local", "local")).toBe(true)
+  test("main channel (local build.sh build) does not participate", () => {
+    expect(isUpdateChannel("main")).toBe(false)
   })
 
-  test("main channel (dev build) should skip auto-upgrade", () => {
-    expect(shouldSkipAutoUpgrade("main", "1.15.13-main.20260731135022")).toBe(true)
+  test("prod channel (local build.sh build) does not participate", () => {
+    expect(isUpdateChannel("prod")).toBe(false)
   })
 
-  test("unknown preview channel should skip auto-upgrade", () => {
-    expect(shouldSkipAutoUpgrade("beta", "1.15.14-beta.1")).toBe(true)
-  })
-})
-
-describe("shouldNotifyUpdate", () => {
-  test("local channel (source checkout) never notifies", () => {
-    expect(shouldNotifyUpdate("local", "local", "2.0.5-rc.1")).toBe(false)
-  })
-
-  test("local channel never notifies even when a newer release exists", () => {
-    expect(shouldNotifyUpdate("local", "0.0.0-local-20260909", "2.0.5-rc.1")).toBe(false)
-  })
-
-  test("preview channel build notifies when an update is available", () => {
-    expect(shouldNotifyUpdate("main", "1.15.13-main.20260731135022", "2.0.5-rc.1")).toBe(true)
-  })
-
-  test("stable channel notifies when an update is available", () => {
-    expect(shouldNotifyUpdate("latest", "2.0.4", "2.0.5-rc.1")).toBe(true)
-  })
-
-  test("stable channel does not notify when already latest", () => {
-    expect(shouldNotifyUpdate("latest", "2.0.5-rc.1", "2.0.5-rc.1")).toBe(false)
+  test("local channel (dev.sh source build) does not participate", () => {
+    expect(isUpdateChannel("local")).toBe(false)
   })
 })
 
@@ -334,6 +322,10 @@ describe("isUpdateAvailable", () => {
 
   test("invalid current version treated as needing update", () => {
     expect(isUpdateAvailable("local", "2.0.0")).toBe(true)
+  })
+
+  test("invalid latest version treated as no update", () => {
+    expect(isUpdateAvailable("2.0.4", "garbage")).toBe(false)
   })
 })
 
