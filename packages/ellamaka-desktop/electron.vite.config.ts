@@ -120,12 +120,6 @@ export default defineConfig({
     },
   },
   renderer: {
-    // define scopes are independent per build (main/preload/renderer): the
-    // renderer must have its own entry or import.meta.env.ELLAMAKA_CHANNEL in
-    // renderer code is never injected.
-    define: {
-      "import.meta.env.ELLAMAKA_CHANNEL": JSON.stringify(channel),
-    },
     plugins: [appPlugin, sentry],
     server: {
       proxy: {

@@ -10,13 +10,14 @@ describe("electron.vite.config.ts channel resolution", () => {
     expect(config).toContain('resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")')
   })
 
-  test("renderer section injects the ELLAMAKA_CHANNEL define", async () => {
+  test("renderer define comes from the appPlugin, not a duplicate section entry", async () => {
     const config = await Bun.file(join(root, "electron.vite.config.ts")).text()
-    // The renderer build is a separate define scope from main/preload:
-    // without a renderer-section entry, import.meta.env.ELLAMAKA_CHANNEL in
-    // renderer code (e.g. the Sentry integration filter) is never injected.
+    // The renderer build injects import.meta.env.ELLAMAKA_CHANNEL through the
+    // shared appPlugin (vite.js). A renderer-section define would duplicate it
+    // (same value, but two injection points to keep in sync).
+    expect(config).toContain("appPlugin")
     const rendererSection = config.slice(config.indexOf("renderer:"))
-    expect(rendererSection).toContain('"import.meta.env.ELLAMAKA_CHANNEL"')
+    expect(rendererSection).not.toContain('"import.meta.env.ELLAMAKA_CHANNEL"')
   })
 
   test("has no residual local channel parsing", async () => {
