@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-09-16
+> **Updated**: 2026-09-17
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -11,6 +11,7 @@
 > - `./DESIGN-dsh-web.md` — Web profile：插件供应链与界面承载
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
 > - `./DESIGN-onboarding.md` — Desktop onboarding 目标实现
+> - `./DESIGN-plan-scheduler.md` — 空间级计划工作区、调度交互与运行接管
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 > **Companion Documents**:
 >
@@ -452,6 +453,8 @@ Workbench 的具体界面、视图模型、目录架构、能力迁移规约以�
 | `packages/ellamaka-app/AGENTS.md` | ellamaka 官方 web UI 包级开发规则                        |
 
 ## Scheduled Plan Execution
+
+界面结构、空间级工作区切换、审批与排期交互由 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md) 定义；HTTP 路径、数据与错误契约由 [API-CONTRACT.md](./API-CONTRACT.md#plan-scheduler-api-proposal) 定义。Workbench 壳负责承载，调度领域状态由 CLI 提供。
 
 Ellamaka 实现 Wopal CLI 定义的 Runner Port：版本协商、幂等执行身份、非交互 Session、结构化事件/结果、查询、取消与完整工具进程树收尾。CLI 拥有可审阅的 DAG JSON、时间、运行态 JSON claim，ontology Provider 拥有审批和实际实施准备；runtime 承接已批准 revision 与验证过的环境。
 

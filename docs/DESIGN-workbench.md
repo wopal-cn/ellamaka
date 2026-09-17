@@ -1,7 +1,7 @@
 # Ellamaka Workbench 设计规范
 
 > **Status**: Active
-> **Updated**: 2026-09-14
+> **Updated**: 2026-09-17
 > **Parent**: `./DESIGN.md`
 >
 > 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
@@ -30,6 +30,8 @@ Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面。
 ---
 
 ## 目标架构模型
+
+空间级「计划」工作区的拟议设计见 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md)。它与会话面板区域切换，共用 Space Tabs、Activity Bar、状态栏与诊断；切换保留会话面板和 PTY。调度页面不注册为绑定 Session 的面板视图。具体页面与交互由该子设计承载。
 
 ```
 Ellamaka App
