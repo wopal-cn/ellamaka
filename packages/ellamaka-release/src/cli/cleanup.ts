@@ -22,6 +22,8 @@
 
 import { execSync } from "child_process"
 import fs from "fs"
+import os from "os"
+import path from "path"
 import {
   applyRetentionWithRecheck,
   buildReferenceGraph,
@@ -100,17 +102,33 @@ function deleteR2Prefix(r2Url: string, versionedPath: string, dryRun: boolean) {
 }
 
 function readLatestAlias(config: ProductConfig, r2Url: string, latestPrefix: string) {
-  const cmd = `aws s3api get-object \
-    --bucket ${R2_BUCKET} \
-    --key "${latestPrefix}/manifest.json" \
-    --endpoint-url "${r2Url}" \
-    /dev/stdout 2>/dev/null`
+  // Download to a temp file instead of streaming to /dev/stdout: aws cli v2
+  // has been observed to fail silently when the get-object target is
+  // /dev/stdout on runners, which made the whole alias map empty and the
+  // withdrawal plan skip the alias-restore step (the withdrawn release then
+  // kept serving from latest). A real file is always writable; the caller
+  // fail-closes when the alias stays unreadable.
+  const tmp = path.join(
+    os.tmpdir(),
+    `wopal-release-latest-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+  )
+  const cmd = `aws s3 cp "s3://${R2_BUCKET}/${latestPrefix}/manifest.json" "${tmp}" --endpoint-url "${r2Url}" --only-show-errors`
   try {
-    const output = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
-    const manifest = JSON.parse(output)
+    execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
+    const manifest = JSON.parse(fs.readFileSync(tmp, "utf8"))
     return manifest.version
-  } catch {
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.warn(
+      `  WARN: cannot read latest alias at ${latestPrefix} (${reason})`,
+    )
     return null
+  } finally {
+    try {
+      fs.rmSync(tmp, { force: true })
+    } catch {
+      // Best-effort cleanup of the temp file.
+    }
   }
 }
 
@@ -361,6 +379,19 @@ function runWithdraw({
 
   const snapshot = buildSnapshot(config, r2Url)
   const aliases = buildAliases(config, r2Url)
+  console.log(`  aliases → ${JSON.stringify(aliases)}`)
+
+  // Fail-closed when no alias is readable: a withdrawal that cannot verify
+  // which version the latest alias points to must never delete the versioned
+  // objects — the alias would dangle on a deleted release (observed when
+  // get-object silently failed on the runner and the restore step was never
+  // planned). Post-restore the aliases become readable again.
+  if (Object.keys(aliases).length === 0) {
+    console.error(
+      "Error: cannot read any latest alias from R2 — refusing to withdraw (the alias restore would be unverifiable). Diagnose the R2 get-object failure and re-run.",
+    )
+    process.exit(1)
+  }
 
   const plan = planWithdraw({
     config,

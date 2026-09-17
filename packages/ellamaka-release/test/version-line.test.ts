@@ -88,3 +88,36 @@ describe("inferNextVersion — explicit", () => {
     expect(() => inferNextVersion({ stable: "2.0.4" }, "rc", "2.0.3-rc.1")).toThrow(/单调/)
   })
 })
+
+describe("inferNextVersion — withdrawn versions are skipped", () => {
+  test("rc 续位跳过已撤回候选", () => {
+    expect(
+      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.3" }, "rc", undefined, [
+        "2.0.5-rc.4",
+      ]),
+    ).toBe("2.0.5-rc.5")
+  })
+
+  test("连续多个已撤回候选逐一跳过", () => {
+    expect(
+      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.3" }, "rc", undefined, [
+        "2.0.5-rc.4",
+        "2.0.5-rc.5",
+      ]),
+    ).toBe("2.0.5-rc.6")
+  })
+
+  test("stable patch+1 跳过已撤回版本", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "stable", undefined, ["2.0.5"])).toBe("2.0.6")
+  })
+
+  test("minor 升位跳过已撤回版本", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "minor", undefined, ["2.1.0"])).toBe("2.2.0")
+  })
+
+  test("显式版本不做跳过(由调用方 check_withdrawn 拒绝)", () => {
+    expect(inferNextVersion({ stable: "2.0.4" }, "rc", "2.0.5-rc.4", ["2.0.5-rc.4"])).toBe(
+      "2.0.5-rc.4",
+    )
+  })
+})

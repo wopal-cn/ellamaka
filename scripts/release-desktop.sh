@@ -3,6 +3,14 @@ set -euo pipefail
 
 SCRIPT="$(basename "$0")"
 
+# 参数解析在 source lib/release.sh 之前执行，而 lib 中的 die 定义在 source
+# 后才生效——这里先提供一个同语义的最小实现（source 后会被 lib 同名函数覆盖），
+# 避免解析错误路径崩溃成 "die: command not found" 的误导性报错。
+die() {
+  printf '错误: %b\n' "$*" >&2
+  exit 1
+}
+
 # 设置引擎上下文后进入共享发布主流程
 SUBCOMMAND="desktop"
 PRODUCT="ellamaka-desktop"

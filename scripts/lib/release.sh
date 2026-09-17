@@ -409,11 +409,18 @@ product_released_candidate() {
 # 通过 version-line CLI 从该产品已发布记录推断目标版本。推断不读 package.json
 # （无版本线/锚点概念），只依赖 git tag：cli/desktop 各自独立序列，互不牵制。
 # 显式版本（${VERSION_OVERRIDE}）时只做单调校验后原样返回。
+# 该产品的永久作废版本（withdrawn-versions.json）作为 withdrawn 清单传入，
+# 自动推断连续跳过它们——整版撤回删除远端 tag 后，推断会重新算出被作废
+# 版本号，不跳过即永久死锁。
 resolve_target_version() {
-  local bump="$1" stable candidate result
+  local bump="$1" stable candidate result withdrawn_args
   stable="$(product_released_stable)"
   candidate="$(product_released_candidate)"
-  result=$(bun packages/ellamaka-release/src/cli/version-line.ts "$bump" "$stable" "$candidate" "${VERSION_OVERRIDE:-}" 2>&1) \
+  withdrawn_args="$([ -f "$WITHDRAWN_FILE" ] && node -e "
+const w = JSON.parse(require('fs').readFileSync('$WITHDRAWN_FILE', 'utf8'));
+process.stdout.write(JSON.stringify((w.products && w.products['$PRODUCT']) || []));
+" 2>/dev/null || echo '[]')"
+  result=$(bun packages/ellamaka-release/src/cli/version-line.ts "$bump" "$stable" "$candidate" "${VERSION_OVERRIDE:-}" "$withdrawn_args" 2>&1) \
     || die "$result"
   echo "$result"
 }

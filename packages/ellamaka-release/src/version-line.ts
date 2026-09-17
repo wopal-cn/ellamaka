@@ -71,10 +71,14 @@ function effectiveBase(hist: ProductHistory): [number, number, number] {
 //   explicit   → 校验 base 不低于已发 stable 后原样返回（同版本重发语义由调用方处理）。
 //
 // 全部推断只依赖 history（该产品已发布 tag），不读取 package.json。
+// withdrawn 携带 release/withdrawn-versions.json 中该产品的永久作废版本：
+// 整版撤回会删除远端 tag，推断可能重新算出它——必须连续跳过，直到落到一个
+// 未被永久作废的版本（显式版本不跳过，由调用方 check_withdrawn 拒绝）。
 export function inferNextVersion(
   history: ProductHistory,
   bump: Bump,
   explicit?: string,
+  withdrawn: string[] = [],
 ): string {
   const s = history.stable ? parseVersion(history.stable) : null
   const c = history.candidate ? parseVersion(history.candidate) : null
@@ -88,36 +92,57 @@ export function inferNextVersion(
     return explicit
   }
 
+  const banned = new Set(withdrawn)
+  // 在推断序列上向前推进一步（同通道同语义的“下一个”），用于跳过永久作废版本。
+  const advance = (version: string): string => {
+    const v = parseVersion(version)
+    if (bump === "rc" || bump === "beta") {
+      return formatVersion({ base: v.base, kind: bump, n: (v.kind ? v.n : 0) + 1 })
+    }
+    if (bump === "minor") {
+      return formatVersion({ base: [v.base[0], v.base[1] + 1, 0], kind: null, n: 0 })
+    }
+    if (bump === "major") {
+      return formatVersion({ base: [v.base[0] + 1, 0, 0], kind: null, n: 0 })
+    }
+    // stable：patch+1 直到未列入永久作废。
+    return formatVersion({ base: patchPlusOne(v.base), kind: null, n: 0 })
+  }
+
   // stable：候选 base 未转正则转正它，否则已发 stable patch+1。
+  let result: string
   if (bump === "stable") {
     const openCandidate = c && (!s || compareBase(c.base, s.base) > 0)
-    if (openCandidate) return formatVersion({ base: c!.base, kind: null, n: 0 })
-    if (s) return formatVersion({ base: patchPlusOne(s.base), kind: null, n: 0 })
+    if (openCandidate) result = formatVersion({ base: c!.base, kind: null, n: 0 })
+    else if (s) result = formatVersion({ base: patchPlusOne(s.base), kind: null, n: 0 })
     // 从未发布 stable：以现行 base 发首个正式版
-    return formatVersion({ base: effectiveBase(history), kind: null, n: 0 })
-  }
-
-  // minor / major：现行 base 升位。
-  if (bump === "minor" || bump === "major") {
+    else result = formatVersion({ base: effectiveBase(history), kind: null, n: 0 })
+  } else if (bump === "minor" || bump === "major") {
+    // minor / major：现行 base 升位。
     const [a, b] = effectiveBase(history)
-    const next: [number, number, number] =
-      bump === "minor" ? [a, b + 1, 0] : [a + 1, 0, 0]
-    return formatVersion({ base: next, kind: null, n: 0 })
+    result =
+      bump === "minor"
+        ? formatVersion({ base: [a, b + 1, 0], kind: null, n: 0 })
+        : formatVersion({ base: [a + 1, 0, 0], kind: null, n: 0 })
+  } else {
+    // rc / beta：确认通道与历史一致。
+    const kind: PrereleaseKind = bump
+    if (c && c.kind && c.kind !== kind) {
+      throw new Error(
+        `已发布候选是 -${c.kind}.N 而本次请求 -${kind}.N：产品通道类型固定（cli=rc / desktop=beta），不得混用`,
+      )
+    }
+    // 候选 base 未转正（高于已发 stable）→ 续 N+1。
+    if (c && c.kind === kind && (!s || compareBase(c.base, s.base) > 0)) {
+      result = formatVersion({ base: c.base, kind, n: c.n + 1 })
+    } else {
+      // 否则在已发 stable 的下一 patch 上开 -kind.1；从未发布任何版本时从种子
+      // base 0.1.0 起步。
+      const nextBase = s ? patchPlusOne(s.base) : ([0, 1, 0] as [number, number, number])
+      result = formatVersion({ base: nextBase, kind, n: 1 })
+    }
   }
 
-  // rc / beta：确认通道与历史一致。
-  const kind: PrereleaseKind = bump
-  if (c && c.kind && c.kind !== kind) {
-    throw new Error(
-      `已发布候选是 -${c.kind}.N 而本次请求 -${kind}.N：产品通道类型固定（cli=rc / desktop=beta），不得混用`,
-    )
-  }
-  // 候选 base 未转正（高于已发 stable）→ 续 N+1。
-  if (c && c.kind === kind && (!s || compareBase(c.base, s.base) > 0)) {
-    return formatVersion({ base: c.base, kind, n: c.n + 1 })
-  }
-  // 否则在已发 stable 的下一 patch 上开 -kind.1；从未发布任何版本时从种子
-  // base 0.1.0 起步。
-  const nextBase = s ? patchPlusOne(s.base) : ([0, 1, 0] as [number, number, number])
-  return formatVersion({ base: nextBase, kind, n: 1 })
+  while (banned.has(result)) result = advance(result)
+  return result
 }
