@@ -115,6 +115,10 @@ Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/buil
 
 Workbench frontend development rules (state ownership, identity scope, dependency direction, PTY lifecycle, effect race protection, persistence, testing, and other mandatory boundaries) are in `packages/ellamaka-app/AGENTS.md`. This file does not duplicate those rules; changes to Workbench frontend code must follow that specification.
 
+### CLI Release Contract
+
+- The release build entry (`packages/ellamaka-release/src/cli/build.ts`) is the only bundling point for published CLI binaries (`scripts/build.sh cli`, CI `publish-ellamaka-cli.yml`). Its `define` block MUST keep the `"process.env.MIN_WOPAL_CLI_VERSION"` entry — the value is exported by `scripts/build.sh` (via `resolve_min_wopal_cli_version`) and falls back to `.ci/versions.json` through `readMinWopalCliVersion`. The runtime (`packages/opencode/src/wopal/cli-contract.ts`) fails closed at module load, and compiled bundles skip the source-tree file fallback: a build that drops or misspells this define still passes its own smoke test on the build machine (the checkout resolves the fallback path) but crashes on every end-user machine. When moving or splitting build entries, move this define with them.
+
 ### Desktop Release Contract
 
 - `main` is for local `build.sh desktop --channel main` verification only. Release workflows accept only `beta` and `prod`.

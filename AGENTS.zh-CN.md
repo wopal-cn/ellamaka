@@ -113,6 +113,10 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 
 Workbench 前端开发规则（状态所有权、身份作用域、依赖方向、PTY 生命周期、effect 竞态防护、持久化、测试等强制边界）见 `packages/ellamaka-app/AGENTS.md`。本文件不重复这些规则，修改 Workbench 前端代码时必须遵守该规范。
 
+### CLI 发布契约
+
+- 发布构建入口（`packages/ellamaka-release/src/cli/build.ts`）是已发布 CLI 二进制（`scripts/build.sh cli`、CI `publish-ellamaka-cli.yml`）的唯一打包点。其 `define` 块必须保留 `"process.env.MIN_WOPAL_CLI_VERSION"` 条目——值由 `scripts/build.sh` 导出（经 `resolve_min_wopal_cli_version`），未设置时经 `readMinWopalCliVersion` 回退读取 `.ci/versions.json`。运行时（`packages/opencode/src/wopal/cli-contract.ts`）在模块加载期 fail-closed，且编译产物跳过源码树文件回退：丢失或拼错该 define 的构建在构建机上仍能通过自身烟测（checkout 存在使回退路径可解析），但在所有最终用户机器上启动即崩。移动或拆分构建入口时，必须同步迁移该 define。
+
 ### Desktop 发布契约
 
 - `main` 只用于 `build.sh desktop --channel main` 本地构建验证。发布 workflow 只接受 `beta` 和 `prod`。

@@ -191,6 +191,14 @@ function build_cli() {
     export OPENCODE_VERSION="$(resolve_build_version "ellamaka-cli" "$CHANNEL")"
   fi
   export OPENCODE_CHANNEL="$CHANNEL"
+
+  # Inject the effective minimum wopal-cli version (same resolution as
+  # build_desktop: max of .ci/versions.json and the @wopal/cli-capability-
+  # schema dependency floor) so the release bundle inlines the protocol
+  # floor at compile time. Packaged artifacts must never depend on a
+  # runtime env var or the source-tree file fallback.
+  export MIN_WOPAL_CLI_VERSION="${MIN_WOPAL_CLI_VERSION:-$(resolve_min_wopal_cli_version "$PROJECT_ROOT")}"
+
   BINARY_NAME="$BINARY_NAME" bun "$PROJECT_ROOT/packages/ellamaka-release/src/cli/build.ts" "${BUILD_ARGS[@]}"
 
   if $INSTALL; then

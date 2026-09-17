@@ -291,7 +291,12 @@ for (const item of buildTargets) {
     const binaryPath = `dist/${name}/bin/${BINARY_NAME}`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
-      const versionOutput = await $`${binaryPath} --version`.text()
+      // Scrub the injected floor from the smoke environment: a packaged
+      // artifact must carry the build-time inlined value, so the probe must
+      // not see the build script's exported env — otherwise a missing
+      // define would pass here and crash end users instead.
+      const smokeEnv = { ...process.env, MIN_WOPAL_CLI_VERSION: "" }
+      const versionOutput = await $`${binaryPath} --version`.env(smokeEnv).text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
       console.error(`Smoke test failed for ${name}:`, e)

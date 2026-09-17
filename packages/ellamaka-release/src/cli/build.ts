@@ -21,6 +21,22 @@ const generated = await import("../../../opencode/script/generate.ts")
 import { Script } from "../build-env"
 import pkg from "../../../opencode/package.json"
 
+// Resolve the effective minimum wopal-cli version for the inlined define.
+// scripts/build.sh exports the resolved value (the max of .ci/versions.json
+// and the @wopal/cli-capability-schema dependency floor, see
+// scripts/lib/version.sh); this is the fallback for direct invocations.
+// Release binaries MUST inline this value — the runtime fails closed when
+// neither the injected value nor a source-tree fallback is available, so a
+// build missing this define would crash every end user. Never remove this
+// define entry.
+function readMinWopalCliVersion(): string {
+  try {
+    const versions = JSON.parse(fs.readFileSync(path.resolve(dir, "../../.ci/versions.json"), "utf8"))
+    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
+  } catch {}
+  throw new Error("cannot read minWopalCli from .ci/versions.json")
+}
+
 // Release builds always use the release channel (latest). Development builds
 // respect the channel passed via OPENCODE_CHANNEL (build.sh cli --channel
 // main|prod; dev.sh sets local), so the binary's channel and its database
@@ -226,6 +242,11 @@ for (const item of targets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+      // Inline the effective minimum wopal-cli version (exported by
+      // scripts/build.sh via scripts/lib/version.sh; fall back to
+      // .ci/versions.json when unset) so packaged binaries enforce the
+      // protocol floor without runtime env or source-tree dependencies.
+      "process.env.MIN_WOPAL_CLI_VERSION": `'${process.env.MIN_WOPAL_CLI_VERSION || readMinWopalCliVersion()}'`,
       // Embed a structured ReleaseIdentity at build time. Release builds
       // (OPENCODE_RELEASE=1) with a release-context path produce a release
       // identity; otherwise a development identity is embedded. See
@@ -253,7 +274,12 @@ for (const item of targets) {
     const binaryPath = `${distDir}/${name}/bin/${BINARY_NAME}`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
-      const versionOutput = await $`${binaryPath} --version`.text()
+      // Scrub the injected floor from the smoke environment: a packaged
+      // artifact must carry the build-time inlined value, so the probe must
+      // not see the build script's exported env — otherwise a missing
+      // define would pass here and crash end users instead.
+      const smokeEnv = { ...process.env, MIN_WOPAL_CLI_VERSION: "" }
+      const versionOutput = await $`${binaryPath} --version`.env(smokeEnv).text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
       console.error(`Smoke test failed for ${name}:`, e)

@@ -13,21 +13,50 @@ import { Global } from "@wopal/ellamaka-core/global"
 // file fallback. When running from source (no build), fall back to reading
 // .ci/versions.json from the repo so the value always comes from the config,
 // never a duplicated literal that can drift.
-function resolveMinWopalCliVersion(): string {
-  const injected = process.env.MIN_WOPAL_CLI_VERSION
-  if (injected) return injected
-  try {
-    const versionsPath = path.resolve(__dirname, "../../../../.ci/versions.json")
-    const versions = JSON.parse(readFileSync(versionsPath, "utf8"))
-    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
-  } catch {
-    // fall through to the error below
+//
+// Compiled Bun binaries resolve module paths into the bunfs virtual
+// filesystem ("/$bunfs/root/...", "B:/~BUN/root/..."). There the file
+// fallback could only read the build machine's own checkout — which would
+// mask a build that forgot to inject the define and ship a crash to every
+// end user. Compiled bundles therefore fail closed: they must carry the
+// injected value, and a build missing the define crashes its own smoke test
+// ("--version") instead of user machines.
+export function isCompiledBundlePath(importMetaPath: string): boolean {
+  const normalized = importMetaPath.replaceAll("\\", "/").toLowerCase()
+  return normalized.startsWith("/$bunfs/") || normalized.startsWith("b:/~bun/")
+}
+
+export function resolveMinWopalCliVersion(
+  envValue: string | undefined,
+  importMetaPath: string,
+  readVersionsFile: () => string | undefined,
+): string {
+  if (envValue) return envValue
+  if (!isCompiledBundlePath(importMetaPath)) {
+    const fromFile = readVersionsFile()
+    if (fromFile) return fromFile
   }
   throw new Error(
     "MIN_WOPAL_CLI_VERSION is undefined and .ci/versions.json is not readable; cannot determine the wopal-cli protocol floor.",
   )
 }
-export const MIN_WOPAL_CLI_VERSION = resolveMinWopalCliVersion()
+
+export const MIN_WOPAL_CLI_VERSION = resolveMinWopalCliVersion(
+  process.env.MIN_WOPAL_CLI_VERSION,
+  import.meta.path,
+  () => {
+    try {
+      const versionsPath = path.resolve(__dirname, "../../../../.ci/versions.json")
+      const versions = JSON.parse(readFileSync(versionsPath, "utf8"))
+      if (typeof versions.minWopalCli === "string" && versions.minWopalCli) {
+        return versions.minWopalCli
+      }
+    } catch {
+      // fall through to the caller's failure path
+    }
+    return undefined
+  },
+)
 
 export const CliHealthSchema = Schema.Struct({
   state: Schema.Union([

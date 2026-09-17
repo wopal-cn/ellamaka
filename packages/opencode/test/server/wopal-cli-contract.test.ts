@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
-import { CliContract, classifyWopalCliVersion, MIN_WOPAL_CLI_VERSION } from "../../src/wopal/cli-contract"
+import {
+  CliContract,
+  classifyWopalCliVersion,
+  MIN_WOPAL_CLI_VERSION,
+  isCompiledBundlePath,
+  resolveMinWopalCliVersion,
+} from "../../src/wopal/cli-contract"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
@@ -74,4 +80,41 @@ describe("wopal CLI contract", () => {
       })
     }),
   )
+})
+
+describe("protocol floor resolution", () => {
+  const FLOOR_ERROR = /MIN_WOPAL_CLI_VERSION is undefined/
+  const sourcePath = "/repo/packages/opencode/src/wopal/cli-contract.ts"
+  const compiledPath = "/$bunfs/root/chunk-x.js"
+  const readVersions = (value?: string) => (): string | undefined => value
+
+  test("prefers the injected env value in any bundle mode", () => {
+    expect(resolveMinWopalCliVersion("9.9.9", compiledPath, readVersions("0.3.16"))).toBe("9.9.9")
+    expect(resolveMinWopalCliVersion("9.9.9", sourcePath, readVersions("0.3.16"))).toBe("9.9.9")
+  })
+
+  test("falls back to the source-tree file only outside compiled bundles", () => {
+    expect(resolveMinWopalCliVersion(undefined, sourcePath, readVersions("0.3.16"))).toBe("0.3.16")
+  })
+
+  test("throws in a compiled bundle when the value was not injected", () => {
+    expect(() => resolveMinWopalCliVersion(undefined, compiledPath, readVersions("0.3.16"))).toThrow(FLOOR_ERROR)
+  })
+
+  test("throws in a source run when the file is unavailable", () => {
+    expect(() => resolveMinWopalCliVersion(undefined, sourcePath, readVersions(undefined))).toThrow(FLOOR_ERROR)
+  })
+})
+
+describe("isCompiledBundlePath", () => {
+  test("recognizes bunfs virtual paths", () => {
+    expect(isCompiledBundlePath("/$bunfs/root/chunk-abc.js")).toBe(true)
+    expect(isCompiledBundlePath("B:/~BUN/root/chunk-abc.js")).toBe(true)
+    expect(isCompiledBundlePath("b:/~bun/root/x.js")).toBe(true)
+  })
+
+  test("rejects real filesystem paths", () => {
+    expect(isCompiledBundlePath("/repo/src/wopal/cli-contract.ts")).toBe(false)
+    expect(isCompiledBundlePath("C:\\dev\\cli-contract.ts")).toBe(false)
+  })
 })
