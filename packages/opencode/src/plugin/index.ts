@@ -62,7 +62,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Plugin") {}
 
 export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel?: string }) {
-  return input.enabled || ["local", "dev", "beta"].includes(input.channel ?? InstallationChannel)
+  return input.enabled || ["main", "local"].includes(input.channel ?? InstallationChannel)
 }
 
 // Built-in plugins that are directly imported (not installed from npm)

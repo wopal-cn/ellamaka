@@ -281,16 +281,16 @@ describe("installation upgrade", () => {
 })
 
 describe("isUpdateChannel", () => {
-  test("release channel participates in update check", () => {
-    expect(isUpdateChannel("latest")).toBe(true)
+  test("stable channel participates in update check", () => {
+    expect(isUpdateChannel("stable")).toBe(true)
+  })
+
+  test("beta channel (release channel outside CLI vocabulary) does not participate", () => {
+    expect(isUpdateChannel("beta")).toBe(false)
   })
 
   test("main channel (local build.sh build) does not participate", () => {
     expect(isUpdateChannel("main")).toBe(false)
-  })
-
-  test("prod channel (local build.sh build) does not participate", () => {
-    expect(isUpdateChannel("prod")).toBe(false)
   })
 
   test("local channel (dev.sh source build) does not participate", () => {
