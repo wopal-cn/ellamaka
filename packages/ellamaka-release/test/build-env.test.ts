@@ -31,6 +31,7 @@ afterAll(() => {
 function childEnv(overrides: Record<string, string>): Record<string, string> {
   const env: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue
     // Drop every build-interface variable so only the explicit overrides leak
     // into the child — a stale OPENCODE_*/ELLAMAKA_* in the parent must never
     // skew the resolution under test.
