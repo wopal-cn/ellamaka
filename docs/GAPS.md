@@ -97,6 +97,25 @@
 
 ---
 
+## Config Consumption
+
+### ELL-G11: 引擎没有空间级配置消费面，面板写入无落点（P0）
+
+**Current**: 引擎能读三层配置文件，但 `Config.Service` 只有 `get`/`getGlobal`/`update`（写死项目目录 `config.json`）/`updateGlobal`，没有空间级读写与来源标注；`wopal-space` 路由组没有配置端点，Workbench 面板查不到继承状态、也没有写入入口；`DialogSettings` 是本地偏好 dialog，无作用域切换。
+
+**Target**: 按 `./DESIGN-config-engine.md` 实现：`GET /wopal-space/config` 由引擎加载状态直答（生效树 + 每项来源）；`PATCH /wopal-space/config` 与 `reset-key` 经 CLI adapter 转发 `config.operation`（引擎无写入代码，空间 `settings.jsonc` 写请求返回只读错误码）；面板作用域切换 + 继承状态标签（覆盖 `wopal.pluginConfig` 插件配置）；配置写入后 `ellamaka` 段经文件监听热重载即时生效。
+
+**Design**: `./DESIGN-config-engine.md`；`../../../docs/products/wopal-space/DESIGN-config-settings.md`（总体分层与唯一写入者）
+
+**Exit**:
+- [ ] `GET /wopal-space/config` 返回生效配置树与每项来源（全局/空间公共/空间本地），与引擎合并链同源
+- [ ] `PATCH /wopal-space/config` 经 adapter 落到 CLI，写目标为 `settings.local.jsonc`；目标为空间 `settings.jsonc` 时返回只读错误码
+- [ ] `reset-key` 删除本地层键后配置回落继承源
+- [ ] 面板作用域切换可用，继承态/覆写态/悬停诊断按数据渲染，含插件配置项
+- [ ] CLI 写入 `ellamaka` 段后当前实例热重载生效，无需重启
+
+---
+
 ## Workbench 交互
 
 ### ELL-G7: 同一个会话能在多个面板里被重复打开（P0）
