@@ -427,7 +427,7 @@
         "@solid-primitives/scheduled": "1.5.2",
         "@standard-schema/spec": "1.0.0",
         "@types/ws": "8.18.1",
-        "@wopal/cli-capability-schema": "^0.3.16",
+        "@wopal/cli-capability-schema": "^0.3.22",
         "@wopal/ellamaka-brand": "workspace:*",
         "@wopal/ellamaka-cordis": "workspace:*",
         "@wopal/ellamaka-onboarding": "workspace:*",
@@ -2593,7 +2593,7 @@
 
     "@vscode/ripgrep-win32-x64": ["@vscode/ripgrep-win32-x64@1.18.0", "https://registry.npmmirror.com/@vscode/ripgrep-win32-x64/-/ripgrep-win32-x64-1.18.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-KNPvtElldqILHdnAetujPaowkNbpqJy3ssIGGN6F6Kve9Qi+nNLI2DN01O83JjCEVQbCzl8Ov3QZ9Eov3BR8Dg=="],
 
-    "@wopal/cli-capability-schema": ["@wopal/cli-capability-schema@0.3.16", "https://registry.npmmirror.com/@wopal/cli-capability-schema/-/cli-capability-schema-0.3.16.tgz", { "dependencies": { "@sinclair/typebox": "^0.34.52" } }, "sha512-vaUTmVFFjFEvhZxDej7bZCVJYWHZlBYejNLgwyBbBq8Opu/j1HpomLBgsP9pphr/s+yCpRwfliy4zfF5adsjpw=="],
+    "@wopal/cli-capability-schema": ["@wopal/cli-capability-schema@0.3.22", "https://registry.npmmirror.com/@wopal/cli-capability-schema/-/cli-capability-schema-0.3.22.tgz", { "dependencies": { "@sinclair/typebox": "^0.34.52" } }, "sha512-PLNEKgfiG/n3myqunwEApGndaPIgWX35w+x1ALP6MlTjosVu0QY9iBX05na+HDj32+4zlY0llFJw1M/I5wiSfw=="],
 
     "@wopal/effect-drizzle-sqlite": ["@wopal/effect-drizzle-sqlite@workspace:packages/effect-drizzle-sqlite"],
 
