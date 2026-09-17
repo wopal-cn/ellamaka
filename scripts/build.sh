@@ -190,7 +190,13 @@ function build_cli() {
     # not part of the version string.
     export ELLAMAKA_VERSION="$(resolve_build_version "ellamaka-cli" "$CHANNEL")"
   fi
-  export ELLAMAKA_CHANNEL="$CHANNEL"
+  # Release builds must not inject a channel: the version shape is the single
+  # source of truth (build-env fail-closed derivation). An unconditional
+  # export of the dev default ("main") contradicted the derived release
+  # channel and broke every CLI release build with ELLAMAKA_RELEASE=true.
+  if [[ -z "${ELLAMAKA_RELEASE:-}" ]]; then
+    export ELLAMAKA_CHANNEL="$CHANNEL"
+  fi
 
   # Inject the effective minimum wopal-cli version (same resolution as
   # build_desktop: max of .ci/versions.json and the @wopal/cli-capability-

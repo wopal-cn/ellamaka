@@ -199,9 +199,58 @@ if (cmp(vkey, floor) < 0) {
 }
 
 # manifest_url <version> — R2 manifest URL for the given version (used by
-# has_effective_manifest / highest_released_tag).
+# has_effective_manifest / highest_released_tag). The R2 layout is
+# product- and channel-scoped (docs/DISTRIBUTION.md §7.1):
+#   cli           → ellamaka/v<version>/
+#   desktop stable→ ellamaka-desktop/v<version>/
+#   desktop beta  → ellamaka-desktop/beta/v<version>/
+# Requires PRODUCT, and CHANNEL for the desktop product (defaults to stable).
 manifest_url() {
-  echo "https://download.coursedao.com/ellamaka/v${1}/manifest.json"
+  local ver="${1:?manifest_url requires a version argument}"
+  case "$PRODUCT" in
+    ellamaka-cli)
+      echo "https://download.coursedao.com/ellamaka/v${ver}/manifest.json"
+      ;;
+    ellamaka-desktop)
+      case "${CHANNEL:-stable}" in
+        beta) echo "https://download.coursedao.com/ellamaka-desktop/beta/v${ver}/manifest.json" ;;
+        *) echo "https://download.coursedao.com/ellamaka-desktop/v${ver}/manifest.json" ;;
+      esac
+      ;;
+    *)
+      die "manifest_url: unknown PRODUCT '${PRODUCT}' (expected ellamaka-cli | ellamaka-desktop)"
+      ;;
+  esac
+}
+
+# bump_commit_subject — one-line subject for the version bump commit. The
+# subject must identify the product (cli vs desktop bumps were previously
+# indistinguishable in `git log`) and the release channel for prereleases.
+bump_commit_subject() {
+  case "${CHANNEL_LABEL:-stable}" in
+    stable) echo "chore(release): bump ${PRODUCT} to ${VERSION}" ;;
+    *) echo "chore(release): bump ${PRODUCT} to ${VERSION} (${CHANNEL_LABEL})" ;;
+  esac
+}
+
+# wait_for_run_or_fail <workflow> <commit> — locate the publish workflow run
+# for the release commit (bounded wait) and watch it to completion. Unlike
+# the interactive watch path, this does not require the run to be
+# in_progress/queued at discovery time: a --no-watch caller may reach this
+# check after the run already finished. watch_run exits non-zero on failure,
+# which under `set -euo pipefail` aborts the release script before cleanup.
+wait_for_run_or_fail() {
+  local workflow="$1" commit="$2"
+  local run_id=""
+  for _ in $(seq 1 12); do
+    run_id=$(gh run list -R wopal-cn/ellamaka --workflow "$workflow" --commit "$commit" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
+    [ -n "$run_id" ] && [ "$run_id" != "null" ] && break
+    sleep 5
+  done
+  if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+    die "未找到 workflow ${workflow} 对应 commit ${commit} 的 run —— 发布未确认成功，请手动检查 actions 页。"
+  fi
+  watch_run "$run_id"
 }
 
 # has_effective_manifest [version]
@@ -690,7 +739,7 @@ console.log('  bumped ' + changed + ' package.json files')
     done
     git -C "$REPO_ROOT" add -- "${bump_paths[@]}"
     # --only + pathspec：只提交版本文件，暂存区里其他改动原样保留（脏工作区发布时尤其重要）
-    git -C "$REPO_ROOT" commit --only -m "chore: bump $PRODUCT version to $VERSION" -- "${bump_paths[@]}"
+    git -C "$REPO_ROOT" commit --only -m "$(bump_commit_subject)" -- "${bump_paths[@]}"
   fi
 
   # ── tag、push ────────────────────────────────────────
@@ -709,10 +758,17 @@ console.log('  bumped ' + changed + ' package.json files')
   git -C "$REPO_ROOT" push "$REMOTE" "$BRANCH" "$TAG"
 
   # ── watch ────────────────────────────────────────────
-  if [ "$NO_WATCH" = "true" ] || [ "$HAVE_GH" = false ]; then
-    if [ "$HAVE_GH" = false ]; then
-      echo "ℹ️  gh CLI 不可用或未认证，跳过 dispatch + watch。tag 已推送，workflow 应已触发。"
-    fi
+  # Release success is only declared after the publish workflow completes
+  # successfully. --no-watch must not skip verification: it previously printed
+  # "✅ Release complete" while the run was still in progress (or already
+  # failing) and fired cleanup against an unverified release.
+  if [ "$HAVE_GH" = false ]; then
+    echo "ℹ️  gh CLI 不可用或未认证，无法 watch workflow。tag 已推送，请手动确认 ${WORKFLOW} 结果后再视为发布成功。"
+    RELEASE_VERIFIED=false
+  elif [ "$NO_WATCH" = "true" ]; then
+    echo "→ --no-watch：仍等待并校验 workflow 结果（不实时输出日志）..."
+    RELEASE_VERIFIED=true
+    wait_for_run_or_fail "$WORKFLOW" "$(git -C "$REPO_ROOT" rev-parse HEAD)"
   else
     COMMIT="$(git -C "$REPO_ROOT" rev-parse HEAD)"
     echo "→ 等待 workflow 启动..."
@@ -726,9 +782,15 @@ console.log('  bumped ' + changed + ' package.json files')
     done
     if [ -z "$RUN_ID" ]; then
       echo "⚠️  60s 内未找到 workflow run（可能需要手动检查 actions 页）。"
+      RELEASE_VERIFIED=false
     else
       watch_run "$RUN_ID"
+      RELEASE_VERIFIED=true
     fi
+  fi
+
+  if [ "${RELEASE_VERIFIED:-false}" != "true" ]; then
+    die "发布 workflow 未确认成功 —— 不触发 cleanup，不宣布发布完成。请检查 actions 页后手动处理。"
   fi
 
   trigger_cleanup
