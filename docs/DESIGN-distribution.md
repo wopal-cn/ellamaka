@@ -1,7 +1,7 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-09-14
+> **Updated**: 2026-09-17
 > **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
@@ -63,7 +63,7 @@ Contract：
 2. `manifest.json` 是 installer 的机器可读入口，其中 `url` 指向 R2 自定义域名；`checksumsUrl` 指向同版本 `checksums.txt`。
 3. `checksums.txt` 与 `release-notes.md` 作为元数据文件与 artifacts 一同发布到 R2。
 4. 归档格式与 wopal-cli 对齐：macOS / Linux 使用 `.tar.gz`，Windows 使用 `.zip`。
-5. release build 的 channel 对外固定为 `latest`（`@wopal/ellamaka-brand` 的 `branding.ts:CHANNEL_RELEASE`）；本地开发 channel 保持 `main`（`CHANNEL_DEV`）。
+5. release build 的 build channel 为 `stable`（`@wopal/ellamaka-brand` 的 `branding.ts:CHANNEL_RELEASE`）；本地开发 build channel 为 `main`（`CHANNEL_DEV`，build.sh 默认）与 `local`（dev.sh）。`latest` 只是 R2 feed 别名（`ellamaka/latest/`），不是通道值。
 
 ### 构建接口
 
@@ -71,12 +71,13 @@ Contract：
 
 | 环境变量 | 作用 | 约束 |
 | -------- | ---- | ---- |
-| `OPENCODE_VERSION` | 兼容上游构建接口 | release build 必须等于 namespaced tag 中的 CLI 产品版本；不能表达 OpenCode baseline |
-| `OPENCODE_RELEASE` | 上游 release 模式开关 | Ellamaka wrapper 必须拦截上游 tag/GitHub Release 副作用，正式 tag 与 publication 只由 workflow 拥有 |
-| `OPENCODE_CHANNEL` | 更新渠道 | 设置时作为 `Script.channel`；未设置时自动推导 |
+| `ELLAMAKA_VERSION` | 产品版本注入 | release build 必须等于 namespaced tag 中的产品版本；不能表达 OpenCode baseline |
+| `ELLAMAKA_RELEASE` | release 模式开关 | wrapper 拦截上游 tag/GitHub Release 副作用，正式 tag 与 publication 只由 workflow 拥有 |
+| `ELLAMAKA_CHANNEL` | build channel | 取值限于 `{stable, beta, main, local}`（[Build Channels](#build-channels)）；未设置时按 Build Channels 决策树推导 |
+| `ELLAMAKA_BUILD_ID` | 构建指纹 | 注入打包产物（Desktop build version），取 commit SHA |
 | `BINARY_NAME` | 产物名前缀 | 构建时替换所有硬编码 `"opencode"`，控制输出目录名、binary 名、archive 名 |
 
-这些变量是上游构建接口，不是 Ellamaka release identity 的权威存储。完整版本、上游、channel 和 build identity 由 [Version Identity](#version-identity)、[Release Workflow](#release-workflow) 与生成的 `release-context.json` 约束。
+这些变量是 Ellamaka 构建接口，由 `build-env` 单点解析，不是 Ellamaka release identity 的权威存储。完整版本、上游、channel 和 build identity 由 [Version Identity](#version-identity)、[Release Workflow](#release-workflow) 与生成的 `release-context.json` 约束。
 
 ---
 
@@ -97,7 +98,7 @@ Ellamaka 发布的 `version` 遵循 SemVer 2.0：
 CLI stable:   X.Y.Z
 CLI rc:       X.Y.Z-rc.N
 Desktop beta: X.Y.Z-beta.N
-Desktop prod: X.Y.Z
+Desktop stable: X.Y.Z
 ```
 
 CLI rc 与 stable 发布完全同构——同一 tag namespace、同一 R2 versioned path、同一 latest feed、同一 Release 页面，`-rc.N` 只是版本字符串上的候选标记。rc 不是 legacy `X.Y.Z-N.rcM` 迭代格式（见 [Legacy Migration](#legacy-migration)）；rc 发布一经提交即不可变，同样适用 [Immutability and Cleanup](#immutability-and-cleanup) 的 retry/withdraw 边界。
@@ -174,12 +175,54 @@ ellamaka-desktop-v1.17.0-beta.1
 
 禁止再创建通用 `vX.Y.Z` Ellamaka tag，避免与 OpenCode 上游 tag 冲突。CLI 与 Desktop workflow 独立触发、独立 checkout tag、独立发布和回滚。
 
-channel 规则：
+### Build Channels
 
-- CLI 单一发布流：stable `X.Y.Z` 与候选 `X.Y.Z-rc.N` 同流发布，latest 总是指向最新发布的 CLI 版本（含 rc）。
-- Desktop stable latest 只引用无 prerelease 的版本。
-- Desktop beta latest 只引用 `-beta.N`，并与 stable 使用不同 appId/feed。
-- 不进行隐式跨 channel 更新或比较。
+通道（channel）回答一个问题：这份产物由谁构建、供谁使用。整个体系只承认一个通道词汇表，由 Release Identity 拥有（`packages/ellamaka-release/src/identity.ts`）：
+
+```text
+发布通道:
+  stable   正式发布。CLI 接受 X.Y.Z 与 X.Y.Z-rc.N；Desktop 接受纯 X.Y.Z。
+  beta     Desktop beta 发布，接受 X.Y.Z-beta.N。CLI 无此通道。
+
+开发通道:
+  main     本地构建（scripts/build.sh 的默认通道）。
+  local    源码直接运行（scripts/dev.sh）。
+```
+
+通道词汇表是闭合的：任何产物、构建注入、manifest、feed 与判定逻辑都只使用上述四个值，不存在第五个通道值。通道与构建身份（kind）的绑定是单向的：release 产物只能取发布通道，开发通道只出现在开发构建；反向不成立——Desktop 本地打包可以选用 stable/beta 构建发布形状的应用用于手动验证，其身份仍为 development、不内嵌 release identity。`prod` 不是通道值——它只作为 electron-builder 的 publish feed 名与 updater feed 路径词汇存在，映射到 `stable`；`latest` 只作为 R2 feed 别名存在，映射到对应产品发布通道的最新版本（`ellamaka/latest/`、`ellamaka-desktop/latest/`）。feed 名与通道值的映射由 identity 模块单一持有（`FEED_TO_CHANNEL`），任何代码不得自建映射。
+
+**单一注入点**：构建通道经单一环境变量 `ELLAMAKA_CHANNEL`（构建接口族，与 `ELLAMAKA_VERSION`/`ELLAMAKA_RELEASE` 同族）传入，取值限于 `{stable, beta, main, local}`，由 `build-env` 模块统一解析：
+
+```text
+发布构建（ELLAMAKA_RELEASE 已设置）
+  → 通道由版本形状决定：X.Y.Z-beta.N → beta，其余（X.Y.Z、X.Y.Z-rc.N）→ stable。
+    已设置的 ELLAMAKA_CHANNEL 必须与推导结果一致，不一致即构建失败。
+
+本地构建（ELLAMAKA_RELEASE 未设置）
+  → 通道由调用方显式传入：CLI 接受 main | local，Desktop 接受 main | beta | stable。
+    未传入时，git 分支为 main 取 main，其余取 local。
+```
+
+CLI 的发布注入据此实现为 `build.ts` 的 `Script.release ? CHANNEL_RELEASE : Script.channel`（`CHANNEL_RELEASE = "stable"`）；Desktop 的发布构建由 workflow 显式传入通道并与 tag 版本形状校验一致。运行时从 define 读取通道（`InstallationChannel` / Desktop `CHANNEL`），并按下面两张契约表消费，禁止在业务代码中直接书写通道字面量比较。
+
+**CLI 通道契约**（`packages/opencode/src/cli/upgrade.ts`）：
+
+| build channel | 升级检查 | 数据库 | 行为 |
+| --- | --- | --- | --- |
+| `stable` | 参与（SemVer 对比 CDN feed） | `ellamaka.db` | 发布通道：自动升级与提示按 [Update Authorization](#update-authorization) 与 autoupdate 配置执行 |
+| `main` | 不参与 | `ellamaka-main.db` | 本地构建：静默跳过，不请求 CDN、不提示、不自动升级 |
+| `local` | 不参与 | `ellamaka-local.db` | dev.sh 源码运行：同上 |
+
+**Desktop 通道契约**（`src/main/constants.ts`、`updater.ts`、`electron-builder.config.ts`）：
+
+| build channel | updater | feed | appId |
+| --- | --- | --- | --- |
+| `stable` | 启用 | `ellamaka-desktop/latest/` | `ai.ellamaka.desktop` |
+| `beta` | 启用（allowPrerelease） | `ellamaka-desktop/beta/latest/` | `ai.ellamaka.desktop.beta` |
+| `main` | 禁用 | — | `ai.ellamaka.desktop.main` |
+| `local` | 禁用 | — | 开发态动态分配 |
+
+升级参与判定是通道契约表的一行：CLI 以 `isUpdateChannel(channel)` 表达"该通道是否参与升级检查"，其唯一真值为 `stable`；Desktop 以 `UPDATER_ENABLED` 表达同一语义。两者都是契约表的直接投影，修改通道行为只改契约表。
 
 发布是一步制（脚本 `scripts/release-cli.sh` / `scripts/release-desktop.sh`）：版本准备与发布触发在同一脚本内完成，`--dry-run` 承担预演职责。
 
@@ -193,7 +236,7 @@ channel 规则：
 3. 提交 bump、创建 namespaced tag（`ellamaka-cli-vX.Y.Z[-rc.N]` / `ellamaka-desktop-vX.Y.Z[-beta.N]`）、推送当前分支与 tag。tag push 触发目标 workflow（`push: tags`），不再手工 dispatch。
 4. 监听 workflow 至完成，成功后自动触发历史清理。
 
-Desktop 渠道为单开关模型：`--beta` 即 beta 渠道（版本必然为 `X.Y.Z-beta.N`，发布到 `ellamaka-desktop/beta/`），缺席即 prod（版本必然为纯 `X.Y.Z`）；不存在独立 `--channel` 参数。
+Desktop 渠道为单开关模型：`--beta` 即 beta 通道（版本必然为 `X.Y.Z-beta.N`，发布到 `ellamaka-desktop/beta/`），缺席即 stable（版本必然为纯 `X.Y.Z`）；不存在独立 `--channel` 参数。
 
 failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时——有有效 R2 manifest 则拒绝（发布不可变，请用更高版本）；无 manifest 则按两种情况重发，均不重复 bump：
 
@@ -202,9 +245,9 @@ failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时—�
 
 分支渠道约束（branch-channel policy）：
 
-- `main`：CLI stable/rc 与 Desktop prod/beta 均可发布。
-- 非 `main` 分支（特性分支等）：只允许 prerelease —— CLI `X.Y.Z-rc.N`、Desktop `X.Y.Z-beta.N`；禁止发布裸 `X.Y.Z`。该约束以**通道级预检**在版本推断之前执行：非 main 分支上 `--patch`/`--minor`/`--major`（stable/prod 目标：候选转正或开新正式版）直接拒绝并提示切回 main；`--rc`/`--beta` 进入推断。dry-run 同样触发，让分支策略在发布计划第一屏显式可见。
-- prerelease 的 base `X.Y.Z` 必须高于该产品已发布 prod/stable 的最高版本：已发布 `2.0.3` 时，prerelease 从 `2.0.4-rc.1` / `2.0.4-beta.1` 开始，`2.0.3-rc.1` / `2.0.3-beta.1` 被拒绝。
+- `main`：CLI stable/rc 与 Desktop stable/beta 均可发布。
+- 非 `main` 分支（特性分支等）：只允许 prerelease —— CLI `X.Y.Z-rc.N`、Desktop `X.Y.Z-beta.N`；禁止发布裸 `X.Y.Z`。该约束以**通道级预检**在版本推断之前执行：非 main 分支上 `--patch`/`--minor`/`--major`（stable 目标：候选转正或开新正式版）直接拒绝并提示切回 main；`--rc`/`--beta` 进入推断。dry-run 同样触发，让分支策略在发布计划第一屏显式可见。
+- prerelease 的 base `X.Y.Z` 必须高于该产品已发布 stable 的最高版本：已发布 `2.0.3` 时，prerelease 从 `2.0.4-rc.1` / `2.0.4-beta.1` 开始，`2.0.3-rc.1` / `2.0.3-beta.1` 被拒绝。
 - 版本单调：同类产品的全部发布（stable、rc、beta）处于同一单调递增序列。rc 占用 base slot 后，后续修复只能发更高版本（`2.0.5-rc.2`、`2.1.0`……），不能回退到已发 rc 的 base 之下。
 
 bump 写入前校验：版本符合 SemVer 子集、version/channel 一致、branch-channel policy 满足、目标版本未列入 `release/withdrawn-versions.json` 且高于该产品已发布的最高标准版本、第一批标准版本高于 [Update Authorization](#update-authorization) 的 migration floor。OpenCode baseline 始终由 upstream lock 随最终 source commit 确定，发布不接收 OpenCode baseline/revision 作为版本输入。
@@ -218,7 +261,7 @@ CLI rc 与 stable 走完全相同的 release job：同一 versioned path（`ella
 CLI 发布流程（release job）：
 
 1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 `sources.opencode.gitCommit` 是当前 release commit 的祖先。
-2. 构建 CLI（`BINARY_NAME=ellamaka OPENCODE_VERSION=<ver> OPENCODE_RELEASE=true bun packages/ellamaka-release/src/cli/build.ts --arch primary --web-ui ellamaka-app`），产出 8 平台产物。
+2. 构建 CLI（`BINARY_NAME=ellamaka ELLAMAKA_VERSION=<ver> ELLAMAKA_RELEASE=true bun packages/ellamaka-release/src/cli/build.ts --arch primary --web-ui ellamaka-app`），产出 8 平台产物。
 3. 运行 `bun packages/ellamaka-release/src/cli/manifest.ts manifest` 生成 `manifest.json`、`checksums.txt`、`release-notes.md`。
 4. 按 manifest-last 提交点协议发布：staging 上传 → 回读校验 → 禁止覆盖写入 versioned path → 最后写 `manifest.json` 作为提交点（契约细节见 [构建接口](./DESIGN-distribution.md#构建接口)）。
 5. 直接更新 CLI latest（含 rc；CLI 是独立产品，发布不受任何 Desktop 版本约束）并主动 purge CDN。
@@ -312,7 +355,7 @@ Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest
 | `build.builtAt` | release context 生成时间 | 否 |
 | artifact `sha256` | 实际构建产物 | 否，只用于完整性 |
 
-顶层 `version` 是 `releaseIdentity.version` 的兼容别名，二者必须完全相等。`channel` 与 SemVer 必须一致：CLI stable channel 接受 `X.Y.Z` 与 `X.Y.Z-rc.N`；Desktop beta 只接受 `-beta.N`。Desktop 内部 feed 名 `prod` 映射为 identity channel `stable`。
+顶层 `version` 是 `releaseIdentity.version` 的兼容别名，二者必须完全相等。`channel` 与 SemVer 必须一致：CLI stable channel 接受 `X.Y.Z` 与 `X.Y.Z-rc.N`；Desktop beta 只接受 `-beta.N`。electron-builder 的 publish feed 名 `prod` 映射为 identity channel `stable`（`FEED_TO_CHANNEL`，见 [Build Channels](#build-channels)）。
 
 ### Runtime Identity Surfaces
 
@@ -430,7 +473,7 @@ cleanup 输出待删除对象与保护原因的审计清单后才执行。任何
 
 Sidecar 是 Node.js runtime（`build-node.ts` 产 `dist/node/`），**不是** Bun compile 的 CLI binary，因此不存在 CLI 的 native vs baseline（AVX2）二分——Node.js 代码由 V8 JIT 在运行时自适应 CPU 指令集。
 
-构建链路：`bun packages/opencode/script/build-node.ts`（sidecar）→ `cd packages/ellamaka-desktop && bun run build`（electron-vite 编译 main/preload/renderer）→ `bun run package:mac|win|linux`（electron-builder 打包）。本地快捷方式：`./scripts/build.sh desktop [--channel main|beta|prod] [--platform mac|linux|win] [--install]`——mac 平台本地打包，linux/win 平台自动走 GitHub Actions 构建并下载产物（CI 仅支持 beta|prod 渠道，`--install` 仅本地构建生效）。
+构建链路：`bun packages/opencode/script/build-node.ts`（sidecar）→ `cd packages/ellamaka-desktop && bun run build`（electron-vite 编译 main/preload/renderer）→ `bun run package:mac|win|linux`（electron-builder 打包）。本地快捷方式：`./scripts/build.sh desktop [--channel main|beta|stable] [--platform mac|linux|win] [--install]`——mac 平台本地打包，linux/win 平台自动走 GitHub Actions 构建并下载产物（CI 仅接受 beta|stable 通道，`--install` 仅本地构建生效）。
 
 ### Artifact Contract
 
@@ -446,9 +489,9 @@ Sidecar 是 Node.js runtime（`build-node.ts` 产 `dist/node/`），**不是** B
 
 Contract：
 
-1. `main` 只用于本地构建；发布 workflow 只接受 `beta` / `prod`。
-2. `prod` channel 的 `appId` 为 `ai.ellamaka.desktop`，deep link scheme 为 `ellamaka://`。
-3. beta 与 prod 的版本化目录和 latest feed 相互独立，也不与 CLI 混用。
+1. `main` 只用于本地构建；发布 workflow 只产出 `stable` / `beta` 通道。
+2. `stable` 通道的 `appId` 为 `ai.ellamaka.desktop`，deep link scheme 为 `ellamaka://`。
+3. beta 与 stable 的版本化目录和 latest feed 相互独立，也不与 CLI 混用。
 4. 自动更新 feed（`latest-mac.yml` / `latest.yml` / `latest-linux.yml`）与安装包同传 R2。
 5. Release 下载表展示 DMG、EXE、AppImage 和 deb。ZIP 与 blockmap 属于 updater 资产。
 
@@ -458,7 +501,7 @@ Desktop 有两个安装入口：wopal-site 下载页和 `wopal ellamaka install`
 
 手动入口由用户下载对应平台安装包。CLI 入口优先发现已有系统安装。缺失时，macOS 从 ZIP 安装到 `~/Applications/Ellamaka.app`，Windows 通过 NSIS current-user 模式安装到 `%LOCALAPPDATA%\Programs\Ellamaka`，Linux 把 AppImage 安装到 `${XDG_DATA_HOME:-~/.local/share}/ellamaka/` 并创建 desktop entry。完成后重新探测应用版本。Sidecar 和 Ellamaka 配置仍写入 `WOPAL_HOME`。
 
-`wopal ellamaka install --beta` 安装 beta Desktop 到独立位置（不同 appId，不覆盖 prod 安装）：
+`wopal ellamaka install --beta` 安装 beta Desktop 到独立位置（不同 appId，不覆盖 stable 安装）：
 
 | 平台 | CLI-managed beta Desktop 位置 |
 | ---- | ----------------------------- |
@@ -466,25 +509,25 @@ Desktop 有两个安装入口：wopal-site 下载页和 `wopal ellamaka install`
 | Windows | `%LOCALAPPDATA%\Programs\Ellamaka Beta\` |
 | Linux | `${XDG_DATA_HOME:-~/.local/share}/ellamaka-beta/Ellamaka Beta.AppImage` |
 
-Beta Desktop 与 prod Desktop 可共存。CLI 通过 appId 区分，不混淆安装位置。
+Beta Desktop 与 stable Desktop 可共存。CLI 通过 appId 区分，不混淆安装位置。
 
 ### 自动更新
 
 `electron-builder` 的 `publish` 配置使用 generic provider，feedURL 指向 R2 `ellamaka-desktop/latest/`，**不走 GitHub Release**（与 CLI canonical source 一致）。macOS 用 `latest-mac.yml`，Windows 用 `latest.yml`，Linux 用 `latest-linux.yml`。
 
-beta 与 prod 启用 electron-updater。prod 使用稳定 latest feed；beta 使用独立 beta latest feed 并允许 prerelease。main 本地构建不启用 updater。macOS ZIP、Windows NSIS EXE、AppImage 及对应 blockmap 位于 updater latest 路径，普通下载表只展示用户安装产物。
+beta 与 stable 启用 electron-updater。stable 使用稳定 latest feed；beta 使用独立 beta latest feed 并允许 prerelease。main 本地构建不启用 updater。macOS ZIP、Windows NSIS EXE、AppImage 及对应 blockmap 位于 updater latest 路径，普通下载表只展示用户安装产物。
 
 增量更新机制：macOS ZIP、Windows NSIS、Linux AppImage 基于 blockmap 支持增量；macOS DMG 不支持（必须全量下载）。增量更新生效条件：feed 包含 `packages[].path` 和 `sha2` 字段、R2 上传包含对应 `.blockmap` 文件、客户端版本严格小于已通过 manifest policy gate 授权的 feed 版本。
 
-**Channel 隔离**：不同 channel 是独立应用（`electron-builder.config.ts` 分配不同 appId）：
+**Channel 隔离**：不同 build channel 是独立应用（`electron-builder.config.ts` 分配不同 appId）：
 
-| Channel | appId |
+| build channel | appId |
 | ------- | ----- |
 | main | `ai.ellamaka.desktop.main` |
 | beta | `ai.ellamaka.desktop.beta` |
-| prod | `ai.ellamaka.desktop` |
+| stable | `ai.ellamaka.desktop` |
 
-不允许跨 channel 升级：prod 用户不能直接升到 beta，beta 用户不能直接切到 prod——macOS/Windows 视为不同应用，必须卸载后重装。`autoUpdater.allowDowngrade` 即使因兼容 electron-updater 的技术路径暂时保留，也不能授权更新；ReleaseIdentity policy gate 只允许同一 product/channel 的标准 SemVer 前进。切换 channel 是显式操作（卸载重装），不应该是自动行为。
+不允许跨 channel 升级：stable 用户不能直接升到 beta，beta 用户不能直接切到 stable——macOS/Windows 视为不同应用，必须卸载后重装。`autoUpdater.allowDowngrade` 即使因兼容 electron-updater 的技术路径暂时保留，也不能授权更新；ReleaseIdentity policy gate 只允许同一 product/channel 的标准 SemVer 前进。切换 channel 是显式操作（卸载重装），不应该是自动行为。
 
 macOS 特殊处理：ad-hoc 签名的 app 升级时，`quitAndInstall` 可能因 quarantine 导致启动失败。安装前 `xattr -d com.apple.quarantine` 新版本（如果可能），并引导用户在新版本首次启动时执行"右键 → 打开"操作。
 

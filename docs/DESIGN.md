@@ -75,8 +75,8 @@ ellamaka 的全部用户可见身份由 `@wopal/ellamaka-brand` 集中定义，�
 | `BINARY_NAME`     | `ellamaka` | CLI 命令名、help 文本、错误前缀                          |
 | `BINARY_TITLE`    | `Ellamaka` | 用户界面标题、sidebar 版本署名                           |
 | `VERSION_PREFIX`  | `ellamaka` | 版本字符串前缀                                           |
-| `CHANNEL_RELEASE` | `latest`   | 发布渠道标识                                             |
-| `CHANNEL_DEV`     | `main`     | 本地开发渠道标识                                         |
+| `CHANNEL_RELEASE` | `stable`   | 发布 build channel 标识（`latest` 仅为 R2 feed 别名）     |
+| `CHANNEL_DEV`     | `main`     | 本地开发 build channel 标识                               |
 | `UI_UPSTREAM_URL` | `null`     | 未内嵌 Web UI 时的在线代理目标域名；`null` 禁用反向代理  |
 
 ### CLI 身份
