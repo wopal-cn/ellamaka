@@ -5,6 +5,7 @@
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
+> - `./DESIGN-config-engine.md` — 引擎配置消费面：三层读取、面板数据链经 CLI 唯一写入实现
 > - `./DESIGN-desktop.md` — 官方桌面应用架构
 > - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
 > - `./DESIGN-dsh-base.md` — dsh 融合基础：文件领地、依赖闭包、热加载
@@ -45,6 +46,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约) |
 | DSH 双引擎融合            | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                        | [DSH 双引擎融合](#dsh-双引擎融合)       |
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
+| 引擎配置消费              | 三层配置读取、`wopal-space/config` API（读写均转发 CLI）与设置面板数据链                          | [DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
@@ -121,9 +123,9 @@ WopalSpace 模式下配置加载优先级（低→高）：
 | Space settings       | `<space>/.wopal/config/settings.jsonc` → `ellamaka` 字段 |
 | Space local settings | `<space>/.wopal/config/settings.local.jsonc`（私有覆盖）  |
 | Agent frontmatter    | `<space>/.wopal/agents/*.md`                             |
-| Environment override | `OPENCODE_CONFIG_CONTENT`                                |
+| Environment override | `ELLAMAKA_CONFIG_CONTENT`                                |
 
-普通会话权限合并同此优先链，按最后匹配项生效；调度会话还受 Scheduled Plan Execution 中不可放宽的 profile 上限约束。非 WopalSpace 模式的配置文件入口迁移至 `$WOPAL_HOME/config/settings.jsonc`，不加载 opencode XDG 全局配置；agents、commands、plugins、skills 与外部技能继续遵循 OpenCode-compatible capability loading，并由 `$WOPAL_HOME` 提供 Ellamaka 全局覆盖层。
+普通会话权限合并同此优先链，按最后匹配项生效；调度会话还受 Scheduled Plan Execution 中不可放宽的 profile 上限约束。非 WopalSpace 模式的配置文件入口迁移至 `$WOPAL_HOME/config/settings.jsonc`，不加载 opencode XDG 全局配置；agents、commands、plugins、skills 与外部技能继续遵循 OpenCode-compatible capability loading，并由 `$WOPAL_HOME` 提供 Ellamaka 全局覆盖层。配置链环境变量统一使用 `ELLAMAKA_` 前缀，命名空间与兼容规则见 `../../../docs/products/wopal-space/DESIGN-config-settings.md`。
 
 空间配置分为公开与私有两层：`config/settings.jsonc` 随 ontology 提交分发，承载公共默认值；`config/settings.local.jsonc` 为用户私有覆盖，不提交。两层通过 `mergeDeep` 合并，后者优先。
 
