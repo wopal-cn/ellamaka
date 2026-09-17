@@ -155,22 +155,13 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
 
 // Channel name lists exported from ipc.ts. registerIpcHandlers registers
 // every channel by literal name; unregisterIpcHandlers must clear the exact
-// same set so the in-process onboarding→workbench transition can re-register
-// handlers without Electron throwing "attempted to register a second handler".
-// This test keeps the two lists in lockstep with the actual registrations.
+// same set so re-registration (dev HMR) can replace handlers without Electron
+// throwing "attempted to register a second handler". This test keeps the two
+// lists in lockstep with the actual registrations.
 describe("IPC channel registry (unregister coverage)", () => {
   // Every ipcMain.handle(...) channel registered in ipc.ts. Sourced by grep
   // over the file; must stay a superset of __IPC_HANDLE_CHANNELS.
   const EXPECTED_HANDLE_CHANNELS = new Set([
-    "get-onboarding-mode",
-    "onboarding-get-state",
-    "onboarding-set-current-step",
-    "onboarding-execute-step",
-    "onboarding-complete",
-    "onboarding-probe",
-    "onboarding-set-wopal-home",
-    "onboarding-cancel-step",
-    "onboarding-renderer-log",
     "kill-sidecar",
     "await-initialization",
     "get-window-config",

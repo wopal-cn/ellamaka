@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, Switch, Match, For } from "solid-js"
+import { createSignal, onCleanup, onMount, Show, Switch, Match, For } from "solid-js"
 import {
   createStepController,
   getStepMetadata,
@@ -22,6 +22,7 @@ import { ProgressDisplay } from "./components/ProgressDisplay"
 import { StepGuide } from "./components/StepGuide"
 import { zhCN } from "./content/zh-CN"
 import { getStepGuideSource, STEP_GUIDE_ASSETS } from "./content/step-guides"
+import { useOnboardingClient } from "./onboarding-client-context"
 import "./onboarding.css"
 
 export interface LogEntry {
@@ -40,6 +41,7 @@ const FORM_SUBMIT_STEPS = new Set<OnboardingStepName>([
 ])
 
 export function OnboardingRoot() {
+  const client = useOnboardingClient()
   const [currentStep, setCurrentStep] = createSignal<OnboardingStepName | "done">("system-check")
   const [progressMsg, setProgressMsg] = createSignal<string>("")
   const [errorInfo, setErrorInfo] = createSignal<{ code?: string; message: string; details?: string } | null>(null)
@@ -54,47 +56,35 @@ export function OnboardingRoot() {
 
   const controller = createStepController("system-check")
 
-  // UI-only append. Messages that originate in the main process (step
-  // progress broadcasts) are already written to onboarding.log by main; we
-  // must NOT mirror them back or the file gets every message twice.
+  // UI-only log buffer. The server owns progress/log events and ships them
+  // over SSE; the UI appends what it observes locally without writing back.
   const appendLog = (text: string, isError = false) => {
     if (!text.trim()) return
     const clean = text.replace(/\x1b\[[0-9;]*m/g, "")
     setLogs((prev) => [...prev.slice(-200), { text: `[${new Date().toLocaleTimeString()}] ${clean}`, isError }])
   }
 
-  // Messages that originate in the renderer (navigation, state restore,
-  // errors) have no main-side counterpart, so mirror them into the file to
-  // keep the UI LogDrawer and onboarding.log consistent.
-  const mirrorToFile = (text: string) => {
-    if (!text.trim()) return
-    void window.api.onboardingRendererLog(text).catch(() => {})
-  }
-
   onMount(() => {
-    // Mirror the boot banner (already seeded in the UI log) into the file so
-    // onboarding.log records the start of this session the same way the UI does.
-    void window.api.onboardingRendererLog("[system] 初始化 Ellamaka Onboarding 环境...").catch(() => {})
-
-    const unsub = window.api.onOnboardingProgress((prog) => {
-      const msg = prog.message || prog.phase || ""
+    const unsubscribe = client.subscribe((event) => {
+      if (event.type !== "progress") return
+      const msg = event.message || event.phase || ""
       if (msg) {
         setProgressMsg(msg)
-        appendLog(msg, prog.phase === "failed")
+        appendLog(msg, event.phase === "failed")
       }
-      if (prog.suggestion) appendLog(`建议: ${prog.suggestion}`, prog.phase === "failed")
-      if (prog.details) appendLog(prog.details, prog.phase === "failed")
+      if (event.suggestion) appendLog(`建议: ${event.suggestion}`, event.phase === "failed")
+      if (event.details) appendLog(event.details, event.phase === "failed")
     })
+    onCleanup(unsubscribe)
 
     void (async () => {
       try {
         const [state, userProbe] = await Promise.all([
-          window.api.onboardingGetState(),
-          window.api.onboardingProbe("system-user").catch(() => null),
+          client.getState(),
+          client.probe("system-user").catch(() => null),
         ])
 
-        const probeResult = userProbe as { userName?: string } | null
-        const name = probeResult?.userName?.trim()
+        const name = typeof userProbe?.userName === "string" ? userProbe.userName.trim() : ""
         if (name) setSystemUserName(name)
 
         if (state && state.currentStep && !state.completed) {
@@ -103,19 +93,15 @@ export function OnboardingRoot() {
             setCurrentStep(savedStep)
             controller.setCurrentStep(savedStep)
             updateUnlockedPhase(savedStep)
-            appendLog(`[system] 已自动从本地 onboarding.json 恢复当前进度: ${savedStep}`)
-            mirrorToFile(`[system] 已自动从本地 onboarding.json 恢复当前进度: ${savedStep}`)
+            appendLog(`[system] 已从服务端恢复当前进度: ${savedStep}`)
           }
         }
       } catch (err) {
         appendLog(`[warning] 获取步骤恢复状态失败: ${err instanceof Error ? err.message : String(err)}`)
-        mirrorToFile(`[warning] 获取步骤恢复状态失败: ${err instanceof Error ? err.message : String(err)}`)
       } finally {
         setInitialized(true)
       }
     })()
-
-    return unsub
   })
 
   const updateUnlockedPhase = (step: OnboardingStepName | "done") => {
@@ -134,10 +120,6 @@ export function OnboardingRoot() {
     setCurrentStep(nextStep)
     updateUnlockedPhase(nextStep)
     appendLog(`[step] 进入步骤: ${getStepMetadata(nextStep).title}`)
-    mirrorToFile(`[step] 进入步骤: ${getStepMetadata(nextStep).title}`)
-    if (nextStep !== "done") {
-      void window.api.onboardingSetCurrentStep(nextStep)
-    }
   }
 
   const handlePrev = () => {
@@ -148,10 +130,6 @@ export function OnboardingRoot() {
     const prevStep = controller.getCurrentStep()
     setCurrentStep(prevStep)
     appendLog(`[step] 返回步骤: ${getStepMetadata(prevStep).title}`)
-    mirrorToFile(`[step] 返回步骤: ${getStepMetadata(prevStep).title}`)
-    if (prevStep !== "done") {
-      void window.api.onboardingSetCurrentStep(prevStep)
-    }
   }
 
   const handleJumpPhase = (phaseNum: 1 | 2 | 3 | 4) => {
@@ -164,10 +142,6 @@ export function OnboardingRoot() {
     setCurrentStep(target)
     controller.setCurrentStep(target)
     appendLog(`[step] 切换到阶段 ${phaseNum}: ${config.title}`)
-    mirrorToFile(`[step] 切换到阶段 ${phaseNum}: ${config.title}`)
-    if (target !== "done") {
-      void window.api.onboardingSetCurrentStep(target)
-    }
   }
 
   const handleSkip = async () => {
@@ -175,7 +149,7 @@ export function OnboardingRoot() {
     setStepResult(null)
     const step = currentStep()
     if (step !== "done") {
-      const res = await window.api.onboardingExecuteStep(step as OnboardingStepName, { skip: true })
+      const res = await client.executeStep(step as OnboardingStepName, { skip: true })
       if (res.status === "failed") {
         handleError({ message: res.error?.message ?? "跳过失败" })
         return
@@ -194,10 +168,8 @@ export function OnboardingRoot() {
     setErrorInfo(info)
     setStepResult({ success: false })
     appendLog(`[ERROR] ${info.message}`, true)
-    mirrorToFile(`[ERROR] ${info.message}`)
     if (info.details) {
       appendLog(info.details, true)
-      mirrorToFile(info.details)
     }
   }
 

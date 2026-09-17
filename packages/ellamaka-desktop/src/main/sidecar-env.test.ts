@@ -25,9 +25,17 @@ mock.module("electron-store", () => {
 // only side-effecting pieces preferAppEnv relies on; mergeShellEnv and
 // resolveShellPath are kept as their real behaviors so PATH resolution stays
 // covered without re-duplicating logic in tests.
+//
+// The factory spreads the real module first: bun's mock registry is process
+// global, so without the spread later-loaded test files (e.g.
+// shell-env.test.ts) would see only the four overridden exports and fail on
+// missing ones (resolveUserShell, isNushell, parseShellEnv, persistWopalHomeEnv).
+import * as shellEnvModule from "./shell-env"
+
 let shell: Record<string, string> | null = null
 
 mock.module("./shell-env", () => ({
+  ...shellEnvModule,
   getUserShell: () => "/bin/zsh",
   loadShellEnv: () => shell,
   mergeShellEnv: (shellEnv: Record<string, string> | null, env: Record<string, string>) => ({

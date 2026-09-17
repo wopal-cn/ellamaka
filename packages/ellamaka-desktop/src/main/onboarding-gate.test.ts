@@ -1,46 +1,5 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import { existsSync, mkdirSync, rmSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
-import { resolveOnboardingMode, probeWopalHomeFromShell } from "./onboarding-gate"
-import { createDefaultOnboardingState, markCompleted, writeOnboardingState } from "./onboarding-state"
-
-describe("onboarding-gate", () => {
-  let testHome: string
-
-  beforeEach(() => {
-    testHome = join(tmpdir(), `onboarding-gate-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-    mkdirSync(testHome, { recursive: true })
-  })
-
-  afterEach(() => {
-    if (existsSync(testHome)) {
-      rmSync(testHome, { recursive: true, force: true })
-    }
-  })
-
-  test("resolveOnboardingMode returns 'onboarding' when state file does not exist", () => {
-    const mode = resolveOnboardingMode(testHome)
-    expect(mode).toBe("onboarding")
-  })
-
-  test("resolveOnboardingMode returns 'onboarding' when state is not completed", () => {
-    const state = createDefaultOnboardingState()
-    writeOnboardingState(state, testHome)
-
-    const mode = resolveOnboardingMode(testHome)
-    expect(mode).toBe("onboarding")
-  })
-
-  test("resolveOnboardingMode returns 'workbench' when state is completed", () => {
-    const state = createDefaultOnboardingState()
-    const completed = markCompleted(state)
-    writeOnboardingState(completed, testHome)
-
-    const mode = resolveOnboardingMode(testHome)
-    expect(mode).toBe("workbench")
-  })
-})
+import { describe, expect, test } from "bun:test"
+import { probeWopalHomeFromShell } from "./onboarding-gate"
 
 describe("probeWopalHomeFromShell", () => {
   test("returns a non-empty string when shell env has WOPAL_HOME, or null when absent", () => {

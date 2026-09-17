@@ -93,6 +93,8 @@ let dshPluginService:
     }
   | undefined
 let sidecarLogLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
+/** Disposer for the /api/onboarding mount; runs before the listener stops. */
+let disposeOnboarding: (() => void) | undefined
 
 /**
  * The dsh runtime initialised once per launch (W-02). The manager's
@@ -166,7 +168,7 @@ async function start(command: StartCommand) {
     // snapshots process.env at that point. listenThenClearCredentials keeps the
     // credentials present for the whole listen call, then deletes them so the
     // engine PTY children (which forward ...process.env) never inherit them.
-    listener = await listenThenClearCredentials(() =>
+    const serverListener = await listenThenClearCredentials<Listener>(() =>
       Server.listen({
         port: command.port,
         hostname: command.hostname,
@@ -175,6 +177,22 @@ async function start(command: StartCommand) {
         cors: ["oc://renderer"],
       }),
     )
+    listener = serverListener
+    // Onboarding HTTP surface (Plan #230): the same /api/onboarding mount the
+    // CLI `serve` command registers, installed directly on the Ellamaka
+    // listener. The package is compiled into this bundle, so the dynamic import
+    // resolves to the inlined module. `home` follows the start command's
+    // WOPAL_HOME (the same value dshLaunch resolves) and the password captured
+    // from the command (the env credentials are already cleared) puts the
+    // surface behind the same credential the rest of the sidecar enforces. The
+    // mount is removed in stop() before the listener closes.
+    {
+      const { mountOnboarding } = await import("@wopal/ellamaka-onboarding/mount")
+      disposeOnboarding = mountOnboarding(serverListener, {
+        home: command.wopalHome,
+        serverPassword: command.password,
+      })
+    }
     // Optional dsh engine (single-process, DESIGN-dsh-base.md). The
     // unified Runtime Manager (consumed via `virtual:opencode-server`, which
     // the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
@@ -482,6 +500,9 @@ async function stop() {
     dshToolsHost = undefined
     await dshHost?.dispose()
     dshHost = undefined
+    // Unregister the onboarding mount before the listener closes (Plan #230).
+    disposeOnboarding?.()
+    disposeOnboarding = undefined
     await listener?.stop()
   } finally {
     listener = undefined

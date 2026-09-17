@@ -6,7 +6,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow, ipcMain } from "electron"
+import { app, BrowserWindow } from "electron"
 
 import contextMenu from "electron-context-menu"
 
@@ -50,8 +50,7 @@ import { needsJsonMigration } from "./migration-check"
 import { enableQuitGuard, interceptWindowClose } from "./quit-guard"
 import { getReleaseInfo } from "./release-info"
 import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
-import { resolveOnboardingMode, probeWopalHomeFromShell } from "./onboarding-gate"
-import { getOnboardingLogger } from "./onboarding-logger"
+import { probeWopalHomeFromShell } from "./onboarding-gate"
 import { isVmwareVirtualGpu } from "./gpu-detect"
 import { recoverMainWindow } from "./window-show-guard"
 import { Deferred, Effect, Fiber } from "effect"
@@ -148,8 +147,8 @@ const allocatePort = Effect.gen(function* () {
 })
 
 // Attach window close-intercept + application menu used by the workbench
-// (real sidecar). Shared by fresh-boot and in-process transition paths so the
-// menu's restart/relaunch/export actions always bind to the live supervisor.
+// (real sidecar) so the menu's restart/relaunch/export actions always bind to
+// the live supervisor.
 function attachWorkbenchChrome(win: BrowserWindow) {
   interceptWindowClose(win, {
     getSidecarState: () => supervisor?.getState(),
@@ -183,25 +182,13 @@ function attachWorkbenchChrome(win: BrowserWindow) {
 }
 
 interface StartWorkbenchOpts {
-  // When set, transition reuses this window (reload to workbench renderer)
-  // instead of creating a new BrowserWindow. Used by onboarding→workbench
-  // in-process transition.
-  existingWindow?: BrowserWindow | null
   // Deferred resolved by the loading window's ready-to-show. Only used on
   // fresh boot when a sqlite migration overlay is shown.
   loadingComplete?: Deferred.Deferred<void, never>
-  // Fresh boot awaits sidecar readiness before showing the window; transition
-  // starts the sidecar in the background and reloads immediately — the
-  // workbench renderer's await-initialization call waits for readiness.
-  awaitSidecarReady?: boolean
 }
 
-// Bring up the workbench: allocate port, spawn SidecarSupervisor, replace
-// IPC handlers (onboarding stubs → real sidecar handlers), fork sidecar
-// startup, then either show a fresh window (fresh boot) or reload the
-// existing onboarding window to the workbench renderer (in-process
-// transition). No process restart, so WOPAL_HOME and other dev.sh-injected
-// env vars are preserved across the transition.
+// Bring up the workbench: allocate port, spawn SidecarSupervisor, register
+// IPC handlers, fork sidecar startup, await readiness, then show the window.
 const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
   Effect.gen(function* () {
     migrate()
@@ -243,10 +230,9 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
       broadcastSidecarState(state)
     })
 
-    // Replace any previously-registered handlers (onboarding stubs during
-    // in-process transition; no-op on fresh boot since none were registered)
-    // with real sidecar handlers. Electron forbids a second handler for the
-    // same channel, so unregister first.
+    // Remove any previously-registered handlers before registering (defensive
+    // idempotence for dev HMR; no-op on fresh boot). Electron forbids a second
+    // handler for the same channel.
     unregisterIpcHandlers()
     registerIpcHandlers({
       homePath: process.env.WOPAL_HOME,
@@ -295,13 +281,10 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
       subscribeToSidecarState: (listener) => supervisor!.subscribe(listener),
     })
 
-    // forkDetach (not forkChild) so the sidecar survives the transition
-    // path's parent-fiber termination. forkChild auto-supervises: when the
-    // parent (startWorkbench) returns, the child is terminated — which would
-    // kill the sidecar mid-startup in the transition path (where we reload
-    // the window and return without awaiting). The fresh-boot path still
-    // awaits this fiber explicitly below. forkDetach detaches from the
-    // parent scope so the sidecar keeps running in the background.
+    // forkDetach (not forkChild) so the sidecar keeps running in the
+    // background while the main fiber returns and the window is shown.
+    // forkChild auto-supervises: when the parent (startWorkbench) returns,
+    // the child is terminated, which would kill the sidecar mid-startup.
     const loadingTask = yield* Effect.gen(function* () {
       logger.log("sidecar connection started", { url })
       initEmitter.on("sqlite", (progress: SqliteMigrationProgress) => {
@@ -315,39 +298,25 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
       logger.log("loading task finished")
     }).pipe(Effect.forkDetach)
 
-    if (opts.awaitSidecarReady) {
-      let overlay: BrowserWindow | null = null
-      if (needsMigration) {
-        const show = yield* loadingTask.pipe(
-          Fiber.await,
-          Effect.timeout("1 second"),
-          Effect.as(false),
-          Effect.catch(() => Effect.succeed(true)),
-        )
-        if (show) {
-          overlay = createLoadingWindow()
-          yield* Effect.sleep("1 second")
-        }
+    let overlay: BrowserWindow | null = null
+    if (needsMigration) {
+      const show = yield* loadingTask.pipe(
+        Fiber.await,
+        Effect.timeout("1 second"),
+        Effect.as(false),
+        Effect.catch(() => Effect.succeed(true)),
+      )
+      if (show) {
+        overlay = createLoadingWindow()
+        yield* Effect.sleep("1 second")
       }
-      yield* Fiber.await(loadingTask)
-      setInitStep({ phase: "done" })
-      if (overlay && opts.loadingComplete) yield* Deferred.await(opts.loadingComplete)
-      if (!opts.existingWindow) {
-        mainWindow = createMainWindow()
-      }
-      if (mainWindow) attachWorkbenchChrome(mainWindow)
-      overlay?.close()
-    } else {
-      // Transition: sidecar starts in background; reload the existing window
-      // to the workbench renderer. The renderer re-fetches get-onboarding-mode
-      // (now "workbench" because onboarding.json is completed) and calls
-      // await-initialization, which waits for the forked sidecar to ready.
-      if (opts.existingWindow) {
-        mainWindow = opts.existingWindow
-        opts.existingWindow.webContents.reload()
-      }
-      if (mainWindow) attachWorkbenchChrome(mainWindow)
     }
+    yield* Fiber.await(loadingTask)
+    setInitStep({ phase: "done" })
+    if (overlay && opts.loadingComplete) yield* Deferred.await(opts.loadingComplete)
+    mainWindow = createMainWindow()
+    if (mainWindow) attachWorkbenchChrome(mainWindow)
+    overlay?.close()
   })
 
 const main = Effect.gen(function* () {
@@ -417,8 +386,7 @@ const main = Effect.gen(function* () {
     }
     // Show + focus the existing window, or recreate it if it was destroyed or
     // never created. The new window shows itself via ready-to-show/fallback;
-    // it decides its own mode (onboarding vs workbench) from state, so no
-    // IPC re-registration or onboarding setup is needed here.
+    // no IPC re-registration or mode setup is needed here.
     mainWindow = recoverMainWindow(mainWindow, () => createMainWindow())
   })
 
@@ -435,14 +403,7 @@ const main = Effect.gen(function* () {
   // Install quit guard: Cmd+Q confirmation + macOS window-all-closed / activate
   enableQuitGuard({
     getMainWindow: () => mainWindow,
-    getSidecarState: () => {
-      if (supervisor) return supervisor.getState()
-      const mode = resolveOnboardingMode(process.env.WOPAL_HOME)
-      if (mode === "onboarding") {
-        return { status: "stopped", onboarding: true } as any
-      }
-      return undefined
-    },
+    getSidecarState: () => supervisor?.getState(),
     stopSidecar: killSidecar,
   })
 
@@ -474,9 +435,9 @@ const main = Effect.gen(function* () {
   // GUI cold-start does not inherit shell rc variables, so process.env.WOPAL_HOME
   // is empty when launched from Finder/Dock. install.sh wrote WOPAL_HOME into
   // the user's shell rc at install time; probe the login shell to recover it
-  // so onboarding state resolves against the same WOPAL_HOME the terminal
-  // `wopal` command uses. Env var (dev mode, explicit override) wins; probe
-  // only fills the gap when env is absent.
+  // so the sidecar and the terminal `wopal` command resolve the same home.
+  // Env var (dev mode, explicit override) wins; probe only fills the gap when
+  // env is absent.
   if (!process.env.WOPAL_HOME) {
     const probed = probeWopalHomeFromShell()
     if (probed) {
@@ -485,105 +446,10 @@ const main = Effect.gen(function* () {
     }
   }
 
-  const onboardingMode = resolveOnboardingMode(process.env.WOPAL_HOME)
-  if (onboardingMode === "onboarding") {
-    // Start each onboarding session with a clean debug trail. The previous
-    // run's entries (kept until a completed wizard clears them, or a crash /
-    // quit left them behind) must not bleed into this session's log.
-    getOnboardingLogger(process.env.WOPAL_HOME).clear()
-    app.setAsDefaultProtocolClient("ellamaka")
-    registerRendererProtocol()
-    setDockIcon()
-    setupAutoUpdater()
-
-    registerIpcHandlers({
-      homePath: process.env.WOPAL_HOME,
-      killSidecar: () => Promise.resolve(),
-      awaitInitialization: Effect.fnUntraced(
-        function* (_sendStep) {
-          return { url: "", username: null, password: null } as any
-        },
-        (e) => Effect.runPromise(e),
-      ),
-      getWindowConfig: () => ({
-        updaterEnabled: UPDATER_ENABLED,
-        version: getReleaseInfo().displayVersion,
-        dshProxyOrigin: getDshHttpProxyOrigin(),
-      }),
-      consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
-      getDisplayBackend: async () => null,
-      setDisplayBackend: async () => undefined,
-      parseMarkdown: async (markdown) => parseMarkdown(markdown),
-      checkAppExists: (appName) => checkAppExists(appName),
-      loadingWindowComplete: () => Deferred.doneUnsafe(loadingComplete, Effect.void),
-      runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killSidecar),
-      checkUpdate: async () => checkUpdate(),
-      installUpdate: async () => installUpdate(killSidecar),
-      setBackgroundColor: (color) => setBackgroundColor(color),
-      exportDebugLogs: () => exportDebugLogs(),
-      recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
-      getSidecarState: () => ({ status: "stopped", onboarding: true }) as any,
-      restartSidecar: () => Promise.resolve(),
-      subscribeToSidecarState: () => () => {},
-    })
-
-    mainWindow = createMainWindow()
-    if (mainWindow) {
-      interceptWindowClose(mainWindow, {
-        getSidecarState: () => ({ status: "stopped", onboarding: true }) as any,
-        stopSidecar: () => Promise.resolve(),
-      })
-      createMenu({
-        trigger: (id) => {
-          const win = BrowserWindow.getFocusedWindow() ?? mainWindow
-          if (win) sendMenuCommand(win, id)
-        },
-        checkForUpdates: () => {
-          void checkForUpdates(true, killSidecar)
-        },
-        relaunch: () => {
-          void killSidecar().finally(() => {
-            app.relaunch()
-            app.exit(0)
-          })
-        },
-        restartSidecar: () => {},
-        exportLogs: () => {
-          void exportDebugLogs()
-        },
-        toggleDebugLogging: () => {
-          toggleDebugLogging()
-        },
-        isDebugLogging: () => isDebugLogging(),
-      })
-    }
-
-    // In-process transition from onboarding to workbench. DoneStep calls
-    // window.api.onboardingTransitionToWorkbench() instead of relaunch(). We
-    // unregister onboarding handlers, bring up the real sidecar via
-    // startWorkbench, then reload the existing window — no process restart,
-    // so WOPAL_HOME and other env vars are preserved. The renderer re-reads
-    // get-onboarding-mode (now "workbench" since onboarding.json is completed)
-    // and renders the workbench.
-    ipcMain.handle("onboarding-transition-to-workbench", async () => {
-      try {
-        await Effect.runPromise(startWorkbench({ existingWindow: mainWindow, awaitSidecarReady: false }))
-        return { status: "ok" as const }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        logger.log("onboarding→workbench transition failed", { message })
-        return { status: "error" as const, message }
-      }
-    })
-
-    return
-  }
-
-  // Fresh-boot workbench path: allocate port, start sidecar, await
-  // readiness, then show a fresh window. The onboarding branch above also
-  // registers an in-process transition handler that calls startWorkbench
-  // with existingWindow=mainWindow when the user finishes onboarding.
-  yield* startWorkbench({ awaitSidecarReady: true, loadingComplete })
+  // Single startup path: the sidecar always starts, then the main window
+  // renders the embedded app, which routes to onboarding or workbench based
+  // on its own state.
+  yield* startWorkbench({ loadingComplete })
 })
 
 Effect.runFork(main)

@@ -46,56 +46,9 @@ type Deps = {
   homePath?: string
 }
 
-import { createOnboardingIpcHandlers } from "./onboarding-ipc"
-import { persistWopalHomeEnv } from "./shell-env"
 import { IPC_HANDLE_CHANNELS, IPC_EVENT_CHANNELS } from "./ipc-channels"
 
 export function registerIpcHandlers(deps: Deps) {
-  const onboardingHandlers = createOnboardingIpcHandlers({
-    homePath: deps.homePath,
-    persistWopalHomeEnv,
-    broadcastProgress: (progress) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("onboarding-progress", progress)
-      }
-    }
-  })
-  // Remove existing handlers before re-registering (dev HMR may call this twice)
-  for (const channel of [
-    "get-onboarding-mode",
-    "onboarding-get-state",
-    "onboarding-set-current-step",
-    "onboarding-execute-step",
-    "onboarding-complete",
-    "onboarding-probe",
-    "onboarding-set-wopal-home",
-    "onboarding-cancel-step",
-    "onboarding-renderer-log",
-  ]) {
-    ipcMain.removeHandler(channel)
-  }
-  ipcMain.handle("get-onboarding-mode", () => onboardingHandlers["get-onboarding-mode"]())
-  ipcMain.handle("onboarding-get-state", () => onboardingHandlers["onboarding-get-state"]())
-  ipcMain.handle("onboarding-set-current-step", (_event, step) =>
-    onboardingHandlers["onboarding-set-current-step"](_event, step),
-  )
-  ipcMain.handle("onboarding-execute-step", (event, step, input) =>
-    onboardingHandlers["onboarding-execute-step"](event, step, input),
-  )
-  ipcMain.handle("onboarding-complete", () => onboardingHandlers["onboarding-complete"]())
-  ipcMain.handle("onboarding-probe", (_event, kind: string) =>
-    onboardingHandlers["onboarding-probe"](_event, kind),
-  )
-  ipcMain.handle("onboarding-set-wopal-home", (event, path: string) =>
-    onboardingHandlers["onboarding-set-wopal-home"](event, path),
-  )
-  ipcMain.handle("onboarding-cancel-step", () =>
-    onboardingHandlers["onboarding-cancel-step"](),
-  )
-  ipcMain.handle("onboarding-renderer-log", (_event, message: string) =>
-    onboardingHandlers["onboarding-renderer-log"](_event, message),
-  )
-
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", (event: IpcMainInvokeEvent) => {
     const send = (step: InitStep) => event.sender.send("init-step", step)
@@ -316,9 +269,8 @@ export function registerIpcHandlers(deps: Deps) {
 export { IPC_HANDLE_CHANNELS as __IPC_HANDLE_CHANNELS, IPC_EVENT_CHANNELS as __IPC_EVENT_CHANNELS } from "./ipc-channels"
 
 // Remove every channel registered by registerIpcHandlers. Idempotent —
-// removeHandler/removeAllListeners are no-ops for unknown channels. Called
-// during in-process onboarding→workbench transition so real sidecar handlers
-// can replace the onboarding-mode stubs without Electron throwing
+// removeHandler/removeAllListeners are no-ops for unknown channels. Kept so a
+// re-registration (dev HMR) can replace handlers without Electron throwing
 // "attempted to register a second handler".
 export function unregisterIpcHandlers() {
   for (const ch of IPC_HANDLE_CHANNELS) {

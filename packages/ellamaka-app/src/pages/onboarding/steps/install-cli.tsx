@@ -1,10 +1,15 @@
 import { createSignal, onMount, Show } from "solid-js"
 import { ResultPanel } from "../components/ResultPanel"
+import { useOnboardingClient } from "../onboarding-client-context"
 import {
   formatInstallFailure,
   resolveInstallRetryTarget,
   type InstallFailure,
 } from "./install-cli-flow"
+
+function readString(value: unknown): string {
+  return typeof value === "string" ? value : ""
+}
 
 export interface StepProps {
   onStatusChange?: (status: "idle" | "working" | "success" | "error") => void
@@ -13,6 +18,7 @@ export interface StepProps {
 }
 
 export function InstallCliStep(props: StepProps) {
+  const client = useOnboardingClient()
   const [phaseMessage, setPhaseMessage] = createSignal("正在准备组件安装与校验…")
   const [currentTool, setCurrentTool] = createSignal<"wopal" | "ellamaka">("wopal")
   const [isWorking, setIsWorking] = createSignal(true)
@@ -47,7 +53,7 @@ export function InstallCliStep(props: StepProps) {
         setCurrentTool("wopal")
         setPhaseMessage("正在检查并安装 Wopal CLI 工具链…")
 
-        const wopalRes = await window.api.onboardingExecuteStep("install-cli", { subStep: "wopal" })
+        const wopalRes = await client.executeStep("install-cli", { subStep: "wopal" })
 
         if (wopalRes.status === "failed") {
           setFailure(formatInstallFailure("wopal", wopalRes.error ?? {}))
@@ -56,15 +62,15 @@ export function InstallCliStep(props: StepProps) {
           return
         }
 
-        const wopalVersion = (wopalRes.result as any)?.version || (wopalRes.result as any)?.wopalVersion || ""
-        const wopalUpgraded = (wopalRes.result as any)?.upgraded === true
+        const wopalVersion = readString(wopalRes.result?.version) || readString(wopalRes.result?.wopalVersion)
+        const wopalUpgraded = wopalRes.result?.upgraded === true
         setWopalStatus({ done: true, version: formatVersionString(wopalVersion), upgraded: wopalUpgraded })
       }
 
       setCurrentTool("ellamaka")
       setPhaseMessage("正在下载并配置 Ellamaka AI 引擎…")
 
-      const ellamakaRes = await window.api.onboardingExecuteStep("install-cli", { subStep: "ellamaka" })
+      const ellamakaRes = await client.executeStep("install-cli", { subStep: "ellamaka" })
 
       if (ellamakaRes.status === "failed") {
         setFailure(formatInstallFailure("ellamaka", ellamakaRes.error ?? {}))
@@ -73,8 +79,8 @@ export function InstallCliStep(props: StepProps) {
         return
       }
 
-      const ellamakaVersion = (ellamakaRes.result as any)?.version || (ellamakaRes.result as any)?.engineVersion || ""
-      const ellamakaUpgraded = (ellamakaRes.result as any)?.upgraded === true
+      const ellamakaVersion = readString(ellamakaRes.result?.version) || readString(ellamakaRes.result?.engineVersion)
+      const ellamakaUpgraded = ellamakaRes.result?.upgraded === true
       setEllamakaStatus({ done: true, version: formatVersionString(ellamakaVersion), upgraded: ellamakaUpgraded })
 
       // All finished

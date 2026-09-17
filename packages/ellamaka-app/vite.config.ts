@@ -40,6 +40,15 @@ export default defineConfig({
     // never carry it after the token exchange. Desktop and production serve
     // the frontend and the mount from one origin and are unaffected.
     proxy: {
+      // Dev-only: the onboarding surface is mounted on the backend origin
+      // (`ellamaka serve` :4096, or the desktop sidecar when its proxy target
+      // env var points there). Proxying keeps the frontend on same-origin
+      // relative requests — the same shape production serve and the Desktop
+      // embedded renderer use.
+      "/api/onboarding": {
+        target: process.env.ELLAMAKA_DSH_PROXY_TARGET ?? "http://127.0.0.1:4096",
+        changeOrigin: true,
+      },
       "/dsh": {
         target: process.env.ELLAMAKA_DSH_PROXY_TARGET ?? "http://127.0.0.1:4097",
         changeOrigin: true,

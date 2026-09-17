@@ -1,4 +1,6 @@
 import { createSignal, onMount, Show, For } from "solid-js"
+import { useNavigate } from "@solidjs/router"
+import { useOnboardingClient } from "../onboarding-client-context"
 
 interface DoneStepProps {
   onLaunchingChange?: (launching: boolean) => void
@@ -6,11 +8,12 @@ interface DoneStepProps {
 }
 
 export function DoneStep(props: DoneStepProps = {}) {
+  const client = useOnboardingClient()
+  const navigate = useNavigate()
   const [isLaunching, setIsLaunching] = createSignal<boolean>(false)
   const [warnings, setWarnings] = createSignal<string[]>([])
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null)
   const [starred, setStarred] = createSignal<boolean>(false)
-  const [runtimeCheckFinished, setRuntimeCheckFinished] = createSignal<boolean>(false)
 
   const setLaunching = (val: boolean) => {
     setIsLaunching(val)
@@ -24,27 +27,20 @@ export function DoneStep(props: DoneStepProps = {}) {
 
   onMount(async () => {
     try {
-      // 1. Thorough Final Inspection: Check onboarding state & runtime readiness
-      const state = await window.api.onboardingGetState()
-      if (state && state.warnings) {
-        setWarnings(state.warnings)
-      }
-
-      // 2. Perform deep inspection check on runtime
-      const runtimeRes = await window.api.onboardingProbe("runtime")
-      if (runtimeRes && (runtimeRes as any).ready === false && (runtimeRes as any).error) {
-        setWarnings((prev) => [...prev, String((runtimeRes as any).error)])
+      // 1. Deep inspection check on runtime readiness. The server state view
+      // carries no warnings list; runtime diagnostics surface below.
+      const runtimeRes = await client.probe("runtime")
+      if (runtimeRes.ready === false && runtimeRes.error) {
+        setWarnings((prev) => [...prev, String(runtimeRes.error)])
       }
     } catch {
       // ignore non-fatal probe error
-    } finally {
-      setRuntimeCheckFinished(true)
     }
   })
 
   const handleManualStar = async () => {
     try {
-      const res = await window.api.onboardingExecuteStep("done", { action: "star" })
+      const res = await client.executeStep("done", { action: "star" })
       if (res.status === "completed" || res.status === "reused") {
         setStarred(true)
       }
@@ -57,18 +53,10 @@ export function DoneStep(props: DoneStepProps = {}) {
     setLaunching(true)
     setError(null)
     try {
-      // 3. Final Gatekeeper: Validate onboarding completion readiness
-      const result = await window.api.onboardingComplete()
-      if (result.status === "failed") {
-        setError(result.error?.message ?? "运行时健康检查未通过，请返回前置步骤检查配置。")
-        setLaunching(false)
-        return
-      }
-      const transition = await window.api.onboardingTransitionToWorkbench()
-      if (transition.status === "error") {
-        setError(transition.message ?? "启动工作台失败，请手动重启应用。")
-        setLaunching(false)
-      }
+      // 2. Final Gatekeeper: mark onboarding complete, then hand the user to
+      // the workbench over the SPA router (no reload, no window swap).
+      await client.complete()
+      navigate("/workbench")
     } catch (err) {
       setError(err instanceof Error ? err.message : "启动工作台失败，请手动重启应用。")
       setLaunching(false)

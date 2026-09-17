@@ -51,10 +51,12 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { ServersProvider } from "./context/servers"
 import { setNavigate } from "@/utils/notification-click"
+import { createOnboardingClient, credentialsFromConnection } from "@/lib/onboarding-client"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const WorkbenchPage = lazy(() => import("@/pages/workbench"))
+const OnboardingPage = lazy(() => import("@/pages/onboarding"))
 
 const SessionRoute = Object.assign(
   () => (
@@ -149,18 +151,55 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
       // Ignore useNavigate failure in server-side/test environments
     }
   })
-  const isWorkbench = () => location.pathname.startsWith("/workbench")
+  const isBareSurface = () =>
+    location.pathname.startsWith("/workbench") || location.pathname.startsWith("/onboarding")
 
   return (
-    <ServerSyncProvider instanceBootstrap={() => !isWorkbench()}>
-      <AppShellProviders instanceBootstrap={() => !isWorkbench()}>
+    <ServerSyncProvider instanceBootstrap={() => !isBareSurface()}>
+      <AppShellProviders instanceBootstrap={() => !isBareSurface()}>
         {props.appChildren}
-        <Show when={isWorkbench()} fallback={<Layout>{props.children}</Layout>}>
+        <OnboardingGate />
+        <Show when={isBareSurface()} fallback={<Layout>{props.children}</Layout>}>
           {props.children}
         </Show>
       </AppShellProviders>
     </ServerSyncProvider>
   )
+}
+
+/**
+ * First-launch gate: once the server is reachable, consult the onboarding
+ * state exactly once and route an unfinished setup to `/onboarding`. A failed
+ * check is deliberately silent — an unreachable or older server must never
+ * pin the app on a redirect loop.
+ */
+function OnboardingGate() {
+  const server = useServer()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [checked, setChecked] = createSignal(false)
+
+  createEffect(() => {
+    if (checked()) return
+    if (!server.ready()) return
+    const connection = server.current
+    if (!connection) return
+    setChecked(true)
+
+    void (async () => {
+      try {
+        const client = createOnboardingClient({ credentials: credentialsFromConnection(connection.http) })
+        const state = await client.getState()
+        if (!state.completed && !location.pathname.startsWith("/onboarding")) {
+          navigate("/onboarding")
+        }
+      } catch {
+        // Silent: onboarding is an enhancement, not a startup blocker.
+      }
+    })()
+  })
+
+  return null
 }
 
 function EllamakaThemeBootstrap() {
@@ -370,6 +409,7 @@ export function AppInterface(props: {
                   root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
                 >
                   <Route path="/" component={HomeRoute} />
+                  <Route path="/onboarding" component={OnboardingPage} />
                   <Route path="/workbench" component={WorkbenchPage} />
                   <Route path="/:dir" component={DirectoryLayout}>
                     <Route path="/" component={() => <Navigate href="session" />} />

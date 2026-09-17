@@ -2,6 +2,7 @@ import { createSignal, onMount, Show } from "solid-js"
 import { ProgressDisplay } from "../components/ProgressDisplay"
 import { ResultPanel } from "../components/ResultPanel"
 import { zhCN } from "../content/zh-CN"
+import { useOnboardingClient } from "../onboarding-client-context"
 import {
   normalizeMemoryProbe,
   validateMemoryForm,
@@ -29,6 +30,7 @@ export interface StepProps {
 }
 
 export function MemoryConfigStep(props: StepProps) {
+  const client = useOnboardingClient()
   const t = zhCN.memory
 
   const [probing, setProbing] = createSignal(true)
@@ -108,7 +110,7 @@ export function MemoryConfigStep(props: StepProps) {
 
   onMount(async () => {
     try {
-      const raw = await window.api.onboardingProbe("memory")
+      const raw = await client.probe("memory")
       const p = normalizeMemoryProbe(raw)
       if (p.error) {
         setProbeError(p.error)
@@ -122,7 +124,7 @@ export function MemoryConfigStep(props: StepProps) {
         try {
           const form = getFormState()
           const payload = buildMemoryPayload(form)
-          const res = await window.api.onboardingExecuteStep("memory-config", payload)
+          const res = await client.executeStep("memory-config", payload)
           if (res.status === "completed" || res.status === "reused") {
             props.onStatusChange?.("success")
           } else {
@@ -249,10 +251,10 @@ export function MemoryConfigStep(props: StepProps) {
 
     try {
       const payload = buildMemoryPayload(form)
-      const res = await window.api.onboardingExecuteStep("memory-config", payload)
+      const res = await client.executeStep("memory-config", payload)
 
       if (res.status === "completed" || res.status === "reused") {
-        const raw = await window.api.onboardingProbe("memory")
+        const raw = await client.probe("memory")
         const p = normalizeMemoryProbe(raw)
 
         const refreshed = refreshMemoryScopeDraftsAfterSave(

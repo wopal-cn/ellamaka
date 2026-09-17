@@ -1,6 +1,8 @@
 import { createSignal, onMount, Show, For } from "solid-js"
+import { usePlatform } from "@/context/platform"
 import { ProgressDisplay } from "../components/ProgressDisplay"
 import { ResultPanel } from "../components/ResultPanel"
+import { useOnboardingClient } from "../onboarding-client-context"
 
 export interface StepProps {
   onStatusChange?: (status: "idle" | "working" | "success" | "error") => void
@@ -33,6 +35,8 @@ interface SpaceResult {
 }
 
 export function CreateSpaceStep(props: StepProps) {
+  const client = useOnboardingClient()
+  const platform = usePlatform()
   const [spaceDir, setSpaceDir] = createSignal<string>("")
   const [spaceType, setSpaceType] = createSignal<string>("")
   const [availableTypes, setAvailableTypes] = createSignal<AvailableType[]>([])
@@ -49,7 +53,7 @@ export function CreateSpaceStep(props: StepProps) {
     setProbeError(null)
     setIsLoading(true)
     try {
-      const envData = await window.api.onboardingProbe("environment")
+      const envData = await client.probe("environment")
       const error = typeof envData.error === "string" ? envData.error : null
       if (error) throw new Error(error)
 
@@ -71,7 +75,7 @@ export function CreateSpaceStep(props: StepProps) {
       if (spaces.length > 0) {
         // Auto-confirm reuse: execute backend skip to mark step done, then user can proceed directly
         try {
-          const res = await window.api.onboardingExecuteStep("create-space", { skip: true })
+          const res = await client.executeStep("create-space", { skip: true })
           if (res.status === "skipped" || res.status === "completed" || res.status === "reused") {
             props.onStatusChange?.("success")
           } else {
@@ -107,7 +111,7 @@ export function CreateSpaceStep(props: StepProps) {
     props.onStatusChange?.("working")
     setIsSubmitting(true)
     try {
-      const res = await window.api.onboardingExecuteStep("create-space", { skip: true })
+      const res = await client.executeStep("create-space", { skip: true })
       if (res.status === "skipped" || res.status === "completed" || res.status === "reused") {
         props.onStatusChange?.("success")
         props.onComplete()
@@ -146,7 +150,7 @@ export function CreateSpaceStep(props: StepProps) {
     setIsSubmitting(true)
 
     try {
-      const res = await window.api.onboardingExecuteStep("create-space", {
+      const res = await client.executeStep("create-space", {
         path: spaceDir().trim(),
         type: spaceType(),
       })
@@ -182,10 +186,10 @@ export function CreateSpaceStep(props: StepProps) {
   }
 
   const handleBrowse = async () => {
+    if (!platform.openDirectoryPickerDialog) return
     try {
-      const result = await window.api.openDirectoryPicker({
+      const result = await platform.openDirectoryPickerDialog({
         title: "选择工作空间根目录",
-        defaultPath: spaceDir(),
       })
       if (typeof result === "string") {
         setSpaceDir(result)
@@ -296,15 +300,17 @@ export function CreateSpaceStep(props: StepProps) {
               placeholder="~/WopalSpace"
               disabled={isSubmitting()}
             />
-            <button
-              type="button"
-              class="ob-button ob-button-secondary"
-              onClick={handleBrowse}
-              disabled={isSubmitting()}
-              style={{ padding: "0 14px", "white-space": "nowrap", "font-size": "13px" }}
-            >
-              选择目录
-            </button>
+            <Show when={platform.openDirectoryPickerDialog !== undefined}>
+              <button
+                type="button"
+                class="ob-button ob-button-secondary"
+                onClick={handleBrowse}
+                disabled={isSubmitting()}
+                style={{ padding: "0 14px", "white-space": "nowrap", "font-size": "13px" }}
+              >
+                选择目录
+              </button>
+            </Show>
           </div>
           <p style={{ "font-size": "12px", color: "var(--ob-text-subtle)", "margin-top": "6px" }}>
             该目录将承载项目文件与 <code>.wopal-space/</code> 空间配置。

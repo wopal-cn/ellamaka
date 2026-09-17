@@ -1,7 +1,7 @@
 // IPC channel name registry. Source of truth for every channel registered by
 // registerIpcHandlers in ipc.ts. unregisterIpcHandlers clears the exact same
-// set so the in-process onboarding→workbench transition can re-register
-// handlers without Electron throwing "attempted to register a second handler".
+// set so re-registration (dev HMR) can replace handlers without Electron
+// throwing "attempted to register a second handler".
 //
 // Kept electron-free so it can be imported by tests that run outside the
 // Electron runtime (bun:test with electron-mock cannot fully load electron).
@@ -11,15 +11,6 @@
 // every channel registered in ipc.ts.
 
 export const IPC_HANDLE_CHANNELS = [
-  "get-onboarding-mode",
-  "onboarding-get-state",
-  "onboarding-set-current-step",
-  "onboarding-execute-step",
-  "onboarding-complete",
-  "onboarding-probe",
-  "onboarding-set-wopal-home",
-  "onboarding-cancel-step",
-  "onboarding-renderer-log",
   "kill-sidecar",
   "await-initialization",
   "get-window-config",

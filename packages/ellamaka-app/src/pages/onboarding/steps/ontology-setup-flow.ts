@@ -1,4 +1,4 @@
-import type { OnboardingStepResult } from "../../../preload/types"
+import type { OnboardingStepResult } from "@/lib/onboarding-client"
 
 export type OntologyMode = "fork" | "clone"
 

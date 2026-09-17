@@ -2,22 +2,6 @@ import { contextBridge, ipcRenderer } from "electron"
 import type { ElectronAPI, InitStep, SqliteMigrationProgress } from "./types"
 
 const api: ElectronAPI = {
-  getOnboardingMode: () => ipcRenderer.invoke("get-onboarding-mode"),
-  onboardingGetState: () => ipcRenderer.invoke("onboarding-get-state"),
-  onboardingSetCurrentStep: (step) => ipcRenderer.invoke("onboarding-set-current-step", step),
-  onboardingExecuteStep: (step, input) => ipcRenderer.invoke("onboarding-execute-step", step, input),
-  onboardingComplete: () => ipcRenderer.invoke("onboarding-complete"),
-  onboardingTransitionToWorkbench: () => ipcRenderer.invoke("onboarding-transition-to-workbench"),
-  onboardingProbe: (kind) => ipcRenderer.invoke("onboarding-probe", kind),
-  onboardingSetWopalHome: (path) => ipcRenderer.invoke("onboarding-set-wopal-home", path),
-  onboardingCancelStep: () => ipcRenderer.invoke("onboarding-cancel-step"),
-  onboardingRendererLog: (message) => ipcRenderer.invoke("onboarding-renderer-log", message),
-  onOnboardingProgress: (cb) => {
-    const handler = (_: unknown, progress: any) => cb(progress)
-    ipcRenderer.on("onboarding-progress", handler)
-    return () => ipcRenderer.removeListener("onboarding-progress", handler)
-  },
-
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: (onStep) => {

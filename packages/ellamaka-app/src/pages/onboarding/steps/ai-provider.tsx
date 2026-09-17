@@ -1,6 +1,8 @@
 import { createSignal, onMount, Show } from "solid-js"
+import { usePlatform } from "@/context/platform"
 import { ProgressDisplay } from "../components/ProgressDisplay"
 import { ResultPanel } from "../components/ResultPanel"
+import { useOnboardingClient } from "../onboarding-client-context"
 import { AI_SUBSCRIPTION_PLANS } from "./ai-subscription-plans"
 
 export interface StepProps {
@@ -10,6 +12,8 @@ export interface StepProps {
 }
 
 export function AiProviderStep(props: StepProps) {
+  const client = useOnboardingClient()
+  const platform = usePlatform()
   const plan = AI_SUBSCRIPTION_PLANS[0]
   const [apiKey, setApiKey] = createSignal("")
   const [loading, setLoading] = createSignal(false)
@@ -19,14 +23,14 @@ export function AiProviderStep(props: StepProps) {
 
   onMount(async () => {
     try {
-      const res = await window.api.onboardingProbe("ai-provider")
-      if (res && (res as any).hasKey) {
-        const masked = (res as any).maskedKey || "oc_****"
+      const res = await client.probe("ai-provider")
+      if (res.hasKey) {
+        const masked = typeof res.maskedKey === "string" ? res.maskedKey : "oc_****"
         setDetectedKey(masked)
         setConfigured(true)
         // Auto-confirm reuse: execute backend to mark step done, then user can proceed directly
         try {
-          const execRes = await window.api.onboardingExecuteStep("ai-provider", {
+          const execRes = await client.executeStep("ai-provider", {
             provider: plan.providerId,
           })
           if (execRes.status === "completed" || execRes.status === "reused") {
@@ -46,7 +50,7 @@ export function AiProviderStep(props: StepProps) {
   })
 
   const handleOpenSignup = () => {
-    window.api.openLink(plan.signupUrl)
+    platform.openLink(plan.signupUrl)
   }
 
   const handleSubmit = async (e: Event) => {
@@ -68,7 +72,7 @@ export function AiProviderStep(props: StepProps) {
     setLoading(true)
 
     try {
-      const res = await window.api.onboardingExecuteStep("ai-provider", {
+      const res = await client.executeStep("ai-provider", {
         provider: plan.providerId,
         apiKey: keyToSubmit,
       })

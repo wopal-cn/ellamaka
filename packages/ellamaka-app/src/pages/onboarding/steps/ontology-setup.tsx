@@ -1,6 +1,7 @@
 import { createSignal, For, onMount, Show } from "solid-js"
 import { ProgressDisplay } from "../components/ProgressDisplay"
 import { ResultPanel } from "../components/ResultPanel"
+import { useOnboardingClient } from "../onboarding-client-context"
 import { ONTOLOGY_MODES, ONTOLOGY_SOURCES } from "./ontology-options"
 import { normalizeOntologyResult, type OntologyResultSummary } from "./ontology-result"
 import {
@@ -60,6 +61,7 @@ function OntologyTypes(props: { items: Array<{ type: string; branch: string }> }
 }
 
 export function OntologySetupStep(props: StepProps) {
+  const client = useOnboardingClient()
   const [mode, setMode] = createSignal<OntologyMode>("fork")
   const [sourceType, setSourceType] = createSignal<SourceType>("official")
   const [customUrl, setCustomUrl] = createSignal("")
@@ -86,7 +88,7 @@ export function OntologySetupStep(props: StepProps) {
   const [resultInfo, setResultInfo] = createSignal<OntologyResultSummary | null>(null)
 
   const applyGithubProbe = async () => {
-    const raw = await window.api.onboardingProbe("github-auth")
+    const raw = await client.probe("github-auth")
     const auth = normalizeGithubAuthProbe(raw)
     setGithubAuth(auth)
     if (auth.detected) setGithubError(null)
@@ -104,13 +106,13 @@ export function OntologySetupStep(props: StepProps) {
     try {
       setProbePhase("正在检测 GitHub 配置…")
       const githubT = performance.now()
-      const authRaw = await window.api.onboardingProbe("github-auth")
+      const authRaw = await client.probe("github-auth")
       const auth = normalizeGithubAuthProbe(authRaw)
       lap(`github-auth 探测完成（${Math.round(performance.now() - githubT)}ms）`)
       setGithubAuth(auth)
       setProbePhase("正在检查空间能力本体…")
       const ontologyT = performance.now()
-      const ontologyRaw = await window.api.onboardingProbe("ontology-setup")
+      const ontologyRaw = await client.probe("ontology-setup")
       const ontology = normalizeOntologyProbe(ontologyRaw)
       lap(`ontology-setup 探测完成（${Math.round(performance.now() - ontologyT)}ms）`)
       const initial = buildOntologyInitialState(auth, ontology)
@@ -127,7 +129,7 @@ export function OntologySetupStep(props: StepProps) {
               githubToken: "",
               reuseExisting: true,
             },
-            window.api.onboardingExecuteStep,
+            (step, input) => client.executeStep(step, input),
           )
           lap(`复用 execute 完成（${Math.round(performance.now() - reuseT)}ms）`)
           if (res.status === "completed" || res.status === "reused") {
@@ -183,7 +185,7 @@ export function OntologySetupStep(props: StepProps) {
     setIsSavingGithub(true)
     props.onStatusChange?.("working")
     try {
-      const response = await window.api.onboardingExecuteStep("github-auth", { token })
+      const response = await client.executeStep("github-auth", { token })
       if (response.status === "completed" || response.status === "reused") {
         setGithubToken("")
         setIsEditingGithub(false)
@@ -251,7 +253,7 @@ export function OntologySetupStep(props: StepProps) {
           githubToken: githubToken(),
           reuseExisting,
         },
-        window.api.onboardingExecuteStep,
+        (step, input) => client.executeStep(step, input),
       )
       if (response.status === "completed" || response.status === "reused") {
         setResultInfo(normalizeOntologyResult(response.result, mode(), sourceType()))

@@ -1,7 +1,17 @@
-import { ONBOARDING_STEPS, type OnboardingStepName } from "../../shared/onboarding-constants"
 import { zhCN, type StepContent } from "./content/zh-CN"
 
-export { ONBOARDING_STEPS, type OnboardingStepName }
+/** The canonical wizard steps, in order (mirrors the server contract). */
+export const ONBOARDING_STEPS = [
+  "system-check",
+  "install-cli",
+  "ontology-setup",
+  "create-space",
+  "ai-provider",
+  "memory-config",
+  "done",
+] as const
+
+export type OnboardingStepName = (typeof ONBOARDING_STEPS)[number]
 
 export const OPTIONAL_STEPS: Set<OnboardingStepName> = new Set([
   "ai-provider",

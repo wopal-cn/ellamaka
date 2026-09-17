@@ -287,6 +287,7 @@
         "@typescript/native-preview": "catalog:",
         "@valibot/to-json-schema": "1.6.0",
         "@wopal/ellamaka-app": "workspace:*",
+        "@wopal/ellamaka-onboarding": "workspace:*",
         "@wopal/ellamaka-release": "workspace:*",
         "@wopal/ui": "workspace:*",
         "electron": "41.2.1",
@@ -313,6 +314,18 @@
         "@parcel/watcher-linux-x64-musl": "2.5.1",
         "@parcel/watcher-win32-arm64": "2.5.1",
         "@parcel/watcher-win32-x64": "2.5.1",
+      },
+    },
+    "packages/ellamaka-onboarding": {
+      "name": "@wopal/ellamaka-onboarding",
+      "version": "2.0.5",
+      "dependencies": {
+        "@wopal/ellamaka-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
       },
     },
     "packages/ellamaka-release": {
@@ -417,6 +430,7 @@
         "@wopal/cli-capability-schema": "^0.3.16",
         "@wopal/ellamaka-brand": "workspace:*",
         "@wopal/ellamaka-cordis": "workspace:*",
+        "@wopal/ellamaka-onboarding": "workspace:*",
         "@wopal/ellamaka-release": "workspace:*",
         "@wopal/llm": "workspace:*",
         "@wopal/ui": "workspace:*",
@@ -2596,6 +2610,8 @@
     "@wopal/ellamaka-core": ["@wopal/ellamaka-core@workspace:packages/ellamaka-core"],
 
     "@wopal/ellamaka-desktop": ["@wopal/ellamaka-desktop@workspace:packages/ellamaka-desktop"],
+
+    "@wopal/ellamaka-onboarding": ["@wopal/ellamaka-onboarding@workspace:packages/ellamaka-onboarding"],
 
     "@wopal/ellamaka-release": ["@wopal/ellamaka-release@workspace:packages/ellamaka-release"],
 

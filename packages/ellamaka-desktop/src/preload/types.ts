@@ -42,15 +42,6 @@ export type FatalRendererError = {
   os?: string
 }
 
-export type OnboardingProgress = {
-  step: string
-  phase?: string
-  percent?: number
-  message?: string
-  suggestion?: string
-  details?: string
-}
-
 export type OnboardingStepResult = {
   status: "completed" | "reused" | "skipped" | "failed"
   result?: Record<string, unknown>
@@ -63,23 +54,6 @@ export type OnboardingStepResult = {
 }
 
 export type ElectronAPI = {
-  getOnboardingMode: () => Promise<{ mode: "onboarding" | "workbench" }>
-  onboardingGetState: () => Promise<import("../main/onboarding-state").OnboardingState | null>
-  onboardingSetCurrentStep: (
-    step: import("../shared/onboarding-constants").OnboardingStepName,
-  ) => Promise<{ status: string; currentStep?: string; message?: string }>
-  onboardingExecuteStep: (
-    step: import("../shared/onboarding-constants").OnboardingStepName | "github-auth",
-    input?: unknown,
-  ) => Promise<OnboardingStepResult>
-  onboardingComplete: () => Promise<OnboardingStepResult>
-  onboardingTransitionToWorkbench: () => Promise<{ status: "ok" } | { status: "error"; message: string }>
-  onboardingProbe: (kind: string) => Promise<Record<string, unknown>>
-  onboardingSetWopalHome: (path: string) => Promise<{ status: string; homePath?: string; message?: string }>
-  onboardingCancelStep: () => Promise<{ status: string }>
-  onboardingRendererLog: (message: string) => Promise<{ status: string }>
-  onOnboardingProgress: (cb: (progress: OnboardingProgress) => void) => () => void
-
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: (onStep: (step: InitStep) => void) => Promise<ServerReadyData>

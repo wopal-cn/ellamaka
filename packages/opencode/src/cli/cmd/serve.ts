@@ -36,6 +36,20 @@ export const ServeCommand = effectCmd({
     console.log(`${BINARY_NAME} server listening on ${origin}`)
     console.log(`workbench: ${workbenchAuthUrl(origin, Flag.ELLAMAKA_SERVER_PASSWORD)}`)
 
+    // Onboarding HTTP surface (Plan #230): a zero-intrusion mount at
+    // /api/onboarding on top of Server.listen. The Onboarding package owns its
+    // authentication (the mount declares `auth: "self"`); the server password
+    // is forwarded so a protected server asks for the same credential here too.
+    // The dynamic import keeps the onboarding closure out of the desktop
+    // sidecar bundle — only CLI hosts load it. No `onComplete` hook is wired:
+    // the listener exposes no Effect-side SpaceRegistry, and the Workbench
+    // already refetches spaces when it navigates after completion.
+    const disposeOnboarding = yield* Effect.promise(async () => {
+      const { mountOnboarding } = await import("@wopal/ellamaka-onboarding/mount")
+      return mountOnboarding(server, { serverPassword: Flag.ELLAMAKA_SERVER_PASSWORD })
+    })
+    console.log(`onboarding: /api/onboarding`)
+
     // Optional dsh engine (single-process, dual-container, DESIGN-dsh-base.md
     // §2.1/§2.2). The unified Runtime Manager (in dsh-mount.ts, shared with the
     // `web` command) gates on `ELLAMAKA_DSH` itself — `=0` → disabled with zero
@@ -45,7 +59,14 @@ export const ServeCommand = effectCmd({
     {
       const { mountDshEngine: engine } = yield* Effect.promise(() => import("./dsh-mount"))
       const handle = yield* Effect.promise(() => engine(server, { cors: opts.cors }))
-      yield* Effect.never.pipe(Effect.ensuring(Effect.promise(() => handle?.dispose() ?? Promise.resolve())))
+      yield* Effect.never.pipe(
+        Effect.ensuring(
+          Effect.promise(async () => {
+            disposeOnboarding()
+            await handle?.dispose()
+          }),
+        ),
+      )
     }
   }),
 })

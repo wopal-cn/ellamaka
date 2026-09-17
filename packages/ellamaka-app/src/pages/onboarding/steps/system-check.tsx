@@ -1,4 +1,6 @@
 import { createSignal, onMount, Show } from "solid-js"
+import { usePlatform } from "@/context/platform"
+import { useOnboardingClient } from "../onboarding-client-context"
 
 export interface StepProps {
   userName?: string
@@ -8,6 +10,8 @@ export interface StepProps {
 }
 
 export function SystemCheckStep(props: StepProps) {
+  const client = useOnboardingClient()
+  const platform = usePlatform()
   const [isRunning, setIsRunning] = createSignal<boolean>(true)
   const [isPassed, setIsPassed] = createSignal<boolean>(false)
   const [errorMsg, setErrorMsg] = createSignal<string | null>(null)
@@ -24,7 +28,7 @@ export function SystemCheckStep(props: StepProps) {
   const probe = async (targetPath?: string) => {
     const checkHome = targetPath ?? wopalHome()
     try {
-      const res = await window.api.onboardingProbe("system-info")
+      const res = await client.probe("system-info")
       const data = (res as Record<string, unknown>) || {}
       setSysInfo({
         platform: (data.platform as string) || "darwin",
@@ -49,7 +53,7 @@ export function SystemCheckStep(props: StepProps) {
     setErrorMsg(null)
     const checkHome = targetPath ?? wopalHome()
     try {
-      const res = await window.api.onboardingExecuteStep("system-check", {
+      const res = await client.executeStep("system-check", {
         customHomePath: checkHome || undefined,
       })
       if (res.status === "completed" || res.status === "reused") {
@@ -88,8 +92,13 @@ export function SystemCheckStep(props: StepProps) {
     props.onStatusChange?.("working")
     setIsRunning(true)
     try {
-      const probeRes = await window.api.onboardingProbe("home")
-      const realHome = (probeRes as any)?.homePath || (probeRes as any)?.wopalHome
+      const probeRes = await client.probe("home")
+      const realHome =
+        typeof probeRes.homePath === "string"
+          ? probeRes.homePath
+          : typeof probeRes.wopalHome === "string"
+            ? probeRes.wopalHome
+            : ""
       const home = realHome || ""
       setWopalHome(home)
       await probe(home || undefined)
@@ -105,10 +114,10 @@ export function SystemCheckStep(props: StepProps) {
   })
 
   const handleBrowseHome = async () => {
+    if (!platform.openDirectoryPickerDialog) return
     try {
-      const result = await window.api.openDirectoryPicker({
+      const result = await platform.openDirectoryPickerDialog({
         title: "选择 WOPAL_HOME 工作目录",
-        defaultPath: wopalHome() || "~/.wopal",
       })
       const selected = typeof result === "string" ? result : Array.isArray(result) ? result[0] : null
       if (selected) {
@@ -138,7 +147,8 @@ export function SystemCheckStep(props: StepProps) {
       props.onError("请输入或选择一个工作目录。")
       return
     }
-    await window.api.onboardingSetWopalHome(trimmed)
+    // The chosen home rides the execute input (`customHomePath`); the server
+    // persists it as part of running the step.
     const passed = await runCheck(trimmed)
     if (passed) props.onComplete()
   }
@@ -182,15 +192,17 @@ export function SystemCheckStep(props: StepProps) {
           disabled={isRunning()}
         />
         <div class="ob-syscheck-home-actions">
-          <button
-            type="button"
-            class="ob-button ob-button-secondary ob-syscheck-browse"
-            onClick={handleBrowseHome}
-            disabled={isRunning()}
-          >
-            <span>📁</span>
-            <span>选择 / 更改工作目录…</span>
-          </button>
+          <Show when={platform.openDirectoryPickerDialog !== undefined}>
+            <button
+              type="button"
+              class="ob-button ob-button-secondary ob-syscheck-browse"
+              onClick={handleBrowseHome}
+              disabled={isRunning()}
+            >
+              <span>📁</span>
+              <span>选择 / 更改工作目录…</span>
+            </button>
+          </Show>
         </div>
       </div>
 

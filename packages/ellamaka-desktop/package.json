@@ -47,6 +47,7 @@
     "@lydell/node-pty": "catalog:",
     "@wopal/ellamaka-app": "workspace:*",
     "@wopal/ellamaka-release": "workspace:*",
+    "@wopal/ellamaka-onboarding": "workspace:*",
     "@wopal/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",

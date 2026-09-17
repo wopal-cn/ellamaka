@@ -26,7 +26,6 @@ import { useTheme } from "@wopal/ui/theme"
 import { DesktopRouter } from "./desktop-router"
 import type { SidecarRuntimeState } from "../preload/types"
 import { mapSidecarStateToAction, resolveSidecarServer } from "./sidecar-adapter"
-import { OnboardingRoot } from "./onboarding/onboarding-root"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -266,16 +265,8 @@ listenForDeepLinks()
 
   const [windowCount] = createResource(() => window.api.getWindowCount())
 
-  const [onboardingMode] = createResource(async () => {
-    const res = await window.api.getOnboardingMode().catch(() => ({ mode: "workbench" as const }))
-    return res.mode
-  })
-
-  // Fetch sidecar credentials only when in workbench mode
-  const [sidecar] = createResource(
-    () => onboardingMode() === "workbench",
-    () => window.api.awaitInitialization(() => undefined),
-  )
+  // Fetch sidecar credentials; initialization waits for the supervisor.
+  const [sidecar] = createResource(() => window.api.awaitInitialization(() => undefined))
 
   // Live sidecar state from Supervisor (for generation changes / restarts)
   const [sidecarState, setSidecarState] = createSignal<SidecarRuntimeState | undefined>()
@@ -362,32 +353,25 @@ listenForDeepLinks()
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <Show when={!onboardingMode.loading}>
-          <Show
-            when={onboardingMode() === "workbench"}
-            fallback={<OnboardingRoot />}
-          >
-            <Show
-              when={
-                !sidecar.loading &&
-                !windowConfig.loading &&
-                !windowCount.loading &&
-                !locale.loading
-              }
-            >
-              {(_) => {
-                return (
-                  <AppInterface
-                    defaultServer={ServerConnection.Key.make("sidecar")}
-                    servers={servers()}
-                    router={DesktopRouter}
-                  >
-                    <Inner />
-                  </AppInterface>
-                )
-              }}
-            </Show>
-          </Show>
+        <Show
+          when={
+            !sidecar.loading &&
+            !windowConfig.loading &&
+            !windowCount.loading &&
+            !locale.loading
+          }
+        >
+          {(_) => {
+            return (
+              <AppInterface
+                defaultServer={ServerConnection.Key.make("sidecar")}
+                servers={servers()}
+                router={DesktopRouter}
+              >
+                <Inner />
+              </AppInterface>
+            )
+          }}
         </Show>
       </AppBaseProviders>
     </PlatformProvider>

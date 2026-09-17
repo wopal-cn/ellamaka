@@ -330,6 +330,9 @@ describe("memory-config-flow | scope drafts", () => {
 describe("memory-config-flow | validateMemoryForm", () => {
   test("no errors when disabled", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: false,
       llmEndpoint: "",
       llmModel: "",
@@ -347,6 +350,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 
   test("validates required fields when enabled", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "",
       llmModel: "",
@@ -368,6 +374,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 
   test("accepts when all required fields present", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -385,6 +394,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 
   test("accepts when key is already configured (no new key input)", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -402,6 +414,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 
   test("rejects invalid URL format", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "not-a-url",
       llmModel: "gpt-4o-mini",
@@ -420,6 +435,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 
   test("rejects empty embedding model", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -438,6 +456,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 
   test("reuse mode: embedding endpoint not required when reuse is on", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -460,6 +481,9 @@ describe("memory-config-flow | validateMemoryForm", () => {
 describe("memory-config-flow | buildMemoryPayload", () => {
   test("builds full payload for enabled config", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -483,6 +507,9 @@ describe("memory-config-flow | buildMemoryPayload", () => {
 
   test("omits key when not provided and already configured", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -501,6 +528,9 @@ describe("memory-config-flow | buildMemoryPayload", () => {
 
   test("reuse mode: copies llmKey to embeddingKey when new key provided", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -519,6 +549,9 @@ describe("memory-config-flow | buildMemoryPayload", () => {
 
   test("reuse mode: does not copy empty llmKey to embeddingKey", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: true,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -535,8 +568,11 @@ describe("memory-config-flow | buildMemoryPayload", () => {
     expect(payload.embeddingEndpoint).toBe("https://api.example.com")
   })
 
-  test("disabled payload only has enabled: false", () => {
+  test("disabled global payload keeps inert scope fields", () => {
     const form: MemoryFormState = {
+      memoryInjectionEnabled: true,
+      scope: "global",
+      spaceMode: "inherit",
       enabled: false,
       llmEndpoint: "https://api.example.com",
       llmModel: "gpt-4o-mini",
@@ -549,7 +585,10 @@ describe("memory-config-flow | buildMemoryPayload", () => {
       embeddingKeyConfigured: false,
     }
     const payload = buildMemoryPayload(form)
-    expect(payload).toEqual({ enabled: false, scope: undefined, spaceMode: undefined, spacePath: undefined })
+    // A real global-scope form always carries scope/spaceMode (see
+    // buildInitialForm); the server short-circuits `enabled: false` before
+    // reading either, so the global/inherit pair is inert on the wire.
+    expect(payload).toEqual({ enabled: false, scope: "global", spaceMode: "inherit", spacePath: undefined })
   })
 
   test("space scope payloads attach spacePath for inherit, disabled, and custom modes", () => {
