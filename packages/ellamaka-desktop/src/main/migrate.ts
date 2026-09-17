@@ -21,11 +21,11 @@ function tauriDir(id: string) {
   }
 }
 
-// The Tauri app identifier changes between main/beta/prod builds.
+// The Tauri app identifier changes between main/beta/stable builds.
 const TAURI_APP_IDS: Record<string, string> = {
   main: "ai.ellamaka.desktop.main",
   beta: "ai.ellamaka.desktop.beta",
-  prod: "ai.ellamaka.desktop",
+  stable: "ai.ellamaka.desktop",
 }
 function tauriAppId() {
   return app.isPackaged ? TAURI_APP_IDS[CHANNEL] : `ai.ellamaka.desktop.${CHANNEL}`

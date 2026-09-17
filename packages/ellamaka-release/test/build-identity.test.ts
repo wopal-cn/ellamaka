@@ -43,7 +43,7 @@ describe("buildReleaseIdentityForBuild: development identity", () => {
     expect(identity.version).toBe("0.0.0-local-202608070916")
   })
 
-  test("reports prod channel verbatim (not folded to local)", () => {
+  test("folds prod (out-of-vocabulary dev channel) to local", () => {
     delete process.env.ELLAMAKA_BUILD_COMMIT
     delete process.env.ELLAMAKA_RELEASE_CONTEXT_PATH
 
@@ -53,7 +53,7 @@ describe("buildReleaseIdentityForBuild: development identity", () => {
       channel: "prod",
     })
 
-    expect(identity.channel).toBe("prod")
+    expect(identity.channel).toBe("local")
   })
 
   test("reports local channel verbatim", () => {

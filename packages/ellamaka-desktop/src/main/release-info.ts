@@ -23,7 +23,7 @@ export function createReleaseInfo(version: string, build?: string): ReleaseInfo 
   }
 }
 
-type DesktopFeedChannel = "main" | "beta" | "prod"
+type DesktopFeedChannel = "main" | "beta" | "stable"
 
 type EmbeddedIdentity = {
   schemaVersion: 2
@@ -62,7 +62,7 @@ type AppMetadata = {
 }
 
 const FEED_TO_IDENTITY_CHANNEL: Record<DesktopFeedChannel, string> = {
-  prod: "stable",
+  stable: "stable",
   beta: "beta",
   main: "local",
 }
@@ -114,11 +114,11 @@ export function getReleaseInfo(): ReleaseInfo {
     }
   } catch {}
 
-  if (process.env.OPENCODE_VERSION?.trim()) {
-    version = process.env.OPENCODE_VERSION.trim()
+  if (process.env.ELLAMAKA_VERSION?.trim()) {
+    version = process.env.ELLAMAKA_VERSION.trim()
   }
-  if (!build && process.env.OPENCODE_BUILD_ID?.trim()) {
-    build = process.env.OPENCODE_BUILD_ID.trim()
+  if (!build && process.env.ELLAMAKA_BUILD_ID?.trim()) {
+    build = process.env.ELLAMAKA_BUILD_ID.trim()
   }
 
   if (!build) {

@@ -1,8 +1,8 @@
 import fs from "fs"
 
 const PRODUCTS = ["ellamaka-cli", "ellamaka-desktop"] as const
-const RELEASE_CHANNELS = ["stable", "beta"] as const
-const DEV_CHANNELS = ["local", "main"] as const
+export const RELEASE_CHANNELS = ["stable", "beta"] as const
+export const DEV_CHANNELS = ["local", "main"] as const
 const COMMIT_RE = /^[0-9a-f]{40}$/
 const ISO8601_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/

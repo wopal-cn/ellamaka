@@ -25,14 +25,22 @@ type DatabaseFlags = Pick<RuntimeFlags.Info, "disableChannelDb" | "skipMigration
 const readRuntimeFlags = () =>
   Effect.runSync(RuntimeFlags.Service.useSync((flags) => flags).pipe(Effect.provide(RuntimeFlags.defaultLayer)))
 
+/**
+ * Database file name for a given build channel. Release channels stable/beta
+ * share the unqualified ellamaka.db so beta testers operate on the same data
+ * as production users; dev channels main/local get channel-qualified files.
+ * Channels outside the closed vocabulary {stable, beta, main, local} fall
+ * through to safe-char filtering for their qualified name.
+ */
+export function getChannelDbName(channel: string) {
+  if (["stable", "beta"].includes(channel)) return "ellamaka.db"
+  const safe = channel.replace(/[^a-zA-Z0-9._-]/g, "-")
+  return `ellamaka-${safe}.db`
+}
+
 export function getChannelPath(flags: Pick<DatabaseFlags, "disableChannelDb"> = readRuntimeFlags()) {
   if (flags.disableChannelDb) return path.join(Global.Path.data, "ellamaka.db")
-  // beta shares the release database so beta testers operate on the same data
-  // as production users. prod/latest/beta all use the unqualified ellamaka.db.
-  if (["latest", "prod", "beta"].includes(InstallationChannel))
-    return path.join(Global.Path.data, "ellamaka.db")
-  const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
-  return path.join(Global.Path.data, `ellamaka-${safe}.db`)
+  return path.join(Global.Path.data, getChannelDbName(InstallationChannel))
 }
 
 export const getPath = (flags?: Pick<DatabaseFlags, "disableChannelDb">) => {

@@ -5,7 +5,7 @@ import fs from "fs"
 import path from "path"
 import { fileURLToPath } from "url"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
-import { BINARY_NAME, CHANNEL_RELEASE } from "@wopal/ellamaka-brand/branding"
+import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 import { buildReleaseIdentityForBuild } from "../build-identity"
 import { filterTargets, type BuildTarget } from "../build-targets"
 
@@ -37,11 +37,11 @@ function readMinWopalCliVersion(): string {
   throw new Error("cannot read minWopalCli from .ci/versions.json")
 }
 
-// Release builds always use the release channel (latest). Development builds
-// respect the channel passed via OPENCODE_CHANNEL (build.sh cli --channel
-// main|prod; dev.sh sets local), so the binary's channel and its database
-// name agree.
-const channel = Script.release ? CHANNEL_RELEASE : Script.channel
+// The channel is resolved by build-env (D-03): release builds derive it from
+// the version shape, dev builds take the channel passed via ELLAMAKA_CHANNEL
+// (build.sh cli --channel main|local; dev.sh sets local), so the binary's
+// channel and its database name agree.
+const channel = Script.channel
 
 // ── DSH runtime manifest freshness gate ─────────────────────────────
 // The bundled CLI carries the DSH runtime manifest through the static JSON
@@ -248,7 +248,7 @@ for (const item of targets) {
       // protocol floor without runtime env or source-tree dependencies.
       "process.env.MIN_WOPAL_CLI_VERSION": `'${process.env.MIN_WOPAL_CLI_VERSION || readMinWopalCliVersion()}'`,
       // Embed a structured ReleaseIdentity at build time. Release builds
-      // (OPENCODE_RELEASE=1) with a release-context path produce a release
+      // (ELLAMAKA_RELEASE=1) with a release-context path produce a release
       // identity; otherwise a development identity is embedded. See
       // docs/DISTRIBUTION.md §5.4.
       //

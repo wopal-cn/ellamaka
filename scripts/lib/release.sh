@@ -95,7 +95,7 @@ check_remote_branch() {
 # target_is_prerelease — resolve 前判定本次 bump 目标是否为 prerelease 通道
 # （不依赖版本号，只看调用意图）：
 #   cli:     仅 --rc 是 prerelease；--patch/--minor/--major 是 stable 通道
-#   desktop: CHANNEL=beta（--beta）是 prerelease；CHANNEL=prod 是 stable 通道
+#   desktop: CHANNEL=beta（--beta）是 prerelease；CHANNEL=stable 是 stable 通道
 target_is_prerelease() {
   if [ "$SUBCOMMAND" = "cli" ]; then
     [ "$AUTO_BUMP" = "rc" ]
@@ -105,7 +105,7 @@ target_is_prerelease() {
 }
 
 # check_branch_allows_channel — 通道级预检（在版本推断之前执行，dry-run 同样
-# 触发）：非 main 分支只许发布 prerelease（rc/beta）。stable/prod 目标
+# 触发）：非 main 分支只许发布 prerelease（rc/beta）。stable 目标
 # （--patch/--minor/--major：候选转正或开新正式版本线）在非 main 上直接拒绝，
 # 让分支渠道约束在进入版本推断前就显式体现，而不是淹没在版本推断错误里。
 check_branch_allows_channel() {
@@ -115,7 +115,7 @@ check_branch_allows_channel() {
   if target_is_prerelease; then
     return 0
   fi
-  die "分支 $branch 不是 main：只允许发布 prerelease（CLI --rc / Desktop --beta），禁止 stable/prod（--patch/--minor/--major）。要发正式版或把候选转正，请切到 main 分支。"
+  die "分支 $branch 不是 main：只允许发布 prerelease（CLI --rc / Desktop --beta），禁止 stable（--patch/--minor/--major）。要发正式版或把候选转正，请切到 main 分支。"
 }
 
 # check_branch_channel_policy — 版本级校验（resolve 后）：prerelease 时 base
@@ -429,7 +429,7 @@ process.stdout.write(JSON.stringify((w.products && w.products['$PRODUCT']) || []
 
 # run_release — 薄壳脚本约定：调用前必须设置
 #   SUBCOMMAND (cli|desktop)  PRODUCT            WORKFLOW
-#   CHANNEL (desktop: beta|prod)  CHANNEL_LABEL  PRERELEASE_KIND (rc|beta|"")
+#   CHANNEL (desktop: beta|stable)  CHANNEL_LABEL  PRERELEASE_KIND (rc|beta|"")
 #   ALLOWED_BUMPS (空格分隔的合法 bump 开关)
 run_release() {
   # dry-run 不做任何写入，永不检查工作区状态
@@ -479,7 +479,7 @@ run_release() {
     if [ "$CHANNEL" = "beta" ]; then
       [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]] || die "beta 渠道需要 X.Y.Z-beta.N 版本，得到: $VERSION"
     else
-      [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "prod 渠道需要纯 X.Y.Z 版本，得到: $VERSION"
+      [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "stable 渠道需要纯 X.Y.Z 版本，得到: $VERSION"
     fi
   fi
 

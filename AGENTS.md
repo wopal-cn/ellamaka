@@ -121,12 +121,12 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 
 ### Desktop Release Contract
 
-- `main` is for local `build.sh desktop --channel main` verification only. Release workflows accept only `beta` and `prod`.
+- `main` is for local `build.sh desktop --channel main` verification only. Release workflows accept only `beta` and `stable`.
 - Windows Desktop UI changes require native Windows CI and runtime validation. macOS builds are insufficient.
 - Release workflows use only Node 24-native official JavaScript actions. Before adding or upgrading an action, inspect its `action.yml`; `runs.using` must be `node24`. `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` is a compatibility guard, never a substitute for the upgrade. Release workflow tests lock the approved action baseline.
 - Product versions use namespaced tags (`ellamaka-cli-vX.Y.Z`, `ellamaka-desktop-vX.Y.Z`) per [Tags 与 Channels](./docs/DESIGN-distribution.md#tags-与-channels). Committed releases are immutable: the same `product + version` tag is never deleted, moved, or re-built. Pre-commit failed attempts may be retried at the same version after controlled cleanup; post-commit major failures require whole-version withdrawal (record in `release/withdrawn-versions.json`, restore aliases, delete versioned objects) and the version is permanently retired.
 - Windows quit waits for the SidecarSupervisor to stop before Electron terminates.
-- Beta versions use `X.Y.Z-beta.N` and publish to `ellamaka-desktop/beta/`. Prod publishes to `ellamaka-desktop/`.
+- Beta versions use `X.Y.Z-beta.N` and publish to `ellamaka-desktop/beta/`. Stable publishes to `ellamaka-desktop/`.
 - Sidecar, Electron Main/Renderer, icons, and electron-builder share the same channel/version environment variables.
 - Public macOS packages use ad-hoc signing. This guarantees bundle signature integrity, but users must still accept Gatekeeper risk manually.
 - Versioned R2 paths are immutable. Pre-commit failed attempts may clear their own partial objects before retry at the same version; post-commit releases must never be overwritten. Whole-version withdrawal follows [Failed Attempt and Whole-Version Withdrawal](./docs/DESIGN-distribution.md#failed-attempt-and-whole-version-withdrawal).

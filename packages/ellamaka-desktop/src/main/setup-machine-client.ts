@@ -346,7 +346,7 @@ export async function runSetupOperation(options: RunSetupOperationOptions): Prom
           // env; when neither is available the check is skipped.
           if (operation === "install-engine" && (desktopStatus === "completed" || desktopStatus === "reused")) {
             const engineVersion = typeof result.version === "string" ? result.version : undefined
-            const desktopVersion = import.meta.env.OPENCODE_VERSION || process.env.OPENCODE_VERSION
+            const desktopVersion = import.meta.env.OPENCODE_VERSION || process.env.ELLAMAKA_VERSION
             if (engineVersion && desktopVersion) {
               const engineCheck = checkEngineMajorMinor(desktopVersion, engineVersion)
               if (!engineCheck.ok) {

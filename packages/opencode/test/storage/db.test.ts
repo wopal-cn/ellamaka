@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
 import { Global } from "@wopal/ellamaka-core/global"
@@ -7,17 +7,27 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@/storage/db"
 import { it } from "../lib/effect"
 
+describe("Database.getChannelDbName", () => {
+  test("stable and beta share the release database (ellamaka.db)", () => {
+    expect(Database.getChannelDbName("stable")).toBe("ellamaka.db")
+    expect(Database.getChannelDbName("beta")).toBe("ellamaka.db")
+  })
+
+  test("main and local get channel-qualified database files", () => {
+    expect(Database.getChannelDbName("main")).toBe("ellamaka-main.db")
+    expect(Database.getChannelDbName("local")).toBe("ellamaka-local.db")
+  })
+
+  test("safe-character filtering still applies to channel-qualified names", () => {
+    expect(Database.getChannelDbName("weird/channel")).toBe("ellamaka-weird-channel.db")
+  })
+})
+
 describe("Database.getChannelPath", () => {
   it.effect("returns database path for the current channel", () =>
     Effect.gen(function* () {
       const flags = yield* RuntimeFlags.Service
-      // beta shares the release database (ellamaka.db) with prod/latest so beta
-      // testers operate on the same data as production users.
-      const isRelease = ["latest", "prod", "beta"].includes(InstallationChannel)
-      const safe = InstallationChannel.replace(/[^a-zA-Z0-9._-]/g, "-")
-      const expected = isRelease
-        ? path.join(Global.Path.data, "ellamaka.db")
-        : path.join(Global.Path.data, `ellamaka-${safe}.db`)
+      const expected = path.join(Global.Path.data, Database.getChannelDbName(InstallationChannel))
 
       expect(Database.getChannelPath(flags)).toBe(expected)
     }).pipe(Effect.provide(RuntimeFlags.layer())),

@@ -14,15 +14,15 @@ const log = Log.create({ service: "upgrade" })
 /**
  * Whether the given build channel participates in update checks at all.
  *
- * Only the release channel ("latest") is published to the CDN feed; per
+ * Only the release channel ("stable") is published to the CDN feed; per
  * DESIGN-distribution.md §"Version Identity", development channels ("main"
- * from local build.sh builds, "local" from dev.sh source builds, and "prod"
- * local flavored builds) are never published and must not be compared
- * against or prompted from the release feed. Cross-channel comparisons are
- * explicitly forbidden by the distribution design.
+ * from local build.sh builds and "local" from dev.sh source builds) are never
+ * published and must not be compared against or prompted from the release
+ * feed. Cross-channel comparisons are explicitly forbidden by the distribution
+ * design.
  */
 export function isUpdateChannel(channel: string): boolean {
-  return channel === "latest"
+  return channel === "stable"
 }
 
 /**
@@ -95,13 +95,13 @@ export async function upgrade() {
     return
   }
 
-  // Only the release channel ("latest") participates in update checks.
+  // Only the release channel ("stable") participates in update checks.
   // Development channels ("main" from local build.sh builds, "local" from
-  // dev.sh source builds, "prod" local flavored builds) are never published
-  // to the CDN feed; prompting them would compare a local dev build against
-  // the release feed (cross-channel comparison, forbidden by
-  // DESIGN-distribution.md) and upgrading would only replace the managed
-  // ~/.wopal/bin/ellamaka while the running process keeps its dev binary.
+  // dev.sh source builds) are never published to the CDN feed; prompting them
+  // would compare a local dev build against the release feed (cross-channel
+  // comparison, forbidden by DESIGN-distribution.md) and upgrading would only
+  // replace the managed ~/.wopal/bin/ellamaka while the running process keeps
+  // its dev binary.
   if (!isUpdateChannel(InstallationChannel)) {
     log.info(`skip update check for ${InstallationChannel} channel build (current ${InstallationVersion}, latest ${latest})`)
     return

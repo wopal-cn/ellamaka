@@ -13,6 +13,14 @@ describe("desktop dev channel", () => {
     expect(source).toContain("resolveDevSidecarChannel")
   })
 
+  test("predev defaults the icon channel to local, never the legacy dev", async () => {
+    const source = await Bun.file(new URL("../../scripts/predev.ts", import.meta.url)).text()
+    // The predev icon channel must be vocabulary-resolved with a "local"
+    // fallback; the legacy "dev" literal must be gone.
+    expect(source).toContain('resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")')
+    expect(source).not.toContain('?? "dev"')
+  })
+
   test("one-click dev launcher defaults the full build chain to local", async () => {
     const source = await Bun.file(new URL("../../../../scripts/dev.sh", import.meta.url)).text()
     expect(source).toContain('local CHANNEL="local"')

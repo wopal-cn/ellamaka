@@ -7,13 +7,13 @@ async function source(path: string) {
 }
 
 describe("desktop release repair", () => {
-  test("publishes only beta or prod with one build context", async () => {
+  test("publishes only beta or stable with one build context", async () => {
     const workflow = await source(".github/workflows/publish-ellamaka-desktop.yml")
 
-    expect(workflow).toContain('default: "prod"')
+    expect(workflow).toContain('default: "stable"')
     expect(workflow).toContain("channel: ${{ steps.version.outputs.channel }}")
-    expect(workflow).toContain("OPENCODE_CHANNEL: ${{ needs.version.outputs.channel }}")
-    expect(workflow).toContain("OPENCODE_VERSION: ${{ needs.version.outputs.version }}")
+    expect(workflow).toContain("ELLAMAKA_CHANNEL: ${{ needs.version.outputs.channel }}")
+    expect(workflow).toContain("ELLAMAKA_VERSION: ${{ needs.version.outputs.version }}")
     expect(workflow).not.toContain("Build sidecar (Node.js runtime)")
     expect(workflow).toContain("--publish never")
   })
@@ -25,6 +25,48 @@ describe("desktop release repair", () => {
     expect(workflow).toMatch(/\n  push:\s*\n\s*tags:\s*\[\s*"ellamaka-desktop-v\*"\s*\]/)
     expect(workflow).toContain('github.event_name }}" = "push"')
     expect(workflow).toContain("${GITHUB_REF_NAME#ellamaka-desktop-v}")
+  })
+
+  test("dispatch channel choice offers only publishable channels (stable|beta)", async () => {
+    const workflow = await source(".github/workflows/publish-ellamaka-desktop.yml")
+
+    // main/local are local-only build channels: scripts/prebuild.ts writes a
+    // development identity for them, yet the release job takes the stable
+    // publish path for any non-beta channel. Offering main in the dispatch
+    // surface makes "publish a dev-identity build to the stable feed" a
+    // one-click operation, so it must not be selectable at all.
+    const options = workflow.slice(
+      workflow.indexOf('description: "Desktop build channel"'),
+      workflow.indexOf('description: "Target platform(s) to build"'),
+    )
+    expect(options).toContain('default: "stable"')
+    expect(options).toContain("- stable")
+    expect(options).toContain("- beta")
+    expect(options).not.toContain("- main")
+    expect(options).not.toContain("- local")
+  })
+
+  test("dispatch validation fails closed on channel vocabulary and version shape", async () => {
+    const workflow = await source(".github/workflows/publish-ellamaka-desktop.yml")
+
+    // Out-of-vocabulary channels (main/local included) are rejected before
+    // anything is built, and an explicit channel contradicting the
+    // version-shape-derived channel fails the run — mirroring the build-env
+    // fail-closed rule (D-03).
+    expect(workflow).toContain("expected stable or beta")
+    expect(workflow).toContain("main/local are local-only and never publishable")
+    expect(workflow).toContain('inferred_channel="beta"')
+    expect(workflow).toContain('inferred_channel="stable"')
+    expect(workflow).toContain("contradicts version")
+
+    // The guards must run inside the dispatch validation, before the build job
+    // consumes the resolved channel.
+    const vocabularyIdx = workflow.indexOf("main/local are local-only and never publishable")
+    const mismatchIdx = workflow.indexOf("contradicts version")
+    const buildIdx = workflow.indexOf("ELLAMAKA_CHANNEL: ${{ needs.version.outputs.channel }}")
+    expect(vocabularyIdx).toBeGreaterThan(-1)
+    expect(mismatchIdx).toBeGreaterThan(vocabularyIdx)
+    expect(buildIdx).toBeGreaterThan(mismatchIdx)
   })
 
   test("release builds gate version against the desktop anchor package.json", async () => {
@@ -64,8 +106,8 @@ describe("desktop release repair", () => {
     expect(config).toContain("extraMetadata")
     expect(config).toContain("packageName")
     expect(config).toContain('executableName: "ellamaka"')
-    expect(config).toContain("OPENCODE_VERSION")
-    expect(config).toContain("OPENCODE_BUILD_ID")
+    expect(config).toContain("ELLAMAKA_VERSION")
+    expect(config).toContain("ELLAMAKA_BUILD_ID")
     expect(config).toContain("ellamaka-desktop/beta/latest")
   })
 
@@ -73,7 +115,7 @@ describe("desktop release repair", () => {
     const constants = await source("packages/ellamaka-desktop/src/main/constants.ts")
     const updater = await source("packages/ellamaka-desktop/src/main/updater.ts")
 
-    expect(constants).toContain('CHANNEL === "beta" || CHANNEL === "prod"')
+    expect(constants).toContain('CHANNEL === "stable" || CHANNEL === "beta"')
     expect(updater).toContain('autoUpdater.allowPrerelease = CHANNEL === "beta"')
   })
 
@@ -106,7 +148,7 @@ describe("desktop release repair", () => {
     // - No --retag (committed releases are immutable; failed attempts retry
     //   via re-release dispatch, tags are never moved)
     expect(engine).not.toContain("--retag")
-    // - No implicit -N auto-increment for prod
+    // - No implicit -N auto-increment for stable
     expect(engine).not.toContain("自动递增 -N")
     // - No generic vX.Y.Z tag (must be namespaced)
     expect(engine).not.toMatch(/VERSION="v\$PLAIN_VERSION"/)
@@ -155,7 +197,7 @@ describe("desktop release repair", () => {
     const desktop = await source(".github/workflows/publish-ellamaka-desktop.yml")
     const cli = await source(".github/workflows/publish-ellamaka-cli.yml")
 
-    expect(desktop).toContain("OPENCODE_BUILD_ID: ${{ github.sha }}")
+    expect(desktop).toContain("ELLAMAKA_BUILD_ID: ${{ github.sha }}")
     expect(desktop).toContain("ELLAMAKA_RELEASE_CONTEXT_PATH")
     expect(desktop).toContain("--release-context-path release-context.json")
     expect(cli).toContain("ELLAMAKA_RELEASE_CONTEXT_PATH")

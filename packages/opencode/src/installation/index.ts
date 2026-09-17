@@ -69,7 +69,7 @@ export function userAgent(client = "cli") {
 export const USER_AGENT = userAgent()
 
 export function isPreview() {
-  return InstallationChannel !== "latest"
+  return InstallationChannel !== "stable"
 }
 
 export function isLocal() {
