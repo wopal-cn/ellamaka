@@ -13,7 +13,7 @@
 
 import { RELEASE_CHANNELS, DEV_CHANNELS } from "./identity.ts"
 
-export type BuildChannel = "stable" | "beta" | "main" | "local"
+export type BuildChannel = (typeof RELEASE_CHANNELS)[number] | (typeof DEV_CHANNELS)[number]
 
 const VOCABULARY: readonly string[] = [...RELEASE_CHANNELS, ...DEV_CHANNELS]
 
