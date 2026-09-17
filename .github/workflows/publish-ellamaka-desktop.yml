@@ -12,12 +12,12 @@ on:
       channel:
         description: "Desktop build channel"
         required: false
-        default: "prod"
+        default: "stable"
         type: choice
         options:
           - main
           - beta
-          - prod
+          - stable
       os:
         description: "Target platform(s) to build"
         required: false
@@ -68,7 +68,7 @@ jobs:
             if [[ "$version" =~ -beta\.[0-9]+$ ]]; then
               channel="beta"
             else
-              channel="prod"
+              channel="stable"
             fi
             matrix='[{"os":"macos-latest","package_cmd":"package:mac --arm64 --x64"},{"os":"windows-latest","package_cmd":"package:win"},{"os":"ubuntu-latest","package_cmd":"package:linux --arm64 --x64"}]'
           else
@@ -76,7 +76,7 @@ jobs:
               version="${{ inputs.version }}"
               tag="v${version}"
             else
-              version="0.0.0-${{ inputs.channel || 'prod' }}.0"
+              version="0.0.0-${{ inputs.channel || 'stable' }}.0"
               tag=""
             fi
 
@@ -92,16 +92,16 @@ jobs:
             if [[ "$version" =~ -beta\.[0-9]+$ ]]; then
               inferred_channel="beta"
             else
-              inferred_channel="prod"
+              inferred_channel="stable"
             fi
 
-            channel="${{ inputs.channel || 'prod' }}"
+            channel="${{ inputs.channel || 'stable' }}"
 
             if [[ "$channel" == "beta" && ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$ ]]; then
               echo "ERROR: beta releases require X.Y.Z-beta.N"
               exit 1
             fi
-            if [[ "$channel" == "prod" && "$version" == *-beta.* ]]; then
+            if [[ "$channel" == "stable" && "$version" == *-beta.* ]]; then
               echo "ERROR: beta versions require channel=beta"
               exit 1
             fi
@@ -147,10 +147,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: github.repository == 'wopal-cn/ellamaka'
     env:
-      OPENCODE_CHANNEL: ${{ needs.version.outputs.channel }}
-      OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-      OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
-      OPENCODE_BUILD_ID: ${{ github.sha }}
+      ELLAMAKA_CHANNEL: ${{ needs.version.outputs.channel }}
+      ELLAMAKA_VERSION: ${{ needs.version.outputs.version }}
+      ELLAMAKA_RELEASE: ${{ needs.version.outputs.release }}
+      ELLAMAKA_BUILD_ID: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
 

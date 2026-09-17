@@ -31,7 +31,7 @@ describe("publish-ellamaka workflow", () => {
   })
 
   test("builds release binaries with release channel and archives the 4 P1 artifacts", () => {
-    expect(workflow).toContain("OPENCODE_RELEASE: ${{ needs.version.outputs.release }}")
+    expect(workflow).toContain("ELLAMAKA_RELEASE: ${{ needs.version.outputs.release }}")
     expect(workflow).toContain("bash scripts/build.sh cli --platform \"${PLATFORM}\" --arch primary --web-ui \"${WEB_UI}\"")
     expect(workflow).toContain("ellamaka-darwin-arm64.tar.gz")
     expect(workflow).toContain("ellamaka-darwin-x64.tar.gz")

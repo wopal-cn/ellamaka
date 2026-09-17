@@ -235,7 +235,7 @@ function resolve_min_wopal_cli_version() {
 # highest_release_tag <product> <channel> [project_root]
 #
 # Prints the highest SemVer tag for the product/channel: stable-only tags
-# for stable/prod channels, -beta.N tags for beta, -rc.N tags for rc. Prints
+# for stable channels, -beta.N tags for beta, -rc.N tags for rc. Prints
 # nothing when no such tag exists. Used by lib/release.sh to detect
 # failed-attempt retries (highest tag without an effective manifest was
 # never released).
@@ -285,7 +285,7 @@ function highest_rc_tag() {
 # suggest_release_version <product> <channel> [project_root]
 #
 # Suggests the next release version (no timestamp) for release:
-#   channel stable/prod: next patch after the highest stable tag; if the
+#   channel stable: next patch after the highest stable tag; if the
 #   highest beta base is ahead of the highest stable base, the beta base
 #   itself (2.0.0-beta.4 → 2.0.0); never below an already-released rc base
 #   (monotonic sequence).

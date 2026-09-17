@@ -59,7 +59,7 @@ Bump 类型:
 
 分支渠道约束（branch-channel policy）：
   main 分支可发布全部版本；非 main 分支（poc-* 等）只允许 prerelease ——
-  CLI X.Y.Z-rc.N，且 prerelease base 必须高于已发布 prod/stable 的最高版本。
+  CLI X.Y.Z-rc.N，且 prerelease base 必须高于已发布 stable 的最高版本。
 
 re-release（幂等）：目标 tag 已在远端存在时——
   tag 有有效 R2 manifest → 拒绝（发布不可变），请用更高版本号；

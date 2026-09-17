@@ -87,7 +87,7 @@ jobs:
         run: |
           # 版本真相源 = packages/ellamaka-cli/package.json（docs/DISTRIBUTION.md
           # §3.2）。tag 版本必须等于锚点文件版本 —— 防手抖打错 tag 或
-          # dispatch 错版本。发布路径的 OPENCODE_VERSION 即由此而来。
+          # dispatch 错版本。发布路径的 ELLAMAKA_VERSION 即由此而来。
           PKG_VERSION="$(node -e "console.log(require('./packages/ellamaka-cli/package.json').version)")"
           if [ "${{ steps.version.outputs.version }}" != "$PKG_VERSION" ]; then
             echo "ERROR: release version ${{ steps.version.outputs.version }} does not match packages/ellamaka-cli/package.json version $PKG_VERSION."
@@ -141,8 +141,8 @@ jobs:
         env:
           WEB_UI: ${{ github.event.inputs.web_ui || 'ellamaka-app' }}
           PLATFORM: ${{ github.event.inputs.platform || 'all' }}
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          ELLAMAKA_VERSION: ${{ needs.version.outputs.version }}
+          ELLAMAKA_RELEASE: ${{ needs.version.outputs.release }}
           ELLAMAKA_RELEASE_CONTEXT_PATH: ${{ github.workspace }}/release-context.json
 
       - name: Create archives

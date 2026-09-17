@@ -7,13 +7,13 @@ async function source(path: string) {
 }
 
 describe("desktop release repair", () => {
-  test("publishes only beta or prod with one build context", async () => {
+  test("publishes only beta or stable with one build context", async () => {
     const workflow = await source(".github/workflows/publish-ellamaka-desktop.yml")
 
-    expect(workflow).toContain('default: "prod"')
+    expect(workflow).toContain('default: "stable"')
     expect(workflow).toContain("channel: ${{ steps.version.outputs.channel }}")
-    expect(workflow).toContain("OPENCODE_CHANNEL: ${{ needs.version.outputs.channel }}")
-    expect(workflow).toContain("OPENCODE_VERSION: ${{ needs.version.outputs.version }}")
+    expect(workflow).toContain("ELLAMAKA_CHANNEL: ${{ needs.version.outputs.channel }}")
+    expect(workflow).toContain("ELLAMAKA_VERSION: ${{ needs.version.outputs.version }}")
     expect(workflow).not.toContain("Build sidecar (Node.js runtime)")
     expect(workflow).toContain("--publish never")
   })
@@ -64,8 +64,8 @@ describe("desktop release repair", () => {
     expect(config).toContain("extraMetadata")
     expect(config).toContain("packageName")
     expect(config).toContain('executableName: "ellamaka"')
-    expect(config).toContain("OPENCODE_VERSION")
-    expect(config).toContain("OPENCODE_BUILD_ID")
+    expect(config).toContain("ELLAMAKA_VERSION")
+    expect(config).toContain("ELLAMAKA_BUILD_ID")
     expect(config).toContain("ellamaka-desktop/beta/latest")
   })
 
@@ -73,7 +73,7 @@ describe("desktop release repair", () => {
     const constants = await source("packages/ellamaka-desktop/src/main/constants.ts")
     const updater = await source("packages/ellamaka-desktop/src/main/updater.ts")
 
-    expect(constants).toContain('CHANNEL === "beta" || CHANNEL === "prod"')
+    expect(constants).toContain('CHANNEL === "stable" || CHANNEL === "beta"')
     expect(updater).toContain('autoUpdater.allowPrerelease = CHANNEL === "beta"')
   })
 
@@ -106,7 +106,7 @@ describe("desktop release repair", () => {
     // - No --retag (committed releases are immutable; failed attempts retry
     //   via re-release dispatch, tags are never moved)
     expect(engine).not.toContain("--retag")
-    // - No implicit -N auto-increment for prod
+    // - No implicit -N auto-increment for stable
     expect(engine).not.toContain("自动递增 -N")
     // - No generic vX.Y.Z tag (must be namespaced)
     expect(engine).not.toMatch(/VERSION="v\$PLAIN_VERSION"/)
@@ -155,7 +155,7 @@ describe("desktop release repair", () => {
     const desktop = await source(".github/workflows/publish-ellamaka-desktop.yml")
     const cli = await source(".github/workflows/publish-ellamaka-cli.yml")
 
-    expect(desktop).toContain("OPENCODE_BUILD_ID: ${{ github.sha }}")
+    expect(desktop).toContain("ELLAMAKA_BUILD_ID: ${{ github.sha }}")
     expect(desktop).toContain("ELLAMAKA_RELEASE_CONTEXT_PATH")
     expect(desktop).toContain("--release-context-path release-context.json")
     expect(cli).toContain("ELLAMAKA_RELEASE_CONTEXT_PATH")

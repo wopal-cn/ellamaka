@@ -15,14 +15,14 @@ CLI 常用选项：
 
 | 选项 | 说明 |
 |------|------|
-| `--channel <main\|prod>` | 渠道（默认 `main`）。`main` → `ellamaka-main.db`；`prod` → `ellamaka.db`（共享发布库） |
+| `--channel <main\|local>` | 渠道（默认 `main`）。`main` → `ellamaka-main.db`；`local` → `ellamaka-local.db`；`stable`/`beta` → `ellamaka.db`（共享发布库） |
 | `--version <ver>` | 覆盖构建版本 |
 | `--platform <mac\|linux\|win>` | 目标平台（逗号分隔） |
 | `--arch <arm64\|x64>` | 目标架构（逗号分隔） |
 | `--web-ui <value>` | 内嵌 Web UI：`ellamaka-app`（默认）、`app`、`none` |
 | `--install` | 安装二进制（软链到 `~/.wopal/bin`） |
 
-Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建；`--platform linux\|win` → dispatch GitHub Actions CI 并下载产物。CI 构建仅接受 `--channel beta\|prod`（`main` 仅本地）。
+Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建；`--platform linux\|win` → dispatch GitHub Actions CI 并下载产物。CI 构建仅接受 `--channel beta\|stable`（`main` 仅本地）。
 
 ### `release-cli.sh` / `release-desktop.sh` — 一步发布 CLI / Desktop 版本
 
@@ -36,7 +36,7 @@ Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建
 - `--patch`（默认）：发布版本线 base 本身（`2.0.4-rc.2` → `2.0.4`，候选转正）
 - `--rc` / `--beta`：候选通道续发（同 base 续 N+1，锚点落后时从新 base 的 `.1` 起步）
 - `--minor` / `--major`：开新版本线（根 + 依赖包镜像同步 bump）
-- Desktop 无独立渠道参数：`--beta` 即 beta 渠道（发布到 `ellamaka-desktop/beta/`），缺席即 prod
+- Desktop 无独立渠道参数：`--beta` 即 beta 渠道（发布到 `ellamaka-desktop/beta/`），缺席即 stable
 
 流程：推断 → bump 锚点 → 提交 → namespaced tag → 推送（tag push 触发 workflow）→ watch → 自动触发历史清理。非 main 分支只允许 prerelease。目标 tag 已在远端时：有 manifest 拒绝（不可变），无 manifest 以该 tag 重发（幂等）。`--dry-run` 只打印发布计划不执行。
 

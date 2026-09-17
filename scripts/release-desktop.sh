@@ -19,9 +19,9 @@ WORKFLOW="publish-ellamaka-desktop.yml"
 PRERELEASE_KIND="beta"
 ALLOWED_BUMPS="--patch --minor --major --beta"
 
-# Desktop 单开关模型：--beta = beta 渠道 + beta bump；缺席即 prod 渠道。
+# Desktop 单开关模型：--beta = beta 渠道 + beta bump；缺席即 stable 渠道。
 AUTO_BUMP="stable"
-CHANNEL="prod"
+CHANNEL="stable"
 DRY_RUN=false
 NO_PUSH=false
 NO_WATCH=false
@@ -45,7 +45,7 @@ Bump 类型:
   --beta      beta 发布：同 base 已有 -beta.N 则 N+1（2.0.5-beta.1 →
               2.0.5-beta.2）；base 已转正则下一 patch 的 -beta.1（2.0.4 已发
               → 2.0.5-beta.1）
-  --patch     prod 发布：无已发正式版时转正现行 beta 候选，否则已发正式版 +1
+  --patch     stable 发布：无已发正式版时转正现行 beta 候选，否则已发正式版 +1
               （2.0.4 → 2.0.5）
   --minor     现行 base minor +1（2.0.5 → 2.1.0），开新线
   --major     现行 base major +1（2.0.5 → 3.0.0），开新线
@@ -61,12 +61,12 @@ Bump 类型:
 
 渠道规则：
   --beta 给出 → beta 渠道（发布到 ellamaka-desktop/beta/，版本必须为 X.Y.Z-beta.N）
-  缺席     → prod 渠道（发布到 ellamaka-desktop/，版本必须为纯 X.Y.Z）
+  缺席     → stable 渠道（发布到 ellamaka-desktop/，版本必须为纯 X.Y.Z）
   渠道与版本号的匹配由版本推断自动保证，无需（也无法）手工指定 --channel。
 
 分支渠道约束（branch-channel policy）：
   main 分支可发布全部版本；非 main 分支（poc-* 等）只允许 prerelease ——
-  Desktop X.Y.Z-beta.N，且 prerelease base 必须高于已发布 prod/stable 的最高版本。
+  Desktop X.Y.Z-beta.N，且 prerelease base 必须高于已发布 stable 的最高版本。
 
 re-release（幂等）：目标 tag 已在远端存在时——
   tag 有有效 R2 manifest → 拒绝（发布不可变），请用更高版本号；
@@ -91,16 +91,16 @@ while [[ $# -gt 0 ]]; do
     --no-cleanup) NO_CLEANUP="true"; shift ;;
     -y|--yes) ASSUME_YES=true; shift ;;
     --beta) AUTO_BUMP="beta"; CHANNEL="beta"; shift ;;
-    --patch) AUTO_BUMP="stable"; CHANNEL="prod"; shift ;;
-    --minor) AUTO_BUMP="minor"; CHANNEL="prod"; shift ;;
-    --major) AUTO_BUMP="major"; CHANNEL="prod"; shift ;;
+    --patch) AUTO_BUMP="stable"; CHANNEL="stable"; shift ;;
+    --minor) AUTO_BUMP="minor"; CHANNEL="stable"; shift ;;
+    --major) AUTO_BUMP="major"; CHANNEL="stable"; shift ;;
     --rc) die "Desktop 没有 rc 渠道；候选请用 --beta" ;;
-    --channel) die "release-desktop.sh 不接受 --channel：--beta 即 beta 渠道，缺席即 prod" ;;
+    --channel) die "release-desktop.sh 不接受 --channel：--beta 即 beta 渠道，缺席即 stable" ;;
     *) die "未知选项: $1" ;;
   esac
 done
 
-# 显式版本参数的渠道自动推断（beta.N → beta，纯 X.Y.Z → prod）
+# 显式版本参数的渠道自动推断（beta.N → beta，纯 X.Y.Z → stable）
 if [ -n "$VERSION" ]; then
   if [[ "$VERSION" =~ -beta\.[0-9]+$ ]]; then
     CHANNEL="beta"
