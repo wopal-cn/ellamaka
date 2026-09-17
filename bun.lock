@@ -129,7 +129,7 @@
     },
     "packages/ellamaka-cli": {
       "name": "@wopal/ellamaka-cli",
-      "version": "2.0.5-rc.5",
+      "version": "2.0.5-rc.6",
       "bin": {
         "opencode": "./src/index.ts",
       },
