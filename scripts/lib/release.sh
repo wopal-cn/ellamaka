@@ -609,25 +609,12 @@ run_release() {
       git -C "$REPO_ROOT" push "$REMOTE" "$TAG" --force
 
       # tag push 触发 publish workflow；与正常发布路径一致地 watch 至完成。
-      if [ "$NO_WATCH" = "true" ] || [ "$HAVE_GH" = false ]; then
-        if [ "$HAVE_GH" = false ]; then
-          echo "ℹ️  gh CLI 不可用或未认证，跳过 watch。tag 已推送，workflow 应已触发。"
-        fi
+      # --no-watch 仍然必须验证结果（同正常发布路径的门禁语义）。
+      if [ "$HAVE_GH" = false ]; then
+        echo "ℹ️  gh CLI 不可用或未认证，无法 watch workflow。tag 已推送，请手动确认 ${WORKFLOW} 结果后再视为发布成功。"
       else
-        echo "→ 等待 workflow 启动..."
-        RUN_ID=""
-        for i in $(seq 1 12); do
-          RUN_ID=$(gh run list -R wopal-cn/ellamaka --workflow "$WORKFLOW" --commit "$head_commit" --status in_progress,queued --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
-          [ -n "$RUN_ID" ] && break
-          RUN_ID=$(gh run list -R wopal-cn/ellamaka --workflow "$WORKFLOW" --commit "$head_commit" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
-          [ -n "$RUN_ID" ] && break
-          sleep 5
-        done
-        if [ -z "$RUN_ID" ]; then
-          echo "⚠️  60s 内未找到 workflow run（可能需要手动检查 actions 页）。"
-        else
-          watch_run "$RUN_ID"
-        fi
+        echo "→ 等待 workflow 启动...$([ "$NO_WATCH" = "true" ] && echo "（--no-watch：静默等待并校验结果）")"
+        wait_for_run_or_fail "$WORKFLOW" "$head_commit"
       fi
       trigger_cleanup
       exit 0
@@ -638,7 +625,8 @@ run_release() {
         exit 0
       fi
       RUN_ID="$(dispatch_workflow)" || die "无法确定本次 workflow run"
-      [ "$NO_WATCH" = "true" ] || watch_run "$RUN_ID"
+      # dispatch 重发同样必须验证 workflow 结果，成功才触发 cleanup。
+      watch_run "$RUN_ID"
       trigger_cleanup
       exit 0
     fi
