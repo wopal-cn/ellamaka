@@ -22,7 +22,7 @@ export default [
           },
         },
         define: {
-          "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+          "import.meta.env.ELLAMAKA_CHANNEL": JSON.stringify(channel),
         },
         worker: {
           format: "es",

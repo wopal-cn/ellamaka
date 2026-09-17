@@ -18,10 +18,10 @@ describe("ellamaka-app vite.js channel resolution", () => {
   })
 })
 
-describe("ellamaka-app VITE_OPENCODE_CHANNEL type domain", () => {
+describe("ellamaka-app ELLAMAKA_CHANNEL type domain", () => {
   test("env.d.ts declares the closed build channel vocabulary", async () => {
     const env = await Bun.file(join(root, "src/env.d.ts")).text()
-    expect(env).toContain('readonly VITE_OPENCODE_CHANNEL?: "stable" | "beta" | "main" | "local"')
+    expect(env).toContain('readonly ELLAMAKA_CHANNEL?: "stable" | "beta" | "main" | "local"')
     expect(env).not.toMatch(/"dev"/)
     expect(env).not.toMatch(/"prod"/)
   })

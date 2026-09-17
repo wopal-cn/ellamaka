@@ -113,7 +113,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
       return integrations.filter(
         (i) =>
           i.name !== "Breadcrumbs" &&
-          !(import.meta.env.VITE_OPENCODE_CHANNEL === "stable" && i.name === "GlobalHandlers"),
+          !(import.meta.env.ELLAMAKA_CHANNEL === "stable" && i.name === "GlobalHandlers"),
       )
     },
   })

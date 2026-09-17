@@ -676,7 +676,7 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
 }
 
 function ChannelIndicator() {
-  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
+  const channel = import.meta.env.ELLAMAKA_CHANNEL
   return (
     <>
       {shouldShowChannelIndicator(channel) && (
