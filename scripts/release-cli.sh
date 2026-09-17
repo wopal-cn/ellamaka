@@ -53,7 +53,7 @@ Bump 类型:
   --dry-run    只打印发布计划，不写入、不 tag、不 push、不 dispatch
   --no-push    bump 并提交 + 本地 tag，但不 push（留待人工检查）
   --no-watch   不 watch workflow 运行结果
-  --no-cleanup 发布成功后跳过历史清理 workflow（默认自动触发）
+  --no-cleanup（已废弃：清理由 publish workflow 的 cleanup job 负责）
   -y, --yes    工作区有未提交变更时不征询，直接继续（非交互场景需显式给出）
   -h, --help   显示本帮助
 
@@ -82,7 +82,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=true; shift ;;
     --no-push) NO_PUSH=true; shift ;;
     --no-watch) NO_WATCH=true; shift ;;
-    --no-cleanup) NO_CLEANUP="true"; shift ;;
+    --no-cleanup) shift ;; # 已废弃，占位兼容
     -y|--yes) ASSUME_YES=true; shift ;;
     --patch) AUTO_BUMP="stable"; shift ;;
     --minor) AUTO_BUMP="minor"; shift ;;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { executeRetention, type RetentionOps } from "../src/cleanup/execute"
+import { executeRetention, sweepOrphanRegistries, type RetentionOps } from "../src/cleanup/execute"
 import { PRODUCTS } from "../src/cleanup/products"
 
 const cli = PRODUCTS["ellamaka-cli"]
@@ -145,5 +145,83 @@ describe("cleanup execute — executeRetention (B-03, W-02)", () => {
     expect(failures).toEqual([])
     expect(calls.deletedR2).toEqual([])
     expect(calls.deletedGh).toEqual([])
+  })
+})
+
+describe("cleanup execute — sweepOrphanRegistries", () => {
+  test("sweeps registry entries whose version is absent from R2 (incl. Gitee orphans)", () => {
+    // R2 still holds 1.15.0; 1.16.0 was deleted from R2 earlier but its
+    // registry entries were left behind (e.g. GITEE_TOKEN was missing).
+    const { ops, calls } = makeOps({
+      listGithub: () => ["ellamaka-cli-v1.16.0", "ellamaka-cli-v1.15.0"],
+      listGithubOntology: () => ["ellamaka-cli-v1.16.0", "ellamaka-v1.15.0"],
+      listGitee: () => [{ id: 1, tag_name: "ellamaka-cli-v1.16.0" }, { id: 3, tag_name: "ellamaka-cli-v1.15.0" }],
+      listGiteeOntology: () => [{ id: 2, tag_name: "ellamaka-cli-v1.16.0" }],
+    })
+    const { swept } = sweepOrphanRegistries({
+      config: cli,
+      r2Versions: new Set(["1.15.0"]),
+      dryRun: false,
+      giteeToken: "t",
+      ghRepo: GH,
+      ghOntRepo: GH_ONT,
+      ops,
+    })
+
+    // 1.16.0 orphans swept everywhere; 1.15.0 (still on R2) untouched.
+    expect(calls.deletedGh).toEqual(["ellamaka-cli-v1.16.0", "ellamaka-cli-v1.16.0"])
+    expect(calls.deletedGitee).toEqual(["ellamaka-cli-v1.16.0", "ellamaka-cli-v1.16.0"])
+    expect(swept).toHaveLength(4)
+  })
+
+  test("dry-run observes without deleting", () => {
+    const { ops, calls } = makeOps({
+      listGithub: () => ["ellamaka-cli-v1.16.0"],
+      listGitee: () => [{ id: 1, tag_name: "ellamaka-cli-v1.16.0" }],
+    })
+    sweepOrphanRegistries({
+      config: cli,
+      r2Versions: new Set(),
+      dryRun: true,
+      giteeToken: "t",
+      ghRepo: GH,
+      ghOntRepo: GH_ONT,
+      ops,
+    })
+    expect(calls.deletedGh).toEqual([])
+    expect(calls.deletedGitee).toEqual([])
+  })
+
+  test("legacy-shaped entries are never swept (fail-closed retain)", () => {
+    const { ops, calls } = makeOps({
+      listGithub: () => ["ellamaka-cli-v1.15.13-4"],
+      listGithubOntology: () => [],
+      listGitee: () => [],
+      listGiteeOntology: () => [],
+    })
+    sweepOrphanRegistries({
+      config: cli,
+      r2Versions: new Set(),
+      dryRun: false,
+      ghRepo: GH,
+      ghOntRepo: GH_ONT,
+      ops,
+    })
+    expect(calls.deletedGh).toEqual([])
+  })
+
+  test("desktop: beta orphan swept via namespaced prefix", () => {
+    const { ops, calls } = makeOps({
+      listGithub: () => ["ellamaka-desktop-v1.16.0", "ellamaka-desktop-v1.15.0"],
+    })
+    sweepOrphanRegistries({
+      config: desktop,
+      r2Versions: new Set(["1.15.0"]),
+      dryRun: false,
+      ghRepo: GH,
+      ghOntRepo: GH_ONT,
+      ops,
+    })
+    expect(calls.deletedGh).toEqual(["ellamaka-desktop-v1.16.0"])
   })
 })

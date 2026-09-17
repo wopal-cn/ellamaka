@@ -6,6 +6,7 @@
 // and per-product tag/ontology matching.
 
 import { parseReleaseTag } from "./parse"
+import { parseReleaseVersion } from "../identity"
 import type { ProductConfig, RetentionCandidate } from "./types"
 
 /**
@@ -115,4 +116,91 @@ export function executeRetention({
   }
 
   return { deletedVersions, failures }
+}
+
+/**
+ * Sweep registry orphans: GitHub / Gitee / ontology-mirror Release+tag
+ * entries whose version no longer exists in R2. This covers the failure
+ * class that lockstep deletion (B-03) cannot repair retroactively — an
+ * earlier run deleted the R2 versioned path but skipped or failed the
+ * registry deletion (e.g. GITEE_TOKEN missing), leaving the registry entry
+ * pointing at a dead CDN path forever, because the version never re-enters
+ * the R2 snapshot and thus never appears in deletedVersions again.
+ *
+ * Fail-closed rules: entries whose version does not parse as a standard
+ * release version for the product (incl. legacy shapes) are retained; only
+ * versions ABSENT from the R2 snapshot are swept. An empty/failed snapshot
+ * must short-circuit the sweep (a partial listing must never widen the
+ * deletion set).
+ */
+export function sweepOrphanRegistries({
+  config,
+  r2Versions,
+  dryRun,
+  giteeToken,
+  ghRepo,
+  ghOntRepo,
+  ops,
+}: {
+  config: ProductConfig
+  /** Versions currently present on R2 (from a COMPLETE snapshot listing). */
+  r2Versions: Set<string>
+  dryRun: boolean
+  giteeToken?: string
+  ghRepo: string
+  ghOntRepo: string
+  ops: RetentionOps
+}): { swept: string[] } {
+  const swept: string[] = []
+
+  const isOrphan = (version: string): boolean => {
+    try {
+      parseReleaseVersion(version)
+    } catch {
+      return false // legacy / unknown → fail-closed retain
+    }
+    return !r2Versions.has(version)
+  }
+
+  // Main repo GitHub releases.
+  for (const tag of ops.listGithub(ghRepo)) {
+    const parsed = parseReleaseTag(config, tag)
+    if (parsed && isOrphan(parsed.version)) {
+      ops.deleteGithub(ghRepo, tag, dryRun)
+      swept.push(`${ghRepo}:${tag}`)
+    }
+  }
+
+  // Main repo Gitee releases.
+  if (giteeToken && ops.listGitee) {
+    for (const release of ops.listGitee(giteeToken, ghRepo)) {
+      const parsed = parseReleaseTag(config, release.tag_name)
+      if (parsed && isOrphan(parsed.version)) {
+        ops.deleteGitee?.(giteeToken, ghRepo, release, dryRun)
+        swept.push(`${ghRepo}:${release.tag_name}`)
+      }
+    }
+  }
+
+  // Ontology mirror GitHub releases.
+  for (const tag of ops.listGithubOntology(ghOntRepo)) {
+    const version = config.ontologyVersion(tag)
+    if (config.isOntologyTag(tag) && isOrphan(version)) {
+      ops.deleteGithub(ghOntRepo, tag, dryRun)
+      swept.push(`${ghOntRepo}:${tag}`)
+    }
+  }
+
+  // Ontology mirror Gitee releases.
+  if (giteeToken && ops.listGiteeOntology) {
+    for (const release of ops.listGiteeOntology(giteeToken, ghOntRepo)) {
+      const version = config.ontologyVersion(release.tag_name)
+      if (config.isOntologyTag(release.tag_name) && isOrphan(version)) {
+        ops.deleteGitee?.(giteeToken, ghOntRepo, release, dryRun)
+        swept.push(`${ghOntRepo}:${release.tag_name}`)
+      }
+    }
+  }
+
+  return { swept }
 }

@@ -420,18 +420,14 @@ watch_run() {
 }
 
 trigger_cleanup() {
-  [ "$HAVE_GH" = true ] || return 0
-  [ "$NO_CLEANUP" != "true" ] || return 0
-  echo "→ 触发 cleanup workflow ($PRODUCT, retention apply)..."
-  if [ "$SUBCOMMAND" = "cli" ]; then
-    gh workflow run cleanup-releases.yml -R wopal-cn/ellamaka \
-      -f mode=retention -f product=ellamaka-cli -f apply=true -f keep-stable=3 -f keep-rc=2 \
-      || echo "⚠️  cleanup workflow 触发失败（可手动触发）"
-  else
-    gh workflow run cleanup-releases.yml -R wopal-cn/ellamaka \
-      -f mode=retention -f product=ellamaka-desktop -f apply=true -f keep-stable=3 -f keep-beta=2 \
-      || echo "⚠️  cleanup workflow 触发失败（可手动触发）"
-  fi
+  # Retention cleanup is owned by the publish workflow's trailing `cleanup`
+  # job (needs: publish, only on success). The script-side trigger raced the
+  # in-flight publish: the cleanup could run before the new release's R2
+  # commit point existed and compute "nothing to delete" — or worse, delete
+  # while the publish was still promoting the latest alias. Every publish
+  # path (tag push, self-heal re-point, manual dispatch) now carries its own
+  # cleanup, so the script never fires one.
+  echo "ℹ️  历史清理由 publish workflow 的 cleanup job 自动执行（发布成功后触发）。"
 }
 
 # ── 版本推断（以该产品已发布记录为唯一依据，产品独立）────────────────────
@@ -668,7 +664,7 @@ run_release() {
 $([ "$PROD_WRITE" = false ] && [ "$RAISE_ROOT" = false ] && echo "  （产品与依赖均已到位，无版本文件改动，直接以当前 HEAD 打 tag）")"
     echo "  push:      $REMOTE 分支 + ${TAG}（tag 触发 ${WORKFLOW}）"
     echo "  watch:     $([ "$NO_WATCH" = "true" ] && echo 跳过 || echo 自动)"
-    echo "  cleanup:   $([ "$NO_CLEANUP" = "true" ] && echo 跳过 || echo 自动触发)"
+    echo "  cleanup:   publish workflow 成功后自动执行（2 stable + 2 rc/beta）"
     exit 0
   fi
 

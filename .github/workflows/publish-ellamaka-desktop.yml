@@ -647,3 +647,27 @@ jobs:
             echo "- GitHub (ontology): https://github.com/wopal-cn/wopal-space-ontology/releases/tag/ellamaka-desktop-v${VERSION}"
             echo "- Gitee (ontology): https://gitee.com/wopal-cn/wopal-space-ontology/releases/tag/ellamaka-desktop-v${VERSION}"
           } >> $GITHUB_STEP_SUMMARY
+
+  # Post-publish retention cleanup: runs only after the release job fully
+  # succeeded (R2 commit point + release pages), so it can never race a
+  # in-flight release. Fires on EVERY publish path (script tag push, self-heal
+  # re-point, manual dispatch). Retention: newest 2 stable + 2 beta per
+  # channel; latest-alias releases are always protected; registry orphans
+  # (R2 deleted, release left behind) are swept.
+  cleanup:
+    name: Retention cleanup (2 stable + 2 beta)
+    needs: [release]
+    runs-on: ubuntu-latest
+    if: github.repository == 'wopal-cn/ellamaka' && needs.release.result == 'success'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - name: Run retention cleanup (apply)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITEE_TOKEN: ${{ secrets.RELEASE_GITEE }}
+        run: |
+          bun packages/ellamaka-release/src/cli/cleanup.ts --product ellamaka-desktop --keep-stable 2 --keep-beta 2

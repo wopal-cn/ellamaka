@@ -30,7 +30,7 @@ import {
   planRetention,
   planWithdraw,
 } from "../cleanup/core"
-import { executeRetention, type RetentionOps } from "../cleanup/execute"
+import { executeRetention, sweepOrphanRegistries, type RetentionOps } from "../cleanup/execute"
 import { parseArgs, parseReleaseTag, type Flags } from "../cleanup/parse"
 import { PRODUCTS, type ProductConfig } from "../cleanup/products"
 
@@ -344,6 +344,30 @@ function runRetention({
   if (failures.length > 0 && !flags.dryRun) {
     console.error(`\n${failures.length} R2 delete(s) failed; registry/tag cleanup aborted for those versions.`)
     process.exit(1)
+  }
+
+  // Orphan sweep: registry Release+tag entries whose version is gone from
+  // R2 but which earlier runs left behind (lockstep deletion only covers
+  // versions deleted by THIS run; a previously skipped/failed registry
+  // deletion — e.g. GITEE_TOKEN missing — would otherwise never be repaired,
+  // because the version no longer appears in any R2 snapshot).
+  const r2Versions = new Set(
+    snapshot.versionedPaths
+      .map((p) => config.versionFromPath(p))
+      .filter((v): v is string => v !== null),
+  )
+  const { swept } = sweepOrphanRegistries({
+    config,
+    r2Versions,
+    dryRun: flags.dryRun,
+    giteeToken,
+    ghRepo,
+    ghOntRepo,
+    ops,
+  })
+  if (swept.length > 0) {
+    console.log(`  orphan registry entries swept: ${swept.length}`)
+    for (const s of swept) console.log(`    swept ${s}`)
   }
 
   console.log(`\n${mode}Cleanup complete.\n`)
