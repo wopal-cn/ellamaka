@@ -16,6 +16,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
+import { shouldShowChannelIndicator } from "./channel-badge"
 import { useServerSync } from "@/context/server-sync"
 import { decodeDirectory } from "@/pages/directory-layout"
 import { iife } from "@wopal/ellamaka-core/util/iife"
@@ -675,11 +676,12 @@ function NewSessionTabItem(props: { href: string; title: string; onClose: () => 
 }
 
 function ChannelIndicator() {
+  const channel = import.meta.env.VITE_OPENCODE_CHANNEL
   return (
     <>
-      {["beta", "dev"].includes(import.meta.env.VITE_OPENCODE_CHANNEL) && (
+      {shouldShowChannelIndicator(channel) && (
         <div class="bg-icon-interactive-base text-[#FFF] font-medium px-2 rounded-sm uppercase font-mono">
-          {import.meta.env.VITE_OPENCODE_CHANNEL.toUpperCase()}
+          {channel?.toUpperCase()}
         </div>
       )}
     </>

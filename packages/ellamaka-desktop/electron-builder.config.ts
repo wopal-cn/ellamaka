@@ -1,33 +1,32 @@
 import type { Configuration } from "electron-builder"
+import { resolveBuildChannel } from "@wopal/ellamaka-release/channel-resolve"
 
-const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "main" || raw === "beta" || raw === "prod") return raw
-  return "main"
-})()
+// Strict mode: out-of-vocabulary channel inputs throw, so a misconfigured
+// build fails fast (fail-closed).
+const channel = resolveBuildChannel(process.env.ELLAMAKA_CHANNEL)
 
 // 版本真相源 = 本包 package.json（docs/DISTRIBUTION.md §3.2）。release 构建
 // 让 electron-builder 原生读它的 version（CI 已校验 tag == 锚点文件），
-// 只有非 release 构建（dev stamp）才用 OPENCODE_VERSION 覆盖。
-const isRelease = process.env.OPENCODE_RELEASE === "true"
-const version = isRelease ? undefined : process.env.OPENCODE_VERSION?.trim()
-const build = process.env.OPENCODE_BUILD_ID?.trim()
+// 只有非 release 构建（dev stamp）才用 ELLAMAKA_VERSION 覆盖。
+const isRelease = process.env.ELLAMAKA_RELEASE === "true"
+const version = isRelease ? undefined : process.env.ELLAMAKA_VERSION?.trim()
+const build = process.env.ELLAMAKA_BUILD_ID?.trim()
 const buildVersion = build ? build.slice(0, 12) : undefined
 const electronDist = process.env.ELECTRON_DIST?.trim()
 
-function getPublishUrl(): string | undefined {
-  if (channel === "beta") return "https://download.coursedao.com/ellamaka-desktop/beta/latest"
-  if (channel === "prod") return "https://download.coursedao.com/ellamaka-desktop/latest"
-  return undefined
+// electron-builder publish feed URL per channel (stable/beta publish; main
+// and local never publish). The feed name itself (e.g. "/beta/latest") is
+// electron-updater's own feed concept, out of the build channel vocabulary.
+const PUBLISH_URLS: Record<string, string | undefined> = {
+  beta: "https://download.coursedao.com/ellamaka-desktop/beta/latest",
+  stable: "https://download.coursedao.com/ellamaka-desktop/latest",
+  main: undefined,
+  local: undefined,
 }
 
-const packageName = (() => {
-  if (channel === "beta") return "ellamaka-beta"
-  if (channel === "main") return "ellamaka-main"
-  return "ellamaka"
-})()
+const packageName = ({ beta: "ellamaka-beta", main: "ellamaka-main", stable: "ellamaka", local: "ellamaka-main" } as Record<string, string>)[channel]
 
-const artifactPrefix = channel === "beta" ? "ellamaka-desktop-beta" : "ellamaka-desktop"
+const artifactPrefix = ({ beta: "ellamaka-desktop-beta", stable: "ellamaka-desktop", main: "ellamaka-desktop", local: "ellamaka-desktop" } as Record<string, string>)[channel]
 
 const getBase = (): Configuration => ({
   ...(electronDist ? { electronDist } : {}),
@@ -99,11 +98,12 @@ const getBase = (): Configuration => ({
 
 function getConfig(): Configuration {
   const base = getBase()
-  const publishUrl = getPublishUrl()
+  const publishUrl = PUBLISH_URLS[channel]
   const publish = publishUrl ? { provider: "generic" as const, url: publishUrl, channel: "latest" } : undefined
 
   switch (channel) {
-    case "main": {
+    case "main":
+    case "local": {
       return {
         ...base,
         appId: "ai.ellamaka.desktop.main",
@@ -119,7 +119,7 @@ function getConfig(): Configuration {
         protocols: { name: "Ellamaka Beta", schemes: ["ellamaka"] },
       }
     }
-    case "prod": {
+    case "stable": {
       return {
         ...base,
         appId: "ai.ellamaka.desktop",

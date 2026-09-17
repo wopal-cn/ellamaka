@@ -59,12 +59,12 @@ import { Deferred, Effect, Fiber } from "effect"
 const APP_NAMES: Record<string, string> = {
   main: "Ellamaka Main",
   beta: "Ellamaka Beta",
-  prod: "Ellamaka",
+  stable: "Ellamaka",
 }
 const APP_IDS: Record<string, string> = {
   main: "ai.ellamaka.desktop.main",
   beta: "ai.ellamaka.desktop.beta",
-  prod: "ai.ellamaka.desktop",
+  stable: "ai.ellamaka.desktop",
 }
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 

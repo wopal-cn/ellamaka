@@ -23,7 +23,7 @@ export function createReleaseInfo(version: string, build?: string): ReleaseInfo 
   }
 }
 
-type DesktopFeedChannel = "main" | "beta" | "prod"
+type DesktopFeedChannel = "main" | "beta" | "stable"
 
 type EmbeddedIdentity = {
   schemaVersion: 2
@@ -62,7 +62,7 @@ type AppMetadata = {
 }
 
 const FEED_TO_IDENTITY_CHANNEL: Record<DesktopFeedChannel, string> = {
-  prod: "stable",
+  stable: "stable",
   beta: "beta",
   main: "local",
 }

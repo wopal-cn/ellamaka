@@ -1,6 +1,7 @@
 import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@wopal/ellamaka-app/vite"
+import { resolveBuildChannel } from "@wopal/ellamaka-release/channel-resolve"
 import * as fs from "node:fs/promises"
 import * as fsSync from "node:fs"
 import path from "node:path"
@@ -27,12 +28,7 @@ const minWopalCliVersion = (() => {
   throw new Error(`minWopalCli missing in ${versionsPath}`)
 })()
 
-const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "local" || raw === "main" || raw === "beta" || raw === "prod") return raw
-  if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
-  return "local"
-})()
+const channel = resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
 const dshProxyTarget = process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.OPENCODE_PORT ?? "4097"}`
@@ -124,6 +120,12 @@ export default defineConfig({
     },
   },
   renderer: {
+    // define scopes are independent per build (main/preload/renderer): the
+    // renderer must have its own entry or import.meta.env.OPENCODE_CHANNEL in
+    // renderer code is never injected.
+    define: {
+      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+    },
     plugins: [appPlugin, sentry],
     server: {
       proxy: {

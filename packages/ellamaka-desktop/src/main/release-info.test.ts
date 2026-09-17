@@ -106,7 +106,7 @@ describe("embedded release identity", () => {
 describe("embedded identity validation against app metadata", () => {
   test("accepts release identity matching app version and channel", () => {
     const identity = validReleaseIdentity("1.16.2", "stable")
-    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.2", channel: "prod" })).not.toThrow()
+    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.2", channel: "stable" })).not.toThrow()
   })
 
   test("accepts beta identity matching beta channel", () => {
@@ -116,12 +116,12 @@ describe("embedded identity validation against app metadata", () => {
 
   test("rejects identity version mismatch with app version", () => {
     const identity = validReleaseIdentity("1.16.2", "stable")
-    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.3", channel: "prod" })).toThrow(/version/)
+    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.3", channel: "stable" })).toThrow(/version/)
   })
 
   test("rejects release identity with wrong product", () => {
     const identity = { ...validReleaseIdentity(), product: "ellamaka-cli" }
-    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.2", channel: "prod" })).toThrow(/product/)
+    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.2", channel: "stable" })).toThrow(/product/)
   })
 
   test("rejects channel mismatch (stable identity on beta channel)", () => {
@@ -133,6 +133,23 @@ describe("embedded identity validation against app metadata", () => {
     const identity = validDevIdentity()
     // Development identity is allowed to have a dev version that differs
     // from app.getVersion(); only product must match.
+    expect(() => validateEmbeddedIdentity(identity, { version: "1.15.13", channel: "main" })).not.toThrow()
+  })
+})
+
+describe("feed to identity channel vocabulary", () => {
+  test("stable feed validates a stable release identity", () => {
+    const identity = validReleaseIdentity("1.16.2", "stable")
+    expect(() => validateEmbeddedIdentity(identity, { version: "1.16.2", channel: "stable" })).not.toThrow()
+  })
+
+  test("beta feed validates a beta release identity", () => {
+    const identity = validReleaseIdentity("1.17.0-beta.1", "beta")
+    expect(() => validateEmbeddedIdentity(identity, { version: "1.17.0-beta.1", channel: "beta" })).not.toThrow()
+  })
+
+  test("main feed validates a local development identity", () => {
+    const identity = validDevIdentity()
     expect(() => validateEmbeddedIdentity(identity, { version: "1.15.13", channel: "main" })).not.toThrow()
   })
 })

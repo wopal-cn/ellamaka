@@ -42,6 +42,7 @@
     "@types/react-dom": "19.1.0",
     "@typescript/native-preview": "catalog:",
     "@vitejs/plugin-react": "4.3.4",
+    "@wopal/ellamaka-release": "workspace:*",
     "stylelint": "17.14.1",
     "stylelint-config-standard": "40.0.0",
     "typescript": "catalog:",

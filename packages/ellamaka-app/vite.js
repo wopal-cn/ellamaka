@@ -1,16 +1,12 @@
 import { readFileSync } from "node:fs"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
+import { resolveBuildChannel } from "@wopal/ellamaka-release/channel-resolve"
 import { fileURLToPath } from "url"
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
 
-const channel = (() => {
-  const raw = process.env.OPENCODE_CHANNEL
-  if (raw === "dev" || raw === "beta" || raw === "prod") return raw
-  if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
-  return "dev"
-})()
+const channel = resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")
 
 /**
  * @type {import("vite").PluginOption}
