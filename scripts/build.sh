@@ -26,8 +26,8 @@ Targets:
 
 CLI options:
   --version <ver>         Override build version (e.g. "1.15.14-dev")
-  --channel <main|prod>   Channel (default: main). main → ellamaka-main.db;
-                          prod → ellamaka.db (shared release database).
+  --channel <main|local>  Channel (default: main). main → ellamaka-main.db;
+                          local → ellamaka-local.db (independent dev databases).
   --platform <mac|linux|win>
                           Target platform (comma-separated, e.g. "mac,linux")
   --arch <arm64|x64>      Target architecture (comma-separated)
@@ -35,9 +35,9 @@ CLI options:
   --install               Install binary (symlink to ~/.wopal/bin)
 
 Desktop options:
-  --channel <main|beta|prod>
+  --channel <main|beta|stable>
                           Channel (default: main). Controls bundle ID, app name, icons.
-                          CI builds accept only beta|prod (main is local-only).
+                          CI builds accept only beta|stable (main is local-only).
   --version <ver>         Override build version (e.g. "1.15.13-main.202607271834")
   --platform <mac|linux|win>
                           Target platform (default: mac). mac builds locally;
@@ -66,12 +66,12 @@ sync_min_wopal_cli_version "$PROJECT_ROOT"
 # ── DSH runtime manifest freshness ────────────────────────────────
 # The CLI binary inlines generated/dsh-runtime-manifest.json at bundle time
 # (static JSON import in @wopal/ellamaka-cordis/runtime). Release builds
-# (OPENCODE_RELEASE=1, CI) only verify with `--check`; dev builds regenerate
+# (ELLAMAKA_RELEASE=1, CI) only verify with `--check`; dev builds regenerate
 # when the committed manifest is missing or dirty. The build entry itself
 # (ellamaka-release build.ts) also gates — this keeps the local chain explicit.
 ensure_dsh_manifest() {
   local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts"
-  if [ -n "${OPENCODE_RELEASE:-}" ]; then
+  if [ -n "${ELLAMAKA_RELEASE:-}" ]; then
     echo "🔒 Verifying DSH runtime manifest (--check)"
     bun "$generator" --check
     return 0
@@ -91,7 +91,7 @@ ensure_dsh_manifest() {
 # generator's fast path exits in milliseconds when the fingerprint matches).
 ensure_dsh_lock() {
   local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts"
-  if [ -n "${OPENCODE_RELEASE:-}" ]; then
+  if [ -n "${ELLAMAKA_RELEASE:-}" ]; then
     echo "🔒 Verifying DSH runtime lock (--check)"
     bun "$generator" --check
     return 0
@@ -123,12 +123,12 @@ function build_cli() {
         ;;
       --channel)
         if [[ $# -lt 2 || "$2" == --* ]]; then
-          echo "❌ --channel requires a value: main or prod"
+          echo "❌ --channel requires a value: main or local"
           exit 1
         fi
         case "$2" in
-          main|prod) CHANNEL="$2" ;;
-          *) echo "❌ Invalid channel: $2 (must be main or prod)"; exit 1 ;;
+          main|local) CHANNEL="$2" ;;
+          *) echo "❌ Invalid channel: $2 (must be main or local)"; exit 1 ;;
         esac
         shift 2
         ;;
@@ -184,13 +184,13 @@ function build_cli() {
   esac
 
   if [[ -n "${CUSTOM_VERSION:-}" ]]; then
-    export OPENCODE_VERSION="$CUSTOM_VERSION"
-  elif [[ -z "${OPENCODE_VERSION:-}" ]]; then
+    export ELLAMAKA_VERSION="$CUSTOM_VERSION"
+  elif [[ -z "${ELLAMAKA_VERSION:-}" ]]; then
     # CLI builds use the channel as the version suffix; the branch name is
     # not part of the version string.
-    export OPENCODE_VERSION="$(resolve_build_version "ellamaka-cli" "$CHANNEL")"
+    export ELLAMAKA_VERSION="$(resolve_build_version "ellamaka-cli" "$CHANNEL")"
   fi
-  export OPENCODE_CHANNEL="$CHANNEL"
+  export ELLAMAKA_CHANNEL="$CHANNEL"
 
   # Inject the effective minimum wopal-cli version (same resolution as
   # build_desktop: max of .ci/versions.json and the @wopal/cli-capability-
@@ -245,12 +245,12 @@ function build_desktop() {
         ;;
       --channel)
         if [[ $# -lt 2 || "$2" == --* ]]; then
-          echo "❌ --channel requires a value: main, beta, or prod"
+          echo "❌ --channel requires a value: main, beta, or stable"
           exit 1
         fi
         case "$2" in
-          main|beta|prod) CHANNEL="$2" ;;
-          *) echo "❌ Invalid channel: $2 (must be main, beta, or prod)"; exit 1 ;; 
+          main|beta|stable) CHANNEL="$2" ;;
+          *) echo "❌ Invalid channel: $2 (must be main, beta, or stable)"; exit 1 ;; 
         esac
         shift 2
         ;;
@@ -318,7 +318,7 @@ function build_desktop() {
     return
   fi
 
-  export OPENCODE_CHANNEL="$CHANNEL"
+  export ELLAMAKA_CHANNEL="$CHANNEL"
 
   # Inject the effective minimum wopal-cli version (auto-follows the
   # @wopal/cli-capability-schema dependency floor, config override wins when
@@ -326,13 +326,13 @@ function build_desktop() {
   export MIN_WOPAL_CLI_VERSION="${MIN_WOPAL_CLI_VERSION:-$(resolve_min_wopal_cli_version "$PROJECT_ROOT")}"
 
   if [[ -n "${CUSTOM_VERSION:-}" ]]; then
-    export OPENCODE_VERSION="$CUSTOM_VERSION"
-  elif [[ -z "${OPENCODE_VERSION:-}" ]]; then
-    export OPENCODE_VERSION="$(resolve_build_version "ellamaka-desktop" "$CHANNEL")"
+    export ELLAMAKA_VERSION="$CUSTOM_VERSION"
+  elif [[ -z "${ELLAMAKA_VERSION:-}" ]]; then
+    export ELLAMAKA_VERSION="$(resolve_build_version "ellamaka-desktop" "$CHANNEL")"
   fi
 
   # Inject build hash so the packaged app shows which commit it was built from
-  export OPENCODE_BUILD_ID="${OPENCODE_BUILD_ID:-$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || true)}"
+  export ELLAMAKA_BUILD_ID="${ELLAMAKA_BUILD_ID:-$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || true)}"
 
   # Use the already-installed electron from node_modules instead of re-downloading
   local electron_dist="$PROJECT_ROOT/node_modules/electron/dist"
@@ -343,7 +343,7 @@ function build_desktop() {
   case "$CHANNEL" in
     main) APP_NAME="Ellamaka Main" ;;
     beta) APP_NAME="Ellamaka Beta" ;;
-    prod) APP_NAME="Ellamaka" ;;
+    stable) APP_NAME="Ellamaka" ;;
   esac
 
   DESKTOP_DIR="$PROJECT_ROOT/packages/ellamaka-desktop"
@@ -355,7 +355,7 @@ function build_desktop() {
     fi
   fi
 
-  local build_label="${OPENCODE_BUILD_ID:+${OPENCODE_BUILD_ID:0:12}}"
+  local build_label="${ELLAMAKA_BUILD_ID:+${ELLAMAKA_BUILD_ID:0:12}}"
   echo ""
   echo "🖥  Building Desktop (channel: $CHANNEL, app: $APP_NAME, build: ${build_label:-none})..."
 
@@ -390,9 +390,9 @@ function build_desktop_ci() {
   fi
 
   case "$CHANNEL" in
-    beta|prod) ;;
+    beta|stable) ;;
     *)
-      echo "❌ CI build only supports --channel beta|prod; main is local-only."
+      echo "❌ CI build only supports --channel beta|stable; main is local-only."
       exit 1
       ;;
   esac

@@ -1080,7 +1080,7 @@ cmd_desktop() {
   local desktop_sidecar_port="${OPENCODE_PORT:-4097}"
   choose_free_port desktop-sidecar "$desktop_sidecar_port"
   desktop_sidecar_port="$SELECTED_PORT"
-  export OPENCODE_CHANNEL="$CHANNEL"
+  export ELLAMAKA_CHANNEL="$CHANNEL"
   # Keep the schema dependency floor in lockstep with .ci/versions.json
   # before resolving MIN_WOPAL_CLI_VERSION (idempotent no-op when aligned).
   sync_min_wopal_cli_version "$root"
@@ -1089,10 +1089,10 @@ cmd_desktop() {
   echo "🖥  Starting Desktop (channel: $CHANNEL)..."
   if $rebuild; then
     echo "==> Rebuilding sidecar (packages/opencode)..."
-    if [ -z "${OPENCODE_VERSION:-}" ]; then
-      export OPENCODE_VERSION="$(resolve_build_version "ellamaka-desktop" "$CHANNEL" "$root")"
+    if [ -z "${ELLAMAKA_VERSION:-}" ]; then
+      export ELLAMAKA_VERSION="$(resolve_build_version "ellamaka-desktop" "$CHANNEL" "$root")"
     fi
-    echo "==> Sidecar version: $OPENCODE_VERSION"
+    echo "==> Sidecar version: $ELLAMAKA_VERSION"
     (cd "$opencode_dir" && bun script/build-node.ts)
     echo "==> Copying icons..."
     (cd "$DESKTOP_DIR" && bun ./scripts/copy-icons.ts "$CHANNEL")
