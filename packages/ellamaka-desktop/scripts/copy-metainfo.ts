@@ -1,7 +1,12 @@
+import { resolveBuildChannel } from "@wopal/ellamaka-release/channel-resolve"
 import { resolveChannel } from "./utils"
 
+// An explicit argument must be in the closed build-channel vocabulary
+// {stable, beta, main, local}: out-of-vocabulary values — including the legacy
+// "dev" — fail loudly instead of silently folding. No argument → resolve from
+// ELLAMAKA_CHANNEL / default, as before.
 const arg = process.argv[2]
-const channel = arg === "dev" || arg === "beta" || arg === "stable" ? arg : resolveChannel()
+const channel = arg === undefined ? resolveChannel() : resolveBuildChannel(arg)
 
 const appId = channel === "stable" ? "ai.opencode.desktop" : `ai.opencode.desktop.${channel}`
 const productName = channel === "stable" ? "OpenCode" : `OpenCode ${channel.charAt(0).toUpperCase() + channel.slice(1)}`
