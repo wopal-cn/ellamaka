@@ -1,7 +1,7 @@
 import { app } from "electron"
 
 type Channel = "local" | "main" | "beta" | "stable"
-const raw = import.meta.env.OPENCODE_CHANNEL
+const raw = import.meta.env.ELLAMAKA_CHANNEL
 export const CHANNEL: Channel =
   raw === "local" || raw === "main" || raw === "beta" || raw === "stable" ? raw : "local"
 

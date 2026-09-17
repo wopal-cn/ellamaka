@@ -10,13 +10,13 @@ describe("electron.vite.config.ts channel resolution", () => {
     expect(config).toContain('resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")')
   })
 
-  test("renderer section injects the OPENCODE_CHANNEL define", async () => {
+  test("renderer section injects the ELLAMAKA_CHANNEL define", async () => {
     const config = await Bun.file(join(root, "electron.vite.config.ts")).text()
     // The renderer build is a separate define scope from main/preload:
-    // without a renderer-section entry, import.meta.env.OPENCODE_CHANNEL in
+    // without a renderer-section entry, import.meta.env.ELLAMAKA_CHANNEL in
     // renderer code (e.g. the Sentry integration filter) is never injected.
     const rendererSection = config.slice(config.indexOf("renderer:"))
-    expect(rendererSection).toContain('"import.meta.env.OPENCODE_CHANNEL"')
+    expect(rendererSection).toContain('"import.meta.env.ELLAMAKA_CHANNEL"')
   })
 
   test("has no residual local channel parsing", async () => {

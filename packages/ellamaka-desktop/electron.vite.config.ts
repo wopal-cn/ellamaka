@@ -53,7 +53,7 @@ const sentry =
 export default defineConfig({
   main: {
     define: {
-      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.ELLAMAKA_CHANNEL": JSON.stringify(channel),
       "import.meta.env.MIN_WOPAL_CLI_VERSION": JSON.stringify(minWopalCliVersion),
     },
     build: {
@@ -121,10 +121,10 @@ export default defineConfig({
   },
   renderer: {
     // define scopes are independent per build (main/preload/renderer): the
-    // renderer must have its own entry or import.meta.env.OPENCODE_CHANNEL in
+    // renderer must have its own entry or import.meta.env.ELLAMAKA_CHANNEL in
     // renderer code is never injected.
     define: {
-      "import.meta.env.OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.ELLAMAKA_CHANNEL": JSON.stringify(channel),
     },
     plugins: [appPlugin, sentry],
     server: {
