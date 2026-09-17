@@ -10,7 +10,7 @@
 //   - OPENCODE_TEST_HOME           : pins os.homedir() → tmpdir
 //   - OPENCODE_DISABLE_PROJECT_CONFIG : skip walking up for opencode.json
 //   - OPENCODE_PURE                : skip external plugin discovery + install
-//   - OPENCODE_DISABLE_AUTOUPDATE / AUTOCOMPACT / MODELS_FETCH : no background work
+//   - ELLAMAKA_DISABLE_AUTOUPDATE / OPENCODE_DISABLE_AUTOCOMPACT / OPENCODE_DISABLE_MODELS_FETCH : no background work
 // Plus HOME / XDG_* pointing at the tmpdir for belt-and-suspenders isolation.
 //
 // Today only `opencode.run` is fully wired. The shape supports adding more
@@ -68,7 +68,7 @@ function isolatedEnv(home: string, configJson: string): Record<string, string> {
     OPENCODE_CONFIG_CONTENT: configJson,
     OPENCODE_DISABLE_PROJECT_CONFIG: "1",
     OPENCODE_PURE: "1",
-    OPENCODE_DISABLE_AUTOUPDATE: "1",
+    ELLAMAKA_DISABLE_AUTOUPDATE: "1",
     OPENCODE_DISABLE_AUTOCOMPACT: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",
     OPENCODE_AUTH_CONTENT: "{}",
