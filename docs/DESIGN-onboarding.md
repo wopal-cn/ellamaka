@@ -65,7 +65,7 @@ system-check → install-cli → ontology-setup → create-space → ai-provider
 | 空间与启动准备 | `create-space`、`ai-provider` | 创建或复用 Space，可选配置 Provider。 |
 | 启动 | `done` | 展示健康摘要、可选 Star 操作，经完成门禁进入 Workbench。 |
 
-Memory 配置不属于 onboarding 旅程。记忆配置的写入者与消费面归配置体系（`./DESIGN-config-engine.md`），由 Workbench 设置面板按需完成；`configure-memory` machine operation 保留给 terminal setup 使用，onboarding 编排不再调用。
+Memory 配置不属于 onboarding 旅程，也不属于 terminal setup 旅程。记忆配置的写入者与消费面归配置体系（`./DESIGN-config-engine.md`），由配置中心按需完成，`configure-memory` machine operation 与旧 `.env` 写入路径一并退役，两个旅程均不再收集记忆配置。
 
 `github-auth` 是伪步骤：可执行（保存 Token 时经 `executeStep`），但不出现在向导步骤映射中。
 
