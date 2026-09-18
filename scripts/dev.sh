@@ -661,7 +661,14 @@ start_backend() {
 start_frontend() {
   local port="$1" backend_port="$2"
   [ -d "$ellamaka_app_dir" ] || { echo "missing Ellamaka Workbench: $ellamaka_app_dir"; return 1; }
-  start_process frontend "$port" "$FRONTEND_LOG" "$ellamaka_app_dir" env VITE_OPENCODE_SERVER_PORT="$backend_port" bun run dev -- --host 127.0.0.1 --port "$port" --strictPort
+  # The Vite dev server proxies `/api/onboarding` and `/dsh` onto the backend
+  # origin. Their built-in fallbacks are the standalone-serve defaults
+  # (4096/4097); without ELLAMAKA_DSH_PROXY_TARGET `serve --port <other>`
+  # proxies every onboarding and dsh request to whatever unrelated process owns
+  # those ports (a 401 Basic prompt from a foreign listener is the visible
+  # symptom), while VITE_ELLAMAKA_SERVER_PORT only rebinds the SDK client.
+  # Point both proxy chains at the backend this worktree actually started.
+  start_process frontend "$port" "$FRONTEND_LOG" "$ellamaka_app_dir" env VITE_ELLAMAKA_SERVER_PORT="$backend_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$backend_port" bun run dev -- --host 127.0.0.1 --port "$port" --strictPort
 }
 
 listener_pid() {
@@ -1077,7 +1084,7 @@ cmd_desktop() {
   else
     require_free_ports 5173 || return 1
   fi
-  local desktop_sidecar_port="${OPENCODE_PORT:-4097}"
+  local desktop_sidecar_port="${ELLAMAKA_PORT:-4097}"
   choose_free_port desktop-sidecar "$desktop_sidecar_port"
   desktop_sidecar_port="$SELECTED_PORT"
   export ELLAMAKA_CHANNEL="$CHANNEL"
@@ -1102,7 +1109,7 @@ cmd_desktop() {
 
   mkdir -p "$DEV_DIR"
   local plugin_modules=""
-  local -a desktop_env=(ELAMAKA_DESKTOP_DEV=1 ELAMAKA_DESKTOP_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" OPENCODE_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
+  local -a desktop_env=(ELAMAKA_DESKTOP_DEV=1 ELAMAKA_DESKTOP_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" ELLAMAKA_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
   # The sidecar's dshmarket install worker re-launches this command for
   # `dsh plugin` installs (Bun installer). Point it at the worktree CLI
   # entry run via bun — no engine build required; the sidecar falls back to

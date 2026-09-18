@@ -59,12 +59,40 @@ describe("ontology-setup-flow | probe normalization", () => {
       ontologyInstalled: true,
       ontologyMode: "clone",
       ontologyPath: "/tmp/ontology",
-      availableTypes: [{ type: "common", branch: "main" }],
+      availableTypes: [{ type: "coding", description: "软件工程空间" }],
     })
 
     expect(probe.status).toBe("ready")
     expect(probe.mode).toBe("clone")
     expect(probe.path).toBe("/tmp/ontology")
+  })
+
+  test("keeps every available type that omits the removed branch field", () => {
+    const probe = normalizeOntologyProbe({
+      status: "ready",
+      ontologyInstalled: true,
+      ontologyMode: "clone",
+      ontologyPath: "/tmp/ontology",
+      availableTypes: [
+        { type: "coding", description: "软件工程空间" },
+        { type: "content", description: null },
+        { type: "ops" },
+      ],
+    })
+
+    expect(probe.availableTypes).toEqual([
+      { type: "coding", description: "软件工程空间" },
+      { type: "content", description: null },
+      { type: "ops", description: null },
+    ])
+  })
+
+  test("drops malformed type entries without discarding the rest", () => {
+    const probe = normalizeOntologyProbe({
+      availableTypes: [{ type: "coding", description: "软件工程空间" }, null, "ops", { description: "无类型" }],
+    })
+
+    expect(probe.availableTypes).toEqual([{ type: "coding", description: "软件工程空间" }])
   })
 
   test("does not report a broken ontology directory as installed", () => {
@@ -82,26 +110,26 @@ describe("ontology-setup-flow | probe normalization", () => {
 })
 
 describe("ontology-setup-flow | initial selection", () => {
-  test("defaults a fresh authenticated environment to fork", () => {
+  test("defaults a fresh authenticated environment to clone", () => {
     const state = buildOntologyInitialState(
       githubProbe({ detected: true, source: "github-token-env" }),
       { status: "missing", installed: false, mode: null, path: "", availableTypes: [] },
     )
 
-    expect(state.mode).toBe("fork")
+    expect(state.mode).toBe("clone")
     expect(state.modeLocked).toBe(false)
     expect(state.showGithubSetup).toBe(false)
   })
 
-  test("keeps fork selected and exposes setup when GitHub is not configured", () => {
+  test("keeps clone selected and hides GitHub setup when GitHub is not configured", () => {
     const state = buildOntologyInitialState(
       githubProbe(),
       { status: "missing", installed: false, mode: null, path: "", availableTypes: [] },
     )
 
-    expect(state.mode).toBe("fork")
+    expect(state.mode).toBe("clone")
     expect(state.modeLocked).toBe(false)
-    expect(state.showGithubSetup).toBe(true)
+    expect(state.showGithubSetup).toBe(false)
   })
 
   test("locks an existing clone without attempting automatic migration", () => {
@@ -113,6 +141,18 @@ describe("ontology-setup-flow | initial selection", () => {
     expect(state.mode).toBe("clone")
     expect(state.modeLocked).toBe(true)
     expect(state.reuseExisting).toBe(true)
+  })
+
+  test("locks an existing fork and reuses it", () => {
+    const state = buildOntologyInitialState(
+      githubProbe(),
+      { status: "ready", installed: true, mode: "fork", path: "/tmp/ontology", availableTypes: [] },
+    )
+
+    expect(state.mode).toBe("fork")
+    expect(state.modeLocked).toBe(true)
+    expect(state.reuseExisting).toBe(true)
+    expect(state.showGithubSetup).toBe(false)
   })
 })
 

@@ -8,6 +8,7 @@ import {
   getPhaseForStep,
   isRetryActionVisible,
   isOptionalStep,
+  resolveRestoreTarget,
   type OnboardingStepName,
 } from "./step-controller"
 import { SystemCheckStep } from "./steps/system-check"
@@ -15,7 +16,6 @@ import { InstallCliStep } from "./steps/install-cli"
 import { OntologySetupStep } from "./steps/ontology-setup"
 import { AiProviderStep } from "./steps/ai-provider"
 import { CreateSpaceStep } from "./steps/create-space"
-import { MemoryConfigStep } from "./steps/memory-config"
 import { DoneStep } from "./steps/done"
 import { LogDrawer } from "./components/LogDrawer"
 import { ProgressDisplay } from "./components/ProgressDisplay"
@@ -37,7 +37,6 @@ const FORM_SUBMIT_STEPS = new Set<OnboardingStepName>([
   "ontology-setup",
   "create-space",
   "ai-provider",
-  "memory-config",
 ])
 
 export function OnboardingRoot() {
@@ -49,10 +48,14 @@ export function OnboardingRoot() {
   const [working, setWorking] = createSignal(false)
   const [stepResult, setStepResult] = createSignal<{ success: boolean } | null>(null)
   const [doneLaunching, setDoneLaunching] = createSignal<boolean>(false)
+  // The done step publishes its launch action here; the nav bar owns the only
+  // button and calls this closure directly (no DOM query — §交互模型).
+  let doneLaunch: (() => void) | null = null
   const [hasExistingSpaces, setHasExistingSpaces] = createSignal(false)
   const [maxUnlockedPhase, setMaxUnlockedPhase] = createSignal<number>(1)
   const [initialized, setInitialized] = createSignal(false)
   const [systemUserName, setSystemUserName] = createSignal<string>("")
+  const [primaryLabelOverride, setPrimaryLabelOverride] = createSignal<string | null>(null)
 
   const controller = createStepController("system-check")
 
@@ -87,13 +90,17 @@ export function OnboardingRoot() {
         const name = typeof userProbe?.userName === "string" ? userProbe.userName.trim() : ""
         if (name) setSystemUserName(name)
 
-        if (state && state.currentStep && !state.completed) {
-          const savedStep = state.currentStep
+        if (state) {
+          const savedStep = resolveRestoreTarget(state)
           if (savedStep !== currentStep()) {
             setCurrentStep(savedStep)
             controller.setCurrentStep(savedStep)
             updateUnlockedPhase(savedStep)
-            appendLog(`[system] 已从服务端恢复当前进度: ${savedStep}`)
+            appendLog(
+              state.completed
+                ? "[system] 配置已完成，已回到启动页"
+                : `[system] 已从服务端恢复当前进度: ${savedStep}`,
+            )
           }
         }
       } catch (err) {
@@ -267,6 +274,10 @@ export function OnboardingRoot() {
       return doneLaunching() ? "正在启动…" : "🚀 启动工作台"
     }
     if (stepResult()?.success === true) return "下一步"
+    // Steps may override the primary action's label when their submit semantics
+    // differ from the step name (e.g. create-space reusing an existing space).
+    const override = primaryLabelOverride()
+    if (override) return override
     // Step-specific action labels for the primary submit action
     const step = stepName()
     if (step === "system-check") return "下一步"
@@ -274,16 +285,12 @@ export function OnboardingRoot() {
     if (step === "ontology-setup") return "准备能力本体"
     if (step === "ai-provider") return "保存配置"
     if (step === "create-space") return "创建工作空间"
-    if (step === "memory-config") return "保存配置"
     return "下一步"
   }
 
   const handleNextClick = () => {
     if (isDone()) {
-      const launchBtn = document.querySelector<HTMLButtonElement>(".ob-done-launch-button")
-      if (launchBtn && !launchBtn.disabled) {
-        launchBtn.click()
-      }
+      doneLaunch?.()
       return
     }
     // If step already succeeded, advance to next step directly
@@ -386,7 +393,7 @@ export function OnboardingRoot() {
                         <span class="ob-optional-tag">可选</span>
                       </Show>
                     </div>
-                    <Show when={currentStep() !== "memory-config" && currentStep() !== "ontology-setup"}>
+                    <Show when={currentStep() !== "ontology-setup"}>
                       <p class="ob-card-description">{content()?.goal ?? meta().description}</p>
                     </Show>
                   </div>
@@ -464,6 +471,7 @@ export function OnboardingRoot() {
                           onComplete={handleNext}
                           onError={handleError}
                           onStatusChange={handleStepStatusChange}
+                          onPrimaryLabelChange={setPrimaryLabelOverride}
                         />
                       </Match>
                       <Match when={currentStep() === "ai-provider"}>
@@ -473,17 +481,10 @@ export function OnboardingRoot() {
                           onStatusChange={handleStepStatusChange}
                         />
                       </Match>
-                      <Match when={currentStep() === "memory-config"}>
-                        <MemoryConfigStep
-                          onComplete={handleNext}
-                          onError={handleError}
-                          onStatusChange={handleStepStatusChange}
-                        />
-                      </Match>
 
                       {/* Phase 4 Steps */}
                       <Match when={currentStep() === "done"}>
-                        <DoneStep onLaunchingChange={setDoneLaunching} />
+                        <DoneStep onLaunchingChange={setDoneLaunching} onRegisterLaunch={(fn) => (doneLaunch = fn)} />
                       </Match>
                     </Switch>
                   </Show>

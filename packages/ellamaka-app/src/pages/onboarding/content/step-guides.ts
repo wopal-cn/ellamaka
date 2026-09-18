@@ -3,7 +3,6 @@ import installCliGuide from "./zh-CN/guides/install-cli.md?raw"
 import ontologySetupGuide from "./zh-CN/guides/ontology-setup.md?raw"
 import createSpaceGuide from "./zh-CN/guides/create-space.md?raw"
 import aiProviderGuide from "./zh-CN/guides/ai-provider.md?raw"
-import memoryConfigGuide from "./zh-CN/guides/memory-config.md?raw"
 import doneGuide from "./zh-CN/guides/done.md?raw"
 import {
   resolveStepGuideId,
@@ -17,7 +16,6 @@ const STEP_GUIDES: Record<StepGuideId, string> = {
   "ontology-setup": ontologySetupGuide,
   "create-space": createSpaceGuide,
   "ai-provider": aiProviderGuide,
-  "memory-config": memoryConfigGuide,
   done: doneGuide,
 }
 

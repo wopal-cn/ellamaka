@@ -1,4 +1,4 @@
-import { createSignal, onMount, Show, For } from "solid-js"
+import { createEffect, createSignal, onCleanup, onMount, Show, For } from "solid-js"
 import { usePlatform } from "@/context/platform"
 import { ProgressDisplay } from "../components/ProgressDisplay"
 import { ResultPanel } from "../components/ResultPanel"
@@ -8,6 +8,8 @@ export interface StepProps {
   onStatusChange?: (status: "idle" | "working" | "success" | "error") => void
   onComplete: () => void
   onSkip?: () => void
+  /** Report the primary submit action's label for the shared bottom nav bar. */
+  onPrimaryLabelChange?: (label: string | null) => void
   onError: (error: {
     code?: string
     message: string
@@ -17,7 +19,7 @@ export interface StepProps {
 
 interface AvailableType {
   type: string
-  branch: string
+  description?: string | null
 }
 
 interface SpaceEntry {
@@ -68,23 +70,13 @@ export function CreateSpaceStep(props: StepProps) {
         setSpaceType(types[0].type)
       }
 
+      // Probing is read-only: existing spaces are listed for the user to
+      // confirm, never auto-skipped. The step is marked done only when the
+      // user submits (either "next" to reuse, or a create form).
       const spaces = Array.isArray(envData.spaces)
         ? envData.spaces as SpaceEntry[]
         : []
       setExistingSpaces(spaces)
-      if (spaces.length > 0) {
-        // Auto-confirm reuse: execute backend skip to mark step done, then user can proceed directly
-        try {
-          const res = await client.executeStep("create-space", { skip: true })
-          if (res.status === "skipped" || res.status === "completed" || res.status === "reused") {
-            props.onStatusChange?.("success")
-          } else {
-            props.onStatusChange?.("idle")
-          }
-        } catch {
-          props.onStatusChange?.("idle")
-        }
-      }
 
       const defaultPath = typeof envData.defaultSpacePath === "string"
         ? envData.defaultSpacePath
@@ -105,6 +97,17 @@ export function CreateSpaceStep(props: StepProps) {
   onMount(() => {
     void loadEnvironment()
   })
+
+  // The shared bottom nav bar owns the primary button. When existing spaces are
+  // listed, that button reuses them rather than creating a new space, so its
+  // label must say so instead of the misleading "创建工作空间".
+  createEffect(() => {
+    const blocked = isLoading() || probeError() || resultInfo()
+    const reusesExisting = existingSpaces().length > 0 && !showCreateForm()
+    props.onPrimaryLabelChange?.(blocked ? null : reusesExisting ? "使用已有空间" : null)
+  })
+
+  onCleanup(() => props.onPrimaryLabelChange?.(null))
 
   const handleSkipCreate = async () => {
     props.onError(null)
@@ -335,7 +338,7 @@ export function CreateSpaceStep(props: StepProps) {
             <For each={availableTypes()}>
               {(t) => (
                 <option value={t.type}>
-                  {t.type === "common" ? "通用 (main 分支)" : `${t.type}`}
+                  {t.description ? `${t.type} · ${t.description}` : t.type}
                 </option>
               )}
             </For>

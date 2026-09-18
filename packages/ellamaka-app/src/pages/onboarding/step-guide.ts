@@ -8,7 +8,6 @@ export const STEP_GUIDE_IDS = [
   "ontology-setup",
   "create-space",
   "ai-provider",
-  "memory-config",
   "done",
 ] as const
 

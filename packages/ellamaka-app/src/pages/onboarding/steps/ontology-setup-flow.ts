@@ -1,4 +1,5 @@
 import type { OnboardingStepResult } from "@/lib/onboarding-client"
+import { normalizeAvailableTypes, type AvailableOntologyType } from "./ontology-result"
 
 export type OntologyMode = "fork" | "clone"
 
@@ -26,7 +27,7 @@ export interface OntologyProbe {
   installed: boolean
   mode: OntologyMode | null
   path: string
-  availableTypes: Array<{ type: string; branch: string }>
+  availableTypes: AvailableOntologyType[]
   error?: string
 }
 
@@ -90,20 +91,13 @@ export function normalizeOntologyProbe(raw: Record<string, unknown> | null | und
         : "missing"
   const rawMode = raw?.ontologyMode
   const mode = rawMode === "fork" || rawMode === "clone" ? rawMode : null
-  const rawTypes = Array.isArray(raw?.availableTypes) ? raw.availableTypes : []
-  const availableTypes = rawTypes.flatMap((item) => {
-    if (!item || typeof item !== "object") return []
-    const entry = item as Record<string, unknown>
-    if (typeof entry.type !== "string" || typeof entry.branch !== "string") return []
-    return [{ type: entry.type, branch: entry.branch }]
-  })
 
   return {
     status,
     installed: status === "ready" && installed,
     mode,
     path: typeof raw?.ontologyPath === "string" ? raw.ontologyPath : "",
-    availableTypes,
+    availableTypes: normalizeAvailableTypes(raw?.availableTypes),
     error: typeof raw?.error === "string" ? raw.error : undefined,
   }
 }
@@ -130,11 +124,16 @@ export function buildOntologyInitialState(
     }
   }
 
+  // A fresh environment defaults to the local Clone: it needs no GitHub
+  // credential and gets the user to a working space fastest. Fork is an
+  // opt-in advanced path, so its credential form stays collapsed until the
+  // user actually selects it.
+  void auth
   return {
-    mode: "fork",
+    mode: "clone",
     modeLocked: false,
     reuseExisting: false,
-    showGithubSetup: !auth.detected,
+    showGithubSetup: false,
   }
 }
 

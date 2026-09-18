@@ -36,8 +36,10 @@ import {
   wopalBinaryPath,
 } from "./machine-runner"
 import {
+  ONBOARDING_HEALTH_GATE_FAILED,
   ONBOARDING_OPERATION_BUSY,
   ONBOARDING_STEPS,
+  type OnboardingCompleteResult,
   type OnboardingExecutableStep,
   type OnboardingProgressCallback,
   type OnboardingProbeResult,
@@ -49,7 +51,7 @@ import {
   type OnboardingStepStatus,
 } from "./types"
 
-export { ONBOARDING_STEPS, ONBOARDING_OPERATION_BUSY }
+export { ONBOARDING_STEPS, ONBOARDING_OPERATION_BUSY, ONBOARDING_HEALTH_GATE_FAILED }
 export { getWopalHome }
 export type { OnboardingStepName }
 
@@ -447,155 +449,6 @@ export function detectMemoryConfig(homePath: string) {
   }
 }
 
-export function writeMemoryEnvFile(
-  targetEnvPath: string,
-  payload: Record<string, unknown>,
-  homePath?: string,
-): boolean {
-  try {
-    const dir = dirname(targetEnvPath)
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-
-    const envVars: Record<string, string> = {}
-    if (existsSync(targetEnvPath)) {
-      for (const line of readFileSync(targetEnvPath, "utf-8").split("\n")) {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith("#")) continue
-        const idx = trimmed.indexOf("=")
-        if (idx > 0) envVars[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim()
-      }
-    }
-
-    const globalEnvVars: Record<string, string> = {}
-    if (homePath) {
-      const globalEnvPath = join(homePath, ".env")
-      if (existsSync(globalEnvPath) && globalEnvPath !== targetEnvPath) {
-        for (const line of readFileSync(globalEnvPath, "utf-8").split("\n")) {
-          const trimmed = line.trim()
-          if (!trimmed || trimmed.startsWith("#")) continue
-          const idx = trimmed.indexOf("=")
-          if (idx > 0) globalEnvVars[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim()
-        }
-      }
-    }
-
-    if (payload.enabled === false) {
-      envVars["WOPAL_MEMORY_ENABLED"] = "false"
-      delete envVars["WOPAL_MEMORY_INJECTION_ENABLED"]
-    } else {
-      envVars["WOPAL_MEMORY_ENABLED"] = "true"
-      envVars["WOPAL_MEMORY_INJECTION_ENABLED"] = payload.memoryInjectionEnabled === false ? "false" : "true"
-      const llmEndpoint = readString(payload.llmEndpoint)
-      if (llmEndpoint) envVars["WOPAL_LLM_BASE_URL"] = llmEndpoint
-      const llmModel = readString(payload.llmModel)
-      if (llmModel) envVars["WOPAL_LLM_MODEL"] = llmModel
-
-      const llmKey = readString(payload.llmKey)
-      if (llmKey) envVars["WOPAL_LLM_API_KEY"] = llmKey
-      else if (!envVars["WOPAL_LLM_API_KEY"] && globalEnvVars["WOPAL_LLM_API_KEY"])
-        envVars["WOPAL_LLM_API_KEY"] = globalEnvVars["WOPAL_LLM_API_KEY"]!
-
-      const embeddingEndpoint = readString(payload.embeddingEndpoint)
-      if (embeddingEndpoint) envVars["WOPAL_EMBEDDING_BASE_URL"] = embeddingEndpoint
-      const embeddingModel = readString(payload.embeddingModel)
-      if (embeddingModel) envVars["WOPAL_EMBEDDING_MODEL"] = embeddingModel
-
-      const embeddingKey = readString(payload.embeddingKey)
-      if (embeddingKey) envVars["WOPAL_EMBEDDING_API_KEY"] = embeddingKey
-      else if (payload.reuseEmbedding || !envVars["WOPAL_EMBEDDING_API_KEY"]) {
-        const fallbackKey =
-          envVars["WOPAL_LLM_API_KEY"] || globalEnvVars["WOPAL_EMBEDDING_API_KEY"] || globalEnvVars["WOPAL_LLM_API_KEY"]
-        if (fallbackKey) envVars["WOPAL_EMBEDDING_API_KEY"] = fallbackKey
-      }
-    }
-
-    writeFileSync(
-      targetEnvPath,
-      Object.entries(envVars)
-        .map(([k, v]) => `${k}=${v}`)
-        .join("\n") + "\n",
-      "utf-8",
-    )
-    return true
-  } catch (err) {
-    console.error(`[onboarding] Failed to write memory env file at ${targetEnvPath}:`, err)
-    return false
-  }
-}
-
-export function clearSpaceMemoryEnvFile(targetEnvPath: string): boolean {
-  try {
-    if (!existsSync(targetEnvPath)) return true
-    const memoryKeys = new Set([
-      "WOPAL_MEMORY_ENABLED",
-      "WOPAL_MEMORY_INJECTION_ENABLED",
-      "WOPAL_LLM_BASE_URL",
-      "WOPAL_LLM_MODEL",
-      "WOPAL_LLM_API_KEY",
-      "WOPAL_MEMORY_LLM_ENDPOINT",
-      "WOPAL_MEMORY_LLM_MODEL",
-      "WOPAL_MEMORY_LLM_KEY",
-      "WOPAL_EMBEDDING_BASE_URL",
-      "WOPAL_EMBEDDING_MODEL",
-      "WOPAL_EMBEDDING_API_KEY",
-      "WOPAL_MEMORY_EMBEDDING_ENDPOINT",
-      "WOPAL_MEMORY_EMBEDDING_MODEL",
-      "WOPAL_MEMORY_EMBEDDING_KEY",
-    ])
-    const remaining: string[] = []
-    for (const line of readFileSync(targetEnvPath, "utf-8").split("\n")) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      const idx = trimmed.indexOf("=")
-      if (idx > 0 && !memoryKeys.has(trimmed.slice(0, idx).trim())) remaining.push(line)
-    }
-    writeFileSync(targetEnvPath, remaining.length > 0 ? remaining.join("\n") + "\n" : "", "utf-8")
-    return true
-  } catch (err) {
-    console.error(`[onboarding] Failed to clear space memory env file at ${targetEnvPath}:`, err)
-    return false
-  }
-}
-
-export function resolveTargetEnvPath(homePath: string, scope?: string, spacePath?: string): string {
-  if (scope === "space") {
-    if (spacePath) return join(spacePath, ".wopal", ".env")
-    const detected = detectMemoryConfig(homePath)
-    if (detected?.effectiveSpace?.path) return join(detected.effectiveSpace.path, ".wopal", ".env")
-    throw new Error("Space scope configuration requires a valid space path.")
-  }
-  return join(homePath, ".env")
-}
-
-export function buildMemoryOperationInput(input?: unknown, homePath?: string): Record<string, unknown> {
-  const payload = asRecord(input) ?? {}
-  const result: Record<string, unknown> = {}
-  if (typeof payload.enabled === "boolean") result.enabled = payload.enabled
-  if (payload.scope) result.scope = payload.scope
-  if (payload.spaceMode) result.spaceMode = payload.spaceMode
-  if (typeof payload.memoryInjectionEnabled === "boolean")
-    result.memoryInjectionEnabled = payload.memoryInjectionEnabled
-
-  if (typeof payload.spacePath === "string" && payload.spacePath) result.spacePath = payload.spacePath
-  else if (payload.scope === "space" && homePath) {
-    try {
-      const detected = detectMemoryConfig(homePath)
-      if (detected?.effectiveSpace?.path) result.spacePath = detected.effectiveSpace.path
-    } catch {}
-  }
-
-  if (payload.enabled === false || payload.spaceMode === "disabled") {
-    result.enabled = false
-    return result
-  }
-  if (payload.spaceMode === "inherit") return result
-
-  for (const field of ["llmEndpoint", "llmKey", "llmModel", "embeddingEndpoint", "embeddingKey", "embeddingModel"]) {
-    if (typeof payload[field] === "string" && payload[field]) result[field] = payload[field]
-  }
-  return result
-}
-
 export function normalizeSetupResult(opRes: OnboardingStepResult): OnboardingStepResult {
   const raw = opRes.status
   if (raw === "completed" || raw === "reused" || raw === "skipped") {
@@ -725,7 +578,6 @@ const STEP_OPERATION_LABELS: Record<string, string> = {
   "ai-provider": "配置 AI Provider",
   "ontology-setup": "准备能力本体与运行时配置",
   "create-space": "创建或复用工作空间",
-  "memory-config": "配置记忆系统",
   done: "完成空间设置",
 }
 
@@ -807,8 +659,31 @@ export class OnboardingService {
     return { ok: true }
   }
 
-  /** Persist `completed: true`, invoke `onComplete`, and emit `complete`. */
-  async complete(): Promise<{ completed: true }> {
+  /**
+   * The completion gate: run one `inspect` and persist `completed: true` only
+   * when the machine reports `verdict === "healthy"`. A non-healthy verdict
+   * (or a failed inspect) refuses with {@link ONBOARDING_HEALTH_GATE_FAILED}
+   * and leaves `onboarding.json` untouched, so the wizard stays on `done`.
+   *
+   * The gate deliberately does not seed the probe snapshot: its verdict is a
+   * one-shot admission decision, not a cached machine fact (D-02).
+   */
+  async complete(): Promise<OnboardingCompleteResult> {
+    const executor = this.executeStepImpl ?? this.defaultExecuteStep.bind(this)
+    const inspection = await executor("inspect")
+    this.inspectSnapshot = null
+
+    const verdict = readString(inspection.result?.verdict)
+    if (inspection.status === "failed" || verdict !== "healthy") {
+      const reason =
+        readString(inspection.result?.verdictReason) ?? inspection.error?.message ?? "无法确认环境健康状态。"
+      const summary = verdict ? `verdict=${verdict}：${reason}` : (inspection.error?.message ?? reason)
+      return {
+        status: "failed",
+        error: { code: ONBOARDING_HEALTH_GATE_FAILED, message: `完成门禁未通过（${summary}）` },
+      }
+    }
+
     let state = readOnboardingState(this.home) ?? createDefaultOnboardingState()
     state = markCompleted(state)
     writeOnboardingState(state, this.home)
@@ -923,6 +798,13 @@ export class OnboardingService {
       else state = updateStep(state, wizardStep, "failed", result.error?.message ?? "Execution failed")
       writeOnboardingState(state, this.home)
     }
+
+    // Any non-failed step may have changed machine facts (installed binaries,
+    // materialized ontology, registered spaces), so the cached inspection is
+    // stale. Invalidate centrally here instead of refreshing per case: a
+    // per-case refresh always leaves one more case to forget. A failed step
+    // changed nothing, so its snapshot stays valid.
+    if (result.status !== "failed") this.inspectSnapshot = null
 
     if (result.status === "failed") {
       const code = result.error?.code ?? "STEP_FAILED"
@@ -1107,16 +989,17 @@ export class OnboardingService {
             errorCode: error?.code ?? "ENVIRONMENT_INSPECT_FAILED",
           }
         }
-        const hasAvailableTypes = Array.isArray(inspection.availableTypes)
+        // No legacy `common` fallback: `common` is not a space type (wopal-cli
+        // rejects it), so a missing type list must surface as "none detected".
+        const availableTypes = Array.isArray(inspection.availableTypes) ? inspection.availableTypes : []
         return {
-          availableTypes: hasAvailableTypes ? inspection.availableTypes : [{ type: "common", branch: "main" }],
+          availableTypes,
           spaces: Array.isArray(inspection.spaces) ? inspection.spaces : [],
           ontologyInstalled: installed || Boolean(inspection.ontologyInstalled),
           ontologyMode: inspection.ontologyMode ?? null,
           homePath,
           wopalHome: homePath,
           defaultSpacePath: join(homedir(), "WopalSpace"),
-          legacyContract: !hasAvailableTypes,
         }
       }
 
@@ -1354,74 +1237,6 @@ export class OnboardingService {
             abortSignal,
           }),
         )
-      }
-
-      case "memory-config": {
-        if (asRecord(input)?.skip) {
-          return {
-            status: "skipped",
-            result: { memoryEnabled: false, scope: "global", state: "unconfigured", outcome: "skipped" },
-          }
-        }
-
-        const memInput = buildMemoryOperationInput(input, homePath)
-        const isSpaceScope = memInput.scope === "space"
-        const spaceMode = readString(memInput.spaceMode) || (isSpaceScope ? "custom" : undefined)
-        const targetEnvPath = resolveTargetEnvPath(homePath, readString(memInput.scope), readString(memInput.spacePath))
-
-        if (isSpaceScope && spaceMode === "inherit") clearSpaceMemoryEnvFile(targetEnvPath)
-        else writeMemoryEnvFile(targetEnvPath, memInput, homePath)
-
-        let cliResult: OnboardingStepResult | null = null
-        if (!isSpaceScope) {
-          try {
-            cliResult = normalizeSetupResult(
-              await runSetupOperation({
-                binaryPath: binPath,
-                operation: "configure-memory",
-                input: memInput,
-                onProgress,
-                abortSignal,
-              }),
-            )
-          } catch {}
-        }
-
-        const globalConfig = readEnvConfig(join(homePath, ".env"))
-        const inherit = isSpaceScope && spaceMode === "inherit"
-        const memoryEnabled = inherit ? Boolean(globalConfig?.enabled) : memInput.enabled !== false
-        return {
-          status: "completed",
-          result: {
-            memoryEnabled,
-            memoryInjectionEnabled: inherit
-              ? globalConfig?.memoryInjectionEnabled !== false
-              : memInput.memoryInjectionEnabled !== false,
-            scope: isSpaceScope ? "space" : "global",
-            spaceMode: isSpaceScope ? spaceMode : undefined,
-            envPath: inherit ? join(homePath, ".env") : targetEnvPath,
-            llmEndpoint: inherit
-              ? (globalConfig?.llmEndpoint ?? "")
-              : (memInput.llmEndpoint ?? readString(cliResult?.result?.llmEndpoint) ?? ""),
-            llmModel: inherit
-              ? (globalConfig?.llmModel ?? "")
-              : (memInput.llmModel ?? readString(cliResult?.result?.llmModel) ?? ""),
-            embeddingEndpoint: inherit
-              ? (globalConfig?.embeddingEndpoint ?? "")
-              : (memInput.embeddingEndpoint ?? readString(cliResult?.result?.embeddingEndpoint) ?? ""),
-            embeddingModel: inherit
-              ? (globalConfig?.embeddingModel ?? "")
-              : (memInput.embeddingModel ?? readString(cliResult?.result?.embeddingModel) ?? ""),
-            llmKeyConfigured: inherit
-              ? Boolean(globalConfig?.hasLlmKey)
-              : Boolean(memInput.llmKey || cliResult?.result?.llmKeyConfigured),
-            embeddingKeyConfigured: inherit
-              ? Boolean(globalConfig?.hasEmbeddingKey)
-              : Boolean(memInput.embeddingKey || cliResult?.result?.embeddingKeyConfigured),
-            state: memoryEnabled ? "ready" : "disabled",
-            outcome: inherit ? "cleared" : "saved",
-          },
-        }
       }
 
       case "done":

@@ -14,7 +14,7 @@
  * | POST   | `/probe`   | 200 probe payload, 503 when busy            |
  * | POST   | `/execute` | 200 StepResult, 503 when busy               |
  * | POST   | `/cancel`  | 200 `{ ok: true }`                          |
- * | POST   | `/complete`| 200 `{ completed: true }`                   |
+ * | POST   | `/complete`| 200 `{ completed: true }` or a health-gate refusal |
  * | GET    | `/stream`  | 200 SSE stream of progress/log/error/complete |
  *
  * @module @wopal/ellamaka-onboarding/router

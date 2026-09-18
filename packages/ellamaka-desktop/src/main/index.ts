@@ -122,10 +122,10 @@ function ensureLoopbackNoProxy() {
   upsert("no_proxy")
 }
 
-// Allocate an ephemeral loopback port. Honors OPENCODE_PORT for tests/dev,
+// Allocate an ephemeral loopback port. Honors ELLAMAKA_PORT for tests/dev,
 // otherwise binds to a kernel-assigned port (listen 0) and returns it.
 const allocatePort = Effect.gen(function* () {
-  const fromEnv = process.env.OPENCODE_PORT
+  const fromEnv = process.env.ELLAMAKA_PORT
   if (fromEnv) {
     const parsed = Number.parseInt(fromEnv, 10)
     if (!Number.isNaN(parsed)) return parsed

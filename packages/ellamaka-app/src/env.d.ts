@@ -1,6 +1,6 @@
 interface ImportMetaEnv {
-  readonly VITE_OPENCODE_SERVER_HOST: string
-  readonly VITE_OPENCODE_SERVER_PORT: string
+  readonly VITE_ELLAMAKA_SERVER_HOST: string
+  readonly VITE_ELLAMAKA_SERVER_PORT: string
   readonly ELLAMAKA_CHANNEL?: "stable" | "beta" | "main" | "local"
 
   readonly VITE_SENTRY_DSN?: string

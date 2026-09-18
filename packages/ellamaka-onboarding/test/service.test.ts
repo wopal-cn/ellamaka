@@ -5,7 +5,14 @@ import { tmpdir } from "node:os"
 
 import { extractJsonEnvelope, resolveWopalCliEntry, runSetupOperation } from "../src/machine-runner"
 import { OnboardingBusyError, OnboardingService, getOnboardingStatePath, getWopalHome } from "../src/service"
-import { ONBOARDING_OPERATION_BUSY, ONBOARDING_STEPS, type OnboardingStepResult } from "../src/types"
+import {
+  ONBOARDING_HEALTH_GATE_FAILED,
+  ONBOARDING_OPERATION_BUSY,
+  ONBOARDING_STEPS,
+  type OnboardingCompleteResult,
+  type OnboardingStepExecutor,
+  type OnboardingStepResult,
+} from "../src/types"
 
 function tempHome(): string {
   return join(tmpdir(), `ellamaka-onboarding-test-${Date.now()}-${Math.random().toString(36).slice(2)}`)
@@ -40,6 +47,12 @@ async function expectBusy(promise: Promise<unknown>): Promise<void> {
   }
   expect(caught).toBeInstanceOf(OnboardingBusyError)
   expect((caught as OnboardingBusyError).code).toBe(ONBOARDING_OPERATION_BUSY)
+}
+
+/** Narrow a `POST /complete` response to its refusal branch for assertions. */
+function refusal(result: OnboardingCompleteResult): { code?: string; message?: string } {
+  if ("completed" in result) throw new Error("expected the completion gate to refuse, but it completed")
+  return result.error
 }
 
 let testHome: string
@@ -116,6 +129,44 @@ describe("onboarding state persistence", () => {
     expect(service.getState().currentStep).toBe("ontology-setup")
   })
 
+  test("a legacy state file that still records memory-config reads normally", () => {
+    writeStateFile(testHome, {
+      version: 1,
+      currentStep: "done",
+      steps: {
+        "system-check": "done",
+        "install-cli": "done",
+        "ontology-setup": "done",
+        "create-space": "done",
+        "ai-provider": "skipped",
+        "memory-config": "done",
+        done: "done",
+      },
+      errors: {},
+      completed: true,
+      startedAt: null,
+      updatedAt: null,
+    })
+    const service = new OnboardingService({ home: testHome })
+    const view = service.getState()
+    expect(view.completed).toBe(true)
+    expect(view.currentStep).toBe("done")
+    // The removed step is simply not part of the canonical step list.
+    expect(view.completedSteps).toEqual(["system-check", "install-cli", "ontology-setup", "create-space", "done"])
+  })
+
+  test("the canonical step list no longer carries memory-config", () => {
+    expect(ONBOARDING_STEPS).not.toContain("memory-config")
+    expect(ONBOARDING_STEPS).toEqual([
+      "system-check",
+      "install-cli",
+      "ontology-setup",
+      "create-space",
+      "ai-provider",
+      "done",
+    ])
+  })
+
   test("getWopalHome expands ~ and honors WOPAL_HOME", () => {
     expect(getWopalHome("/tmp/custom")).toBe("/tmp/custom")
     expect(getWopalHome("~/custom")).not.toContain("~")
@@ -188,6 +239,26 @@ describe("OnboardingService step scheduling", () => {
     expect(ran).toBe(false)
   })
 
+  test("the removed memory-config step is rejected with ONBOARDING_STEP_INVALID", async () => {
+    let ran = false
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async () => {
+        ran = true
+        return { status: "completed" }
+      },
+    })
+    // The removed step is no longer part of the executable union; passing it
+    // is a deliberate contract violation, so the call is expected to be a type
+    // error as well as a runtime rejection.
+    // @ts-expect-error memory-config is not an executable step any more
+    const result = await service.executeStep("memory-config", { enabled: true })
+    expect(result.status).toBe("failed")
+    expect(result.error?.code).toBe("ONBOARDING_STEP_INVALID")
+    expect(ran).toBe(false)
+    expect(service.getState().completedSteps).toEqual([])
+  })
+
   test("the github-auth pseudo step does not pollute the wizard step map", async () => {
     const service = new OnboardingService({
       home: testHome,
@@ -211,6 +282,96 @@ describe("OnboardingService step scheduling", () => {
     expect(result.status).toBe("failed")
     expect(result.error?.code).toBe("STEP_EXECUTION_ERROR")
     expect(result.error?.message).toContain("kaboom")
+  })
+})
+
+describe("OnboardingService inspect snapshot invalidation", () => {
+  /** An executor that reports a different machine fact on every inspect. */
+  function progressiveInspectExecutor(): { executor: OnboardingStepExecutor; inspectCalls: () => number } {
+    let inspects = 0
+    const executor: OnboardingStepExecutor = async (step) => {
+      if (step !== "inspect") return { status: "completed", result: {} }
+      inspects += 1
+      if (inspects === 1) {
+        return { status: "completed", result: { ontologyInstalled: false, ontologyMode: null, availableTypes: [] } }
+      }
+      return {
+        status: "completed",
+        result: {
+          ontologyInstalled: true,
+          ontologyMode: "clone",
+          availableTypes: [{ type: "coding", description: "代码开发" }],
+        },
+      }
+    }
+    return { executor, inspectCalls: () => inspects }
+  }
+
+  test("a successful wizard step invalidates the snapshot so the next probe re-inspects", async () => {
+    const { executor, inspectCalls } = progressiveInspectExecutor()
+    const service = new OnboardingService({ home: testHome, executeStep: executor })
+
+    const before = (await service.probe("ontology-setup")) as Record<string, unknown>
+    expect(before.status).toBe("missing")
+    expect(before.availableTypes).toEqual([])
+
+    const step = await service.executeStep("ontology-setup", { mode: "clone" })
+    expect(step.status).toBe("completed")
+
+    const after = (await service.probe("ontology-setup")) as Record<string, unknown>
+    expect(after.status).toBe("ready")
+    expect(after.ontologyInstalled).toBe(true)
+    expect(after.availableTypes).toEqual([{ type: "coding", description: "代码开发" }])
+    expect(inspectCalls()).toBe(2)
+  })
+
+  test("a successful step outside ontology-setup also invalidates the snapshot", async () => {
+    const { executor, inspectCalls } = progressiveInspectExecutor()
+    const service = new OnboardingService({ home: testHome, executeStep: executor })
+
+    await service.probe("environment")
+    await service.executeStep("create-space", { path: join(testHome, "space") })
+
+    const after = (await service.probe("environment")) as Record<string, unknown>
+    expect(after.ontologyInstalled).toBe(true)
+    expect(inspectCalls()).toBe(2)
+  })
+
+  test("a failed step keeps the snapshot, so the next probe reuses it", async () => {
+    let inspects = 0
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) => {
+        if (step === "inspect") {
+          inspects += 1
+          return { status: "completed", result: { ontologyInstalled: false, ontologyMode: null, availableTypes: [] } }
+        }
+        return { status: "failed", error: { code: "BOOM", message: "boom" } }
+      },
+    })
+
+    await service.probe("ontology-setup")
+    const failed = await service.executeStep("ontology-setup", { mode: "clone" })
+    expect(failed.status).toBe("failed")
+
+    await service.probe("ontology-setup")
+    expect(inspects).toBe(1)
+  })
+
+  test("a reused result also invalidates the snapshot", async () => {
+    const { executor, inspectCalls } = progressiveInspectExecutor()
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step, input, onProgress, abortSignal) => {
+        if (step === "install-cli") return { status: "reused", result: { version: "1.0.0" } }
+        return executor(step, input, onProgress, abortSignal)
+      },
+    })
+
+    await service.probe("ontology-setup")
+    await service.executeStep("install-cli")
+    await service.probe("ontology-setup")
+    expect(inspectCalls()).toBe(2)
   })
 })
 
@@ -380,11 +541,23 @@ describe("OnboardingService events", () => {
 })
 
 describe("OnboardingService complete", () => {
+  /** The completion gate runs one `inspect`; only `healthy` may complete. */
+  const healthyExecutor =
+    (inspects?: () => void): OnboardingStepExecutor =>
+    async (step) => {
+      if (step === "inspect") {
+        inspects?.()
+        return { status: "completed", result: { verdict: "healthy", verdictReason: "All components are ready." } }
+      }
+      return { status: "completed", result: {} }
+    }
+
   test("complete writes completed:true, invokes onComplete and emits complete", async () => {
     let callbacks = 0
     const completeEvents: any[] = []
     const service = new OnboardingService({
       home: testHome,
+      executeStep: healthyExecutor(),
       onComplete: () => {
         callbacks += 1
       },
@@ -400,7 +573,7 @@ describe("OnboardingService complete", () => {
 
   test("complete emits the SSE-complete envelope and advances currentStep to done", async () => {
     const completeEvents: unknown[] = []
-    const service = new OnboardingService({ home: testHome })
+    const service = new OnboardingService({ home: testHome, executeStep: healthyExecutor() })
     service.events.on("complete", (event) => completeEvents.push(event))
 
     await service.complete()
@@ -418,6 +591,7 @@ describe("OnboardingService complete", () => {
     const order: string[] = []
     const service = new OnboardingService({
       home: testHome,
+      executeStep: healthyExecutor(),
       onComplete: () => {
         // The callback observes the finished state file, not a pending one.
         order.push(readStateFile(testHome).completed ? "callback:persisted" : "callback:missing")
@@ -432,7 +606,7 @@ describe("OnboardingService complete", () => {
 
   test("complete works without an onComplete callback", async () => {
     const completeEvents: unknown[] = []
-    const service = new OnboardingService({ home: testHome })
+    const service = new OnboardingService({ home: testHome, executeStep: healthyExecutor() })
     service.events.on("complete", (event) => completeEvents.push(event))
 
     expect(await service.complete()).toEqual({ completed: true })
@@ -441,7 +615,7 @@ describe("OnboardingService complete", () => {
   })
 
   test("complete stays green when called again after finishing", async () => {
-    const service = new OnboardingService({ home: testHome })
+    const service = new OnboardingService({ home: testHome, executeStep: healthyExecutor() })
 
     await service.complete()
     expect(await service.complete()).toEqual({ completed: true })
@@ -455,16 +629,112 @@ describe("OnboardingService complete", () => {
     let finished = false
     const service = new OnboardingService({
       home: testHome,
+      executeStep: healthyExecutor(),
       onComplete: async () => {
         await gate.promise
         finished = true
       },
     })
     const pending = service.complete()
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(finished).toBe(false)
     gate.resolve()
     await pending
     expect(finished).toBe(true)
+  })
+
+  test("complete refuses with ONBOARDING_HEALTH_GATE_FAILED when the verdict is not healthy", async () => {
+    writeStateFile(testHome, {
+      version: 1,
+      currentStep: "ai-provider",
+      steps: { "system-check": "done", "install-cli": "done", "ontology-setup": "done" },
+      errors: {},
+      completed: false,
+      startedAt: null,
+      updatedAt: null,
+    })
+    const completeEvents: unknown[] = []
+    let callbacks = 0
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? {
+              status: "completed",
+              result: { verdict: "partial", verdictReason: "Ontology directory is missing." },
+            }
+          : { status: "completed", result: {} },
+      onComplete: () => {
+        callbacks += 1
+      },
+    })
+    service.events.on("complete", (event) => completeEvents.push(event))
+
+    const result = await service.complete()
+
+    const error = refusal(result)
+    expect(error.code).toBe(ONBOARDING_HEALTH_GATE_FAILED)
+    expect(error.message).toContain("partial")
+    expect(error.message).toContain("Ontology directory is missing.")
+
+    expect(callbacks).toBe(0)
+    expect(completeEvents.length).toBe(0)
+    expect(service.getState().completed).toBe(false)
+    expect(readStateFile(testHome).completed).toBe(false)
+  })
+
+  test("complete refuses for broken, fresh and a failed inspect alike", async () => {
+    for (const scenario of [
+      { verdict: "broken", verdictReason: "Wopal CLI is not installed." },
+      { verdict: "fresh", verdictReason: "Nothing has been configured yet." },
+    ]) {
+      const home = tempHome()
+      mkdirSync(home, { recursive: true })
+      const service = new OnboardingService({
+        home,
+        executeStep: async (step) =>
+          step === "inspect" ? { status: "completed", result: scenario } : { status: "completed", result: {} },
+      })
+      const result = await service.complete()
+      const error = refusal(result)
+      expect(error.code).toBe(ONBOARDING_HEALTH_GATE_FAILED)
+      expect(error.message).toContain(scenario.verdict)
+      expect(service.getState().completed).toBe(false)
+      // A refusal must not even create the state file.
+      expect(existsSync(getOnboardingStatePath(home))).toBe(false)
+      rmSync(home, { recursive: true, force: true })
+    }
+
+    const failedInspect = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? { status: "failed", error: { code: "WOPAL_BINARY_NOT_FOUND", message: "wopal binary missing" } }
+          : { status: "completed", result: {} },
+    })
+    const refused = refusal(await failedInspect.complete())
+    expect(refused.code).toBe(ONBOARDING_HEALTH_GATE_FAILED)
+    expect(refused.message).toContain("wopal binary missing")
+    expect(existsSync(getOnboardingStatePath(testHome))).toBe(false)
+  })
+
+  test("the gate inspect does not write the snapshot back", async () => {
+    let inspects = 0
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) => {
+        if (step !== "inspect") return { status: "completed", result: {} }
+        inspects += 1
+        return { status: "completed", result: { verdict: "healthy", verdictReason: "ok" } }
+      },
+    })
+
+    await service.complete()
+    expect(inspects).toBe(1)
+
+    // A later probe must run its own inspect rather than reuse the gate result.
+    await service.probe("ontology-setup")
+    expect(inspects).toBe(2)
   })
 })
 
@@ -493,6 +763,72 @@ describe("OnboardingService probe", () => {
   test("an unknown probe kind returns an error payload", async () => {
     const service = new OnboardingService({ home: testHome })
     expect(await service.probe("nonsense")).toEqual({ error: "Unknown probe kind" })
+  })
+
+  test("probe('environment') returns no available types instead of the common fallback", async () => {
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? { status: "completed", result: { ontologyInstalled: true, ontologyMode: "clone", spaces: [] } }
+          : { status: "completed", result: {} },
+    })
+    const env = (await service.probe("environment")) as Record<string, unknown>
+    // An empty list is strictly stronger than "no `common` entry".
+    expect(env.availableTypes).toEqual([])
+  })
+
+  test("probe('environment') passes through inspection availableTypes", async () => {
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? {
+              status: "completed",
+              result: {
+                ontologyInstalled: true,
+                ontologyMode: "clone",
+                availableTypes: [{ type: "coding", description: "代码开发" }],
+              },
+            }
+          : { status: "completed", result: {} },
+    })
+    const env = (await service.probe("environment")) as Record<string, unknown>
+    expect(env.availableTypes).toEqual([{ type: "coding", description: "代码开发" }])
+  })
+
+  test("probe('environment') falls back to an empty type list when inspect fails", async () => {
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? { status: "failed", error: { code: "WOPAL_BINARY_NOT_FOUND", message: "wopal binary missing" } }
+          : { status: "completed", result: {} },
+    })
+    const env = (await service.probe("environment")) as Record<string, unknown>
+    expect(env.availableTypes).toEqual([])
+    expect(env.errorCode).toBe("WOPAL_BINARY_NOT_FOUND")
+  })
+
+  test("probe('memory') still returns a read-only summary", async () => {
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? {
+              status: "completed",
+              result: {
+                memory: { state: "ready", enabled: true, llmModel: "gpt-4o" },
+                spaces: [{ name: "demo", path: join(testHome, "demo") }],
+              },
+            }
+          : { status: "completed", result: {} },
+    })
+    const memory = (await service.probe("memory")) as Record<string, unknown>
+    expect(memory.state).toBe("ready")
+    expect(memory.enabled).toBe(true)
+    // The probe never writes a config file.
+    expect(existsSync(join(testHome, ".env"))).toBe(false)
   })
 })
 

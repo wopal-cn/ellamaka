@@ -10,14 +10,20 @@
  * @module @wopal/ellamaka-onboarding/types
  */
 
-/** The canonical wizard steps, in order. */
+/**
+ * The canonical wizard steps, in order.
+ *
+ * The former memory configuration step was removed from the journey: memory
+ * configuration belongs to the configuration surface, not onboarding. Legacy
+ * state files that still record it are read normally — unknown step keys are
+ * simply ignored.
+ */
 export const ONBOARDING_STEPS = [
   "system-check",
   "install-cli",
   "ontology-setup",
   "create-space",
   "ai-provider",
-  "memory-config",
   "done",
 ] as const
 
@@ -81,6 +87,18 @@ export type OnboardingEvent =
 
 /** The stable error code reported when an operation is already running. */
 export const ONBOARDING_OPERATION_BUSY = "ONBOARDING_OPERATION_BUSY"
+
+/** The stable error code reported when the completion health gate refuses. */
+export const ONBOARDING_HEALTH_GATE_FAILED = "ONBOARDING_HEALTH_GATE_FAILED"
+
+/**
+ * The `POST /complete` response. The gate only persists `completed: true` when
+ * the machine reports `verdict === "healthy"`; otherwise it refuses with a
+ * structured error carrying the verdict and its reason.
+ */
+export type OnboardingCompleteResult =
+  | { completed: true }
+  | { status: "failed"; error: { code: typeof ONBOARDING_HEALTH_GATE_FAILED; message: string } }
 
 /** A probe result: operation-specific shape, or `{ error }` for unknown kinds. */
 export type OnboardingProbeResult = Record<string, unknown>

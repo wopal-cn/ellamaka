@@ -9,7 +9,13 @@ import { checkOnboardingAuth } from "../src/auth"
 import { createOnboardingRouter } from "../src/router"
 import { mountOnboarding } from "../src/mount"
 import { OnboardingService } from "../src/service"
-import { ONBOARDING_OPERATION_BUSY, type NodeRouteMount, type OnboardingStepResult } from "../src/types"
+import {
+  ONBOARDING_HEALTH_GATE_FAILED,
+  ONBOARDING_OPERATION_BUSY,
+  type NodeRouteMount,
+  type OnboardingStepExecutor,
+  type OnboardingStepResult,
+} from "../src/types"
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -17,6 +23,13 @@ import { ONBOARDING_OPERATION_BUSY, type NodeRouteMount, type OnboardingStepResu
 
 function tempHome(): string {
   return join(tmpdir(), `ellamaka-onboarding-router-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+}
+
+/** The completion gate runs one `inspect`; only `healthy` may complete. */
+const healthyExecutor = (): OnboardingStepExecutor => async (step) => {
+  if (step === "inspect")
+    return { status: "completed", result: { verdict: "healthy", verdictReason: "All components are ready." } }
+  return { status: "completed", result: {} }
 }
 
 interface TestHost {
@@ -263,7 +276,11 @@ describe("onboarding router endpoints", () => {
 
   test("POST /complete returns { completed: true } and triggers onComplete", async () => {
     let completed = 0
-    const service = new OnboardingService({ home: testHome, onComplete: () => void (completed += 1) })
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: healthyExecutor(),
+      onComplete: () => void (completed += 1),
+    })
     const host = await startHost(routerMount(service))
     try {
       const res = await send(host.origin, "POST", "/api/onboarding/complete")
@@ -273,6 +290,29 @@ describe("onboarding router endpoints", () => {
 
       const state = await send(host.origin, "GET", "/api/onboarding/state")
       expect(state.json().completed).toBe(true)
+    } finally {
+      await host.stop()
+    }
+  })
+
+  test("POST /complete surfaces the health gate refusal", async () => {
+    const service = new OnboardingService({
+      home: testHome,
+      executeStep: async (step) =>
+        step === "inspect"
+          ? { status: "completed", result: { verdict: "broken", verdictReason: "Wopal CLI is not installed." } }
+          : { status: "completed", result: {} },
+    })
+    const host = await startHost(routerMount(service))
+    try {
+      const res = await send(host.origin, "POST", "/api/onboarding/complete")
+      expect(res.status).toBe(200)
+      expect(res.json().status).toBe("failed")
+      expect(res.json().error.code).toBe(ONBOARDING_HEALTH_GATE_FAILED)
+      expect(res.json().error.message).toContain("Wopal CLI is not installed.")
+
+      const state = await send(host.origin, "GET", "/api/onboarding/state")
+      expect(state.json().completed).toBe(false)
     } finally {
       await host.stop()
     }
@@ -356,7 +396,7 @@ describe("onboarding SSE stream", () => {
   })
 
   test("POST /complete delivers a complete frame over an open stream and ends it", async () => {
-    const service = new OnboardingService({ home: testHome })
+    const service = new OnboardingService({ home: testHome, executeStep: healthyExecutor() })
     const host = await startHost(routerMount(service))
     const controller = new AbortController()
     try {

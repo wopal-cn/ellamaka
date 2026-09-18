@@ -14,6 +14,7 @@ export { checkOnboardingAuth, isLoopbackAddress, type OnboardingAuthOptions, typ
 export {
   OnboardingBusyError,
   OnboardingService,
+  ONBOARDING_HEALTH_GATE_FAILED,
   ONBOARDING_STEPS,
   ONBOARDING_OPERATION_BUSY,
   createDefaultOnboardingState,
@@ -36,6 +37,7 @@ export {
 export type {
   NodeRouteAuth,
   NodeRouteMount,
+  OnboardingCompleteResult,
   OnboardingEvent,
   OnboardingExecutableStep,
   OnboardingProbeResult,

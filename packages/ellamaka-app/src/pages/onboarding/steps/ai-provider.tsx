@@ -6,7 +6,7 @@ import { useOnboardingClient } from "../onboarding-client-context"
 import { AI_SUBSCRIPTION_PLANS } from "./ai-subscription-plans"
 
 export interface StepProps {
-  onStatusChange?: (status: "working" | "success" | "error") => void
+  onStatusChange?: (status: "idle" | "working" | "success" | "error") => void
   onComplete: () => void;
   onError: (err: string | null) => void;
 }
@@ -21,6 +21,8 @@ export function AiProviderStep(props: StepProps) {
   const [configured, setConfigured] = createSignal(false)
   const [detectedKey, setDetectedKey] = createSignal<string | null>(null)
 
+  // Probing is read-only: it reports whether a key is already present but never
+  // executes the step. Completion is the user's explicit "next" confirmation.
   onMount(async () => {
     try {
       const res = await client.probe("ai-provider")
@@ -28,20 +30,6 @@ export function AiProviderStep(props: StepProps) {
         const masked = typeof res.maskedKey === "string" ? res.maskedKey : "oc_****"
         setDetectedKey(masked)
         setConfigured(true)
-        // Auto-confirm reuse: execute backend to mark step done, then user can proceed directly
-        try {
-          const execRes = await client.executeStep("ai-provider", {
-            provider: plan.providerId,
-          })
-          if (execRes.status === "completed" || execRes.status === "reused") {
-            props.onStatusChange?.("success")
-          } else {
-            // Backend could not confirm — still show configured but let user manually proceed
-            props.onStatusChange?.("success")
-          }
-        } catch {
-          props.onStatusChange?.("success")
-        }
       }
     } catch {
     } finally {
@@ -55,9 +43,27 @@ export function AiProviderStep(props: StepProps) {
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault()
+
+    // No new key supplied: confirm the detected configuration explicitly.
     if (configured() && !apiKey().trim()) {
-      props.onStatusChange?.("success")
-      props.onComplete()
+      props.onError(null)
+      props.onStatusChange?.("working")
+      setLoading(true)
+      try {
+        const res = await client.executeStep("ai-provider", { provider: plan.providerId })
+        if (res.status === "completed" || res.status === "reused") {
+          props.onStatusChange?.("success")
+          props.onComplete()
+        } else {
+          props.onStatusChange?.("error")
+          props.onError(res.error?.message || "现有 OpenCode Go 配置确认失败。")
+        }
+      } catch (err) {
+        props.onStatusChange?.("error")
+        props.onError(String(err))
+      } finally {
+        setLoading(false)
+      }
       return
     }
 
@@ -103,7 +109,8 @@ export function AiProviderStep(props: StepProps) {
 
       <Show when={!probing() && configured()}>
         <ResultPanel
-          title="OpenCode Go 已配置"
+          title="已检测到 OpenCode Go 配置"
+          message="点击下方按钮确认复用现有配置；如需更换，请先点击「更换 API Key」。"
           actions={
             <button
               type="button"

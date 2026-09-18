@@ -25,7 +25,6 @@ export const ONBOARDING_STEPS = [
   "ontology-setup",
   "create-space",
   "ai-provider",
-  "memory-config",
   "done",
 ] as const
 
@@ -108,12 +107,24 @@ export interface OnboardingClientOptions {
   eventSource?: OnboardingEventStreamFactory
 }
 
+/** The stable error code reported when the completion health gate refuses. */
+export const ONBOARDING_HEALTH_GATE_FAILED = "ONBOARDING_HEALTH_GATE_FAILED"
+
+/**
+ * The `POST /complete` response. The gate only persists `completed: true` when
+ * the machine reports `verdict === "healthy"`; otherwise it refuses with a
+ * structured error carrying the verdict and its reason.
+ */
+export type OnboardingCompleteResult =
+  | { completed: true }
+  | { status: "failed"; error: { code: typeof ONBOARDING_HEALTH_GATE_FAILED; message: string } }
+
 export interface OnboardingClient {
   getState(): Promise<OnboardingStateView>
   probe(kind: string): Promise<OnboardingProbeResult>
   executeStep(step: OnboardingExecutableStep, input?: unknown): Promise<OnboardingStepResult>
   cancel(): Promise<{ ok: true }>
-  complete(): Promise<{ completed: true }>
+  complete(): Promise<OnboardingCompleteResult>
   /** Subscribe to the SSE stream; returns a disposer that closes it. */
   subscribe(listener: (event: OnboardingEvent) => void): () => void
 }

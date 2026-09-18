@@ -3,7 +3,7 @@ import { ProgressDisplay } from "../components/ProgressDisplay"
 import { ResultPanel } from "../components/ResultPanel"
 import { useOnboardingClient } from "../onboarding-client-context"
 import { ONTOLOGY_MODES, ONTOLOGY_SOURCES } from "./ontology-options"
-import { normalizeOntologyResult, type OntologyResultSummary } from "./ontology-result"
+import { normalizeOntologyResult, type AvailableOntologyType, type OntologyResultSummary } from "./ontology-result"
 import {
   buildOntologyInitialState,
   executeOntologySetup,
@@ -37,7 +37,7 @@ function credentialSourceLabel(source: GithubCredentialSource | null): string {
   return source ? SOURCE_LABELS[source] : "未检测到"
 }
 
-function OntologyTypes(props: { items: Array<{ type: string; branch: string }> }) {
+function OntologyTypes(props: { items: AvailableOntologyType[] }) {
   return (
     <div class="ob-space-types">
       <div class="ob-space-types-header">
@@ -50,7 +50,9 @@ function OntologyTypes(props: { items: Array<{ type: string; branch: string }> }
             {(item) => (
               <div class="ob-space-type-item">
                 <strong>{item.type}</strong>
-                <code>{item.branch}</code>
+                <Show when={item.description}>
+                  <span class="ob-space-type-desc">{item.description}</span>
+                </Show>
               </div>
             )}
           </For>
@@ -118,30 +120,11 @@ export function OntologySetupStep(props: StepProps) {
       const initial = buildOntologyInitialState(auth, ontology)
       setOntologyProbe(ontology)
       setMode(initial.mode)
+      // Probing is read-only. A ready ontology is surfaced as a reuse panel and
+      // executed only when the user confirms with the primary nav action;
+      // probing itself must never write to disk.
       if (ontology.status === "ready") {
-        // Auto-confirm reuse: execute backend to mark step done, then user can proceed directly
-        try {
-          const reuseT = performance.now()
-          const res = await executeOntologySetup(
-            {
-              mode: ontology.mode === "fork" ? "fork" : "clone",
-              hasGithubAuth: auth.detected,
-              githubToken: "",
-              reuseExisting: true,
-            },
-            (step, input) => client.executeStep(step, input),
-          )
-          lap(`复用 execute 完成（${Math.round(performance.now() - reuseT)}ms）`)
-          if (res.status === "completed" || res.status === "reused") {
-            setResultInfo(normalizeOntologyResult(res.result, ontology.mode === "fork" ? "fork" : "clone", "official"))
-            props.onStatusChange?.("success")
-          } else {
-            // Backend reuse failed — fall back to idle, user can manually retry
-            props.onStatusChange?.("idle")
-          }
-        } catch {
-          props.onStatusChange?.("idle")
-        }
+        props.onStatusChange?.("idle")
       } else if (ontology.status === "broken") {
         props.onStatusChange?.("error")
       } else {
@@ -405,8 +388,10 @@ export function OntologySetupStep(props: StepProps) {
 
       <Show when={!isProbing() && ontologyProbe()?.status === "ready" && !resultInfo()}>
         <ResultPanel
-          title="已检测到空间能力本体"
-          message={ontologyProbe()?.mode === "fork" ? "将复用现有 Fork 配置。" : "将复用现有 Clone，不自动迁移或改写本地分支。"}
+          title="已检测到可复用本体"
+          message={ontologyProbe()?.mode === "fork"
+            ? "将复用现有 Fork 配置；点击「准备能力本体」确认，不会改写远程仓库。"
+            : "将复用现有 Clone，不自动迁移或改写本地分支；点击「准备能力本体」确认。"}
         >
           <div class="ob-result-details">
             <div class="ob-result-row">

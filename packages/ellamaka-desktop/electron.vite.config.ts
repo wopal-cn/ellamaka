@@ -31,7 +31,7 @@ const minWopalCliVersion = (() => {
 const channel = resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
-const dshProxyTarget = process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.OPENCODE_PORT ?? "4097"}`
+const dshProxyTarget = process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.ELLAMAKA_PORT ?? "4097"}`
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT

@@ -38,7 +38,6 @@ export interface OnboardingContent {
     copy: string
     clear: string
     close: string
-    save: string
   }
   status: {
     working: string
@@ -51,55 +50,6 @@ export interface OnboardingContent {
     impact: string
     action: string
     technicalDetails: string
-  }
-  memory: {
-    enableLabel: string
-    enableDescription: string
-    globalScope: string
-    disabledHint: string
-    llmSection: string
-    llmSectionDesc: string
-    llmEndpointLabel: string
-    llmEndpointPlaceholder: string
-    llmModelLabel: string
-    llmModelPlaceholder: string
-    llmKeyLabel: string
-    llmKeyPlaceholder: string
-    llmKeySaved: string
-    embeddingSection: string
-    embeddingSectionDesc: string
-    reuseLabel: string
-    reuseDescription: string
-    embeddingEndpointLabel: string
-    embeddingEndpointPlaceholder: string
-    embeddingModelLabel: string
-    embeddingModelPlaceholder: string
-    embeddingKeyLabel: string
-    embeddingKeyPlaceholder: string
-    embeddingKeySaved: string
-    probing: string
-    probeFailed: string
-    verifyFailed: string
-    saveButton: string
-    saving: string
-    resultTitle: string
-    resultStatus: string
-    resultScopeLabel: string
-    resultOutcome: string
-    resultEnabled: string
-    resultDisabled: string
-    resultScope: string
-    resultOutcomeCreated: string
-    resultOutcomeUpdated: string
-    resultOutcomeReused: string
-    resultLlmEndpoint: string
-    resultLlmModel: string
-    resultLlmKeySaved: string
-    resultEmbeddingEndpoint: string
-    resultEmbeddingModel: string
-    resultEmbeddingKeySaved: string
-    resultEnvPath: string
-    notConfigured: string
   }
 }
 
@@ -160,7 +110,7 @@ export const zhCN: OnboardingContent = {
       title: "配置空间能力本体",
       shortTitle: "能力本体",
       goal: "选择能力来源与同步方式",
-      why: "Fork 会保留并同步你的能力演化；Clone 只保存在当前电脑。",
+      why: "默认 Clone 仅保存在当前电脑，无需 GitHub 即可开始；Fork 会保留并同步你的能力演化，适合进阶用户。",
       duration: "约 1-3 分钟",
       outcome: "能力本体准备完成，可直接用于创建空间。",
       notes: "已有本体只复用，不在配置向导中自动迁移模式。",
@@ -180,15 +130,6 @@ export const zhCN: OnboardingContent = {
       why: "工作空间是项目协作和记忆隔离的基本单元。",
       duration: "约 20 秒",
       outcome: "空间注册完成，可以开始工作。",
-    },
-    "memory-config": {
-      title: "记忆系统配置",
-      shortTitle: "记忆系统",
-      goal: "配置长期记忆和向量嵌入端点",
-      why: "记忆系统让代理能够跨会话保留上下文和学习成果。",
-      duration: "约 30 秒",
-      outcome: "记忆后端配置完成，嵌入模型就绪。",
-      notes: "跳过此步骤将禁用长期记忆功能。",
     },
     "star-guide": {
       title: "社区与支持",
@@ -219,7 +160,6 @@ export const zhCN: OnboardingContent = {
     copy: "复制",
     clear: "清空",
     close: "关闭",
-    save: "保存记忆配置",
   },
   status: {
     working: "正在处理，请稍候…",
@@ -232,54 +172,5 @@ export const zhCN: OnboardingContent = {
     impact: "有什么影响",
     action: "如何处理",
     technicalDetails: "技术详情",
-  },
-  memory: {
-    enableLabel: "启用长期记忆",
-    enableDescription: "让代理跨会话保留偏好、项目约定和构建上下文。",
-    globalScope: "全局配置 · 所有 Space 默认继承",
-    disabledHint: "长期记忆已关闭。你可以随时重新启用以保留已有配置。",
-    llmSection: "记忆整理模型",
-    llmSectionDesc: "用于会话摘要和记忆蒸馏的 LLM 配置。",
-    llmEndpointLabel: "LLM API 端点",
-    llmEndpointPlaceholder: "https://api.openai.com/v1",
-    llmModelLabel: "LLM 模型",
-    llmModelPlaceholder: "gpt-4o-mini",
-    llmKeyLabel: "LLM API Key",
-    llmKeyPlaceholder: "sk-...",
-    llmKeySaved: "已保存",
-    embeddingSection: "语义检索模型",
-    embeddingSectionDesc: "用于记忆向量搜索的 Embedding 配置。",
-    reuseLabel: "复用上面的服务和 Key",
-    reuseDescription: "Embedding 使用与 LLM 相同的 API 端点和 Key。",
-    embeddingEndpointLabel: "Embedding API 端点",
-    embeddingEndpointPlaceholder: "https://api.openai.com/v1",
-    embeddingModelLabel: "Embedding 模型",
-    embeddingModelPlaceholder: "text-embedding-3-small",
-    embeddingKeyLabel: "Embedding API Key",
-    embeddingKeyPlaceholder: "留空使用本地默认值",
-    embeddingKeySaved: "已保存",
-    probing: "正在检查记忆配置…",
-    probeFailed: "无法读取现有记忆配置，请重试后再保存。",
-    verifyFailed: "保存后复检未通过，请检查技术详情后重试。",
-    saveButton: "保存记忆配置",
-    saving: "正在保存…",
-    resultTitle: "记忆配置已保存",
-    resultStatus: "状态",
-    resultScopeLabel: "作用域",
-    resultOutcome: "结果",
-    resultEnabled: "已启用",
-    resultDisabled: "已关闭",
-    resultScope: "全局 · 所有 Space 默认继承",
-    resultOutcomeCreated: "新建",
-    resultOutcomeUpdated: "已更新",
-    resultOutcomeReused: "未变更",
-    resultLlmEndpoint: "LLM 端点",
-    resultLlmModel: "LLM 模型",
-    resultLlmKeySaved: "LLM 密钥",
-    resultEmbeddingEndpoint: "Embedding 端点",
-    resultEmbeddingModel: "Embedding 模型",
-    resultEmbeddingKeySaved: "Embedding 密钥",
-    resultEnvPath: "配置文件",
-    notConfigured: "未配置",
   },
 }

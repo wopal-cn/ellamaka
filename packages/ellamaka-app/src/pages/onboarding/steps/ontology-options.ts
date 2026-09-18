@@ -30,17 +30,17 @@ export const ONTOLOGY_SOURCES: readonly OntologySourceOption[] = [
 
 export const ONTOLOGY_MODES: readonly OntologyModeOption[] = [
   {
-    id: "fork",
-    name: "Fork 到我的 GitHub",
-    summary: "保留个人远程副本，可跨设备同步并贡献改进",
-    recommended: true,
-    requiresGithubAuth: true,
-  },
-  {
     id: "clone",
     name: "仅保存在本机",
-    summary: "无需 GitHub；本地改动不会自动备份或同步",
-    recommended: false,
+    summary: "无需 GitHub，最快开始；本地改动不会自动备份或同步",
+    recommended: true,
     requiresGithubAuth: false,
+  },
+  {
+    id: "fork",
+    name: "Fork 到我的 GitHub",
+    summary: "进阶：贡献能力演化；保留个人远程副本，可跨设备同步",
+    recommended: false,
+    requiresGithubAuth: true,
   },
 ]

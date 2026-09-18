@@ -3,7 +3,7 @@ import solidPlugin from "vite-plugin-solid"
 
 const solid = solidPlugin({
   include:
-    /\/(?:chat-blocks|chat-tool-blocks|prompt-navigator|spinner|workbench-chat-timeline|workbench-markdown-renderer|ellamaka-file)\.tsx$/,
+    /\/(?:chat-blocks|chat-tool-blocks|prompt-navigator|spinner|workbench-chat-timeline|workbench-markdown-renderer|ellamaka-file|done)\.tsx$/,
 })
 
 type SolidTransformResult = string | { code: string } | null | undefined
@@ -15,7 +15,7 @@ plugin({
     build.onLoad(
       {
         filter:
-          /\/(?:chat-blocks|chat-tool-blocks|prompt-navigator|spinner|workbench-chat-timeline|workbench-markdown-renderer|ellamaka-file)\.tsx$/,
+          /\/(?:chat-blocks|chat-tool-blocks|prompt-navigator|spinner|workbench-chat-timeline|workbench-markdown-renderer|ellamaka-file|done)\.tsx$/,
       },
       async ({ path }) => {
         const transform = solid.transform as unknown as SolidTransform

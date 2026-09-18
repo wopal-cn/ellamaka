@@ -7,7 +7,6 @@ export const ONBOARDING_STEPS = [
   "ontology-setup",
   "create-space",
   "ai-provider",
-  "memory-config",
   "done",
 ] as const
 
@@ -15,7 +14,6 @@ export type OnboardingStepName = (typeof ONBOARDING_STEPS)[number]
 
 export const OPTIONAL_STEPS: Set<OnboardingStepName> = new Set([
   "ai-provider",
-  "memory-config",
 ])
 
 export interface StepContext {
@@ -51,8 +49,8 @@ export const PHASE_CONFIGS: PhaseConfig[] = [
   },
   {
     phase: 3,
-    title: "空间与记忆",
-    steps: ["create-space", "ai-provider", "memory-config"],
+    title: "空间与模型",
+    steps: ["create-space", "ai-provider"],
     autoAdvanceSteps: new Set([]),
   },
   {
@@ -128,12 +126,6 @@ export const STEP_METADATA: Record<OnboardingStepName | "done" | string, StepMet
     optional: false,
     content: zhCN.steps["create-space"],
   },
-  "memory-config": {
-    title: zhCN.steps["memory-config"].title,
-    description: zhCN.steps["memory-config"].goal,
-    optional: true,
-    content: zhCN.steps["memory-config"],
-  },
   "star-guide": {
     title: zhCN.steps["star-guide"].title,
     description: zhCN.steps["star-guide"].goal,
@@ -163,7 +155,6 @@ const EXPLICIT_ACTION_STEPS = new Set<OnboardingStepName>([
   "ai-provider",
   "ontology-setup",
   "create-space",
-  "memory-config",
 ])
 
 export function isExplicitActionStep(step: OnboardingStepName | "done" | string): boolean {
@@ -201,6 +192,28 @@ export function isRetryActionVisible(
   return step !== "done" && !input.working && input.success === false
 }
 
+/**
+ * Decide which step to open when the wizard mounts against a server state.
+ *
+ * A run that already reached `completed: true` is finished: the design
+ * contract hands such a user to the Workbench, so re-entering `/onboarding`
+ * must land on `done` (which carries the health-gated launch action) rather
+ * than rendering an empty stage 1 that looks like nothing ever happened.
+ *
+ * Otherwise the saved step is resumed as-is — including `done`, which is a
+ * legitimate resting place while `completed` is still false (the user reached
+ * the launch page but has not passed the health gate yet). A missing or
+ * unrecognised step starts a fresh run at `system-check`.
+ */
+export function resolveRestoreTarget(
+  state: { completed?: boolean; currentStep?: string } | null | undefined,
+): OnboardingStepName | "done" {
+  if (state?.completed) return "done"
+  const saved = state?.currentStep
+  if (!saved) return "system-check"
+  return ONBOARDING_STEPS.find((step) => step === saved) ?? "system-check"
+}
+
 export function createStepController(initialStep: OnboardingStepName | "done" | string = "system-check") {
   let currentStep: OnboardingStepName | "done" = (initialStep === "star-guide" ? "done" : initialStep === "install-wopal-cli" || initialStep === "install-ellamaka-cli" ? "install-cli" : initialStep) as OnboardingStepName | "done"
 
@@ -226,7 +239,7 @@ export function createStepController(initialStep: OnboardingStepName | "done" | 
     },
     prev: () => {
       if (currentStep === "done") {
-        currentStep = "memory-config"
+        currentStep = "ai-provider"
         return
       }
       const idx = ONBOARDING_STEPS.indexOf(currentStep as OnboardingStepName)

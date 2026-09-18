@@ -1205,7 +1205,7 @@
   font-size: 14px;
 }
 
-.ob-ontology-flow .ob-space-type-item code {
+.ob-ontology-flow .ob-space-type-desc {
   font-size: 12px;
 }
 
@@ -1405,7 +1405,7 @@
   font-size: 12px;
 }
 
-.ob-space-type-item code {
+.ob-space-type-desc {
   color: var(--ob-text-subtle);
   font-size: 10px;
   overflow-wrap: anywhere;
@@ -1626,76 +1626,6 @@
 .ob-input:focus {
   border-color: var(--ob-accent);
   box-shadow: 0 0 0 3px rgb(255 111 97 / 20%);
-}
-
-.ob-memory-toggle,
-.ob-memory-reuse {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ob-memory-toggle-control {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--ob-accent);
-}
-
-.ob-memory-toggle-label {
-  color: var(--ob-text-main);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.ob-memory-description,
-.ob-memory-scope {
-  color: var(--ob-text-subtle);
-  margin-top: 6px;
-}
-
-.ob-memory-description {
-  font-size: 12px;
-}
-
-.ob-memory-scope {
-  color: var(--ob-text-muted);
-  font-size: 11px;
-  margin-top: 2px;
-}
-
-.ob-memory-disabled,
-.ob-memory-probe-error {
-  padding: 12px 14px;
-  border: 1px solid rgb(255 111 97 / 20%);
-  border-radius: 10px;
-  background: rgb(255 111 97 / 6%);
-  color: var(--ob-text-muted);
-  font-size: 13px;
-}
-
-.ob-memory-probe-error {
-  color: var(--ob-error);
-}
-
-.ob-memory-section {
-  margin-top: 8px;
-}
-
-.ob-memory-reuse {
-  gap: 10px;
-}
-
-.ob-memory-reuse-control {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--ob-accent);
-}
-
-.ob-memory-reuse-label {
-  color: var(--ob-text-muted);
-  cursor: pointer;
-  font-size: 13px;
 }
 
 .ob-field-error {
@@ -1963,46 +1893,6 @@
   line-height: 1.55;
 }
 
-/* Scope Selector Tabs (memory-config) */
-.ob-scope-tabs {
-  display: flex;
-  gap: 4px;
-  width: fit-content;
-  margin: 0 auto;
-  padding: 4px;
-  border: 1px solid var(--ob-card-border);
-  border-radius: 10px;
-  background: rgb(255 255 255 / 4%);
-}
-
-.ob-scope-tab {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ob-text-subtle);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.ob-scope-tab:hover:not(:disabled, .active) {
-  color: var(--ob-text-main);
-  background: rgb(255 255 255 / 5%);
-}
-
-.ob-scope-tab.active {
-  background: var(--ob-accent);
-  color: #fff;
-  font-weight: 600;
-}
-
-.ob-scope-tab:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
 /* Done Step — Unified result card width */
 .ob-done-content {
   display: flex;
@@ -2138,14 +2028,35 @@
   color: #fca5a5;
 }
 
-.ob-done-launch {
-  display: flex;
-  justify-content: center;
-  margin-top: 12px;
+/* Completion health gate refusal — a first-class, retryable state. */
+.ob-done-gate-error {
+  width: 100%;
+  max-width: min(100%, 780px);
+  align-self: center;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid rgb(251 191 36 / 35%);
+  background: rgb(251 191 36 / 8%);
+  color: #fcd34d;
+  text-align: left;
+  box-sizing: border-box;
 }
 
-.ob-done-launch-button {
-  padding: 14px 44px;
-  font-size: 17px;
-  font-weight: 600;
+.ob-done-gate-error-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.ob-done-gate-error-message {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #fde68a;
+  overflow-wrap: anywhere;
+}
+
+.ob-done-gate-error-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ob-text-subtle);
 }
