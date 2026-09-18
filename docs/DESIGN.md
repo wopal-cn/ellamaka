@@ -11,7 +11,7 @@
 > - `./DESIGN-dsh-base.md` — dsh 融合基础：文件领地、依赖闭包、热加载
 > - `./DESIGN-dsh-web.md` — Web profile：插件供应链与界面承载
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
-> - `./DESIGN-onboarding.md` — Desktop onboarding 目标实现
+> - `./DESIGN-onboarding.md` — Onboarding 目标实现：HTTP/SSE 编排服务与 Web/Desktop 共用页面
 > - `./DESIGN-plan-scheduler.md` — 空间级计划工作区、调度交互与运行接管
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 > **Companion Documents**:
