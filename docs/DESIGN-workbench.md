@@ -257,7 +257,6 @@ PanelChat
    │  │  ├─ FileChangeBlock
    │  │  ├─ SubagentActivityBlock
    │  │  └─ GenericToolBlock
-   │  ├─ TurnChangeSummary
    │  └─ TurnOutcome
    └─ PromptNavigator
       ├─ PromptRail
@@ -274,14 +273,13 @@ PanelChat
 
 1. **用户消息**：右对齐气泡，表达请求边界。
 2. **Agent 响应区**：左对齐、全宽的结构化 Part 流。
-3. **变更汇总**：会话产生文件变更后，在响应末尾提供可点击的文件数与增删行摘要。
-4. **结果状态**：错误、中断、重试和完成状态位于对应活动附近或对话轮末尾。
+3. **结果状态**：错误、中断、重试和完成状态位于对应活动附近或对话轮末尾。
 
 对话轮之间使用 16px 垂直间距。用户消息与 Agent 响应之间使用 12px 间距。Agent 内容块之间使用 6px 间距；同类连续正文段落由 Markdown 自身的段落节奏组织。间距属于虚拟列表测量高度的一部分，滚动定位与缓存高度始终包含这些边界。
 
 **转录行与虚拟化策略**：保留现有 Virtualizer，并采用 Kilo Code 已验证的“稳定历史 + 直接渲染实时尾部”结构：
 
-- 一个 Turn 投影为独立的用户行、若干 Assistant 分段行、变更汇总行和错误行。Assistant Message 按固定数量的可见 Part 切分为稳定分段；行 key 由 Turn、Message 和首个 Part ID 组成。
+- 一个 Turn 投影为独立的用户行、若干 Assistant 分段行和错误行。Assistant Message 按固定数量的可见 Part 切分为稳定分段；行 key 由 Turn、Message 和首个 Part ID 组成。
 - 已完成历史和稳定的实时前缀进入 Virtualizer。当前仍在增长的 Assistant 分段及其后续结果作为 `LiveTranscriptTail` 直接渲染，避免高频文本 delta 持续改变虚拟行测量并造成跳动。
 - Turn 仍是语义和视觉边界，而不是单个超大虚拟行。所有同属一个 Turn 的转录行共享 `turnID`，通过连续间距形成完整回复。
 - 消息前插分页时保留稳定 row key、测量缓存与首个可见行偏移。字体、Panel 宽度或设备像素比变化时更新布局指纹并使旧测量失效。
@@ -424,11 +422,7 @@ Session 处于忙碌状态时，Chat 在实时尾部持续表达当前阶段，�
 
 未注册专用渲染器的工具使用统一通用块，任何工具都不会从时间线丢失。头部由工具图标、工具名与最具说明性的输入字段组成：按 `command → action → description → query → url → filePath → path → pattern → name` 的优先级提取第一个有值字段作为副标题（借鉴 Kilo Code 的 GenericTool 启发式，并将 `command`/`action` 提前以适配 WopalSpace 工具生态）；无描述字段时降级展示至多 3 个结构化参数（如 `limit=5`）。展开内容以 JSON/文本输出呈现，限制在约 240px 最大高度内内部滚动。通用块遵守相同的字体、间距、状态与折叠规则，保证新工具自然融入 Chat。
 
-##### TurnChangeSummary 与 TurnOutcome
-
-文件变更汇总位于对话轮末尾，显示修改文件数、增删行和进入 Review 的操作入口。它使用无框的紧凑摘要行，与单次文件编辑块形成“过程—结果”关系。
-
-错误位于产生错误的活动块内。无法归属具体 Part 的 Assistant 错误由 `TurnOutcome` 在回复末尾展示。中断与上下文压缩使用带标签的水平分隔，重试状态紧邻当前活动显示。
+##### TurnOutcome无法归属具体 Part 的 Assistant 错误由 `TurnOutcome` 在回复末尾展示。中断与上下文压缩使用带标签的水平分隔，重试状态紧邻当前活动显示。
 
 #### 默认展开策略
 
