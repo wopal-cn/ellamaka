@@ -3,7 +3,6 @@ import { EventEmitter } from "node:events"
 import * as http from "node:http"
 import { createServer } from "node:net"
 import { homedir } from "node:os"
-import { join } from "node:path"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
 import { app, BrowserWindow } from "electron"
@@ -53,17 +52,13 @@ import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from ".
 import { probeWopalHomeFromShell } from "./onboarding-gate"
 import { isVmwareVirtualGpu } from "./gpu-detect"
 import { recoverMainWindow } from "./window-show-guard"
+import { resolveAppId, resolveUserDataPath } from "./user-data"
 import { Deferred, Effect, Fiber } from "effect"
 
 const APP_NAMES: Record<string, string> = {
   main: "Ellamaka Main",
   beta: "Ellamaka Beta",
   stable: "Ellamaka",
-}
-const APP_IDS: Record<string, string> = {
-  main: "ai.ellamaka.desktop.main",
-  beta: "ai.ellamaka.desktop.beta",
-  stable: "ai.ellamaka.desktop",
 }
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
@@ -327,18 +322,15 @@ const main = Effect.gen(function* () {
     process.chdir(homedir())
   } catch {}
 
-  const appId = app.isPackaged ? APP_IDS[CHANNEL] : `ai.ellamaka.desktop.${CHANNEL}`
-  // Electron userData (electron-store) does not follow WOPAL_HOME. When
-  // WOPAL_HOME is customized (dev.sh desktop sandbox), isolate userData under
-  // it so dev runs never mutate the real app's settings.
-  const devUserDataRoot = process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "ellamaka", "desktop") : undefined
+  const appId = resolveAppId(app.isPackaged, CHANNEL)
   app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "Ellamaka Dev")
   app.setAppUserModelId(appId)
-  app.setPath(
-    "userData",
-    devUserDataRoot ?? join(app.getPath("appData"), appId),
-  )
-  if (devUserDataRoot) app.setPath("sessionData", join(devUserDataRoot, "session"))
+  // Electron userData always lives under the OS standard app-data directory,
+  // keyed by appId. Development builds use a distinct appId
+  // (`ai.ellamaka.desktop.<channel>` vs `ai.ellamaka.desktop.local`), so dev
+  // runs never touch the packaged app's settings without redirecting userData
+  // into WOPAL_HOME — see #233 for the regression this avoids.
+  app.setPath("userData", resolveUserDataPath(app.isPackaged, app.getPath("appData"), CHANNEL))
   logger = initLogging()
   initCrashReporter()
 
