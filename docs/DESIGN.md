@@ -212,6 +212,22 @@ onboarding 将 ontology base capabilities 物化到 `WOPAL_HOME` 后，ellamaka 
 
 详细 artifact contract 见 `docs/DESIGN-distribution.md`。
 
+## Plugin SDK Distribution
+
+ellamaka 在 OpenCode fork 的 plugin/sdk 契约层之上做了一批增量扩展。这些扩展是 ellamaka 与上游能力的差异面，通过 npm 包 `@wopal/ellamaka-plugin` 与 `@wopal/ellamaka-sdk` 分发，版本跟随产品主版本号（纯 `x.y.z`，不带 rc/beta）。发布机制与版本策略见 `docs/DESIGN-distribution.md` 的 npm 包发布章节。
+
+fork 的 plugin 契约层相对上游基线（OpenCode `1.15.13`）新增五处可选扩展：
+
+- `SystemPromptSectionKind` / `SystemPromptSection` / `SystemPromptMetadata` —— 结构化系统提示词元数据，引擎在 `session/prompt.ts` 构造，经 `chat.params.systemMetadata` 传入插件
+- `PluginInput.wopalSpaceRoot` —— 空间根来源，wopal 空间集成的基础
+- `Hooks.chat.params` 的 `systemMetadata` 输入 —— 结构化提示词随模型请求透传
+- `Hooks["tool.provider"]` —— 每次模型请求动态提供工具集，支撑运行时挂载/卸载
+- `ToolContext.extra` —— 宿主向工具调用透传附加上下文（如沙箱模式）
+
+这五处扩展均为可选字段或新增 hook，是上游类型的超集：上游插件可在 fork 引擎上运行，使用扩展的插件则依赖 fork 契约层。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、systemMetadata 的 dump 链路）与 `../../../.wopal/docs/DESIGN-dsh-adapter.md`（tool.provider、ToolContext.extra 的动态工具投影与沙箱语义）。
+
+插件消费这些扩展时直接声明 `@wopal/ellamaka-plugin` 依赖，运行时引擎以 `InstallationVersion` 剥离 rc/beta 后的纯主版本为兜底 pin，保证插件拿到的契约层类型与引擎一致。
+
 ## State Ownership
 
 | 状态                             | 位置                                                  | Owner                                                                                 |

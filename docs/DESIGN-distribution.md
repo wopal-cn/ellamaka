@@ -1,7 +1,7 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-09-17
+> **Updated**: 2026-09-19
 > **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
@@ -598,6 +598,58 @@ ellamaka 安装完成后，运行时加载链路按 WopalSpace mode 工作：
 7. 才允许按"外部 CLI → Desktop → 最终健康检查与收据"的顺序落盘；失败不得把未验证的部分安装状态报告为成功。
 
 Desktop 保留自己的 manifest policy gate。electron-updater 负责平台 feed、下载、签名检查和安装，不单独决定跨 channel、兼容性或 release identity 授权。其返回的 update version 必须等于已经授权的 Desktop manifest version。
+
+---
+
+## NPM 包发布机制
+
+ellamaka 的插件契约层与 SDK 作为独立 npm 包分发，供引擎运行期安装与第三方插件消费。两个包承载 fork 相对 OpenCode 上游的契约扩展，与产品二进制解耦发布。
+
+### 包身份与归属
+
+| npm 包 | 来源目录 | 包内容 |
+| ------- | ------- | ------ |
+| `@wopal/ellamaka-plugin` | `packages/plugin` | 插件契约层：`Plugin` / `Hooks` / `ToolDefinition` / `SystemPromptMetadata` / `tool.provider` 等 fork 扩展类型 |
+| `@wopal/ellamaka-sdk` | `packages/sdk/js` | 引擎 SDK：client/server 类型、`/v2` 子路径（`ProviderV2` / `ModelV2` / `Auth`） |
+
+两者依赖方向固定：plugin 依赖 sdk（含 `/v2` 子路径），sdk 不依赖 plugin。发布顺序必须先 sdk 后 plugin。
+
+包名使用 `@wopal/` scope，`publishConfig.access` 为 `public`，免费账号即可发布 scoped public 包。npm 上的 `@opencode-ai/plugin` 与 `@opencode-ai/sdk` 归 OpenCode 上游所有，ellamaka 的 fork 扩展不发布到这两个包名下。
+
+### 版本策略
+
+npm 包版本跟随产品主版本号，与 CLI/Desktop 渠道解耦：
+
+- 版本号取两产品现行 base 的**较高者**，纯 `x.y.z`，不带 `-rc.N` / `-beta.N` 后缀
+- CLI 发布 `2.0.5-rc.7` 时，npm 包版本为 `2.0.5`；Desktop 发布 `2.0.5-beta.2` 时同样为 `2.0.5`
+- 主版本每次递增时同步 bump 并发布 npm 包（即使 plugin/sdk 源码未变更）——这是兜底 pin 的版本租金，保证任何产品主版本都有对应契约层可安装
+
+npm 包版本不参与产品发布排序，也不进 `releaseIdentity`。它只在运行期依赖安装与兼容性检查中作为消费方引用的版本。
+
+### 运行期兜底 pin
+
+引擎在插件依赖安装时对 `@wopal/ellamaka-plugin` 做一次兜底 pin，保证插件拿到的契约层类型与引擎一致。这是上游机制的延续：第三方插件声明的依赖版本无法与每次产品发布同步，引擎以运行期 pin 补齐对齐。
+
+pin 版本 = `InstallationVersion` 剥离 prerelease 段后的纯主版本。CLI 构建 `2.0.5-rc.7` → pin `@wopal/ellamaka-plugin@2.0.5`。剥离逻辑在 `packages/ellamaka-core/src/installation/version.ts` 单一实现，业务代码不重复书写版本解析。
+
+pin 与插件声明的依赖共存：插件 package.json 声明精确依赖（如 wopal-plugin 声明 `@wopal/ellamaka-plugin`），引擎在安装时以 pin 版本兜底对齐。pin 失败不阻断插件自身声明的依赖安装，插件声明的版本优先生效。
+
+### 发布时序
+
+每次 CLI 或 Desktop 主版本发布时：
+
+1. 主版本递增（`2.0.5` → `2.0.6`）写入产品 package.json，npm 包同步 bump 到同版本
+2. 先发布 `@wopal/ellamaka-sdk@x.y.z`，再发布 `@wopal/ellamaka-plugin@x.y.z`（依赖方向决定顺序）
+3. CLI/Desktop workflow 的 release job 追加 npm publish 步骤（幂等：已发布版本跳过），仿 `@wopal/cli-capability-schema` 的发布脚本模式
+
+npm 发布在 release job 内完成，与 R2 二进制发布同一次触发，不引入独立发布动作。
+
+### 消费者契约
+
+插件消费 fork 扩展时声明 `@wopal/ellamaka-plugin` 依赖，不再复制类型或依赖上游包。当前消费者：
+
+- `wopal-plugin`（`.wopal/plugins/wopal-plugin`）：消费 `wopalSpaceRoot` 与 `systemMetadata`，契约见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`
+- `dsh-adapter`（`.wopal/plugins/dsh-adapter`）：消费 `tool.provider` 与 `ToolContext.extra`，契约见 `../../../.wopal/docs/DESIGN-dsh-adapter.md`
 
 ---
 
