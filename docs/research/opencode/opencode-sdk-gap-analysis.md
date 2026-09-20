@@ -1,8 +1,14 @@
 # OpenCode SDK 差距分析报告
 
+> **⚠️ 研究对象已移除（2026-09-20）**：本文分析的自研封装 `opencode-sdk`
+> （原 `projects/ontology/tools/opencode-sdk`，后迁至 `projects/wopal-cli/tools/opencode-sdk`）
+> 已于 2026-09-20 随 `projects/wopal-cli/tools/` 整体删除。原因：无任何消费者——
+> 不在构建与测试面内、`src/` 无引用、未发布 npm，且仅实现官方 API 的 22% 能力。
+> 本文件保留为历史研究报告与决策依据；文中"项目路径"及代码示例均已失效。
+
 > 分析日期：2026-03-11
 > 官方 SDK 版本：@opencode-ai/sdk v1.2.24
-> 项目路径：projects/ontology/tools/opencode-sdk
+> 项目路径：projects/ontology/tools/opencode-sdk（已移除）
 
 ---
 
