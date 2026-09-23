@@ -198,21 +198,27 @@ if (cmp(vkey, floor) < 0) {
 }
 }
 
-# manifest_url <version> — R2 manifest URL for the given version (used by
-# has_effective_manifest / highest_released_tag). The R2 layout is
+# manifest_url <version> [channel] — R2 manifest URL for the given version
+# (used by has_effective_manifest / highest_released_tag). The R2 layout is
 # product- and channel-scoped (docs/DISTRIBUTION.md §7.1):
 #   cli           → ellamaka/v<version>/
 #   desktop stable→ ellamaka-desktop/v<version>/
 #   desktop beta  → ellamaka-desktop/beta/v<version>/
-# Requires PRODUCT, and CHANNEL for the desktop product (defaults to stable).
+# Requires PRODUCT. The channel defaults to the ambient release channel
+# ($CHANNEL — the channel the current release action publishes to), but
+# record-oracle callers that query a channel other than the running release
+# (e.g. highest_released_tag reading the beta line while a stable release
+# runs) must pass it explicitly: the oracle must resolve the root of the
+# channel it was asked about, never the root of the ambient CHANNEL.
 manifest_url() {
   local ver="${1:?manifest_url requires a version argument}"
+  local chan="${2:-${CHANNEL:-stable}}"
   case "$PRODUCT" in
     ellamaka-cli)
       echo "https://download.coursedao.com/ellamaka/v${ver}/manifest.json"
       ;;
     ellamaka-desktop)
-      case "${CHANNEL:-stable}" in
+      case "$chan" in
         beta) echo "https://download.coursedao.com/ellamaka-desktop/beta/v${ver}/manifest.json" ;;
         *) echo "https://download.coursedao.com/ellamaka-desktop/v${ver}/manifest.json" ;;
       esac
@@ -253,13 +259,17 @@ wait_for_run_or_fail() {
   watch_run "$run_id"
 }
 
-# has_effective_manifest [version]
+# has_effective_manifest [version] [channel]
 # 判定某版本是否有有效 R2 manifest（即真正提交的发布）。默认检查 $VERSION。
+# channel 缺省沿用环境 CHANNEL（当前发布动作的渠道）；查询其他渠道的记录
+# （highest_released_tag 的跨渠道 oracle）必须显式传入，否则会落到错误的
+# 渠道根（desktop 的 stable/beta 分根）。
 has_effective_manifest() {
   command -v curl >/dev/null 2>&1 || die "curl 不可用，无法判定远端 tag 是否为 failed attempt"
   local ver="${1:-$VERSION}"
+  local chan="${2:-${CHANNEL:-stable}}"
   local url code
-  url="$(manifest_url "$ver")"
+  url="$(manifest_url "$ver" "$chan")"
   code=$(curl -s -o /dev/null -w "%{http_code}" --noproxy '*' --max-time 15 "$url" 2>/dev/null || echo "000")
   [ "$code" = "200" ]
 }
@@ -274,7 +284,7 @@ highest_released_tag() {
   # 用 node 从本地 tag 按 SemVer 对该通道降序列出所有版本。
   while IFS= read -r version; do
     [ -n "$version" ] || continue
-    if has_effective_manifest "$version"; then
+    if has_effective_manifest "$version" "$channel"; then
       echo "$version"
       return 0
     fi

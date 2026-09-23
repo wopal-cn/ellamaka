@@ -45,6 +45,43 @@ describe("release.sh manifest_url", () => {
     const url = runLib('manifest_url "2.0.6"', { PRODUCT: "ellamaka-desktop" })
     expect(url).toBe("https://download.coursedao.com/ellamaka-desktop/v2.0.6/manifest.json")
   })
+
+  test("desktop accepts an explicit channel overriding the ambient CHANNEL", () => {
+    const url = runLib('manifest_url "2.0.5-beta.2" "beta"', {
+      PRODUCT: "ellamaka-desktop",
+      CHANNEL: "stable",
+    })
+    expect(url).toBe("https://download.coursedao.com/ellamaka-desktop/beta/v2.0.5-beta.2/manifest.json")
+  })
+})
+
+describe("release.sh cross-channel oracle", () => {
+  test("beta records stay visible to highest_released_tag while a stable release runs", () => {
+    // 发布 desktop stable 时（环境 CHANNEL=stable），beta 记录必须仍按 beta 根
+    // 查询（best-effort curl 桩：beta 根 200，stable 根 404）。串根缺陷会查
+    // stable 根 → 全部 404 → 输出空。
+    const out = runLib(
+      `
+        curl() { case "$*" in *"/beta/"*) printf 200 ;; *) printf 404 ;; esac; }
+        highest_released_tag ellamaka-desktop beta
+      `,
+      { PRODUCT: "ellamaka-desktop", CHANNEL: "stable" },
+    )
+    expect(out).toMatch(/^\d+\.\d+\.\d+-beta\.\d+$/)
+  })
+
+  test("stable records stay visible to highest_released_tag while a beta release runs", () => {
+    // 发布 desktop beta 时（环境 CHANNEL=beta），stable 记录必须仍按 stable 根
+    // 查询。串根缺陷会查 beta 根 → 看不到已发 stable → 输出空。
+    const out = runLib(
+      `
+        curl() { case "$*" in *"/beta/"*) printf 404 ;; *) printf 200 ;; esac; }
+        highest_released_tag ellamaka-desktop stable
+      `,
+      { PRODUCT: "ellamaka-desktop", CHANNEL: "beta" },
+    )
+    expect(out).toMatch(/^\d+\.\d+\.\d+$/)
+  })
 })
 
 describe("release.sh bump_commit_subject", () => {
@@ -82,8 +119,6 @@ describe("build.sh release channel guard", () => {
     // build-env (D-03) derives the release channel from the version shape and
     // fail-closes on contradiction; exporting the dev default ("main") broke
     // every CLI release build.
-    expect(buildSh).toMatch(
-      /if \[\[ -z "\$\{ELLAMAKA_RELEASE:-\}" \]\]; then\n\s*export ELLAMAKA_CHANNEL="\$CHANNEL"/,
-    )
+    expect(buildSh).toMatch(/if \[\[ -z "\$\{ELLAMAKA_RELEASE:-\}" \]\]; then\n\s*export ELLAMAKA_CHANNEL="\$CHANNEL"/)
   })
 })
