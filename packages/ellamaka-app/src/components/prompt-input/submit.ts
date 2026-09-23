@@ -1,4 +1,4 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "@wopal/ellamaka-sdk/v2/client"
 import { showToast } from "@wopal/ui/toast"
 import { base64Encode } from "@wopal/ellamaka-core/util/encode"
 import { Binary } from "@wopal/ellamaka-core/util/binary"

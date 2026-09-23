@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event } from "@wopal/ellamaka-sdk/v2/client"
 import { createSessionActivity, type SessionActivity } from "./session-activity"
 
 const busy = (sessionID: string, directory = "/cold"): SessionActivity => ({

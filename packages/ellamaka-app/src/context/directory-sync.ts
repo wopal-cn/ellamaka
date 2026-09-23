@@ -9,7 +9,7 @@ import {
   setSessionPrefetch,
 } from "./global-sync/session-prefetch"
 import { createServerSyncContext } from "./server-sync"
-import type { Message, Part, SessionStatus } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, SessionStatus } from "@wopal/ellamaka-sdk/v2/client"
 import { SESSION_CACHE_LIMIT, dropSessionCaches, pickSessionCacheEvictions } from "./global-sync/session-cache"
 import { message as clean } from "@/utils/diffs"
 import { useServerSDK } from "./server-sdk"

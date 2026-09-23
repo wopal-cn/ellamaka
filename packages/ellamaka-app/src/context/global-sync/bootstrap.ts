@@ -8,7 +8,7 @@ import type {
   QuestionRequest,
   Session,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@wopal/ellamaka-sdk/v2/client"
 import { showToast } from "@wopal/ui/toast"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { retry } from "@wopal/ellamaka-core/util/retry"

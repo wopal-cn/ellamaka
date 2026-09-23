@@ -3,7 +3,7 @@ import { describe, expect, mock, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
 import type { JSX } from "solid-js"
-import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { PromptNavigator, type PromptNavigatorProps } from "./prompt-navigator"
 
 mock.module("@wopal/ui/icon", () => ({

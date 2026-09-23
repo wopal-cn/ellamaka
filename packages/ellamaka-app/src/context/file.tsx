@@ -22,7 +22,7 @@ import {
 } from "./file/content-cache"
 import { createFileViewCache } from "./file/view-cache"
 import { createFileTreeStore } from "./file/tree-store"
-import type { Event, FileContent, FileNode } from "@opencode-ai/sdk/v2/client"
+import type { Event, FileContent, FileNode } from "@wopal/ellamaka-sdk/v2/client"
 import { invalidateFromWatcher } from "./file/watcher"
 import {
   selectionFromLines,

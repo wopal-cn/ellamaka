@@ -100,6 +100,11 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     if: github.repository == 'wopal-cn/ellamaka'
+    # id-token: write is granted for the npm release step only (OIDC trusted
+    # publishing); contents: write covers the GitHub release creation below.
+    permissions:
+      contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -199,6 +204,38 @@ jobs:
             --archives-dir dist \
             --output-dir release-output \
             --release-context-path release-context.json
+
+      - uses: actions/setup-node@v6
+        if: needs.version.outputs.release != ''
+        with:
+          # npm >= 11.5.1 is required for OIDC trusted publishing (Node 22
+          # ships npm 10.x). setup-node writes the .npmrc registry block only
+          # when registry-url is set — required for the OIDC exchange.
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          # No npm cache: caching would expose the OIDC auth token to a
+          # poisoned cache restore.
+          package-manager-cache: false
+
+      - name: Publish npm packages (@wopal/ellamaka-sdk, @wopal/ellamaka-plugin)
+        # The two fork contract packages ship to npm with the CLI release.
+        #
+        # Runs BEFORE the R2 commit point below: the versioned R2 manifest is
+        # the immutable release commit and a re-run cannot overwrite it, so a
+        # failed npm publish must abort the release before it is committed. The
+        # publish CLI is idempotent — it skips a version already on the
+        # registry — so a dispatch re-run fills the gap instead of failing.
+        #
+        # The packages follow the product base version: a release tag carries
+        # the prerelease (2.0.5-rc.7) while the packages are pinned at 2.0.5.
+        # The version is passed through raw and stripped exactly once, inside
+        # the publish CLI; the base version must match both packages or the
+        # step fails before touching the registry. Publishing order is sdk
+        # first, plugin second (the plugin depends on the sdk, incl. /v2).
+        if: needs.version.outputs.release != ''
+        run: |
+          bun packages/ellamaka-release/src/cli/publish-npm.ts \
+            --version "${{ needs.version.outputs.version }}"
 
       - name: Upload binaries and metadata to Cloudflare R2
         if: needs.version.outputs.release != ''

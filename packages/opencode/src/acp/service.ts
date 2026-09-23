@@ -31,7 +31,7 @@ import {
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
+import type { Message, OpencodeClient, SessionMessageResponse } from "@wopal/ellamaka-sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"

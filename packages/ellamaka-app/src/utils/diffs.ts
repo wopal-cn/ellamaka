@@ -1,5 +1,5 @@
-import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
-import type { Message } from "@opencode-ai/sdk/v2/client"
+import type { VcsFileDiff } from "@wopal/ellamaka-sdk/v2"
+import type { Message } from "@wopal/ellamaka-sdk/v2/client"
 
 function diff(value: unknown): value is VcsFileDiff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false

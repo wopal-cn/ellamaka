@@ -17,7 +17,7 @@ import { createFlyoutController, flyoutVisibilityClass, type FlyoutMode } from "
 import type { SidebarNav } from "./sidebar-nav"
 import { coerceSidebarNav } from "./sidebar-nav"
 import { FileTreePanel } from "./file-tree-panel"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "@wopal/ellamaka-sdk/v2"
 
 const MIN_WIDTH = 200
 const MAX_WIDTH = 500

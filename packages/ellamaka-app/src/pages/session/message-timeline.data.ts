@@ -1,5 +1,5 @@
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
-import { AssistantMessage, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import { AssistantMessage, Part, SessionStatus, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { groupParts, PartGroup, renderable } from "@wopal/ui/message-part"
 import { Data, Equal } from "effect"
 

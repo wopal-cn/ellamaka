@@ -1,4 +1,4 @@
-import type { Message } from "@opencode-ai/sdk/v2"
+import type { Message } from "@wopal/ellamaka-sdk/v2"
 import { Binary } from "@wopal/ellamaka-core/util/binary"
 import * as Log from "@wopal/ellamaka-core/util/log"
 

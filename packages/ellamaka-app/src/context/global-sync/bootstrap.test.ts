@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Project } from "@wopal/ellamaka-sdk/v2/client"
 import type { NormalizedProviderListResponse } from "@wopal/ui/context"
 import { bootstrapDirectory, bootstrapGlobal } from "./bootstrap"
 import type { State, VcsCache } from "./types"

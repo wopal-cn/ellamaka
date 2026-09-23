@@ -3,7 +3,7 @@ import type { JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { MemoryRouter, Route, createMemoryHistory } from "@solidjs/router"
 
-import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, UserMessage } from "@wopal/ellamaka-sdk/v2/client"
 import { useMutation } from "@tanstack/solid-query"
 import { createAutoScroll } from "@wopal/ui/hooks"
 import { Part as OpenCodeMessagePart } from "@wopal/ui/message-part"

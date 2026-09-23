@@ -18,7 +18,7 @@ import { findLast } from "@wopal/ellamaka-core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { isDraftSessionId } from "@/utils/draft-session"
-import { UserMessage } from "@opencode-ai/sdk/v2"
+import { UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export type LocalPanelActionContext = {

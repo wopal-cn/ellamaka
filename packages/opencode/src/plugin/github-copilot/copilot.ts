@@ -1,5 +1,5 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import type { Model } from "@opencode-ai/sdk/v2"
+import type { Hooks, PluginInput } from "@wopal/ellamaka-plugin"
+import type { Model } from "@wopal/ellamaka-sdk/v2"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { iife } from "@/util/iife"
 import * as Log from "@wopal/ellamaka-core/util/log"

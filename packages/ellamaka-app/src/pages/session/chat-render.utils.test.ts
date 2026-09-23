@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AssistantMessage, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, ToolPart, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import {
   agentDisplayName,
   classifyPart,

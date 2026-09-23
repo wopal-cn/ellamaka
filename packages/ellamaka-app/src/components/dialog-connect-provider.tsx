@@ -1,4 +1,4 @@
-import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@opencode-ai/sdk/v2/client"
+import type { ProviderAuthAuthorization, ProviderAuthMethod } from "@wopal/ellamaka-sdk/v2/client"
 import { Button } from "@wopal/ui/button"
 import { useDialog } from "@wopal/ui/context/dialog"
 import { Dialog } from "@wopal/ui/dialog"

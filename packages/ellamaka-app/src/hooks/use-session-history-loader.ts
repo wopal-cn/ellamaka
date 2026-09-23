@@ -1,6 +1,6 @@
 import { createMemo, on, onCleanup, createEffect } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { UserMessage } from "@opencode-ai/sdk/v2/client"
+import type { UserMessage } from "@wopal/ellamaka-sdk/v2/client"
 import { same } from "@/utils/same"
 
 export type SessionHistoryWindowInput = {

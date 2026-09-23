@@ -1,5 +1,5 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
-import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient } from "@wopal/ellamaka-sdk/v2"
+import type { GlobalEvent } from "@wopal/ellamaka-sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"

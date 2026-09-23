@@ -7,6 +7,7 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
+    "@wopal/ellamaka-core": "workspace:*",
     "semver": "^7.6.3"
   },
   "devDependencies": {
@@ -17,6 +18,7 @@
   },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo --noEmit",
+    "publish:npm": "bun run src/cli/publish-npm.ts"
   }
 }

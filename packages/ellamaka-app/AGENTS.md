@@ -16,7 +16,7 @@ description: Ellamaka Web UI built with SolidJS, Vite, and Tailwind CSS
 
 ## Architecture and Directories
 
-Execution chain: Vite dev server → SolidJS SPA → `@opencode-ai/sdk` → backend (`packages/opencode`) HTTP/WS API.
+Execution chain: Vite dev server → SolidJS SPA → `@wopal/ellamaka-sdk` → backend (`packages/opencode`) HTTP/WS API.
 
 ### Desktop Integration Boundary
 
@@ -53,7 +53,7 @@ Frontend-backend dev verification: `./scripts/dev.sh help`
 
 ## Implementation Rules
 
-- Backend communication goes through `@opencode-ai/sdk`; components must not call fetch against the backend directly.
+- Backend communication goes through `@wopal/ellamaka-sdk`; components must not call fetch against the backend directly.
 - Typecheck uses `tsgo -b`; never run `tsc` directly.
 - Extend upstream shared code through adapters, callbacks, or small injection points; never copy entire Session, command, Dialog, or navigation flows.
 - `packages/ui` is never modified for Workbench presentation. All adaptation happens inside `ellamaka-app` through component wrappers, extension points (`FileComponentProvider`, `ThemeProvider.registerTheme`), and scoped CSS overrides. Whether a chat block is self-built or reuses an official renderer is a pragmatic per-block decision recorded in [Agent 内容块类型](../../docs/DESIGN-workbench.md#agent-内容块类型).

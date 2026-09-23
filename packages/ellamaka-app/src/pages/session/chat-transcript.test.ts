@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import {
   ASSISTANT_SEGMENT_PARTS,
   createRowStabilizer,

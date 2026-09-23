@@ -10,7 +10,7 @@ import type {
   SessionConfigSelectOption,
   SetSessionConfigOptionResponse,
 } from "@agentclientprotocol/sdk"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { OpencodeClient } from "@wopal/ellamaka-sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"

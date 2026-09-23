@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2/client"
+import type { Event } from "@wopal/ellamaka-sdk/v2/client"
 import { createSimpleContext } from "@wopal/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"

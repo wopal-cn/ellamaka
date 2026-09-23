@@ -6,11 +6,11 @@ import type {
   WorkspaceAdapter as PluginWorkspaceAdapter,
   SystemPromptMetadata,
   SystemPromptSection,
-} from "@opencode-ai/plugin"
+} from "@wopal/ellamaka-plugin"
 import { Config } from "@/config/config"
 import { Bus } from "../bus"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@wopal/ellamaka-sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
 import { Session } from "@/session/session"

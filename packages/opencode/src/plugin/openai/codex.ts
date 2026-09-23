@@ -1,4 +1,4 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
+import type { Hooks, PluginInput } from "@wopal/ellamaka-plugin"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { OauthCallbackPage } from "@wopal/ellamaka-core/oauth/page"
 import { OAUTH_DUMMY_KEY } from "../../auth"

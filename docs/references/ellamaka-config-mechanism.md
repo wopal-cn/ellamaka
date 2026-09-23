@@ -50,9 +50,10 @@ ellamaka 有两种运行模式，配置加载链路完全不同：
 **插件依赖安装（ellamaka 增强）**：能力扫描到 `~/.wopal/` 时，额外为该目录下的本地插件安装其 `package.json` 声明的依赖。
 
 - **upstream 行为**：opencode 对每个能力目录只调 `npmSvc.install(dir, { add: [{ name: "@opencode-ai/plugin" }] })`，仅装 plugin SDK 公共头文件。对 `file://` 本地插件，`resolvePluginTarget`（`plugin/shared.ts`）只解析路径、检查 `package.json` 存在，**不安装插件自身的 `dependencies`**。upstream 假设 `file://` 插件由开发者自行管理依赖。
-- **ellamaka 增强**：扫描到 `~/.wopal/`（`Global.Path.wopalHome`）时，复用 wopal-space 模式的 `localPluginInstallDeps(dir)` 收集该目录下所有本地插件的 `file:` 依赖，与 `@opencode-ai/plugin` 一起交给 `npmSvc.install` 安装。
-- **范围**：仅对 `~/.wopal/` 触发；其他能力目录（`.opencode/`、`~/.opencode/`、`~/.config/opencode/`）走 upstream 默认路径，只装 `@opencode-ai/plugin`。
-- 实现位于 `packages/opencode/src/config/config.ts` 的目录循环，函数定义在 `packages/opencode/src/config/wopal-space.ts`。
+- **ellamaka 增强**：扫描到 `~/.wopal/`（`Global.Path.wopalHome`）时，复用 wopal-space 模式的 `localPluginInstallDeps(dir)` 收集该目录下所有本地插件的 `file:` 依赖，与 `@wopal/ellamaka-plugin` 一起交给 `npmSvc.install` 安装。
+- **pin 包名与版本**：fork 不发布到上游包名，兜底 pin 目标为 `@wopal/ellamaka-plugin`，版本取 `InstallationVersion` 剥离 prerelease 段后的纯主版本（`InstallationVersionBase`，如构建版本 `2.0.5-rc.7` → pin `2.0.5`；`InstallationLocal` 时为 `undefined`）。发布机制见 `docs/DESIGN-distribution.md` 的 npm 包发布章节。
+- **范围**：仅对 `~/.wopal/` 触发；其他能力目录（`.opencode/`、`~/.opencode/`、`~/.config/opencode/`）走 upstream 默认路径，只装 `@wopal/ellamaka-plugin`。
+- 实现位于 `packages/opencode/src/config/config.ts` 的目录循环，函数定义在 `packages/opencode/src/config/wopal-space.ts`；TUI 插件目录的同类 pin 位于 `packages/opencode/src/cli/cmd/tui/config/tui.ts`。
 
 **合并规则**：高优先级配置通过 `mergeDeep` 覆盖低优先级的同名键，`agent`、`mode`、`plugin`、`command` 等特殊键做深度合并。
 

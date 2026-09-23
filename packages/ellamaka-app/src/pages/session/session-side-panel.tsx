@@ -8,7 +8,7 @@ import { ResizeHandle } from "@wopal/ui/resize-handle"
 import { Mark } from "@wopal/ui/logo"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
-import type { VcsFileDiff } from "@opencode-ai/sdk/v2"
+import type { VcsFileDiff } from "@wopal/ellamaka-sdk/v2"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { useDialog } from "@wopal/ui/context/dialog"
 

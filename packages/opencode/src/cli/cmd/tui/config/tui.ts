@@ -15,7 +15,7 @@ import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { CurrentWorkingDirectory } from "./cwd"
 import { ConfigPlugin } from "@/config/plugin"
 import { TuiKeybind } from "./keybind"
-import { InstallationLocal, InstallationVersion } from "@wopal/ellamaka-core/installation/version"
+import { InstallationLocal, InstallationVersionBase } from "@wopal/ellamaka-core/installation/version"
 import { makeRuntime } from "@wopal/ellamaka-core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
 import * as Log from "@wopal/ellamaka-core/util/log"
@@ -23,7 +23,7 @@ import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@wopal/ellamaka-core/npm"
 import { tryLoadWopalSpaceTuiConfig } from "./wopal-space"
 import type { DeepMutable } from "@wopal/ellamaka-core/schema"
-import type { TuiAttentionSoundName } from "@opencode-ai/plugin/tui"
+import type { TuiAttentionSoundName } from "@wopal/ellamaka-plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 
 const log = Log.create({ service: "tui.config" })
@@ -303,8 +303,8 @@ export const layer = Layer.effect(
           .install(dir, {
             add: [
               {
-                name: "@opencode-ai/plugin",
-                version: InstallationLocal ? undefined : InstallationVersion,
+                name: "@wopal/ellamaka-plugin",
+                version: InstallationLocal ? undefined : InstallationVersionBase,
               },
             ],
           })

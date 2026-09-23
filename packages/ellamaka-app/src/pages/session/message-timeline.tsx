@@ -42,7 +42,7 @@ import type {
   Part as PartType,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk/v2"
+} from "@wopal/ellamaka-sdk/v2"
 import { showToast } from "@wopal/ui/toast"
 import { Binary } from "@wopal/ellamaka-core/util/binary"
 import { getFilename } from "@wopal/ellamaka-core/util/path"

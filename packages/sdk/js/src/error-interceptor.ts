@@ -10,7 +10,7 @@
  * body unchanged so existing field-level reads (`.error.name`,
  * `JSON.stringify(error)`, etc.) are byte-for-byte identical to before.
  */
-import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+import { BINARY_NAME } from "./brand.js"
 
 export function wrapClientError(
   error: unknown,

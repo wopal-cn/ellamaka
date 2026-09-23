@@ -20,6 +20,7 @@ const INTEGRATION = [
   "share",
   "mcp",
   "lsp",
+  "publish-smoke",
 ]
 const FAST = ["acp", "config", "provider", "util"]
 

@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, SessionStatus, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { isRenderablePart } from "./chat-render.utils"
 
 /**

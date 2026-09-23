@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup, For, Show } from "solid-js"
 import type { JSX } from "solid-js"
-import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { Icon } from "@wopal/ui/icon"
 import { Collapsible } from "@wopal/ui/collapsible"
 import { useDialog } from "@wopal/ui/context/dialog"

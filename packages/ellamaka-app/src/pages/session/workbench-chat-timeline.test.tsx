@@ -5,7 +5,7 @@ import h from "solid-js/h"
 import { createStore } from "solid-js/store"
 import { createComponent, createRenderEffect, createSignal, ErrorBoundary } from "solid-js"
 import type { JSX } from "solid-js"
-import type { AssistantMessage, Message, Part, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, ToolPart, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { WorkbenchChatTimeline, type WorkbenchChatTimelineProps } from "./workbench-chat-timeline"
 
 mock.module("./workbench-markdown-renderer", () => ({

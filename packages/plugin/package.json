@@ -1,9 +1,19 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/plugin",
+  "name": "@wopal/ellamaka-plugin",
   "version": "2.0.5",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wopal-cn/ellamaka",
+    "directory": "packages/plugin"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "build": "tsc"
@@ -17,7 +27,7 @@
     "dist"
   ],
   "dependencies": {
-    "@opencode-ai/sdk": "workspace:*",
+    "@wopal/ellamaka-sdk": "workspace:*",
     "effect": "catalog:",
     "zod": "catalog:"
   },

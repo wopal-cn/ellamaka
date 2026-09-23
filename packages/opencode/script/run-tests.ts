@@ -25,6 +25,7 @@ export const INTEGRATION_DIRS = [
   "share",
   "mcp",
   "lsp",
+  "publish-smoke",
 ]
 
 // e2e files follow the `*-e2e.test.ts` naming convention and are isolated from

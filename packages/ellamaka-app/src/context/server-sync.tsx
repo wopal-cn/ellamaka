@@ -1,4 +1,4 @@
-import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@wopal/ellamaka-sdk/v2/client"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { showServerToast } from "@/utils/server-toast"
 import {

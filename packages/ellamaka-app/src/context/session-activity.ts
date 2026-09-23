@@ -1,4 +1,4 @@
-import type { Event, SessionStatus } from "@opencode-ai/sdk/v2/client"
+import type { Event, SessionStatus } from "@wopal/ellamaka-sdk/v2/client"
 import { batch } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 

@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount } from "solid-js"
-import type { AssistantMessage, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { cleanSummary, extractPromptSummary, isInjectionPart } from "./chat-render.utils"
 import { isCompactionMarker } from "./chat-transcript"
 

@@ -1,4 +1,4 @@
-import type { Pty } from "@opencode-ai/sdk/v2/client"
+import type { Pty } from "@wopal/ellamaka-sdk/v2/client"
 import { reportWorkbenchError } from "./workbench-error"
 
 export type PtyKind = "tui" | "term" | "split"

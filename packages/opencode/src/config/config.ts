@@ -9,7 +9,7 @@ import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
-import { InstallationLocal, InstallationVersion } from "@wopal/ellamaka-core/installation/version"
+import { InstallationLocal, InstallationVersionBase } from "@wopal/ellamaka-core/installation/version"
 import { existsSync } from "fs"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
@@ -595,8 +595,8 @@ export const layer = Layer.effect(
                   npmSvc.install(dir, {
                     add: [
                       {
-                        name: "@opencode-ai/plugin",
-                        version: InstallationLocal ? undefined : InstallationVersion,
+                        name: "@wopal/ellamaka-plugin",
+                        version: InstallationLocal ? undefined : InstallationVersionBase,
                       },
                       ...add,
                     ],
@@ -614,8 +614,8 @@ export const layer = Layer.effect(
                   npmSvc.install(dir, {
                     add: [
                       {
-                        name: "@opencode-ai/plugin",
-                        version: InstallationLocal ? undefined : InstallationVersion,
+                        name: "@wopal/ellamaka-plugin",
+                        version: InstallationLocal ? undefined : InstallationVersionBase,
                       },
                       ...add,
                     ],
@@ -627,7 +627,7 @@ export const layer = Layer.effect(
                 }
                 await Promise.all([
                   writeDirDepFingerprint(dir, fingerprint, plugins),
-                  writeInstallManifest(dir, add, [{ name: "@opencode-ai/plugin", version: InstallationLocal ? undefined : InstallationVersion }]),
+                  writeInstallManifest(dir, add, [{ name: "@wopal/ellamaka-plugin", version: InstallationLocal ? undefined : InstallationVersionBase }]),
                 ])
               }),
             ).pipe(Effect.forkDetach),
@@ -755,8 +755,8 @@ export const layer = Layer.effect(
                   npmSvc.install(dir, {
                     add: [
                       {
-                        name: "@opencode-ai/plugin",
-                        version: InstallationLocal ? undefined : InstallationVersion,
+                        name: "@wopal/ellamaka-plugin",
+                        version: InstallationLocal ? undefined : InstallationVersionBase,
                       },
                       ...pluginDeps,
                     ],
@@ -769,7 +769,7 @@ export const layer = Layer.effect(
                 if (depFingerprint) {
                   await Promise.all([
                     writeDirDepFingerprint(dir, depFingerprint, depPlugins!),
-                    writeInstallManifest(dir, pluginDeps, [{ name: "@opencode-ai/plugin", version: InstallationLocal ? undefined : InstallationVersion }]),
+                    writeInstallManifest(dir, pluginDeps, [{ name: "@wopal/ellamaka-plugin", version: InstallationLocal ? undefined : InstallationVersionBase }]),
                   ])
                 }
               }),

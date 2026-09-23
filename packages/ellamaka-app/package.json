@@ -53,7 +53,7 @@
   "dependencies": {
     "@kobalte/core": "catalog:",
     "@wopal/ellamaka-core": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@wopal/ellamaka-sdk": "workspace:*",
     "@wopal/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@shikijs/transformers": "3.9.2",

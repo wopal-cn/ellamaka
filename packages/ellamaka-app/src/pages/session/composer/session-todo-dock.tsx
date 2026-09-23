@@ -1,4 +1,4 @@
-import type { Todo } from "@opencode-ai/sdk/v2"
+import type { Todo } from "@wopal/ellamaka-sdk/v2"
 import { AnimatedNumber } from "@wopal/ui/animated-number"
 import { Checkbox } from "@wopal/ui/checkbox"
 import { DockTray } from "@wopal/ui/dock-surface"

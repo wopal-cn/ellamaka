@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js"
-import type { PermissionRequest } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest } from "@wopal/ellamaka-sdk/v2"
 import { Button } from "@wopal/ui/button"
 import { DockPrompt } from "@wopal/ui/dock-prompt"
 import { Icon } from "@wopal/ui/icon"

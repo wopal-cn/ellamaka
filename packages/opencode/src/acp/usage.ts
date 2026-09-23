@@ -1,6 +1,6 @@
 import type { AgentSideConnection, Usage } from "@agentclientprotocol/sdk"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@wopal/ellamaka-sdk/v2"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { ModelID, ProviderID } from "@/provider/schema"

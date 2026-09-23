@@ -2,14 +2,11 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "fs"
 import { dirname, join, resolve } from "path"
 import { fileURLToPath } from "url"
+import { countOccurrences, stepBlockBefore } from "./workflow-helpers"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(currentDir, "..", "..", "..")
 const workflow = readFileSync(join(root, ".github", "workflows", "publish-ellamaka-cli.yml"), "utf8")
-
-function count(text: string, needle: string) {
-  return text.split(needle).length - 1
-}
 
 describe("publish-ellamaka workflow", () => {
   test("release triggered by CLI tag push, with dispatch as re-release/dev path", () => {
@@ -32,7 +29,7 @@ describe("publish-ellamaka workflow", () => {
 
   test("builds release binaries with release channel and archives the 4 P1 artifacts", () => {
     expect(workflow).toContain("ELLAMAKA_RELEASE: ${{ needs.version.outputs.release }}")
-    expect(workflow).toContain("bash scripts/build.sh cli --platform \"${PLATFORM}\" --arch primary --web-ui \"${WEB_UI}\"")
+    expect(workflow).toContain('bash scripts/build.sh cli --platform "${PLATFORM}" --arch primary --web-ui "${WEB_UI}"')
     expect(workflow).toContain("ellamaka-darwin-arm64.tar.gz")
     expect(workflow).toContain("ellamaka-darwin-x64.tar.gz")
     expect(workflow).toContain("ellamaka-linux-x64.tar.gz")
@@ -43,7 +40,7 @@ describe("publish-ellamaka workflow", () => {
 
   test("selects the embedded web UI during manual dispatch", () => {
     expect(workflow).toContain("web_ui:")
-    expect(workflow).toContain("default: \"ellamaka-app\"")
+    expect(workflow).toContain('default: "ellamaka-app"')
     expect(workflow).toContain("- ellamaka-app")
     expect(workflow).toContain("- app")
     expect(workflow).toContain("- none")
@@ -95,7 +92,9 @@ describe("publish-ellamaka workflow", () => {
   test("uploads manifest last as the commit point (manifest-last protocol)", () => {
     // Per §9, the manifest is written last as the release commit point. The
     // `put_with_cache` for manifest.json must come after artifacts.
-    const manifestIdx = workflow.indexOf('put_with_cache "release-output/manifest.json" "${VERSION_PREFIX}/manifest.json"')
+    const manifestIdx = workflow.indexOf(
+      'put_with_cache "release-output/manifest.json" "${VERSION_PREFIX}/manifest.json"',
+    )
     const artifactIdx = workflow.indexOf('put_with_cache "dist/${name}" "${VERSION_PREFIX}/${name}"')
     expect(manifestIdx).toBeGreaterThan(artifactIdx)
     expect(manifestIdx).toBeGreaterThan(-1)
@@ -113,7 +112,7 @@ describe("publish-ellamaka workflow", () => {
     // file absent from the manifest must not fake a mismatch via empty
     // array lookups.
     expect(workflow).not.toMatch(/for f in dist\/ellamaka-\*/)
-    expect(workflow).toContain('while IFS=$\'\\t\' read -r name ext; do')
+    expect(workflow).toContain("while IFS=$'\\t' read -r name ext; do")
     expect(workflow).toContain('console.log([a.name, a.ext].join("\\t"))')
   })
 
@@ -146,9 +145,9 @@ describe("publish-ellamaka workflow", () => {
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}")
     expect(workflow).toContain("RELEASE_TOKEN secret is required to publish the ontology GitHub release.")
     expect(workflow).toContain("--notes-file release-output/release-notes.md")
-    expect(count(workflow, "bun packages/ellamaka-release/src/cli/gitee.ts")).toBe(2)
-    expect(count(workflow, "--repo wopal-cn/ellamaka")).toBeGreaterThanOrEqual(2)
-    expect(count(workflow, "--repo wopal-cn/wopal-space-ontology")).toBeGreaterThanOrEqual(2)
+    expect(countOccurrences(workflow, "bun packages/ellamaka-release/src/cli/gitee.ts")).toBe(2)
+    expect(countOccurrences(workflow, "--repo wopal-cn/ellamaka")).toBeGreaterThanOrEqual(2)
+    expect(countOccurrences(workflow, "--repo wopal-cn/wopal-space-ontology")).toBeGreaterThanOrEqual(2)
     // No gh release edit (committed release cannot be overwritten)
     expect(workflow).not.toContain("gh release edit")
     expect(workflow).not.toContain("--generate-notes")
@@ -170,5 +169,45 @@ describe("publish-ellamaka workflow", () => {
     const buildIdx = workflow.indexOf("- name: Build")
     expect(gateIdx).toBeGreaterThan(-1)
     expect(buildIdx).toBeGreaterThan(gateIdx)
+  })
+
+  test("publishes the plugin/SDK npm packages with the release version", () => {
+    // The two fork contract packages ship to npm alongside the CLI release.
+    // The step runs the shared publish CLI, which owns the idempotency probe
+    // and the prerelease-free version check (single implementation of the
+    // strip rule, see packages/ellamaka-release/src/npm/plan.ts).
+    expect(workflow).toContain("Publish npm packages (@wopal/ellamaka-sdk, @wopal/ellamaka-plugin)")
+    expect(workflow).toContain("bun packages/ellamaka-release/src/cli/publish-npm.ts")
+    expect(workflow).toContain('--version "${{ needs.version.outputs.version }}"')
+  })
+
+  test("gates the npm publish on a real release and never strips the version in shell", () => {
+    // The tag version may carry a prerelease (2.0.5-rc.7); the strip must
+    // happen exactly once, inside the publish CLI via stripPrerelease — a
+    // shell-side strip would be a second implementation of the rule.
+    const stepBlock = stepBlockBefore(workflow, "bun packages/ellamaka-release/src/cli/publish-npm.ts")
+    expect(stepBlock).toContain("needs.version.outputs.release != ''")
+    expect(stepBlock).not.toMatch(/\bsed\b|\bcut\b/)
+  })
+
+  test("publishes to npm before the immutable R2 commit point", () => {
+    // The versioned R2 manifest is the release commit point and cannot be
+    // overwritten by a re-run. Publishing npm first means a failed npm publish
+    // aborts the release before it is committed, so a dispatch re-run can
+    // still fill the gap (the npm probe skips an already-published version).
+    const npmIdx = workflow.indexOf("bun packages/ellamaka-release/src/cli/publish-npm.ts")
+    const commitIdx = workflow.indexOf("Upload binaries and metadata to Cloudflare R2")
+    expect(npmIdx).toBeGreaterThan(-1)
+    expect(commitIdx).toBeGreaterThan(npmIdx)
+  })
+
+  test("uses OIDC trusted publishing for the npm release job", () => {
+    // Same mechanism as the wopal-cli release: no long-lived npm token.
+    // id-token: write is required for the OIDC exchange, and npm >= 11.5.1
+    // (Node 24) is required for trusted publishing.
+    expect(workflow).toContain("id-token: write")
+    expect(workflow).toContain("registry-url: 'https://registry.npmjs.org'")
+    expect(workflow).toContain("node-version: '24'")
+    expect(workflow).not.toContain("NPM_TOKEN")
   })
 })

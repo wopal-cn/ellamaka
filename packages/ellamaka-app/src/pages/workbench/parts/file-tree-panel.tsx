@@ -1,7 +1,7 @@
 import FileTree from "@/components/file-tree"
 import { WorkbenchSpaceFileProvider } from "../workbench-space-file-provider"
 import { fileTreePanelIdentity } from "./file-tree-panel-identity"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "@wopal/ellamaka-sdk/v2"
 import { Show, createMemo } from "solid-js"
 import { createSpaceMount } from "./space-mount"
 

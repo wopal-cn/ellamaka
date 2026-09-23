@@ -50,7 +50,7 @@ beforeAll(async () => {
     useParams: () => params,
   }))
 
-  mock.module("@opencode-ai/sdk/v2/client", () => ({
+  mock.module("@wopal/ellamaka-sdk/v2/client", () => ({
     createOpencodeClient: (input: { directory: string }) => clientFor(input.directory),
   }))
 

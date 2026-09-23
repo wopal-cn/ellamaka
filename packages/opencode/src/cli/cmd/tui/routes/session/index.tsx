@@ -33,7 +33,7 @@ import type {
   UserMessage,
   TextPart,
   ReasoningPart,
-} from "@opencode-ai/sdk/v2"
+} from "@wopal/ellamaka-sdk/v2"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@/util/locale"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"

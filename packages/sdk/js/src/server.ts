@@ -1,5 +1,5 @@
 import launch from "cross-spawn"
-import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+import { BINARY_NAME } from "./brand.js"
 import { type Config } from "./gen/types.gen.js"
 import { stop, bindAbort } from "./process.js"
 

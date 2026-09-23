@@ -1,6 +1,6 @@
 import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { PermissionRequest, QuestionRequest, Todo } from "@opencode-ai/sdk/v2"
+import type { PermissionRequest, QuestionRequest, Todo } from "@wopal/ellamaka-sdk/v2"
 import { useParams } from "@solidjs/router"
 import { showToast } from "@wopal/ui/toast"
 import { useServerSync } from "@/context/server-sync"

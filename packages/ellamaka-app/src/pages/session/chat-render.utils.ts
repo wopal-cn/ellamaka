@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Message, Part, UserMessage } from "@wopal/ellamaka-sdk/v2"
 
 /**
  * Part classification for the Workbench Chat render layer. Classification reads

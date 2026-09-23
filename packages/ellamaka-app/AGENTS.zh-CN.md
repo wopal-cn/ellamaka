@@ -16,7 +16,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 
 ## 架构与目录
 
-执行链：Vite dev server → SolidJS SPA → `@opencode-ai/sdk` → backend（`packages/opencode`）HTTP/WS API。
+执行链：Vite dev server → SolidJS SPA → `@wopal/ellamaka-sdk` → backend（`packages/opencode`）HTTP/WS API。
 
 ### Desktop 集成边界
 
@@ -52,7 +52,7 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 
 ## 实现规则
 
-- 后端通信通过 `@opencode-ai/sdk`；禁止组件裸调 fetch 到 backend。
+- 后端通信通过 `@wopal/ellamaka-sdk`；禁止组件裸调 fetch 到 backend。
 - 类型检查使用 `tsgo -b`，禁止直接运行 `tsc`。
 - 上游共享代码优先通过 adapter、callback 或小型注入点扩展，禁止复制整段 Session、命令、Dialog 或导航流程。
 - SSE 事件处理：`server.connected` 仅恢复传输，**不触发全局刷新**；只有 `global.disposed` 触发全量对账。改 SSE 事件处理时必须验证：重连后 UI 状态保留、`global.disposed` 仍触发全量刷新。

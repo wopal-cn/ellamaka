@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Show, type Component, type JSX } from "solid-js"
-import type { AssistantMessage, ToolPart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, ToolPart } from "@wopal/ellamaka-sdk/v2"
 import { Icon } from "@wopal/ui/icon"
 import { Collapsible } from "@wopal/ui/collapsible"
 import { agentColor } from "@/utils/agent"

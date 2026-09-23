@@ -12,7 +12,7 @@ import WhichKey from "../feature-plugins/system/which-key"
 import DiffViewer from "../feature-plugins/system/diff-viewer"
 import SessionSwitcher from "../feature-plugins/session"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
-import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@wopal/ellamaka-plugin/tui"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 
 export type InternalTuiPlugin = Omit<TuiPluginModule, "id"> & {

@@ -1,6 +1,6 @@
 import { useSDK } from "@/context/sdk"
 import { Persist, persisted } from "@/utils/persist"
-import { SessionStatus } from "@opencode-ai/sdk/v2"
+import { SessionStatus } from "@wopal/ellamaka-sdk/v2"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSessionLayout } from "./session-layout"

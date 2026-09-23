@@ -18,7 +18,7 @@ import {
   type SurfaceTab,
 } from "./parts/inspector-adapter"
 import { Persist, persisted } from "@/utils/persist"
-import type { FileNode } from "@opencode-ai/sdk/v2"
+import type { FileNode } from "@wopal/ellamaka-sdk/v2"
 import {
   sessionRemovalReasonFromEvent,
   shouldNotifySessionRemoval,

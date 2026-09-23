@@ -66,8 +66,8 @@ await Bun.build({
     ELLAMAKA_MODELS_DEV: generated.modelsData,
     // Inline both channel and version so the sidecar matches the CLI build
     // (build.ts). Without OPENCODE_VERSION, InstallationVersion falls back to
-    // the literal "local" at runtime; in non-local channels that string is
-    // then passed to npm as @opencode-ai/plugin@local, which fails with "No
+    // the literal "local" at runtime; in non-local channels the plugin pin
+    // then resolves to @wopal/ellamaka-plugin@local, which fails with "No
     // matching version found". build-node.ts is the sidecar build, consumed by
     // dev.sh and the desktop package step, so it must define the same
     // compile-time constants as the CLI build.

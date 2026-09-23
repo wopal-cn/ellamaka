@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { useSessionHistoryLoader } from "./use-session-history-loader"
-import type { UserMessage } from "@opencode-ai/sdk/v2/client"
+import type { UserMessage } from "@wopal/ellamaka-sdk/v2/client"
 
 function msg(id: string): UserMessage {
   return { id, role: "user" } as UserMessage

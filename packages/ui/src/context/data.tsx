@@ -1,4 +1,4 @@
-import type { Message, Session, Part, SessionStatus, Provider } from "@opencode-ai/sdk/v2"
+import type { Message, Session, Part, SessionStatus, Provider } from "@wopal/ellamaka-sdk/v2"
 import { createSimpleContext } from "./helper"
 
 export type NormalizedProviderListResponse = {

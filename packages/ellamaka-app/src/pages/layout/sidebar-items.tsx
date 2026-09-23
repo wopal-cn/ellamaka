@@ -1,4 +1,4 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@wopal/ellamaka-sdk/v2/client"
 import { Avatar } from "@wopal/ui/avatar"
 import { Icon } from "@wopal/ui/icon"
 import { IconButton } from "@wopal/ui/icon-button"

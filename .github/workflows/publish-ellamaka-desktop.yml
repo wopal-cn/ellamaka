@@ -241,6 +241,12 @@ jobs:
     needs: [version, build-desktop]
     runs-on: ubuntu-latest
     if: github.repository == 'wopal-cn/ellamaka' && needs.version.outputs.release != ''
+    # id-token: write is granted for the npm release step (OIDC trusted
+    # publishing); contents: write covers the GitHub release creation below.
+    # Scoped to this job so the build matrix never inherits the token grant.
+    permissions:
+      contents: write
+      id-token: write
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -252,6 +258,12 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+        # The npm publish step runs publish-npm.ts, which builds the SDK and
+        # plugin packages with the workspace-local tsc. A fresh runner has no
+        # node_modules, so dependencies must be installed before any use of
+        # the release tooling.
 
       - name: Download release context
         uses: actions/download-artifact@v8
@@ -277,6 +289,44 @@ jobs:
             --output-dir release-output \
             --release-context-path release-context.json \
             --base-url "$BASE_URL"
+
+      - uses: actions/setup-node@v6
+        if: needs.version.outputs.release != ''
+        with:
+          # npm >= 11.5.1 is required for OIDC trusted publishing (Node 22
+          # ships npm 10.x). setup-node writes the .npmrc registry block only
+          # when registry-url is set — required for the OIDC exchange.
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          # No npm cache: caching would expose the OIDC auth token to a
+          # poisoned cache restore.
+          package-manager-cache: false
+
+      - name: Publish npm packages (@wopal/ellamaka-sdk, @wopal/ellamaka-plugin)
+        # A desktop release bumps the whole workspace to the base version
+        # (scripts/lib/release.sh mirrors every dependency package to the pure
+        # base), so the engine's plugin pin needs the branded packages on npm
+        # even when no CLI release runs in between. Same shared publish CLI as
+        # the CLI workflow: it owns the idempotency probe and the
+        # prerelease-free version check.
+        #
+        # Runs BEFORE the R2 commit point below: the versioned R2 manifest is
+        # the immutable release commit and a re-run cannot overwrite it, so a
+        # failed npm publish must abort the release before it is committed. The
+        # publish CLI is idempotent — it skips a version already on the
+        # registry — so a dispatch re-run fills the gap instead of failing.
+        #
+        # The version is passed through raw: a desktop beta tag
+        # (2.0.6-beta.1) maps to the base package version (2.0.6), stripped
+        # exactly once inside the publish CLI; the base version must match both
+        # packages or the step fails before touching the registry. Publishing
+        # order is sdk first, plugin second (the plugin depends on the sdk,
+        # incl. /v2). The step repeats the job's release gate so the npm
+        # contract stays self-describing if the job condition is ever widened.
+        if: needs.version.outputs.release != ''
+        run: |
+          bun packages/ellamaka-release/src/cli/publish-npm.ts \
+            --version "${{ needs.version.outputs.version }}"
 
       - name: Upload binaries and metadata to Cloudflare R2
         run: |
