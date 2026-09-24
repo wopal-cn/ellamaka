@@ -897,7 +897,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
         if (part.type === "reasoning") {
           if (differentModel) {
-            if (part.text.trim().length > 0)
+            // Bedrock Claude rejects unsigned thinking blocks from other models.
+            // Other targets must not receive the old model's reasoning as plain text.
+            if (
+              model.api.npm === "@ai-sdk/amazon-bedrock" &&
+              model.api.id.toLowerCase().includes("claude") &&
+              part.text.trim().length > 0
+            )
               assistantMessage.parts.push({
                 type: "text",
                 text: part.text,

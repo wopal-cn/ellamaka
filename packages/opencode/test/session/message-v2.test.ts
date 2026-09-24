@@ -598,7 +598,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("omits provider metadata when assistant model differs", async () => {
+  test("omits foreign reasoning without losing text or tool results", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
@@ -657,7 +657,6 @@ describe("session.message-v2.toModelMessage", () => {
         role: "assistant",
         content: [
           { type: "text", text: "done" },
-          { type: "text", text: "thinking" },
           {
             type: "tool-call",
             toolCallId: "call-1",
@@ -678,6 +677,111 @@ describe("session.message-v2.toModelMessage", () => {
           },
         ],
       },
+    ])
+  })
+
+  test("does not turn DeepSeek reasoning into GLM text on the same provider", async () => {
+    const assistantID = "m-deepseek-assistant"
+    const glm: Provider.Model = {
+      ...model,
+      id: ModelID.make("glm-5.3-flash"),
+      providerID: ProviderID.make("wopal-ai"),
+      api: { ...model.api, id: "glm-5.3-flash", npm: "@ai-sdk/openai-compatible" },
+    }
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: "wopal-ai",
+          modelID: "deepseek-v4.1-flash",
+        }),
+        parts: [
+          {
+            ...basePart(assistantID, "private"),
+            type: "reasoning",
+            text: "private thought ".repeat(1000),
+            time: { start: 0 },
+          },
+          { ...basePart(assistantID, "answer"), type: "text", text: "final answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    const messages = await MessageV2.toModelMessages(input, glm)
+    expect(messages).toStrictEqual([{ role: "assistant", content: [{ type: "text", text: "final answer" }] }])
+    expect(ProviderTransform.message(messages, glm, {})).toStrictEqual(messages)
+  })
+
+  test("preserves same-model reasoning and provider metadata", async () => {
+    const assistantID = "m-same-model-assistant"
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent"),
+        parts: [
+          {
+            ...basePart(assistantID, "reasoning"),
+            type: "reasoning",
+            text: "thinking",
+            metadata: { openai: { reasoning: "meta" } },
+            time: { start: 0 },
+          },
+          { ...basePart(assistantID, "answer"), type: "text", text: "answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "thinking", providerOptions: { openai: { reasoning: "meta" } } },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ])
+  })
+
+  test("keeps Bedrock Claude cross-model reasoning as text for signature compatibility", async () => {
+    const assistantID = "m-bedrock-assistant"
+    const bedrock: Provider.Model = {
+      ...model,
+      id: ModelID.make("amazon-bedrock/anthropic.claude-sonnet-4-6"),
+      providerID: ProviderID.make("amazon-bedrock"),
+      api: {
+        id: "anthropic.claude-sonnet-4-6",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+    const input: MessageV2.WithParts[] = [
+      {
+        info: assistantInfo(assistantID, "m-parent", undefined, {
+          providerID: "amazon-bedrock",
+          modelID: "anthropic.claude-opus-4-6",
+        }),
+        parts: [
+          { ...basePart(assistantID, "reasoning"), type: "reasoning", text: "thinking", time: { start: 0 } },
+          { ...basePart(assistantID, "answer"), type: "text", text: "answer" },
+        ] as MessageV2.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, bedrock)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "thinking" },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ])
+
+    const nova: Provider.Model = {
+      ...bedrock,
+      id: ModelID.make("amazon.nova-pro-v1:0"),
+      api: { ...bedrock.api, id: "amazon.nova-pro-v1:0" },
+    }
+    expect(await MessageV2.toModelMessages(input, nova)).toStrictEqual([
+      { role: "assistant", content: [{ type: "text", text: "answer" }] },
     ])
   })
 
