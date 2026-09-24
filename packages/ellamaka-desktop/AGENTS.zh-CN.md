@@ -3,11 +3,11 @@ name: ellamaka-desktop
 description: Ellamaka Electron 桌面应用 — 基于 OpenCode packages/desktop 的 v1.15.13 基线
 ---
 
-# ellamaka-desktop
+# Agent 开发规则
 
 ## 上游基线
 
-- **来源**：OpenCode `packages/desktop`，提交 [`385cb694419f98103af0e8fc6187ddcbcbb6eecb`](https://github.com/anomalyco/opencode/commit/385cb694419f98103af0e8fc6187ddcbcbb6eecb)（v1.15.13）
+- **来源**：OpenCode `packages/desktop`，提交 `385cb694419f98103af0e8fc6187ddcbcbb6eecb`（v1.15.13）
 - **Electron**：41.2.1
 - **同步策略**：仅选择性回移安全/生命周期修复。不进行跨版本整体升级。所有变更通过 `git diff` 对照基线跟踪。
 

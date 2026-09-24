@@ -56,7 +56,6 @@ description: 基于 SolidJS、Vite 和 Tailwind CSS 构建的 ellamaka Web UI �
 - 类型检查使用 `tsgo -b`，禁止直接运行 `tsc`。
 - 上游共享代码优先通过 adapter、callback 或小型注入点扩展，禁止复制整段 Session、命令、Dialog 或导航流程。
 - SSE 事件处理：`server.connected` 仅恢复传输，**不触发全局刷新**；只有 `global.disposed` 触发全量对账。改 SSE 事件处理时必须验证：重连后 UI 状态保留、`global.disposed` 仍触发全量刷新。
-- SSE 事件按类型分级处理：高频属性变更（标题、消息流）由对应组件局部处理；结构性事件（`session.created`/`session.deleted`/带 `timeArchived` 的 `session.updated`）才触发 SessionTree 刷新。禁止用 SSE 事件触发无关 Panel 或树级重载。
 - Canvas 渲染必须使用整数 `devicePixelRatio`。ghostty-web（及任何 `canvas.width = cssSize * dpr` + `ctx.scale(dpr)` 模式的 canvas 渲染器）在非整数 dpr 下，浏览器会把 canvas 物理像素截断为整数，而 context scale 仍用原始小数，导致合成器对 canvas 纹理做亚像素重采样，产生按字符单元格周期排列的网格条纹。Electron 窗口缩放（如 110%）会使 `window.devicePixelRatio = nativeDpr × zoomFactor` 变成非整数（如 2.2），必然触发此问题。`Terminal` 组件已对 `renderer.devicePixelRatio` 做整数化处理，禁止移除该修复；新增任何 canvas 渲染路径（直接用 `<canvas>` 或引入新终端渲染库）同样必须将传给渲染器的 dpr 取整。
 
 ## 工作台强制边界
@@ -193,7 +192,7 @@ Workbench Chat 的模型选择按 Session 隔离。用户显式选择是当前 S
 - **按需 Space Keep-Alive**：恢复 Tab 布局不代表需要加载运行环境。首次只挂载当前 Space；其他 Space 首次访问时挂载，此后保留其 Panel，直到用户显式关闭。非当前已挂载 Space 用 `position: absolute; visibility: hidden; inert` 隐藏，禁止 `display: none`（Ghostty 尺寸会归零）。已激活 Panel 切到后台必须保留草稿、滚动位置与终端连接。
 - **运行环境加载条件**：只有 Panel 中已打开或新建的会话才加载目录能力。空 Panel、Tab 布局、会话树行、运行/未读指示及通知元数据均为被动读取，不得创建会发出请求的目录状态或加载插件。空间文件浏览与预览使用 Root 级文件读取，不使用会话 instance。空 Panel 不提供目录能力状态，但服务健康状态始终独立可用。
 - **重连加载边界**：从 `localStorage` 恢复时只挂载并恢复当前 Space。页面不刷新而后端/sidecar 重启时，只允许当前可见 Space（其中正在显示的所有 Panel）对账会话并恢复 PTY 连接；隐藏 keep-alive Space 只保留 DOM、草稿和重连提示，不得重新创建 directory instance、加载插件或重连 PTY，直到用户切回该 Space。
-- **SSE 事件分级**：高频属性变更（标题、消息流）由对应组件局部处理；结构性事件（`session.created`/`session.deleted`/带 `timeArchived` 的 `session.updated`）才触发 SessionTree 刷新。`message.part.*` 只更新对应 PanelChat。
+- **SSE 事件分级**：高频属性变更（标题、消息流）由对应组件局部处理；结构性事件（`session.created`/`session.deleted`/带 `timeArchived` 的 `session.updated`）才触发 SessionTree 刷新。`message.part.*` 只更新对应 PanelChat。禁止用 SSE 事件触发无关 Panel 或树级重载。
 - **CLI 不可用降级**：CLI 缺失/损坏/版本不兼容时，保留 General Session、Chat、TUI 和 PTY，暂停 Space Control；修复操作由用户在诊断中心点击确认，恢复后自动重新探测，不重启 sidecar。
 - **离线输入隔离**：`runtime.status === "offline"` 时，Shell 在顶层显示连接保护遮罩并将工作台表面设为 `inert`，阻断所有用户输入。恢复连接后自动解除隔离并保留当前现场。
 - **错误不抛 ErrorBoundary**：局部非阻塞错误（如 `locations` 接口拉取失败）严禁抛出至面板 ErrorBoundary 导致崩溃卸载。错误统一进入诊断队列，由状态栏居中显示并提供重试/清除入口。

@@ -38,37 +38,12 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 | `packages/ellamaka-desktop/` | Electron desktop app hosting ellamaka-app Workbench and local Ellamaka sidecar; see `packages/ellamaka-desktop/AGENTS.md` |
 | `docs/` | Project DESIGN, API contract, references, research, and plans |
 
-### Wopal Integration Modules
+### Wopal Integration
 
-| Module | Path | Responsibility |
-|--------|------|----------------|
-| CLI Adapter | `packages/opencode/src/wopal/cli-adapter.ts` | Effect service that executes the wopal CLI via ChildProcessSpawner with absolute path + argument array, parses the v1 capability envelope (`wopal.capability/v1`), and maps CLI error codes to Runtime domain errors (`SpaceControlUnavailable`, `CapabilityContractError`) |
-| CLI Contract | `packages/opencode/src/wopal/cli-contract.ts` | Global CLI health and repair service. Checks version compatibility of `$WOPAL_HOME/bin/wopal`, performs user-confirmed update or install recovery, and re-probes after repair |
-| CLI Schema | `packages/opencode/src/wopal/cli-schema.ts` | CLI envelope, data schema (SpaceEntry, ProjectEntry, DirectoryEntry), Runtime domain errors, and stable error codes (`StableErrorCode`) |
-| SpaceRegistry | `packages/opencode/src/wopal/space-registry.ts` | Non-authoritative read-through Runtime cache. Obtains Space list, project list, and directory search results via the CLI adapter; provides `refreshSpaces`, `getSpaces`, `refreshProjects`, `searchDirectories` |
-| Session Provisioner | `packages/opencode/src/workbench/session-provisioner.ts` | Controlled session creation. `provisionGeneral` creates a unique directory under `$WOPAL_HOME/general_tasks/`; `provisionSpace` accepts only registered Spaces and safe relative directories, rejecting traversal attacks and unknown Spaces |
-| Session Projection | `packages/opencode/src/workbench/session-projection.ts` | Session tree projection. Reads all Session data from the Runtime database, grouped by registered Space; sessions created by external TUIs appear naturally in the projection |
-| Directory Health | `packages/opencode/src/workbench/session-directory-health.ts` | Directory health check. Returns `healthy`, `missing`, or `unavailable`; directory failure does not delete the Session |
-| Workbench API | `packages/opencode/src/server/routes/instance/httpapi/groups/workbench.ts` | Workbench HttpApi route group. `POST /workbench/sessions` creates a controlled session; `GET /workbench/session-groups` returns the full session projection with directory health |
-| Workbench Handler | `packages/opencode/src/server/routes/instance/httpapi/handlers/workbench.ts` | Workbench endpoint handler that translates HTTP requests into domain service calls, returning Session responses with `directoryHealth` |
+Wopal capabilities enter the engine through two module groups in `packages/opencode/src/`: `wopal/` (CLI adapter, contract, schema, SpaceRegistry) and `workbench/` (session provisioning, session projection, directory health); their HTTP surface lives in the `workbench` and `wopal-space` HttpApi groups.
 
-### Test Locations
-
-| Test File | Coverage |
-|----------|----------|
-| `packages/opencode/test/server/wopal-cli-adapter.test.ts` | CLI adapter protocol parsing, error mapping, schema validation, SpaceRegistry integration |
-| `packages/opencode/test/server/wopal-space-overview.test.ts` | WopalSpace grouping logic (project root session, subdirectory, worktree attribution) |
-| `packages/opencode/test/server/workbench-session-api.test.ts` | Session provisioner, projection, directory health service-level tests |
-
-### HTTP API Ownership
-
-| API Domain | HTTP Method | Path | Owner |
-|--------|-----------|------|-------|
-| Workbench | POST | `/workbench/sessions` | `SessionProvisioner` + `SessionDirectoryHealth` |
-| Workbench | GET | `/workbench/session-groups` | `SessionProjection` + `SessionDirectoryHealth` |
-| WopalSpace | GET | `/wopal-space/spaces` | `SpaceRegistry` (via CLI adapter) |
-| Global | GET | `/global/health` | `CliContract` + Runtime health |
-| Global | POST | `/global/cli/repair` | `CliContract`, invoked by user-confirmed Workbench repair action |
+- Session provisioning accepts only registered Spaces and safe relative directories (traversal and unknown Spaces are rejected); a failed directory never deletes the Session.
+- Endpoint behavior and error semantics are owned by [API-CONTRACT](./docs/API-CONTRACT.md); integration tests live in `packages/opencode/test/server/` (`wopal-cli-adapter`, `wopal-space-overview`, `workbench-session-api`).
 
 ## Development Commands
 
@@ -141,8 +116,6 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - **Contract discipline**: contracts are self-owned inside `@wopal/ellamaka-cordis` (shapes borrowed from dsh; never import dsh contract packages or track rc releases); external plugins mount only after passing contract conformance smoke tests (see the adoption boundary in [tool container design](./docs/DESIGN-ellamaka-tools.md))
 - **Test gate**: the bridge package's own tests live in `packages/ellamaka-cordis/test/`; cross-package behavior is carried by the opencode-side `test/cli/serve/dsh-mount.test.ts`, `test/cli/cmd/tui/dsh-mount.test.ts`, `test/server/dsh-single-port.test.ts`, and peers; bridge package changes keep those tests green
 - **Event-log folds are LAST-wins**: dsh session events (`sandbox/mode`, `approval/policy`) fold with the last event winning. "Restore the default" requires appending the default value explicitly; "equal to default" and "not chosen" are different semantics and must never share a code path (see the approval bridge section and its fold invariant in [tool container design](./docs/DESIGN-ellamaka-tools.md)). A test that asserts "same value appends nothing" pins the wrong semantics unless the log carries no prior overrides.
-- **Dependency manifest is generated, never hand-edited**: `packages/ellamaka-cordis/package.json` dependencies are the only edit source for DSH direct dependency versions. The build derives `dsh-runtime-manifest.json` and resolves `dsh-runtime-lock.json` from it. Never maintain a second hand-written manifest, and never resolve the dependency tree at runtime. Upgrade flow: change versions, `bun install`, build.
-- **Bridge additions stay additive**: new bridges arrive as new files or wrappers, so deleting the bridge is a complete rollback. Never restructure upstream files to make room for a bridge.
 - **Host never repairs the live dsh home**: closure materialization is the Runtime Manager's job at startup. A missing or corrupt closure triggers automatic materialization. Never ask the user to run a repair script, and never hand-edit `$WOPAL_HOME/dsh` content to fix a startup failure.
 - **Bun host compatibility gate**: the released `ellamaka serve` runs as a single Bun process. User plugins must not require Node private module loaders or `--expose-internals`. `plugin add` completes a static dependency scan and an isolated mount precheck before writing the profile declaration or touching a running container; an incompatible plugin is rejected with an actionable diagnostic. Never fake `loader.internal`, switch to Node, or degrade the whole host to work around it. The official Node-only `cordis-plugin-hmr` is a host-side exception: the Bun path uses the Bridge's HMR adapter instead, and that exception never transfers to third-party plugins.
 - **Plugin installation uses no external toolchain**: the installer never forwards to pnpm or npm. It reuses the Runtime Manager's pacote download and registry speed-probe, and resolves user plugin trees with the built-in minimal resolver at runtime.
@@ -190,7 +163,7 @@ When diagnosing serve, TUI, or sidecar behavior, widen output through the log le
 - Code changes follow TDD: write a failing test first, then implement code to make it pass.
 - Run `bun run lint` before committing (repo-wide pre-existing warnings are tolerated as a baseline). Every file you touch must pass `bunx oxlint --deny-warnings <files>` (`<files>` = your changed files, e.g. `git diff --name-only HEAD~1 | grep -E '\.tsx?$' | xargs bunx oxlint --deny-warnings`): no new warning in any changed file, regardless of the repo-wide warning count.
 - Format touched files with `bunx prettier --write <files>`; `bunx prettier --check --ignore-unknown <files>` must pass.
-- 在修改任何 TypeScript 代码或添加新文件后，必须自动运行 `bun run typecheck`（或对应 package 的 typecheck），确保零 TypeScript 类型错误。
+- After modifying any TypeScript code or adding new files, run `bun run typecheck` (or the corresponding package's typecheck) and ensure zero TypeScript type errors.
 - Avoid mocks as much as possible; test real implementations, do not duplicate logic into tests.
 - Tests must run from the corresponding package directory, never from repo root.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.

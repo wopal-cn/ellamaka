@@ -38,37 +38,12 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 | `packages/ellamaka-desktop/` | Electron 桌面应用，承载 ellamaka-app Workbench 和本地 Ellamaka sidecar；内部规则见 `packages/ellamaka-desktop/AGENTS.md` |
 | `docs/` | project DESIGN、API 契约、references、research 和 plans |
 
-### Wopal 集成模块
+### Wopal 集成
 
-| 模块 | 路径 | 职责 |
-|------|------|------|
-| CLI Adapter | `packages/opencode/src/wopal/cli-adapter.ts` | Effect 服务，通过 ChildProcessSpawner 以绝对路径+参数数组执行 wopal CLI，解析 v1 capability envelope（`wopal.capability/v1`），将 CLI 错误码映射为 Runtime 领域错误（`SpaceControlUnavailable`、`CapabilityContractError`） |
-| CLI Contract | `packages/opencode/src/wopal/cli-contract.ts` | 全局 CLI 健康与修复服务。检查 `$WOPAL_HOME/bin/wopal` 的版本兼容性，提供用户确认后的更新或安装恢复，并在修复后重新探测 |
-| CLI Schema | `packages/opencode/src/wopal/cli-schema.ts` | CLI envelope、data schema（SpaceEntry、ProjectEntry、DirectoryEntry）、Runtime 领域错误与稳定错误码（`StableErrorCode`）定义 |
-| SpaceRegistry | `packages/opencode/src/wopal/space-registry.ts` | 非权威读穿式 Runtime 缓存。通过 CLI adapter 获取 Space 列表、项目列表和目录搜索结果，提供 `refreshSpaces`、`getSpaces`、`refreshProjects`、`searchDirectories` 方法 |
-| Session Provisioner | `packages/opencode/src/workbench/session-provisioner.ts` | 受控会话创建。`provisionGeneral` 在 `$WOPAL_HOME/general_tasks/` 下创建唯一目录；`provisionSpace` 只接受已登记 Space 和安全的相对目录，拒绝遍历攻击和未知 Space |
-| Session Projection | `packages/opencode/src/workbench/session-projection.ts` | 会话树投影。从 Runtime 数据库全量读取 Session 数据，按已登记 Space 归组；外部 TUI 创建的 Session 自然出现在投影中 |
-| Directory Health | `packages/opencode/src/workbench/session-directory-health.ts` | 目录健康检查。返回 `healthy`、`missing` 或 `unavailable`；目录失效不删除 Session |
-| Workbench API | `packages/opencode/src/server/routes/instance/httpapi/groups/workbench.ts` | Workbench HttpApi 路由组。`POST /workbench/sessions` 创建受控会话；`GET /workbench/session-groups` 返回含目录健康的全量 Session 投影 |
-| Workbench Handler | `packages/opencode/src/server/routes/instance/httpapi/handlers/workbench.ts` | Workbench 端点 handler，将 HTTP 请求转换为领域服务调用，返回含 `directoryHealth` 的 Session 响应 |
+Wopal 能力经 `packages/opencode/src/` 下的两个模块组进入引擎：`wopal/`（CLI adapter、contract、schema、SpaceRegistry）与 `workbench/`（会话 provision、会话投影、目录健康）；其 HTTP 面由 `workbench` 与 `wopal-space` 两个 HttpApi 组承载。
 
-### 测试位置
-
-| 测试文件 | 覆盖范围 |
-|----------|----------|
-| `packages/opencode/test/server/wopal-cli-adapter.test.ts` | CLI adapter 协议解析、错误映射、Schema 验证、SpaceRegistry 集成 |
-| `packages/opencode/test/server/wopal-space-overview.test.ts` | WopalSpace 空间分组逻辑（project root session、子目录、worktree 归属） |
-| `packages/opencode/test/server/workbench-session-api.test.ts` | Session provisioner、projection、directory health 服务级测试 |
-
-### HTTP API 所有权
-
-| API 域 | HTTP 方法 | 路径 | Owner |
-|--------|-----------|------|-------|
-| Workbench | POST | `/workbench/sessions` | `SessionProvisioner` + `SessionDirectoryHealth` |
-| Workbench | GET | `/workbench/session-groups` | `SessionProjection` + `SessionDirectoryHealth` |
-| WopalSpace | GET | `/wopal-space/spaces` | `SpaceRegistry`（通过 CLI adapter） |
-| Global | GET | `/global/health` | `CliContract` + Runtime health |
-| Global | POST | `/global/cli/repair` | `CliContract`，由用户确认的 Workbench 修复操作调用 |
+- 会话 provision 只接受已登记 Space 和安全的相对目录（路径穿越与未知 Space 一律拒绝）；目录失效不删除 Session。
+- 端点行为与错误语义归 [API-CONTRACT](./docs/API-CONTRACT.md) 所有；集成测试位于 `packages/opencode/test/server/`（`wopal-cli-adapter`、`wopal-space-overview`、`workbench-session-api`）。
 
 ## Development Commands
 
@@ -108,6 +83,8 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - 路径表达领域资源与自然从属关系。查询条件属于 query 参数。文件系统、Shell、CLI 执行和目录 provision 由所属领域服务拥有，不形成浏览器可直接调用的通用原语。
 - SDK 由 Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts` 自动生成。应用代码使用生成客户端；`packages/sdk/js/src/v2/gen/**` 由生成管线拥有。
 - 新增或修改端点必须测试 schema、成功结果、领域错误和 middleware 边界，重新生成 SDK，并同步更新相关 DESIGN 文档。
+- **SDK 重新生成是全有或全无**：任何 payload schema 变更后，必须从 `packages/sdk/js` 运行 `bun script/build.ts`（禁止手改 gen 文件）。一个字段只有当 `types.gen.ts` 和 `sdk.gen.ts` 同时包含才算落地——仅类型层存在不是证据；陈旧的 `buildClientParams` 映射会在编码期静默丢弃字段且无报错（见 [ellamaka 设计](./docs/DESIGN.md) 的 SDK generation 一节）。用 `rg "<fieldName>" src/v2/gen/` 验证命中两个文件，或 diff 重新生成的输出。
+- **权限规则：显式仅靠位置胜过通配**：求值按合并规则集 LAST-wins，且一个 agent 的 frontmatter 可能来自多份副本（`~/.wopal` home + space `.wopal`）按加载顺序深度合并。frontmatter 不得声明 `"*": allow` 式通配（引擎默认已提供通配兜底），只允许显式收窄。修改权限 frontmatter 后，通过 `GET /agent` 在活实例上验证显式规则位于合并列表中任何通配之后（见 [ellamaka 设计](./docs/DESIGN.md) 的 permission merge 一节）。
 
 ### Workbench 前端开发
 
@@ -132,13 +109,13 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 
 ### Cordis 开发约束
 
-- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本以该包 `package.json` 为准，不在文档中复述）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）禁止被主线代码 import、禁止运行时加载、禁止作为插件挂载——required peer 仅供类型解析（如 SessionId）不算违反，以运行时加载探针为零为验收（`forbidden-load.test.ts`）——见 [ellamaka 主设计](./docs/DESIGN.md)
+- **依赖边界**：`@deepseek-ai/cordis` 只出现在 `@wopal/ellamaka-cordis` 包内（版本以该包 `package.json` 为准，不在文档中复述）；dsh 深耦合包（agent-loop/session/session-query/compaction/subagent/schedule）暂不进入主线运行时（见 [ellamaka 主设计](./docs/DESIGN.md) 现行约定——PoC 阶段无红线，变更需用户+Wopal 联合确认）；运行时加载探针（`forbidden-load.test.ts`）保留为观测工具
 - **桥接形态**：Effect↔async 桥接一律遵守 [ellamaka 主设计](./docs/DESIGN.md) 中的桥接 API 规范（`Effect.forkIn(scope)(work)` 持有 work Fiber；中断经 `runtime.runFork(Fiber.interrupt(fiber))`；禁止 `runPromise` 驱动长任务）
 - **契约纪律**：契约在 `@wopal/ellamaka-cordis` 内自持（形状借鉴 dsh，不 import dsh 契约包、不跟随 rc 演进）；外部插件须通过契约符合性冒烟测试方可挂载（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md)）
 - **测试门禁**：桥接包自带测试放 `packages/ellamaka-cordis/test/`；跨包行为由 opencode 侧的 `test/cli/serve/dsh-mount.test.ts`、`test/cli/cmd/tui/dsh-mount.test.ts`、`test/server/dsh-single-port.test.ts` 等承接；桥接包变更保持这些测试零回归
 - **事件折叠为最后者生效**：dsh 会话事件（`sandbox/mode`、`approval/policy`）按最后一条折叠。「恢复默认」必须显式追加默认值；「等于默认」与「未选择」是两种语义，绝不共用代码路径（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md) 的审批桥接与折叠不变量）。断言「值相同则不追加」的测试锁死了错误语义，除非日志中本就没有任何覆盖。
-- **依赖清单是构建产物**：`packages/ellamaka-cordis/package.json` 的 dependencies 是 DSH 直接依赖版本的唯一编辑源。构建从中派生 `dsh-runtime-manifest.json` 并解析出 `dsh-runtime-lock.json`。禁止维护第二份手工清单，禁止在运行时解析依赖树。升级流程：改版本 → `bun install` → 构建。
-- **桥接只做加法**：新桥接一律以新增文件或包装层落地，删除桥接即完整回滚。禁止为了腾位置而重构上游文件。
+- **活家目录隔离（dsh in ellamaka）**：引擎运行期间，引擎进程之外的任何东西不得写入 `$WOPAL_HOME/dsh/home/profiles/` 之下——包括内容未变的"幂等"写入（loader 的常驻重建以组合文件的 mtime/size 为键而非内容，同内容写入会与引擎竞态，可能触发 tool-cordis 注册冲突错误风暴）。会触碰 profile 文件的测试、dump 与诊断一律经注入对临时 home 运行（`dumpDshConfig`/`mountDshWeb` 接受 `dshHome`/`installAnchor`）；CLI 测试只断言定义或使用注入的临时 home，绝不触碰真实 `Global.Path.wopalHome`。引擎重启是用户的动作；宿主不修理活 home。插件安装区就是 profile 自己的 `node_modules/` + profile `package.json` 声明（官方语义）——旧 `plugins/` 安装区与 `installed.json` 存储已退役（遗留 store 文件在下次 CLI 运行时一次性迁入 profile 清单）。
+- **工具链隔离——dsh profiles vs wopal root**：dsh profile 插件由 Bun installer 安装进各 profile 自己的 `node_modules/`。官方 `dsh` CLI 是 pnpm 壳；任何命令都不得指向 `$WOPAL_HOME/dsh/home`——wopal root 下的 `pnpm-workspace.yaml` 会让 pnpm 上爬把 `$WOPAL_HOME` 当作 workspace root，列出 root 依赖而非 profile 插件，并在 add/remove 时摧毁 Bun 管理的拓扑（2026-09-09 实测）。`$WOPAL_HOME` root 依赖只归 npm/arborist 工具链所有（`package.json` + `package-lock.json`）；禁止在 wopal root 运行 `pnpm install` 或 `bun install`——它会覆盖 node_modules 布局，产生三锁文件污染（同一依赖集上 npm/pnpm/bun 三锁并存，2026-09-09 实测）。
 - **宿主不修理运行中的 dsh home**：闭包物化归 Runtime Manager 在启动时完成，闭包缺失或损坏自动触发。禁止要求用户运行修复脚本，禁止手工编辑 `$WOPAL_HOME/dsh` 内容来修启动故障。
 - **Bun 宿主兼容门禁**：发布态 `ellamaka serve` 是单 Bun 进程。用户插件不得要求 Node 私有模块加载器或 `--expose-internals`。`plugin add` 必须在写入 profile 声明与触碰运行中容器之前完成静态依赖扫描与隔离挂载预检；不兼容插件拒绝安装并给出可操作诊断。禁止伪造 `loader.internal`、禁止切换到 Node、禁止降级整台宿主来绕过。官方 Node 专用的 `cordis-plugin-hmr` 是宿主侧例外：Bun 路径以 Bridge 的 HMR 适配器替代，该例外不得转嫁给第三方插件。
 - **插件安装零外部工具链**：安装器禁止转发 pnpm 或 npm。它复用 Runtime Manager 的 pacote 下载与 registry 测速基建，用户插件的依赖树由内置最小解析器在运行时解析。
@@ -158,12 +135,35 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - **结构化**：上下文用 `extra` 字段携带（`log.info("reverting", { file, hash })`），禁止拼接进 message；message 用固定动词短语便于检索
 - **禁止静默吞错**：catch 后必须打日志（error 或 warn），不得空 catch
 - **级别**：默认 `INFO`；`debug` 仅诊断用，生产模式不输出
+- **Trace 按类别 opt-in**：`TRACE` 是第五级，低于 `DEBUG`。它承载正常运行绝不输出的高容量生命周期记录。经 `log.trace(category, message, extra)` 输出（Effect 代码：`EffectLogger.create(...).trace(...)`）。仅有级别不会输出任何记录——只有类别被显式选中时才写入。类别是封闭注册表（`Log.TraceCategory`）：`bus`、`permission`、`session`、`llm`、`plugin`、`io`。新增类别必须同时有调用点和 LOGGING.md 的一行记录，禁止例外。
+- **Trace 不承载 payload 或用户数据**：bus trace 只记录事件类型；permission trace 记录权限名、决策 `action`（`allow|ask|deny`）、`escalated` 标记、计数与回复结果；session/LLM trace 记录步骤计数与 runtime/model 标识符。绝不写入事件 payload、prompt 或消息内容、tool 参数、求值后的 pattern、命令、路径、session id 或 pending request 内容。显式 `--log-level` 永远压过 `--trace` 提升
+- **Authority**：[packages/opencode/LOGGING.md](./packages/opencode/LOGGING.md) 是 serve 日志策略的详细版（channel、DSH 分类、trace 类别）。任何日志行为修改必须同步更新它
+
+### 调试日志
+
+诊断 serve、TUI 或 sidecar 行为时，通过日志级别放宽输出，而不是往代码里加临时记录。TRACE 总是带类别名；`--log-level TRACE` 不带 `--trace` 是被有意拒绝的。
+
+| 场景 | 命令 | 说明 |
+|----------|---------|-------|
+| 列出 trace 类别 | `ellamaka serve --trace` | 打印注册表后退出 |
+| 默认（安静、结构化） | `ellamaka serve` | 只有 `INFO`、warning 与失败 |
+| 权限 + 事件生命周期 | `ellamaka serve --trace permission,bus` | 级别提升为 `TRACE`；其余类别保持静默 |
+| Session/LLM 循环细节 | `ellamaka serve --trace session,llm` | 历史上刷爆日志的两个循环 |
+| 插件与 I/O 启动 | `ellamaka serve --trace plugin,io` | 插件加载、MCP 连接、LSP/format 活动 |
+| 全部类别（逃生口） | `ellamaka serve --trace all` | 必须显式；没有隐式 all |
+| 实现诊断 | `ellamaka serve --log-level DEBUG` | 有界，仍脱敏 |
+| 压过 trace 提升 | `ellamaka serve --log-level INFO --trace bus` | 显式级别生效；不输出 `TRACE` 记录 |
+
+- 日志位置：非 dev CLI 写 `serve-*` / `tui-*` / `sidecar-*` 到 `$WOPAL_HOME/logs/`；dev 模式写 `.wopal-space/logs/dev/<scope>/`。清理时整体保留最新 10 个带时间戳的文件。
+- DSH 只有四级，宿主 `TRACE` 在边界映射为 DSH `DEBUG`；DSH 日志文件是 `$WOPAL_HOME/logs/dsh-runtime.log` 和 `dsh-plugins.log`。
+- 若某类别的记录缺失，先确认类别在 selector 中（显式 `--log-level` 压过 `--trace`，未知类别启动即被拒绝）。
 
 ## Testing
 
 - 代码类变更遵循 TDD：先写能失败的测试，再实现代码使其通过。
 - 提交前运行 `bun run lint`（全仓存量 warning 作为 baseline 容忍）。**本次改动到的文件必须通过 `bunx oxlint --deny-warnings <files>`**（`<files>` 传改动文件列表，如 `git diff --name-only HEAD~1 \| grep -E '\.tsx?$' \| xargs bunx oxlint --deny-warnings`）：不得为改动文件新增任何 warning，与全仓 warning 总数无关。
 - 改动文件用 `bunx prettier --write <files>` 格式化；`bunx prettier --check --ignore-unknown <files>` 必须通过。
+- 修改任何 TypeScript 代码或新增文件后，必须运行 `bun run typecheck`（或对应 package 的 typecheck），确保零 TypeScript 类型错误。
 - 尽量避免 mocks；测试真实实现，不要把实现逻辑复制进测试。
 - 测试从对应 package 目录运行，不要从 repo root 运行。
 - 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明：`WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
@@ -187,6 +187,6 @@ Agent 无法自动验证的行为（GUI 交互、引导流程、桌面壳）通�
 ## User-Supplied Rules
 
 - JS SDK 重新生成：`./packages/sdk/js/script/build.ts`。
-- 本仓库默认分支是 `main`。`dev` 分支仅跟踪 upstream OpenCode 的 `dev`，用于 merge 集成。
-- diff 基准使用 `main` 或 `origin/main`；`dev` 仅作 upstream-tracking。
+- 本仓库默认分支是 `main`。ellamaka 已停止跟踪 upstream OpenCode（2026-08-31）；`dev` 分支不再用于 upstream merge 集成。
+- diff 基准使用 `main` 或 `origin/main`。需要参考 upstream OpenCode 模块代码时，读取空间内的 `labs/ref-repos/opencode/`。
 - 优先自动执行明确请求；遇到缺少关键信息、安全风险或不可逆操作时先确认。

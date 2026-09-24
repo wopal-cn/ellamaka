@@ -1,3 +1,8 @@
+---
+name: opencode test rules
+description: Test fixtures and patterns for the opencode package test suite
+---
+
 # Test Fixtures Guide
 
 ## Temporary Directory Fixture

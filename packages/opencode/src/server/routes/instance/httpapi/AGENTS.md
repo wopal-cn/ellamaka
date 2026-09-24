@@ -1,3 +1,8 @@
+---
+name: httpapi route rules
+description: Effect HttpApi route patterns for instance endpoints, including streaming HTTP responses
+---
+
 # HttpApi Route Patterns
 
 Use `HttpApiBuilder.group(...)` for normal HTTP endpoints, including streaming HTTP responses such as server-sent events. Handlers should yield stable services once while building the handler layer, then close over those services in endpoint implementations.

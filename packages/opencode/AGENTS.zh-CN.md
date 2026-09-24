@@ -13,7 +13,6 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - Parent Rules: `../../AGENTS.md`
 - Test Rules: `test/AGENTS.md`
 - Server Test Rules: `test/server/AGENTS.md`
-- Instance Route Rules: `src/server/routes/instance/AGENTS.md`
 - HttpApi Route Rules: `src/server/routes/instance/httpapi/AGENTS.md`
 - Effect Migration Reference: `specs/effect/migration.md`
 
@@ -27,7 +26,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 |---|---|
 | `src/cli/` | CLI commands、TUI command entry 和 command-specific runtime glue |
 | `src/config/` | config schema、loading、merge、command/agent/plugin 配置与 wopal-space config hooks |
-| `src/server/` | Hono / Effect HttpApi server、routes、middleware 和 adapters |
+| `src/server/` | Effect HttpApi server、routes、middleware 和 adapters |
 | `src/session/` | session lifecycle、messages、events、retry/status 等 session domain logic |
 | `src/tool/` | tool definitions、permission-facing tool behavior 和 runtime execution surfaces |
 | `src/storage/` | database access、storage adapters 和 persisted runtime data |
@@ -55,10 +54,8 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 ## Implementation Rules
 
 - 遵循父级 `../../AGENTS.md` 的 Bun、TypeScript、WopalSpace mode、上游定制边界和验证规则。
-- 禁止用 `export namespace Foo { ... }` 组织模块；使用 flat top-level exports，并在文件底部 self-reexport，例如 `export * as Foo from "./foo"`。
+- 模块形态规则（namespace 禁用、self-reexport、barrel 禁用）遵循本文件底部 User-Supplied Rules。
 - 单文件模块名为 `index.ts` 时，self-reexport source 使用 `"."`，不要用 `"./index"`。
-- 多 sibling 目录不要添加 barrel `index.ts`；消费者直接 import 具体 sibling，例如 `@/session/retry`。
-- namespace-private helpers 保持为同文件 non-exported top-level declarations。
 - `src/config` 新增模块时遵循现有 self-export pattern，例如 `export * as ConfigAgent from "./agent"`。
 - Drizzle schema 位于 `src/**/*.sql.ts`。
 - Drizzle table 和 column 使用 snake_case；join columns 使用 `<entity>_id`；indexes 使用 `<table>_<column>_idx`。
@@ -83,9 +80,6 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - 已在 Effect 代码中时，优先使用 `Path.Path`、`Config`、`Clock`、`DateTime`。
 - background loops 或 scheduled tasks 使用 `Effect.repeat` 或 `Effect.schedule`，并用 `Effect.forkScoped` 挂到 layer scope。
 - 多个并发调用需要共享同一个 in-flight computation 时使用 `Effect.cached`，不要手写 `Fiber | undefined` 或 `Promise | undefined` 缓存。See `specs/effect/migration.md` for the full pattern.
-- native addon callbacks 需要读取 `Instance.directory` 或调用 `Bus.publish` 时，使用 `Instance.bind(fn)` 捕获并恢复 Instance AsyncLocalStorage context。
-- `setTimeout`、`Promise.then`、`EventEmitter.on` 或 Effect fibers 不需要 `Instance.bind`。
-- 修改 `src/server/routes/instance/` 时保持 legacy Hono routes 与 Effect HttpApi 行为对齐；详细规则见对应子目录 `AGENTS.md`。
 - 修改 `src/server/routes/instance/httpapi/` 时遵循 HttpApi route patterns；不要在 request handler 中重建 stable layers。
 
 ## Testing
@@ -104,7 +98,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - 测试可用 `TestClock` 和 `TestConsole` 时使用 `it.effect(...)`。
 - 需要临时目录时优先使用 `tmpdir`、`tmpdirScoped`、`provideTmpdirInstance` 或 `provideTmpdirServer` from `test/fixture/fixture.ts`。
 - Server 和 HttpApi middleware tests 遵循 `test/server/AGENTS.md`，优先 focused middleware tests 和 Effect HTTP stack。
-- 修改 legacy Hono / Effect HttpApi 路由时，添加或更新 parity coverage，例如 `test/server/httpapi-bridge.test.ts` 或 focused HttpApi tests。
+- 修改 legacy 路由或为 Effect HttpApi 补充 parity coverage 时，在 `test/server/` 下添加或更新测试（`test/server/httpapi-*.test.ts` 或 focused HttpApi tests）。
 - 修改 database schema 时生成 migration，并添加或更新 migration tests。
 - 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明 `WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
 - Windows 的 Git 克隆通常使用 `core.symlinks=false`；插件解析器必须把内容为受限相对源码路径的扁平化 symlink 占位文件解析到同一插件目录内的真实文件，并拒绝目录越界目标。
@@ -158,18 +152,3 @@ import { SessionStatus } from "@/session/status"
 ```
 
 Barrels in multi-sibling directories force every import through the barrel to evaluate every sibling, which defeats tree-shaking and slows module load.
-
-### Instance.bind — ALS for native callbacks
-
-`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
-
-Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish` or anything that reads `Instance.directory`.
-
-You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
-
-```typescript
-const cb = Instance.bind((err, evts) => {
-  Bus.publish(MyEvent, { ... })
-})
-nativeAddon.subscribe(dir, cb)
-```

@@ -11,7 +11,6 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 - Parent Rules: `../../AGENTS.md`
 - Test Rules: `test/AGENTS.md`
 - Server Test Rules: `test/server/AGENTS.md`
-- Instance Route Rules: `src/server/routes/instance/AGENTS.md`
 - HttpApi Route Rules: `src/server/routes/instance/httpapi/AGENTS.md`
 - Effect Migration Reference: `specs/effect/migration.md`
 
@@ -25,7 +24,7 @@ This is ellamaka's main engine package. It carries the OpenCode inherited runtim
 |---|---|
 | `src/cli/` | CLI commands, TUI command entry, and command-specific runtime glue |
 | `src/config/` | Config schema, loading, merge, command/agent/plugin config, and wopal-space config hooks |
-| `src/server/` | Hono / Effect HttpApi server, routes, middleware, and adapters |
+| `src/server/` | Effect HttpApi server, routes, middleware, and adapters |
 | `src/session/` | Session lifecycle, messages, events, retry/status session domain logic |
 | `src/tool/` | Tool definitions, permission-facing tool behavior, and runtime execution surfaces |
 | `src/storage/` | Database access, storage adapters, and persisted runtime data |
@@ -53,10 +52,8 @@ All commands run from `packages/opencode`.
 ## Implementation Rules
 
 - Follow parent `../../AGENTS.md` for Bun, TypeScript, WopalSpace mode, upstream customization boundaries, and verification rules.
-- Do not use `export namespace Foo { ... }`; use flat top-level exports with a self-reexport at the bottom: `export * as Foo from "./foo"`.
+- Module shape rules (namespace ban, self-reexport, barrel ban) follow the User-Supplied Rules at the bottom of this file.
 - For `index.ts` single-file modules, self-reexport with `"."`, not `"./index"`.
-- Do not add barrel `index.ts` in multi-sibling directories; consumers import specific siblings directly, e.g. `@/session/retry`.
-- Keep namespace-private helpers as non-exported top-level declarations in the same file.
 - In `src/config`, follow the existing self-export pattern when adding new modules: `export * as ConfigAgent from "./agent"`.
 - Drizzle schemas live in `src/**/*.sql.ts`.
 - Drizzle tables and columns use snake_case; join columns use `<entity>_id`; indexes use `<table>_<column>_idx`.
@@ -81,9 +78,6 @@ All commands run from `packages/opencode`.
 - When already in Effect code, prefer `Path.Path`, `Config`, `Clock`, `DateTime`.
 - For background loops or scheduled tasks, use `Effect.repeat` or `Effect.schedule` with `Effect.forkScoped` in the layer definition.
 - Use `Effect.cached` when multiple concurrent callers share one in-flight computation; do not hand-roll `Fiber | undefined` or `Promise | undefined` caches. See `specs/effect/migration.md`.
-- For native addon callbacks needing `Instance.directory` or `Bus.publish`, use `Instance.bind(fn)` to capture and restore Instance AsyncLocalStorage context.
-- `setTimeout`, `Promise.then`, `EventEmitter.on`, and Effect fibers do not need `Instance.bind`.
-- When modifying `src/server/routes/instance/`, keep legacy Hono routes aligned with Effect HttpApi behavior; see subdirectory `AGENTS.md`.
 - When modifying `src/server/routes/instance/httpapi/`, follow HttpApi route patterns; do not rebuild stable layers in request handlers.
 
 ## Testing
@@ -103,9 +97,10 @@ All commands run from `packages/opencode`.
 - Use `it.effect(...)` when `TestClock` and `TestConsole` suffice.
 - Prefer `tmpdir`, `tmpdirScoped`, `provideTmpdirInstance`, or `provideTmpdirServer` from `test/fixture/fixture.ts` for temp directories.
 - Server and HttpApi middleware tests follow `test/server/AGENTS.md`; prefer focused middleware tests and the Effect HTTP stack.
-- When modifying legacy Hono / Effect HttpApi routes, add or update parity coverage (e.g. `test/server/httpapi-bridge.test.ts` or focused HttpApi tests).
+- When modifying legacy routes or adding Effect HttpApi parity coverage, add or update tests under `test/server/` (`test/server/httpapi-*.test.ts` or focused HttpApi tests).
 - When modifying database schema, generate a migration and add or update migration tests.
 - After modifying CLI/runtime/config/plugin/agent/TUI space mode, verify or document: `WOPAL_SPACE` flag, `.wopal/config/settings.*`, TUI settings, plugin loading, theme loading.
+- Windows Git clones typically use `core.symlinks=false`; the plugin resolver must resolve flattened symlink placeholder files (whose content is a constrained relative source path) to the real file inside the same plugin directory, and reject directory-escape targets.
 
 ## User-Supplied Rules
 
@@ -156,18 +151,3 @@ import { SessionStatus } from "@/session/status"
 ```
 
 Barrels in multi-sibling directories force every import through the barrel to evaluate every sibling, which defeats tree-shaking and slows module load.
-
-### Instance.bind — ALS for native callbacks
-
-`Instance.bind(fn)` captures the current Instance AsyncLocalStorage context and restores it synchronously when called.
-
-Use it for native addon callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, etc.) that need to call `Bus.publish` or anything that reads `Instance.directory`.
-
-You do not need it for `setTimeout`, `Promise.then`, `EventEmitter.on`, or Effect fibers.
-
-```typescript
-const cb = Instance.bind((err, evts) => {
-  Bus.publish(MyEvent, { ... })
-})
-nativeAddon.subscribe(dir, cb)
-```

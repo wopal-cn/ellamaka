@@ -3,11 +3,11 @@ name: ellamaka-desktop
 description: Ellamaka Electron desktop application — v1.15.13 base from OpenCode packages/desktop
 ---
 
-# ellamaka-desktop
+# Agent Development Rules
 
 ## Upstream Baseline
 
-- **Source**: OpenCode `packages/desktop` at commit [`385cb694419f98103af0e8fc6187ddcbcbb6eecb`](https://github.com/anomalyco/opencode/commit/385cb694419f98103af0e8fc6187ddcbcbb6eecb) (v1.15.13)
+- **Source**: OpenCode `packages/desktop` at commit `385cb694419f98103af0e8fc6187ddcbcbb6eecb` (v1.15.13)
 - **Electron**: 41.2.1
 - **Sync strategy**: Selective backport of security/lifecycle fixes only. No cross-version wholesale upgrade. All changes tracked via git diff against baseline.
 

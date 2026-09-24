@@ -1,3 +1,8 @@
+---
+name: opencode server test rules
+description: Server and HttpApi middleware test patterns for test/server
+---
+
 # Server Test Guide
 
 Use these patterns for server and HttpApi middleware tests in this directory.
