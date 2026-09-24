@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { planLayer } from "./run-tests"
+import { planLayer } from "./run-tests-root"
 
 describe("planLayer layer x package mapping", () => {
   test("unit + opencode maps to test:unit in opencode dir", () => {

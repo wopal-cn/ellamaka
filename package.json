@@ -10,16 +10,15 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "lint": "oxlint",
     "typecheck": "turbo typecheck",
-    "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
     "random": "echo 'Random script'",
     "sso": "aws sso login --sso-session=opencode --no-browser",
     "test": "echo 'do not run tests from root' && exit 1",
     "publish:npm": "bun run packages/ellamaka-release/src/cli/publish-npm.ts",
-    "test:unit": "bun run script/run-tests.ts --layer unit --package all",
-    "test:integration": "bun run script/run-tests.ts --layer integration --package all",
-    "test:e2e": "bun run script/run-tests.ts --layer e2e --package all"
+    "test:unit": "bun run packages/opencode/script/run-tests-root.ts --layer unit --package all",
+    "test:integration": "bun run packages/opencode/script/run-tests-root.ts --layer integration --package all",
+    "test:e2e": "bun run packages/opencode/script/run-tests-root.ts --layer e2e --package all"
   },
   "workspaces": {
     "packages": [

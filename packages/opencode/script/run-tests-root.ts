@@ -58,7 +58,9 @@ export function planLayer(layer: Layer, pkg: PackageName): PlannedCommand[] {
 }
 
 function packageDir(pkg: ConcretePackage): string {
-  return join(import.meta.dir, "..", "packages", pkg)
+  // script/ lives two levels below packages/ (packages/opencode/script), so
+  // sibling package dirs are two ups + pkg.
+  return join(import.meta.dir, "..", "..", pkg)
 }
 
 async function main() {
