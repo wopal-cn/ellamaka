@@ -44,7 +44,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 | Dev | `bun run dev` | 本地运行 package dev entry |
 | Typecheck | `bun typecheck` | 修改 TypeScript 后；不要直接运行 `tsc` |
 | Test（默认子集） | `bun run test:unit` | 修改 package behavior 后（只跑快速单元测试，约 60s） |
-| Test（重目录集成） | `bun run test:integration` | 修改 server/session/cli/snapshot/project/tool/control-plane 相关行为后 |
+| Test（重目录集成） | `bun run test:integration` | 修改集成目录相关行为后（目录清单见下方 Testing 一节，以 `INTEGRATION_DIRS` 为准） |
 | Test（e2e） | `bun run test:e2e` | 修改真实 provider 链路 / 浏览器 e2e 测试后 |
 | Test（全量回归） | `bun run test:all` | 完整回归（等价 `bun test --timeout 30000 --force-exit`） |
 | Build | `bun run build` | 修改 runtime、CLI、package build 或发布相关代码后 |
@@ -90,10 +90,11 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 
 ## Testing
 
-- 测试子集由 `script/run-tests.ts` 按层展开，`package.json` 提供四个入口：`test:unit`（默认开发子集，扫 `test/` 全部子目录 + 顶层 `*.test.ts`，剔除集成目录与 `*-e2e.test.ts`）、`test:integration`（只跑 7 个集成目录：server/session/cli/snapshot/project/tool/control-plane）、`test:e2e`（只跑 `*-e2e.test.ts` 文件，递归）、`test:all`（全量回归）。日常开发默认用 `test:unit`；改到集成目录（server/session/cli/snapshot/project/tool/control-plane）相关代码时至少跑 `test:integration`；提交/合并前跑 `test:all` 回归。
+- 测试子集由 `script/run-tests.ts` 按层展开，`package.json` 提供四个入口：`test:unit`（默认开发子集，扫 `test/` 全部子目录 + 顶层 `*.test.ts`，剔除集成目录与 `*-e2e.test.ts`）、`test:integration`（只跑集成目录：server/session/cli/snapshot/project/tool/control-plane/plugin/file/pty/skill/reference/share/mcp/lsp/publish-smoke）、`test:e2e`（只跑 `*-e2e.test.ts` 文件，递归）、`test:all`（全量回归）。日常开发默认用 `test:unit`；改到集成目录相关代码时至少跑 `test:integration`；提交/合并前跑 `test:all` 回归。
 - e2e 文件遵循 `*-e2e.test.ts` 命名约定，通过 `pathIgnorePatterns` 从 `test:unit`/`test:integration` 隔离（CLI 值覆盖 bunfig，不合并），只在 `test:e2e` 下运行。不要将 e2e 文件移出所属 domain 目录。
 - 新增测试目录默认自动纳入 `test:unit`（扫描式）；若某目录属于集成（真实 I/O），把目录名加入 `script/run-tests.ts` 的 `INTEGRATION_DIRS` 常量，并在本文件集成目录清单同步。
 - 跨包编排：从 repo root 运行 `bun run test:unit|test:integration|test:e2e` 会通过根目录 `script/run-tests.ts` 在所有 package 上跑对应层；用 `--package <name>` 指定单个 package（如 `bun run test:unit --package opencode`）。
+- 测试提速用现成工具：`bun run bench:test`（全量基准）与 `bun run profile:test`（定位最慢测试文件，`TEST_PROFILE_GLOB`/`TEST_PROFILE_LIMIT` 收窄范围）。判定提速成立以目标文件 3 次重跑的中位数为准——单次全量运行噪声大，混跑时单文件耗时可被放大数倍，不得据此下结论。
 - 代码类变更遵循 TDD：先写能失败的测试，再实现代码使其通过。
 - 测试从 `packages/opencode` 运行；不要从 repo root 运行测试。
 - 测试真实实现，避免 mocks；不要把实现逻辑复制进测试。

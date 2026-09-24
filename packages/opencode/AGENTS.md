@@ -42,7 +42,7 @@ This is ellamaka's main engine package. It carries the OpenCode inherited runtim
 | Dev | `bun run dev` | Local package dev entry |
 | Typecheck | `bun typecheck` | After TypeScript changes; never run `tsc` directly |
 | Test (default subset) | `bun run test:unit` | After behavior changes (fast unit subset, ~60s) |
-| Test (heavy integration) | `bun run test:integration` | After behavior changes in server/session/cli/snapshot/project/tool/control-plane |
+| Test (heavy integration) | `bun run test:integration` | After behavior changes in integration-dir code (dir list in Testing below; `INTEGRATION_DIRS` is the source of truth) |
 | Test (e2e) | `bun run test:e2e` | After changes to real provider-chain / browser e2e tests |
 | Test (full regression) | `bun run test:all` | Full regression (equivalent to `bun test --timeout 30000 --force-exit`) |
 | Build | `bun run build` | After runtime, CLI, or package build changes |
@@ -93,6 +93,7 @@ All commands run from `packages/opencode`.
 - New test directories are auto-included in `test:unit` (scan-based). If a directory is integration (real I/O), add its name to the `INTEGRATION_DIRS` constant in `script/run-tests.ts` and keep this file's integration-dir list in sync.
 - **The unit layer must stay fast and deterministic.** A unit test must not fork subprocesses (`Process.run`/`spawn`), watch the filesystem, run git, hit the network, or rely on real clocks/`it.live`. Tests that need live OS behavior belong in an integration directory — put the file in the matching `INTEGRATION_DIRS` directory (or add the directory to that constant) so it runs under `test:integration`, not on every unit pass. The one exception: a test that merely needs a temp directory (`tmpdir`/`it.instance`) is still a unit test.
 - Cross-package orchestration: from repo root, `bun run test:unit|test:integration|test:e2e` runs the matching layer across all packages via `script/run-tests.ts` (root). Use `--package <name>` to target a single package (e.g. `bun run test:unit --package opencode`).
+- Use the built-in tooling for test speedup work: `bun run bench:test` (full-suite benchmark) and `bun run profile:test` (locate slowest test files; narrow with `TEST_PROFILE_GLOB`/`TEST_PROFILE_LIMIT`). A speedup counts only if the target file's median across 3 repeated runs improves — a single full-suite run is noisy and can inflate a file's cost severalfold from mixed-scope contention, so never conclude from it alone.
 - Code changes follow TDD: write a failing test first, then implement to make it pass.
 - Run tests from `packages/opencode`; never from repo root.
 - Test real implementations; avoid mocks and do not duplicate logic into tests.
