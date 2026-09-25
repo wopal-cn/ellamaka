@@ -7,6 +7,7 @@
 > **Sibling DESIGNs**:
 >
 > - `../../wopal-cli/docs/DESIGN.md` — CLI 侧日志架构：空间感知路由的参照模型，以及 CLI 与引擎的日志边界
+> - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系：`wopal.logging.level` 与 `ELLAMAKA_LOG_LEVEL` 的统一定义
 >
 > **Scope**: 引擎日志的目录路由、文件生命周期、输出通道、级别与 Trace 策略、脱敏边界
 
@@ -79,6 +80,24 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 
 级别顺序：`TRACE` < `DEBUG` < `INFO` < `WARN` < `ERROR`，默认 `INFO`。
 
+## Level Resolution
+
+引擎的生效级别是全产品统一机制的一个消费面（机制定义见 [`../../../docs/products/wopal-space/DESIGN-config-settings.md`](../../../docs/products/wopal-space/DESIGN-config-settings.md) 的 Logging Level 节）。解析顺序：
+
+```text
+--log-level <级别>（进程树显式覆盖）
+  → ELLAMAKA_LOG_LEVEL（环境变量）
+    → settings.jsonc 的 wopal.logging.level（持久配置）
+      → INFO（默认）
+```
+
+- 解析一次发生在进程入口、日志初始化之前；结果写回 `ELLAMAKA_LOG_LEVEL` 供进程内传播。
+- 引擎把生效级别传给 DSH（runtime 与各 profile 文件）与 wopal-plugin；worker 与子进程靠环境继承，组件自身不读配置文件。
+- 配置读取实现留有单一替换点，将来可替换为 `wopal config get` 契约。
+- 显式 `--log-level` 覆盖一切；显式 `--log-level` 与 `--trace` 的搭配规则见 Trace 节。
+- 非法值或配置不可读时回落 `INFO`，不阻断启动。
+- 上游遗留的级别环境变量名不再读取；日志级别的唯一环境变量名是 `ELLAMAKA_LOG_LEVEL`。
+
 ## Trace
 
 `TRACE` 是第五级，低于 `DEBUG`。它承载正常运行绝不输出的高容量生命周期记录；除非调用者显式点名类别，否则不生效。
@@ -125,8 +144,18 @@ DSH 插件的 severity 不被照抄：插件用 `error` 表示“调用方 agent
 - 重试中的插件是 `DEBUG`：自动恢复仍在进行时，单次连接尝试不是 operator 警告。
 - 非预期的工具执行失败是脱敏的 `WARN`：保留工具名与类别，不把 session id、call id、路径与原始工具错误抄进持久插件日志。
 - `ERROR` 表示能力实际不可用（例如重试耗尽后工具被注销）或插件报告不可恢复故障，携带固定 reason code 而非任意上游 payload。
-- DSH runtime manager 与 DSH plugin exporter 跟随宿主日志级别：`ellamaka serve --log-level DEBUG` 打开它们的有界诊断记录，常规 serve 让例行 runtime 与插件活动不进入 operator 日志。
-- DSH 侧独立日志文件（`dsh-runtime.log`、`dsh-plugins.log`）位于全局域 `$WOPAL_HOME/logs/`。
+- DSH 记录跟随统一解析出的生效级别（见 Level Resolution 节），不做文件级或组件级独立定级；DSH 内部不再有等级映射。
+- `dsh-runtime.log` 记录宿主级 runtime 管理（物化、加载、profile 装配）；`dsh-plugins-<profile>.log` 按 profile 拆分插件诊断（`web`、`ellamaka-tools`，未来新增 profile 自动获得独立文件）。每个文件独立有界（容量上限、滚动备份、重复抑制），位于全局域 `$WOPAL_HOME/logs/`。
+- DSH runtime 记录按关注度分级：物化的开始与完成、依赖安装、降级与失败是 `INFO`——它们是需要事后关注的运行时状态变化；阶段轨迹（resolve / inspect / lock / stage / verify / activate / load）与插件例行为 `DEBUG`。默认 `INFO` 下，首次安装或依赖变更留下物化记录，缓存命中的例行启动保持安静；需要完整轨迹时把级别提升到 `DEBUG`。
+- `ELLAMAKA_DSH=0` 不创建任何 DSH 文件；终端镜像仅在 `--print-logs` 时开启。
+
+## Wopal Plugin Records
+
+wopal-plugin 随宿主进程运行，其记录与引擎记录同目录同级别：
+
+- 生效级别按优先级解析：`WOPAL_PLUGIN_LOG_LEVEL`（显式覆盖，用户或 dev 工具链注入）> `wopal.pluginConfig["wopal-plugin"].logLevel` / `wopal.logLevel`（插件配置）> `ELLAMAKA_LOG_LEVEL`（宿主生效级别）> `INFO`。前两层是插件自身显式接口，后两层来自统一机制。
+- 模块过滤（`logModules`）是插件的诊断筛选维度，与级别独立，保持插件配置。
+- 插件日志文件由宿主的 `WOPAL_PLUGIN_LOG_FILE` 指定调试目标，缺省落在日志目录下的 `wopal-plugin.log`；目录路由与引擎一致。
 
 ## Reference Documents
 
