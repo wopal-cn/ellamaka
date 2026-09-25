@@ -93,7 +93,7 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 
 - 解析一次发生在进程入口、日志初始化之前；结果写回 `ELLAMAKA_LOG_LEVEL` 供进程内传播。
 - 引擎把生效级别传给 DSH（runtime 与各 profile 文件）与 wopal-plugin；worker 与子进程靠环境继承，组件自身不读配置文件。
-- 配置读取实现留有单一替换点，将来可替换为 `wopal config get` 契约。
+- 引擎在进程内读取持久配置值，与 CLI 查询使用相同的配置层级及合并语义。
 - 显式 `--log-level` 覆盖一切；显式 `--log-level` 与 `--trace` 的搭配规则见 Trace 节。
 - 非法值或配置不可读时回落 `INFO`，不阻断启动。
 - 上游遗留的级别环境变量名不再读取；日志级别的唯一环境变量名是 `ELLAMAKA_LOG_LEVEL`。
@@ -153,7 +153,7 @@ DSH 插件的 severity 不被照抄：插件用 `error` 表示“调用方 agent
 
 wopal-plugin 随宿主进程运行，其记录与引擎记录同目录同级别：
 
-- 生效级别按优先级解析：`WOPAL_PLUGIN_LOG_LEVEL`（显式覆盖，用户或 dev 工具链注入）> `wopal.pluginConfig["wopal-plugin"].logLevel` / `wopal.logLevel`（插件配置）> `ELLAMAKA_LOG_LEVEL`（宿主生效级别）> `INFO`。前两层是插件自身显式接口，后两层来自统一机制。
+- 生效级别按优先级解析：`WOPAL_PLUGIN_LOG_LEVEL`（显式覆盖，用户或 dev 工具链注入）> `wopal.pluginConfig["wopal-plugin"].logLevel`（插件配置）> `ELLAMAKA_LOG_LEVEL`（宿主生效级别）> `INFO`。前两层是插件自身显式接口，后两层来自统一机制。
 - 模块过滤（`logModules`）是插件的诊断筛选维度，与级别独立，保持插件配置。
 - 插件日志文件由宿主的 `WOPAL_PLUGIN_LOG_FILE` 指定调试目标，缺省落在日志目录下的 `wopal-plugin.log`；目录路由与引擎一致。
 
