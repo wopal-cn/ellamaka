@@ -48,31 +48,48 @@ WopalSpace 模式下，引擎启动时按现有合并链读取配置（低 → �
 
 ## Forwarding: HTTP API
 
-Workbench 面板跑在浏览器里，浏览器只跟引擎 HTTP API 说话。引擎在 `wopal-space` 路由组加配置端点，读写两条链分工明确：
+Workbench 面板跑在浏览器里，浏览器只跟引擎 HTTP API 说话。引擎提供独立的 `config-v2` 路由组（实例作用域，Instance Context + Workspace Routing + Authorization 中间件，两种运行模式通用），读写两条链分工明确。此端点是配置的通用消费面——后续配置相关功能优先建立在它之上，`/config` 维持运行时视图、不扩展：
 
 ```typescript
 // 读——引擎直接从自己的加载状态回答，不走 CLI
 // 返回生效配置树 + 每项来源（全局 / 空间公共 / 空间本地），面板标签的数据源
-HttpApiEndpoint.get("configGet", "/wopal-space/config", {
+HttpApiEndpoint.get("configGet", "/config-v2", {
   query: WorkspaceRoutingQuery,
-  success: described(WopalSpaceConfigTreeResponse, "Effective configuration with per-item source"),
+  success: described(ConfigV2TreeResponse, "Effective configuration with per-item source"),
 })
 
 // 写——引擎自己不写文件：经 CLI adapter 调 config.operation，由 CLI 落盘
 // payload 指定目标（global / space）+ 键值；目标是空间公共层（settings.jsonc）时返回只读错误码
-HttpApiEndpoint.patch("configUpdate", "/wopal-space/config", {
+HttpApiEndpoint.patch("configUpdate", "/config-v2", {
   query: WorkspaceRoutingQuery,
-  payload: WopalSpaceConfigUpdatePayload, // { target: "global" | "space", updates: KeyValue[] }
-  success: described(WopalSpaceConfigUpdateResult, "Written via CLI writer"),
+  payload: ConfigV2UpdatePayload, // { target: "global" | "space", updates: KeyValue[] }
+  success: described(ConfigV2UpdateResult, "Written via CLI writer"),
 })
 
 // 恢复继承——删掉空间本地层里指定的键，回落上层默认值
-HttpApiEndpoint.post("configResetKey", "/wopal-space/config/reset-key", {
+HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
   query: WorkspaceRoutingQuery,
   payload: Schema.Struct({ keyPath: Schema.Array(Schema.String) }),
   success: described(Schema.Boolean, "Reset successful"),
 })
 ```
+
+### Read Surface
+
+`GET /config-v2` 覆盖三层继承链上的三个设置段：`ellamaka`、`wopal`、`tui`。`spaces` / `ontologies` 注册表走各自命令与既有读取通道，不进入本端点。返回形态：
+
+```jsonc
+{
+  "effective": { "ellamaka": { /* 实例合并后的引擎配置 */ }, "wopal": { /* pluginConfig、logging */ }, "tui": { /* 终端偏好 */ } },
+  "sources": {
+    "wopal.pluginConfig.dsh-adapter.sandbox.mode": "space-local"
+  }
+}
+```
+
+- `effective` 是引擎合并链的结果值。`ellamaka` 段与既有 `/config` 同源同语义（`$VAR` 在加载时已代换）；`wopal` / `tui` 段为文件镜像（`$VAR` 不代换，引用解析发生在消费方插件内部）。
+- `sources` 是叶键级的点路径 → 来源层标注，值 ∈ `global` / `space` / `space-local`；缺省值不占键，数组类键按整键标注。面板的"继承自全局 / 本地覆写 / 恢复继承"标签以此渲染。
+- 分工：`/config` 维持运行时视图且不扩展；`/config-v2` 是配置的编辑视图，面板与后续配置功能统一消费它。权限选择器读 `effective.wopal.pluginConfig["dsh-adapter"].sandbox` 判断显示与默认模式，读 `effective.ellamaka.plugin` 判断插件存在性。
 
 写入链路复用现有的 Wopal CLI adapter（sidecar 内 spawn `wopal --api-version` 进程，见 Runtime API 与 SDK 契约）：
 
@@ -103,7 +120,7 @@ adapter 侧的调用形态（复用既有 `CliContract` 的进程边界、超时
   → adapter 把 envelope 映射为引擎领域结果/错误
 ```
 
-`PATCH /wopal-space/config` 与 `reset-key` 端点内部就是这个 adapter 调用，没有第二实现。schema、OpenAPI 描述、SDK 生成遵循 `API-CONTRACT.md` 的纪律。
+`PATCH /config-v2` 与 `reset-key` 端点内部就是这个 adapter 调用，没有第二实现。schema、OpenAPI 描述、SDK 生成遵循 `API-CONTRACT.md` 的纪律。
 
 ---
 
@@ -141,7 +158,7 @@ adapter 侧的调用形态（复用既有 `CliContract` 的进程边界、超时
 | 已覆写（空间本地层写过这项） | 高亮标签"本地覆写" + "恢复继承"按钮 | 改 → 更新本地值；点恢复 → 删掉本地键，回落继承源 |
 | 悬停诊断 | 标签浮窗 | 看全貌：全局是什么、空间默认是什么、本地覆盖是什么、最终生效是哪个 |
 
-标签数据来自 `GET /wopal-space/config`——引擎从自己的加载状态直接回答，来源判定与合并算法同源。面板自己不碰任何文件，也不感知文件路径——它只知道"用户全局 / 空间"两个作用域和引擎给的数据。
+标签数据来自 `GET /config-v2`——引擎从自己的加载状态直接回答，来源判定与合并算法同源。面板自己不碰任何文件，也不感知文件路径——它只知道"用户全局 / 空间"两个作用域和引擎给的数据。
 
 ---
 
