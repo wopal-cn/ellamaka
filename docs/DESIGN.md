@@ -48,7 +48,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约) |
 | DSH 双引擎融合            | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                        | [DSH 双引擎融合](#dsh-双引擎融合)       |
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
-| 引擎配置消费              | 三层配置读取、`wopal-space/config` API（读写均转发 CLI）与设置面板数据链                          | [DESIGN-config-engine.md](./DESIGN-config-engine.md) |
+| 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`wopal-space/config` 查询由引擎直答，写入经 CLI 转发                 | [DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
@@ -122,7 +122,7 @@ WopalSpace 模式下配置加载优先级（低→高）：
 | -------------------- | -------------------------------------------------------- |
 | Built-in defaults    | ellamaka 内置                                            |
 | Global config        | `$WOPAL_HOME/config/settings.jsonc`                      |
-| Space settings       | `<space>/.wopal/config/settings.jsonc` → `ellamaka` 字段 |
+| Space settings       | `<space>/.wopal/config/settings.jsonc` → `ellamaka` 段与 `wopal.pluginConfig` |
 | Space local settings | `<space>/.wopal/config/settings.local.jsonc`（私有覆盖）  |
 | Agent frontmatter    | `<space>/.wopal/agents/*.md`                             |
 | Environment override | `ELLAMAKA_CONFIG_CONTENT`                                |

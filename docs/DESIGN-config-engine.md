@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Active
-> **Updated**: 2026-09-17
+> **Updated**: 2026-09-25
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 > - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系总体设计："只有 CLI 能写配置"的规则由它定
@@ -35,6 +35,12 @@ WopalSpace 模式下，引擎启动时按现有合并链读取配置（低 → �
 之后叠加 agent frontmatter 与 `ELLAMAKA_CONFIG_CONTENT` 内联覆盖（现有链路，见本文档 Configuration Contract）。深合并，后加载者覆盖。
 
 **空间公共层是只读的**：它是本体维护人员经 Git 分发的默认配置，引擎不写它，也不接受任何针对它的写入请求。用户想覆盖某个默认值，写入空间本地层即可——加载顺序天然让本地覆盖生效，"恢复默认"等于删掉本地层的对应键。
+
+### Plugin Configuration Assembly
+
+引擎读取三层 settings 时，也合并 `wopal.pluginConfig`，并将结果留在实例的内存配置状态中。配置合并独立于插件装载：插件缺席或装载失败，不改变已经得到的生效配置。
+
+插件装载时，引擎把整张生效表经 `PluginInput.pluginConfig`（fork `packages/plugin` 契约字段，类型 `Record<string, Record<string, unknown>>`）交给插件，插件按自身配置键自取条目；引擎不解析插件身份、不按身份切片。`pluginConfig` 对插件条目内联 options 的同名配置具有更高优先级；内联 options 保持原有兼容性。插件校验自己的行为配置，装载失败由插件装载链报告，不以默认配置掩盖失败。插件不读配置文件，只消费引擎交付的条目。
 
 运行中的重载：引擎监听配置文件变化，CLI 写完文件后热重载自动接住，当前实例即时生效（现有 ReloadController 链路）。
 
@@ -83,7 +89,7 @@ HttpApiEndpoint.post("configResetKey", "/wopal-space/config/reset-key", {
 | 场景 | 路径 | 为什么 |
 |------|------|--------|
 | 改配置 | adapter → `wopal config` → CLI 落盘 | 唯一写入实现，校验/补丁/密钥规则只存在一份 |
-| 读配置值 | 引擎自己的加载链（内存中的合并结果） | 启动时已加载，spawn 进程是纯开销 |
+| 读配置值 | 引擎自己的加载链（内存中的合并结果，含 `wopal.pluginConfig`） | 启动时已加载，spawn 进程是纯开销 |
 | 来源标注 / 继承状态 | 引擎合并记录直答 | 同上 |
 | `ellamaka` 段 schema | 引擎构建期自带（`Config.Info` 转出的片段） | schema 真相源在引擎源码，不依赖 CLI |
 
@@ -142,7 +148,7 @@ adapter 侧的调用形态（复用既有 `CliContract` 的进程边界、超时
 ## When Settings Take Effect
 
 - `ellamaka` 段：CLI 写完文件 → 引擎文件监听热重载 → 当前实例即时生效。
-- `wopal`/`tui` 段：插件启动时读一次。写入后下一个会话生效；面板在写入响应里提示这一点，并在面板关闭时触发空间插件重建，让新配置尽快就位。
+- `wopal.pluginConfig` 段：引擎保留三层合并结果，插件装载时消费。写入后插件重新装载时取得新值；面板在写入响应里提示这一点，并在面板关闭时触发空间插件重建，让新配置尽快就位。`tui` 段由 TUI 配置链消费。
 
 ---
 

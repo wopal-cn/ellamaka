@@ -1,7 +1,7 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-09-14
+> **Updated**: 2026-09-25
 > **Parent**: `./DESIGN.md`
 
 ellamaka 通过 `ellamaka-tools` 这个 dsh profile 获得沙箱执行能力。工具容器不承载界面，不创建、不持有任何会话，只对外提供工具执行后端。
@@ -124,7 +124,7 @@ ellamaka 通过 `ellamaka-tools` 这个 dsh profile 获得沙箱执行能力。�
 | 无询问闭包（如无界面的入口） | 委托下游兜底为不可用，失败即关闭 |
 | 中止 | dsh 原生取消 |
 
-**提权策略**：空间配置项 `ellamaka.dsh.sandbox.escalation` 取值 `ask` 或 `never`，默认询问。取 `never` 时 adapter 向每个会话外观预置审批策略事件，审批服务在事件瀑布之前确定性拒绝，应答桥零调用。沙箱关闭时 adapter 空转，该字段不生效。
+**提权策略**：空间配置项 `wopal.pluginConfig["dsh-adapter"].escalation` 取值 `ask` 或 `never`，默认询问。取 `never` 时 adapter 向每个会话外观预置审批策略事件，审批服务在事件瀑布之前确定性拒绝，应答桥零调用。沙箱关闭时 adapter 空转，该字段不生效。
 
 ### 会话级沙箱模式切换
 
@@ -148,7 +148,7 @@ Workbench 聊天输入框底栏提供三态下拉：只读、工作区写入、�
 
 ### 沙箱配置
 
-空间级 `.wopal/config/settings.jsonc` 与 `settings.local.jsonc` 拥有工具容器的沙箱策略，配置形态为 `ellamaka.dsh.sandbox: { enabled, mode }`：
+空间级 `.wopal/config/settings.jsonc` 与 `settings.local.jsonc` 拥有工具容器的沙箱策略，配置形态为 `wopal.pluginConfig["dsh-adapter"].sandbox: { enabled, mode }`：
 
 | 配置 | 含义 |
 |------|------|
