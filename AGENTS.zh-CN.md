@@ -135,9 +135,9 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - **结构化**：上下文用 `extra` 字段携带（`log.info("reverting", { file, hash })`），禁止拼接进 message；message 用固定动词短语便于检索
 - **禁止静默吞错**：catch 后必须打日志（error 或 warn），不得空 catch
 - **级别**：默认 `INFO`；`debug` 仅诊断用，生产模式不输出
-- **Trace 按类别 opt-in**：`TRACE` 是第五级，低于 `DEBUG`。它承载正常运行绝不输出的高容量生命周期记录。经 `log.trace(category, message, extra)` 输出（Effect 代码：`EffectLogger.create(...).trace(...)`）。仅有级别不会输出任何记录——只有类别被显式选中时才写入。类别是封闭注册表（`Log.TraceCategory`）：`bus`、`permission`、`session`、`llm`、`plugin`、`io`。新增类别必须同时有调用点和 LOGGING.md 的一行记录，禁止例外。
+- **Trace 按类别 opt-in**：`TRACE` 是第五级，低于 `DEBUG`。它承载正常运行绝不输出的高容量生命周期记录。经 `log.trace(category, message, extra)` 输出（Effect 代码：`EffectLogger.create(...).trace(...)`）。仅有级别不会输出任何记录——只有类别被显式选中时才写入。类别是封闭注册表（`Log.TraceCategory`）：`bus`、`permission`、`session`、`llm`、`plugin`、`io`。新增类别必须同时有调用点和[日志设计](./docs/DESIGN-logging.md)中的一行记录，禁止例外。
 - **Trace 不承载 payload 或用户数据**：bus trace 只记录事件类型；permission trace 记录权限名、决策 `action`（`allow|ask|deny`）、`escalated` 标记、计数与回复结果；session/LLM trace 记录步骤计数与 runtime/model 标识符。绝不写入事件 payload、prompt 或消息内容、tool 参数、求值后的 pattern、命令、路径、session id 或 pending request 内容。显式 `--log-level` 永远压过 `--trace` 提升
-- **Authority**：[packages/opencode/LOGGING.md](./packages/opencode/LOGGING.md) 是 serve 日志策略的详细版（channel、DSH 分类、trace 类别）。任何日志行为修改必须同步更新它
+- **Authority**：[日志设计](./docs/DESIGN-logging.md) 是日志策略的详细版（路由、文件、channel、DSH 分类、trace 类别、脱敏）。任何日志行为修改必须同步更新它
 
 ### 调试日志
 

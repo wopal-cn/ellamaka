@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-09-17
+> **Updated**: 2026-09-25
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -11,6 +11,7 @@
 > - `./DESIGN-dsh-base.md` — dsh 融合基础：文件领地、依赖闭包、热加载
 > - `./DESIGN-dsh-web.md` — Web profile：插件供应链与界面承载
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
+> - `./DESIGN-logging.md` — 日志架构：角色分域路由、文件生命周期、Trace 与脱敏策略
 > - `./DESIGN-onboarding.md` — Onboarding 目标实现：HTTP/SSE 编排服务与 Web/Desktop 共用页面
 > - `./DESIGN-plan-scheduler.md` — 空间级计划工作区、调度交互与运行接管
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
@@ -32,6 +33,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | ------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | WopalSpace 自动检测       | CLI 从 cwd 检测单一空间；sidecar 按 instance directory 解析独立空间根                             | [Space Detection Contract](#space-detection-contract) |
 | 全局路径分离              | `$WOPAL_HOME/config` + `$WOPAL_HOME/ellamaka/{data,cache,state}`                                  | [State Ownership](#state-ownership)     |
+| 日志路由                  | 角色分域：serve / sidecar 恒落 `$WOPAL_HOME/logs`，tui 在空间内落 `.wopal-space/logs`（与 CLI 空间路由同语义） | [Logging Architecture](./DESIGN-logging.md) |
 | 非 WopalSpace 模式        | 配置入口由 WOPAL_HOME 所有；capability loading 保持 OpenCode-compatible 并叠加 WOPAL_HOME 全局能力 | [Configuration Contract](#configuration-contract) |
 | WopalSpace 模式           | 从 instance space root 加载 `.wopal/` 配置和能力；空间根与任意子目录共享同一 context              | [Configuration Contract](#configuration-contract) |
 | Instance 运行模式         | 按 directory 检测空间根；server 不使用进程 env 表达当前空间                                       | [Sidecar Instance Context](#sidecar-instance-context) |

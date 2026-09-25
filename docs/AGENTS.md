@@ -25,6 +25,7 @@ This directory is ellamaka's design and documentation asset collection. Document
 | `DESIGN-dsh-base.md` | dsh fusion foundation shared by both profiles: file territory, dependency closure, materialization, module hot reload | Sync on fusion mechanism changes |
 | `DESIGN-dsh-web.md` | Web profile: plugin supply chain, plugin market, wopal plugin package, multi-profile decoupling, Workbench integration | Sync on Web profile changes |
 | `DESIGN-ellamaka-tools.md` | Tool container profile: capability adoption, tool projection, sandbox, per-space configuration | Sync on tool container changes |
+| `DESIGN-logging.md` | Logging architecture: role-based directory routing, file lifecycle, output channels, trace categories, redaction | Sync on logging behavior changes |
 | `DESIGN-onboarding.md` | Desktop onboarding target implementation: entry determination, state machine, CLI machine invocation | Sync on onboarding flow changes |
 | `DESIGN-workbench.md` | Workbench architecture choices, state model, and interaction flows | Sync on Workbench product design changes |
 
