@@ -42,6 +42,8 @@ WopalSpace 模式下，引擎启动时按现有合并链读取配置（低 → �
 
 插件装载时，引擎把整张生效表经 `PluginInput.pluginConfig`（fork `packages/plugin` 契约字段，类型 `Record<string, Record<string, unknown>>`）交给插件，插件按自身配置键自取条目；引擎不解析插件身份、不按身份切片。`pluginConfig` 对插件条目内联 options 的同名配置具有更高优先级；内联 options 保持原有兼容性。插件校验自己的行为配置，装载失败由插件装载链报告，不以默认配置掩盖失败。插件不读配置文件，只消费引擎交付的条目。
 
+TUI 插件走同一契约的另一条装载链：TUI 配置链（`TuiConfig`）在 WopalSpace 模式读三层 settings 时合并 `wopal.pluginConfig`，TUI 运行时装配 TUI 插件时把同一张生效表经 `TuiPluginApi.pluginConfig`（类型与 `PluginInput.pluginConfig` 一致）整表交付，TUI 插件按自身配置键自取并校验，同样不读配置文件。内联 mount options 保持为兼容 fallback，`pluginConfig` 优先。
+
 运行中的重载：引擎监听配置文件变化，CLI 写完文件后热重载自动接住，当前实例即时生效（现有 ReloadController 链路）。
 
 ---
@@ -165,7 +167,7 @@ adapter 侧的调用形态（复用既有 `CliContract` 的进程边界、超时
 ## When Settings Take Effect
 
 - `ellamaka` 段：CLI 写完文件 → 引擎文件监听热重载 → 当前实例即时生效。
-- `wopal.pluginConfig` 段：引擎保留三层合并结果，插件装载时消费。写入后插件重新装载时取得新值；面板在写入响应里提示这一点，并在面板关闭时触发空间插件重建，让新配置尽快就位。`tui` 段由 TUI 配置链消费。
+- `wopal.pluginConfig` 段：WopalSpace 模式下引擎与 TUI 配置链各自加载时合并三层结果，插件装载时消费（server 插件经 `PluginInput.pluginConfig`，TUI 插件经 `TuiPluginApi.pluginConfig`）。写入后插件重新装载时取得新值；面板在写入响应里提示这一点，并在面板关闭时触发空间插件重建，让新配置尽快就位。`tui` 段由 TUI 配置链消费。
 
 ---
 
