@@ -1,12 +1,14 @@
 import type { Exporter, Message } from "@deepseek-ai/cordis"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "./runtime/loader.js"
+import type { DshLogLevel } from "./runtime/log.js"
 
 /**
  * ellamaka-side log level names, matching `@wopal/ellamaka-core/util/log`.
  * cordis uses numeric LoggerLevel (ERROR=0, INFO=1, WARN=2, DEBUG=3);
- * this string union is the ellamaka-side vocabulary.
+ * this string union is the ellamaka-side vocabulary. It is the same four-level
+ * set DSH understands (`DshLogLevel`), defined once in `runtime/log.ts`.
  */
-export type EllamakaLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
+export type EllamakaLogLevel = DshLogLevel
 
 const ELLAMAKA_PRIORITY: Record<EllamakaLogLevel, number> = {
   DEBUG: 0,

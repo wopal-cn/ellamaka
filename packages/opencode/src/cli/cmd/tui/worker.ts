@@ -1,7 +1,6 @@
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import type { Level } from "@wopal/ellamaka-core/util/log"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
@@ -18,12 +17,16 @@ import { mountDshIfEnabled } from "@/cli/cmd/tui/dsh-mount"
 
 ensureProcessMetadata("worker")
 
+// The worker inherits the level its parent entry resolved and wrote back
+// (`ELLAMAKA_LOG_LEVEL`); resolving here keeps a directly spawned worker
+// correct as well.
+const level = Log.resolveEffectiveLevel()
+process.env.ELLAMAKA_LOG_LEVEL = level
 await Log.init({
   print: process.argv.includes("--print-logs"),
   dev: Installation.isLocal(),
-  devFile: "ellamaka-dev-tui.log",
   role: "tui",
-  level: (process.env.OPENCODE_LOG_LEVEL as Level) ?? (Installation.isLocal() ? "DEBUG" : "INFO"),
+  level,
 })
 
 Heap.start()

@@ -141,7 +141,7 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 
 ### 调试日志
 
-诊断 serve、TUI 或 sidecar 行为时，通过日志级别放宽输出，而不是往代码里加临时记录。TRACE 总是带类别名；`--log-level TRACE` 不带 `--trace` 是被有意拒绝的。
+诊断 serve、TUI 或 sidecar 行为时，通过日志级别放宽输出，而不是往代码里加临时记录。级别机制全组件统一：`--log-level`（引擎进程树）> `ELLAMAKA_LOG_LEVEL` > `wopal.logging.level`（`$WOPAL_HOME/config/settings.jsonc`）> `INFO`。TRACE 总是带类别名；`--log-level TRACE` 不带 `--trace` 是被有意拒绝的。
 
 | 场景 | 命令 | 说明 |
 |----------|---------|-------|
@@ -154,8 +154,8 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 | 实现诊断 | `ellamaka serve --log-level DEBUG` | 有界，仍脱敏 |
 | 压过 trace 提升 | `ellamaka serve --log-level INFO --trace bus` | 显式级别生效；不输出 `TRACE` 记录 |
 
-- 日志位置：非 dev CLI 写 `serve-*` / `tui-*` / `sidecar-*` 到 `$WOPAL_HOME/logs/`；dev 模式写 `.wopal-space/logs/dev/<scope>/`。清理时整体保留最新 10 个带时间戳的文件。
-- DSH 只有四级，宿主 `TRACE` 在边界映射为 DSH `DEBUG`；DSH 日志文件是 `$WOPAL_HOME/logs/dsh-runtime.log` 和 `dsh-plugins.log`。
+- 日志位置按角色分域：`serve`/`sidecar`（含 `web`）恒写全局 `$WOPAL_HOME/logs/`；交互角色 `tui` 在空间内启动时写 `<space>/.wopal-space/logs/`，空间外回落 `$WOPAL_HOME/logs/`。dev（`dev.sh`）以 `WOPAL_DEBUG_LOG_DIR` 覆盖目录到 `.wopal-space/logs/dev/<scope>/`，dev 文件名稳定为 `ellamaka-dev-<role>.log`。同一目录保留最新 10 个带时间戳文件。
+- DSH 只有四级，宿主 `TRACE` 在边界映射为 DSH `DEBUG`；DSH 日志文件为 `$WOPAL_HOME/logs/dsh-runtime.log`（单文件）与每 profile 一个有界 `dsh-plugins-<profile>.log`（`web`、`ellamaka-tools`）。
 - 若某类别的记录缺失，先确认类别在 selector 中（显式 `--log-level` 压过 `--trace`，未知类别启动即被拒绝）。
 
 ## Testing
@@ -181,7 +181,7 @@ Agent 无法自动验证的行为（GUI 交互、引导流程、桌面壳）通�
 | TUI | `./scripts/dev.sh tui` | 默认内嵌后端 |
 | 停止 | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
-- 日志：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{desktop,sidecar}.log`（`<scope>` 由 worktree 路径派生）。
+- 日志：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`（`<scope>` 由 worktree 路径派生）。
 - Plan 的 User Validation 必须引用本表并给出用户可直接复制执行的命令，不得只写"启动应用"之类的泛指。
 
 ## User-Supplied Rules

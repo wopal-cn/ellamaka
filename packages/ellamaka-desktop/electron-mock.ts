@@ -130,6 +130,22 @@ mock.module("drizzle-orm/node-sqlite/driver", () => ({
 // the module resolves to the real cordis implementation the CLI mount also
 // uses — the point of these tests is the shared decision table, and a stub
 // would pin the copy instead of the contract.
-mock.module("virtual:opencode-server", () =>
-  import("../ellamaka-cordis/src/plugins/install-command"),
-)
+// The sidecar's live `setLogLevel` message path awaits this specifier at
+// message time, so the mock must carry a `Log` shim alongside the real
+// install-command surface the sidecar also consumes. `setLevel` records into
+// a process-level array so `sidecar-log-level.test.ts` can assert the wiring
+// regardless of bun's shared module registry (a per-file mock.module override
+// cannot re-patch the specifier once another file has materialized it).
+;(globalThis as Record<string, unknown>).__mockDshSetLevelCalls = []
+mock.module("virtual:opencode-server", async () => {
+  const real = await import("../ellamaka-cordis/src/plugins/install-command")
+  return {
+    ...real,
+    Log: {
+      setLevel: (level: string) => {
+        ;(globalThis as Record<string, unknown>).__mockDshSetLevelCalls.push(level)
+      },
+      create: () => ({ warn() {}, info() {}, error() {} }),
+    },
+  }
+})

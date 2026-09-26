@@ -87,7 +87,7 @@ ellamaka 通过 `ellamaka-tools` 这个 dsh profile 获得沙箱执行能力。�
 - **schema 投影**：把 dsh 的 JSON Schema 解包为 ellamaka 插件 SDK 的类型描述。不支持的类型降级为未知类型，dsh schema 的扩展不破坏投影。
 - **参数映射**：dsh 的下划线命名参数重命名为 ellamaka 的驼峰命名，投影时重命名，执行时转回。
 - **结果映射**：dsh 的差异元数据映射为 ellamaka 的文件差异结构（文件、补丁、新增行数、删除行数），差异算法在 adapter 内自持，不引用 dsh 包。前端无需改动。
-- **调用日志**：adapter 经容器日志记录每次调用，携带工具名、会话标识与调用标识，落入 `dsh-plugins.log`。
+- **调用日志**：adapter 经容器日志记录每次调用，携带工具名、会话标识与调用标识，落入该 profile 的 `dsh-plugins-ellamaka-tools.log`。
 - **权限门禁复用**：adapter 在执行前复用 ellamaka 的读写权限与外部目录权限门禁。
 
 **动态装配**：adapter 注册为工具提供者，每次调用实时读取容器的工具 schema，不在启动时冻结。dsh 插件动态加载或卸载后，工具集合在下一轮模型请求中自动更新；同名 dsh 工具卸载后内置工具自动恢复。工具集合未变化时，通过确定性投影加名字排序保证结果字节一致，缓存命中。

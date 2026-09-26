@@ -141,7 +141,7 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 
 ### Debugging Logs
 
-When diagnosing serve, TUI, or sidecar behavior, widen output through the log level rather than adding temporary records to the code. TRACE always names its categories; `--log-level TRACE` without `--trace` is rejected on purpose.
+When diagnosing serve, TUI, or sidecar behavior, widen output through the log level rather than adding temporary records to the code. One level mechanism serves every component: `--log-level` (engine process tree) > `ELLAMAKA_LOG_LEVEL` > `wopal.logging.level` (`$WOPAL_HOME/config/settings.jsonc`) > `INFO`. TRACE always names its categories; `--log-level TRACE` without `--trace` is rejected on purpose.
 
 | Scenario | Command | Notes |
 |----------|---------|-------|
@@ -154,8 +154,8 @@ When diagnosing serve, TUI, or sidecar behavior, widen output through the log le
 | Implementation diagnostics | `ellamaka serve --log-level DEBUG` | Bounded, still redacted |
 | Override trace promotion | `ellamaka serve --log-level INFO --trace bus` | Explicit level wins; no `TRACE` records emit |
 
-- Log locations: non-dev CLI writes `serve-*` / `tui-*` / `sidecar-*` under `$WOPAL_HOME/logs/`; dev mode writes to `.wopal-space/logs/dev/<scope>/`. Cleanup keeps the latest 10 timestamped files collectively.
-- DSH has four levels, so host `TRACE` maps to DSH `DEBUG` at the boundary; DSH log files are `$WOPAL_HOME/logs/dsh-runtime.log` and `dsh-plugins.log`.
+- Log routing is role-scoped: `serve`/`sidecar` (and `web`) always write the global domain `$WOPAL_HOME/logs/`; the interactive `tui` role writes `<space>/.wopal-space/logs/` when launched inside a WopalSpace and `$WOPAL_HOME/logs/` otherwise. Dev runs (`dev.sh`) override the directory through `WOPAL_DEBUG_LOG_DIR` → `.wopal-space/logs/dev/<scope>/`, with stable dev file names `ellamaka-dev-<role>.log`. Cleanup keeps the latest 10 timestamped files per directory.
+- DSH has four levels, so host `TRACE` maps to DSH `DEBUG` at the boundary; DSH log files are `$WOPAL_HOME/logs/dsh-runtime.log` (single file) and one bounded `dsh-plugins-<profile>.log` per profile (`web`, `ellamaka-tools`).
 - If a category's records are missing, confirm the category is in the selector (an explicit `--log-level` overrides `--trace`, and an unknown category is rejected at startup).
 
 ## Testing & Verification
@@ -181,7 +181,7 @@ Behaviors an agent cannot verify automatically (GUI interaction, onboarding flow
 | TUI | `./scripts/dev.sh tui` | In-process backend by default |
 | Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
-- Logs: `.wopal-space/logs/dev/<scope>/ellamaka-dev-{desktop,sidecar}.log` (`<scope>` is derived from the worktree path).
+- Logs: `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log` (`<scope>` is derived from the worktree path).
 - A Plan's User Validation must reference this table and give a command the user can copy and run directly; generic wording such as "start the app" is not acceptable.
 
 ## User-Supplied Rules

@@ -2,9 +2,10 @@ export * as Log from "./log"
 
 import path from "path"
 import fs from "fs/promises"
-import { createWriteStream } from "fs"
+import { createWriteStream, readFileSync } from "fs"
 import * as Global from "../global"
 import { Schema } from "effect"
+import { parse as parseJsonc } from "jsonc-parser"
 import { Glob } from "./glob"
 
 export const Level = Schema.Literals(["TRACE", "DEBUG", "INFO", "WARN", "ERROR"]).annotate({
@@ -101,6 +102,67 @@ export function setLevel(next: Level, categories?: string | readonly string[]) {
 
 function shouldLog(input: Level): boolean {
   return levelPriority[input] >= levelPriority[level]
+}
+
+function parseLevel(value: unknown, options: { allowTrace?: boolean } = {}): Level | undefined {
+  if (value === "TRACE") return options.allowTrace === false ? undefined : "TRACE"
+  if (value === "DEBUG" || value === "INFO" || value === "WARN" || value === "ERROR") return value
+  return undefined
+}
+
+export interface ResolveLevelOptions {
+  /** Explicit level (e.g. `--log-level`); wins over every persisted source. */
+  requested?: Level
+  /** Environment map; defaults to `process.env`. */
+  env?: Record<string, string | undefined>
+  /** Settings file; defaults to `$WOPAL_HOME/config/settings.jsonc`. */
+  configFile?: string
+}
+
+/**
+ * Resolve the unified effective level (DESIGN-config-settings.md "Logging
+ * Level"): `requested` > `ELLAMAKA_LOG_LEVEL` > `wopal.logging.level` > INFO.
+ * Each source is tried in order; an invalid value is not a hit and the next
+ * source is consulted. TRACE is legal only as an explicit or environment value
+ * (it must pair with `--trace`), never as a persistent config value. Reading
+ * the config is best-effort: an unreadable or malformed file falls back to
+ * INFO and never blocks startup.
+ *
+ * Callers are process entries: they resolve once, write the result back to
+ * `ELLAMAKA_LOG_LEVEL` for the process tree, and pass it to `Log.init`.
+ */
+export function resolveEffectiveLevel(options: ResolveLevelOptions = {}): Level {
+  if (options.requested) return options.requested
+  const env = options.env ?? process.env
+  const fromEnv = parseLevel(env.ELLAMAKA_LOG_LEVEL)
+  if (fromEnv) return fromEnv
+  const configFile = options.configFile ?? path.join(Global.Path.config, "settings.jsonc")
+  return readConfiguredLevel(configFile) ?? "INFO"
+}
+
+/**
+ * The single replacement point for the persisted level read: when
+ * `wopal config get` lands, only this function changes. v1 reads the global
+ * layer only (`$WOPAL_HOME/config/settings.jsonc`).
+ */
+function readConfiguredLevel(configFile: string): Level | undefined {
+  try {
+    // jsonc-parser is fault-tolerant: invalid input still yields a recoverable
+    // tree, so a syntactically broken document must be rejected via the error
+    // array — a level inside it is not a configured level.
+    const errors: import("jsonc-parser").ParseError[] = []
+    const parsed: unknown = parseJsonc(readFileSync(configFile, "utf8"), errors)
+    if (errors.length > 0) return undefined
+    if (!isRecord(parsed)) return undefined
+    const wopal = parsed.wopal
+    if (!isRecord(wopal)) return undefined
+    const logging = wopal.logging
+    if (!isRecord(logging)) return undefined
+    // TRACE is a command-line mechanism (`--trace`), not a config value.
+    return parseLevel(logging.level, { allowTrace: false })
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -210,15 +272,27 @@ function localStamp() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
+/**
+ * Directory routing (DESIGN-logging.md "角色分域"), in priority order:
+ * 1. `WOPAL_DEBUG_LOG_DIR` — the dev-toolchain override, honored only in the
+ *    dev channel and winning for every role.
+ * 2. Machine roles (`serve`, `sidecar`) are global-domain services: they
+ *    serve multiple spaces per process, so their records belong to
+ *    `$WOPAL_HOME/logs` even when launched inside a space.
+ * 3. Interactive roles (`tui`, including the role-less default) are
+ *    space-aware: a process started inside a WopalSpace writes to that
+ *    space's `.wopal-space/logs` (`WOPAL_SPACE_ROOT`, written by the CLI
+ *    entry's single detection point — the logger never re-detects).
+ * 4. Outside any WopalSpace (e.g. `ellamaka dsh` from an arbitrary cwd) the
+ *    machine command still runs: fall back to the global log directory
+ *    instead of throwing — space-scoped logs are an optimization, not a
+ *    precondition.
+ */
 function dir(options: Options) {
-  if (!options.dev) return Global.Path.log
-  if (process.env.WOPAL_DEBUG_LOG_DIR) return process.env.WOPAL_DEBUG_LOG_DIR
+  if (options.dev && process.env.WOPAL_DEBUG_LOG_DIR) return process.env.WOPAL_DEBUG_LOG_DIR
+  if (options.role === "serve" || options.role === "sidecar") return Global.Path.log
   const spaceRoot = process.env.WOPAL_SPACE_ROOT
   if (spaceRoot) return path.join(spaceRoot, ".wopal-space", "logs")
-  // Outside any WopalSpace (e.g. `ellamaka dsh` from an arbitrary cwd) the
-  // machine command still runs: fall back to the global log directory
-  // instead of throwing — space-scoped logs are an optimization, not a
-  // precondition.
   return Global.Path.log
 }
 
@@ -236,10 +310,20 @@ export async function init(next: Options) {
   initializing = null
   // The log file is created lazily on the first actual write, so read-only
   // machine commands (e.g. `debug release-info`) never leave empty log files.
-  logpath = path.join(
-    dir(next),
-    next.dev ? (next.devFile ?? "dev.log") : next.role ? `${next.role}-${localStamp()}.log` : `${localStamp()}.log`,
-  )
+  logpath = path.join(dir(next), fileName(next))
+}
+
+/**
+ * The file name inside the routed directory (DESIGN-logging.md "Log Files"):
+ * - dev channel: the stable role-prefixed name `ellamaka-dev-<role>.log`, so
+ *   same-role processes share one trackable file. An explicit `devFile`
+ *   (dev tooling and tests) stays authoritative.
+ * - regular channel: the per-process `<role>-<timestamp>.log` (or bare
+ *   `<timestamp>.log` without a role).
+ */
+function fileName(next: Options) {
+  if (next.dev) return next.devFile ?? `ellamaka-dev${next.role ? `-${next.role}` : ""}.log`
+  return next.role ? `${next.role}-${localStamp()}.log` : `${localStamp()}.log`
 }
 
 // Ensure the log file and write stream exist exactly once per process. On

@@ -19,8 +19,10 @@ declare module "virtual:opencode-server" {
   export namespace Log {
     export const init: typeof import("@wopal/ellamaka-core/util/log").Log.init
     export const setLevel: typeof import("@wopal/ellamaka-core/util/log").Log.setLevel
+    export const resolveEffectiveLevel: typeof import("@wopal/ellamaka-core/util/log").Log.resolveEffectiveLevel
     export const create: typeof import("@wopal/ellamaka-core/util/log").Log.create
     export type Logger = import("@wopal/ellamaka-core/util/log").Log.Logger
+    export type Level = import("@wopal/ellamaka-core/util/log").Log.Level
   }
   export namespace Database {
     export const getPath: typeof import("../../../opencode/dist/types/src/node").Database.getPath
@@ -62,6 +64,9 @@ declare module "virtual:opencode-server" {
   }
 
   export const initializeDshRuntime: (options: DshInitializeOptions) => Promise<DshRuntimeStatus>
+  /** The four levels DSH understands; the host TRACE maps down to DEBUG. */
+  export type DshLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
+  export const toDshLogLevel: (level: string | undefined) => DshLogLevel
   export const DEFAULT_DSH_RUNTIME_MANIFEST: DshRuntimeManifest
   export const resolveInstallAnchor: (wopalHome: string, manifest: DshRuntimeManifest) => DshInstallAnchor
   export const createDshRuntimeApi: (installAnchor: string) => DshRuntimeApi
@@ -95,7 +100,8 @@ declare module "virtual:opencode-server" {
     home?: string
     port: number
     installAnchor?: string
-    logFile?: string
+    /** Plugin-log directory; each profile derives `dsh-plugins-<profile>.log`. */
+    logDir?: string
     logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
     getLogLevel?: () => "DEBUG" | "INFO" | "WARN" | "ERROR"
     runtime?: DshRuntimeApi

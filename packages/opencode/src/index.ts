@@ -26,7 +26,6 @@ import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
-import path from "node:path"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
@@ -122,15 +121,11 @@ const cli = yargs(args)
     const command = typeof opts._?.[0] === "string" ? opts._[0] : ""
     const role: "serve" | "tui" = SERVER_COMMANDS.has(command) ? "serve" : "tui"
     const detection = detectWopalSpace(process.cwd())
-    if (Installation.isLocal() && detection) {
-      process.env.WOPAL_DEBUG_LOG_DIR = path.join(detection.root, ".wopal-space", "logs")
-    }
+    // The logger routes by role and space itself (`WOPAL_SPACE_ROOT` below) —
+    // the entry must not rewrite the dev log directory (D-03/D-04).
     if (!opts.disableWopalspace && !SERVER_COMMANDS.has(command) && detection) {
       process.env.WOPAL_SPACE = "1"
       process.env.WOPAL_SPACE_ROOT = detection.root
-    }
-    if (opts.logLevel) {
-      process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     }
     const requested = opts.logLevel
     const requestedLevel: Log.Level | undefined =
@@ -159,21 +154,17 @@ const cli = yargs(args)
       process.exit(0)
     }
     const trace = resolvedTrace.categories
-    if (trace) {
-      process.env.OPENCODE_TRACE = trace
-    }
+    const level = resolveLogLevel({ requested: requestedLevel, trace })
+    // Write the effective level back so the process tree speaks one language:
+    // workers and child processes inherit ELLAMAKA_LOG_LEVEL and never resolve
+    // the persisted sources themselves (DESIGN-config-settings.md).
+    process.env.ELLAMAKA_LOG_LEVEL = level
 
     await Log.init({
       print: process.argv.includes("--print-logs"),
       dev: Installation.isLocal(),
-      devFile: "ellamaka-dev-tui.log",
       role,
-      level: resolveLogLevel({
-        isLocal: Installation.isLocal(),
-        role,
-        requested: requestedLevel,
-        trace,
-      }),
+      level,
       trace,
     })
 

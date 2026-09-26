@@ -1,8 +1,10 @@
 import * as Log from "@wopal/ellamaka-core/util/log"
 
 export interface LogLevelInput {
-  readonly isLocal: boolean
-  readonly role: "serve" | "tui"
+  /**
+   * Explicit `--log-level` value; wins over everything, including the trace
+   * promotion and the persisted sources.
+   */
   readonly requested?: Log.Level
   /**
    * Raw `--trace` selector (comma-separated). A nonempty selector opts into the
@@ -10,6 +12,10 @@ export interface LogLevelInput {
    * `--log-level` already named a level.
    */
   readonly trace?: string | readonly string[]
+  /** Environment map for the unified resolution; defaults to `process.env`. */
+  readonly env?: Record<string, string | undefined>
+  /** Settings file for the unified resolution; defaults to the global settings.jsonc. */
+  readonly configFile?: string
 }
 
 function hasTraceSelection(trace: LogLevelInput["trace"]): boolean {
@@ -19,15 +25,15 @@ function hasTraceSelection(trace: LogLevelInput["trace"]): boolean {
 }
 
 /**
- * Server logs are persistent operational records, so local `serve` should be
- * no noisier than a release server. Local TUI keeps DEBUG for interactive
- * diagnostics. `--log-level` remains the explicit escape hatch for either, and
- * wins over the implicit promotion performed by `--trace`.
+ * Resolve the engine process-tree level (DESIGN-config-settings.md "Logging
+ * Level"): `--log-level` > `--trace` promotion > `ELLAMAKA_LOG_LEVEL` >
+ * `wopal.logging.level` > INFO. There is no implicit dev promotion: the dev
+ * toolchain asks for DEBUG explicitly (`dev.sh` passes `--log-level DEBUG`).
  */
-export function resolveLogLevel(input: LogLevelInput): Log.Level {
+export function resolveLogLevel(input: LogLevelInput = {}): Log.Level {
   if (input.requested) return input.requested
   if (hasTraceSelection(input.trace)) return "TRACE"
-  return input.isLocal && input.role === "tui" ? "DEBUG" : "INFO"
+  return Log.resolveEffectiveLevel({ env: input.env, configFile: input.configFile })
 }
 
 export interface TraceInput {

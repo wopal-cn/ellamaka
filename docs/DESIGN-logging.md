@@ -93,7 +93,7 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 
 - 解析一次发生在进程入口、日志初始化之前；结果写回 `ELLAMAKA_LOG_LEVEL` 供进程内传播。
 - 引擎把生效级别传给 DSH（runtime 与各 profile 文件）与 wopal-plugin；worker 与子进程靠环境继承，组件自身不读配置文件。
-- 引擎在进程内读取持久配置值，与 CLI 查询使用相同的配置层级及合并语义。
+- 引擎在进程内读取持久配置值；v1 为全局层 `$WOPAL_HOME/config/settings.jsonc` 的直读（raw JSONC，不含 CLI 的层级合并），读取实现收敛在 `resolveEffectiveLevel` 单一替换点，将来 `wopal config get` 落地后仅替换该函数。
 - 显式 `--log-level` 覆盖一切；显式 `--log-level` 与 `--trace` 的搭配规则见 Trace 节。
 - 非法值或配置不可读时回落 `INFO`，不阻断启动。
 - 上游遗留的级别环境变量名不再读取；日志级别的唯一环境变量名是 `ELLAMAKA_LOG_LEVEL`。

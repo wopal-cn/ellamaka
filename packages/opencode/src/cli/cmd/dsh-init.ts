@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { join } from "node:path"
 import { Global } from "@wopal/ellamaka-core/global"
-import { DEFAULT_DSH_RUNTIME_MANIFEST, initializeDshRuntime } from "@wopal/ellamaka-cordis/runtime"
+import { DEFAULT_DSH_RUNTIME_MANIFEST, initializeDshRuntime, toDshLogLevel } from "@wopal/ellamaka-cordis/runtime"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 
 /**
@@ -63,15 +63,9 @@ export const DshInitCommand = effectCmd({
  * for tests (the manager gates on `ELLAMAKA_DSH` from it).
  */
 export function runDshInit(options: { wopalHome: string; logFile?: string; env?: Record<string, string | undefined> }) {
-  const requested = process.env.OPENCODE_LOG_LEVEL
-  // DSH has four levels; the host TRACE level maps down to DEBUG at the
-  // boundary so `--trace ...` does not accidentally disable DSH diagnostics.
-  const logLevel =
-    requested === "TRACE"
-      ? "DEBUG"
-      : requested === "DEBUG" || requested === "INFO" || requested === "WARN" || requested === "ERROR"
-        ? requested
-        : undefined
+  // The host's effective level (written back to ELLAMAKA_LOG_LEVEL by the
+  // entry) is mapped to DSH's four levels at the single boundary in cordis.
+  const logLevel = toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL)
   return initializeDshRuntime({
     wopalHome: options.wopalHome,
     logFile: options.logFile ?? join(options.wopalHome, "logs", "dsh-runtime.log"),

@@ -38,6 +38,9 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).toContain("resolveInstallAnchor")
     expect(source).toContain("createDshRuntimeApi")
     expect(source).toContain('entry: opts.entry ?? "serve"')
+    // One level boundary for every DSH consumer: the host's effective level
+    // (written back to ELLAMAKA_LOG_LEVEL) is mapped once, in cordis.
+    expect(source).toContain("toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL)")
   })
 
   test("dsh-mount keeps runtime and plugin diagnostics in separate bounded files", () => {
@@ -45,7 +48,10 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).toContain('"dsh-runtime.log"')
     expect(source).toContain("runtimeLogFile")
     expect(source).toContain("logFile: runtimeLogFile")
-    // The profile mounts intentionally continue to receive the plugin file.
+    // The profile mounts receive the plugin-log directory, never a fixed
+    // file: each profile derives its own bounded `dsh-plugins-<profile>.log`.
+    expect(source).toContain("logDir")
+    expect(source).not.toContain('"dsh-plugins.log"')
     expect(source).toContain("mountDshWeb(webHub.ctx, {")
     expect(source).toContain("mountDshTools(toolsHub.ctx, {")
   })

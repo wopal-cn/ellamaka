@@ -46,7 +46,7 @@ describe("tui dsh mount", () => {
     seedDshClosure(wopalHome)
     const handle = await mountDshIfEnabled({
       wopalHome,
-      logFile: join(wopalHome, "logs", "dsh-plugins.log"),
+      logDir: join(wopalHome, "logs"),
     })
     expect(handle).toBeDefined()
     // The host sets DSH_HOME=$WOPAL_HOME/dsh/home at process launch; the TUI
@@ -62,7 +62,7 @@ describe("tui dsh mount", () => {
     seedDshClosure(wopalHome)
     const handle = await mountDshIfEnabled({
       wopalHome,
-      logFile: join(wopalHome, "logs", "dsh-plugins.log"),
+      logDir: join(wopalHome, "logs"),
     })
     expect(handle).toBeDefined()
 
@@ -101,7 +101,7 @@ describe("tui dsh mount", () => {
     seedDshClosure(wopalHome)
     const handle = await mountDshIfEnabled({
       wopalHome,
-      logFile: join(wopalHome, "logs", "dsh-plugins.log"),
+      logDir: join(wopalHome, "logs"),
     })
     expect(handle).toBeDefined()
     await handle!.dispose()
@@ -127,9 +127,7 @@ describe("tui dsh mount", () => {
       const dir = join(aiDir, name.slice("@deepseek-ai/".length))
       mkdirSync(dir, { recursive: true })
       // dsh deliberately has NO entry point (the broken export).
-      const pkg = name === "@deepseek-ai/dsh"
-        ? { name, version }
-        : { name, version, main: "index.js" }
+      const pkg = name === "@deepseek-ai/dsh" ? { name, version } : { name, version, main: "index.js" }
       writeFileSync(join(dir, "package.json"), JSON.stringify(pkg))
     }
     let handle: unknown
@@ -137,7 +135,7 @@ describe("tui dsh mount", () => {
     try {
       handle = await mountDshIfEnabled({
         wopalHome,
-        logFile: join(wopalHome, "logs", "dsh-plugins.log"),
+        logDir: join(wopalHome, "logs"),
       })
     } catch (e) {
       error = e

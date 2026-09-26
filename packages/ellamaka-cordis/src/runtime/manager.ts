@@ -22,6 +22,10 @@ export { resolveInstallAnchor } from "./status.js"
 export { pickFastestRegistry, CANDIDATE_REGISTRIES, DEFAULT_REGISTRY } from "./registry.js"
 export type { RegistryCandidate, RegistryProbeResult } from "./registry.js"
 export type { InstallAnchor } from "./status.js"
+// The single host→DSH level boundary (TRACE maps down to DEBUG) and the
+// four-level vocabulary shared with the log bridge.
+export { toDshLogLevel } from "./log.js"
+export type { DshLogLevel } from "./log.js"
 
 /**
  * Unified DSH Runtime Manager (DESIGN §3.4.5, 9-step state machine).

@@ -1,13 +1,13 @@
 import { Global } from "@wopal/ellamaka-core/global"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import { dirname, join } from "node:path"
+import { join } from "node:path"
 import os from "node:os"
 import type { Listener } from "../../server/server"
-import { Effect } from "effect"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   initializeDshRuntime,
   resolveInstallAnchor,
+  toDshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-command"
@@ -149,9 +149,10 @@ export function routableDshOrigin(hostname: string, port: number, requestHost: s
 export interface DshEngineMountOptions {
   /** Override the wopal home; defaults to `$WOPAL_HOME`. */
   wopalHome?: string
-  /** Override the dsh-plugins log file; defaults to `$WOPAL_HOME/logs/dsh-plugins.log`. */
-  logFile?: string
-  /** Override the DSH runtime-manager log; defaults to `$WOPAL_HOME/logs/dsh-runtime.log`. */
+  /** Override the plugin-log directory; defaults to `$WOPAL_HOME/logs`.
+   * Each profile derives its own file (`dsh-plugins-<profile>.log`). */
+  logDir?: string
+  /** Override the DSH runtime-manager log; defaults to `<logDir>/dsh-runtime.log`. */
   runtimeLogFile?: string
   /** The entry name the runtime manager logs under; defaults to `serve`. */
   entry?: "serve" | "web"
@@ -161,15 +162,6 @@ export interface DshEngineMountOptions {
    * trusted authorities from this list — one trust decision, one surface.
    */
   cors?: readonly string[]
-}
-
-function configuredDshLogLevel(): "DEBUG" | "INFO" | "WARN" | "ERROR" {
-  const value = process.env.OPENCODE_LOG_LEVEL
-  // DSH has four levels; the host TRACE level is mapped down to its most
-  // verbose equivalent so `--trace ...` still widens DSH diagnostics instead of
-  // silently falling back to the quiet default.
-  if (value === "TRACE") return "DEBUG"
-  return value === "DEBUG" || value === "INFO" || value === "WARN" || value === "ERROR" ? value : "WARN"
 }
 
 export interface DshEngineHandle {
@@ -223,8 +215,10 @@ export async function mountDshEngine(
   opts: DshEngineMountOptions = {},
 ): Promise<DshEngineHandle | undefined> {
   const wopalHome = opts.wopalHome ?? Global.Path.wopalHome
-  const logFile = opts.logFile ?? join(Global.Path.log, "dsh-plugins.log")
-  const runtimeLogFile = opts.runtimeLogFile ?? join(dirname(logFile), "dsh-runtime.log")
+  // The plugin-log directory (per-profile files derive inside the mount); the
+  // runtime manager keeps its single dedicated file.
+  const logDir = opts.logDir ?? Global.Path.log
+  const runtimeLogFile = opts.runtimeLogFile ?? join(logDir, "dsh-runtime.log")
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
@@ -239,7 +233,7 @@ export async function mountDshEngine(
   const status = await initializeDshRuntime({
     wopalHome,
     logFile: runtimeLogFile,
-    logLevel: configuredDshLogLevel(),
+    logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
     entry: opts.entry ?? "serve",
     manifest,
@@ -275,8 +269,8 @@ export async function mountDshEngine(
     const dsh = await mountDshWeb(webHub.ctx, {
       home,
       port: server.port,
-      logFile,
-      logLevel: configuredDshLogLevel(),
+      logDir,
+      logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
       installAnchor: anchor.path,
       runtime,
       disableCodeRuntime: true,
@@ -322,8 +316,8 @@ export async function mountDshEngine(
     const toolsHost = await mountDshTools(toolsHub.ctx, {
       home,
       port: 0,
-      logFile,
-      logLevel: configuredDshLogLevel(),
+      logDir,
+      logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
       installAnchor: anchor.path,
       runtime,
     })

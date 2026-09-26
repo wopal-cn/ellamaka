@@ -299,6 +299,16 @@ is_service_process() {
       [[ "$command" == *"bun run dev"* || "$command" == *"vite"* ]] || return 1
       expected="$ellamaka_app_dir_"
       ;;
+    tui)
+      # The interactive tui/attach client execs from the caller's cwd, so
+      # unlike backend/frontend there is no expected cwd — the engine entry
+      # path in the command line is the identity.
+      if [ "$root_" = "-" ]; then
+        [[ "$command" == *"packages/opencode/src/index.ts"* ]] || return 1
+      else
+        [[ "$command" == *"$opencode_entry_"* ]] || return 1
+      fi
+      ;;
     desktop) [[ "$command" == *"electron-vite"* ]] || return 1 ;;
     desktop-sidecar)
       # utilityProcess.fork: an Electron Helper running the bundled sidecar as
@@ -722,7 +732,7 @@ record_crashpads() {
 cmd_stop() {
   local target="${1:-all}" failed=false
   case "$target" in
-    backend|frontend|desktop|all|--everywhere) ;;
+    backend|frontend|desktop|tui|all|--everywhere) ;;
     -h|--help)
       cat <<EOF
 Usage: $self stop [target] [--everywhere]
@@ -731,6 +741,7 @@ Targets:
   backend    Stop only the backend server (keep Workbench alive)
   frontend   Stop only the Workbench dev server (keep backend alive)
   desktop    Stop only the Electron desktop app (keep backend/Workbench alive)
+  tui        Stop a registered foreground tui/attach client of this worktree
   all        Stop all dev instances in THIS worktree (default)
 
 --everywhere
@@ -756,11 +767,12 @@ EOF
   fi
 
   case "$target" in
-    backend|frontend|desktop) stop_service "$target" ;;
+    backend|frontend|desktop|tui) stop_service "$target" ;;
     all)
       stop_service frontend || failed=true
       stop_service desktop || failed=true
       stop_service backend || failed=true
+      stop_service tui || failed=true
       if $failed; then return 1; fi
       ;;
   esac
@@ -792,7 +804,7 @@ stop_everywhere() {
       [ -n "$label" ] || continue
       service="${label%%-*}"
       case "$service" in
-        backend|frontend|desktop) ;;
+        backend|frontend|desktop|tui) ;;
         *) continue ;;
       esac
       # Respect the requested target; crashpad/sidecar/vite sub-records ride
@@ -802,6 +814,7 @@ stop_everywhere() {
         backend) [ "$service" = backend ] || continue ;;
         frontend) [ "$service" = frontend ] || continue ;;
         desktop) [ "$service" = desktop ] || continue ;;
+        tui) [ "$service" = tui ] || continue ;;
       esac
       # Identity check BEFORE killing, mirroring stop_service: a recycled
       # pid/pgid in a stale record must not translate into killing an
@@ -819,6 +832,21 @@ stop_everywhere() {
   done
   echo
   echo "all instances stopped (run any worktree's 'dev.sh status' to confirm)"
+}
+
+# Shared interactive log injection for the `tui` and `attach` entries. The
+# engine no longer promotes the dev channel implicitly (D-09), so both paths
+# inject the default level explicitly; `--debug` additionally opens the plugin
+# debug channel. Both call sites expand this one construction so the two paths
+# cannot drift apart.
+interactive_log_injection() {
+  INTERACTIVE_LOG_ARGS=(--log-level DEBUG)
+  INTERACTIVE_LOG_ENV=()
+  if [ "$1" = true ]; then
+    local modules
+    modules="$(plugin_debug_modules "$2")"
+    INTERACTIVE_LOG_ENV+=(WOPAL_PLUGIN_LOG_LEVEL=debug WOPAL_PLUGIN_LOG_MODULES="$modules" WOPAL_PLUGIN_LOG_FILE="$PLUGIN_DEBUG_LOG")
+  fi
 }
 
 cmd_tui() {
@@ -847,12 +875,10 @@ cmd_tui() {
 
   if $attach; then
     mkdir -p "$DEV_DIR"
-    local caller_pwd="$(pwd)" attach_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") attach_args=() plugin_modules=""
-    if $debug; then
-      attach_args+=(--log-level DEBUG)
-      plugin_modules="$(plugin_debug_modules "$debug_modules")"
-      attach_env+=(WOPAL_PLUGIN_LOG_LEVEL=debug WOPAL_PLUGIN_LOG_MODULES="$plugin_modules" WOPAL_PLUGIN_LOG_FILE="$PLUGIN_DEBUG_LOG")
-    fi
+    local caller_pwd="$(pwd)" attach_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") attach_args=()
+    interactive_log_injection "$debug" "$debug_modules"
+    attach_env+=("${INTERACTIVE_LOG_ENV[@]}")
+    attach_args+=("${INTERACTIVE_LOG_ARGS[@]}")
 
     if read_record backend && service_running backend && backend_healthy "$RECORD_PORT"; then
       echo "attaching to running server :$RECORD_PORT"
@@ -864,6 +890,7 @@ cmd_tui() {
         echo "  workbench :$APP_PORT"
       fi
       cd "$opencode_dir"
+      write_record tui - "$$" "$(pgid_of "$$")"
       exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$RECORD_PORT" --dir "$caller_pwd"
     fi
 
@@ -888,20 +915,22 @@ cmd_tui() {
     echo "  backend :$PORT, workbench :$APP_PORT"
     echo "  → $(workbench_entry_url "$APP_PORT")"
     cd "$opencode_dir"
+    write_record tui - "$$" "$(pgid_of "$$")"
     exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
   fi
 
   mkdir -p "$DEV_DIR"
-  local caller_pwd="$(pwd)" tui_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") tui_args=() plugin_modules=""
+  local caller_pwd="$(pwd)" tui_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") tui_args=()
+  interactive_log_injection "$debug" "$debug_modules"
+  tui_env+=("${INTERACTIVE_LOG_ENV[@]}")
+  tui_args+=("${INTERACTIVE_LOG_ARGS[@]}")
   if $debug; then
-    tui_args+=(--log-level DEBUG)
-    plugin_modules="$(plugin_debug_modules "$debug_modules")"
-    tui_env+=(WOPAL_PLUGIN_LOG_LEVEL=debug WOPAL_PLUGIN_LOG_MODULES="$plugin_modules" WOPAL_PLUGIN_LOG_FILE="$PLUGIN_DEBUG_LOG")
     echo "debug enabled (modules: $debug_modules)"
     echo "  plugin log: $PLUGIN_DEBUG_LOG"
     echo "watch: tail -f $PLUGIN_DEBUG_LOG"
   fi
   cd "$caller_pwd"
+  write_record tui - "$$" "$(pgid_of "$$")"
   exec env "${tui_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${tui_args[@]}" "${ns_arg[@]}" "${passthrough[@]}"
 }
 
@@ -999,6 +1028,7 @@ EOF
       return 0
       ;;
     desktop) echo "restart: desktop not supported (use 'stop desktop && $self desktop')"; return 1 ;;
+    tui) echo "restart: tui not supported (use 'stop tui && $self tui')"; return 1 ;;
     *) echo "Unknown restart target: $target (expected: backend|frontend|all)"; return 1 ;;
   esac
 
@@ -1109,7 +1139,7 @@ cmd_desktop() {
 
   mkdir -p "$DEV_DIR"
   local plugin_modules=""
-  local -a desktop_env=(ELAMAKA_DESKTOP_DEV=1 ELAMAKA_DESKTOP_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" ELLAMAKA_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
+  local -a desktop_env=(ELLAMAKA_DESKTOP_DEV=1 ELLAMAKA_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" ELLAMAKA_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
   # The sidecar's dshmarket install worker re-launches this command for
   # `dsh plugin` installs (Bun installer). Point it at the worktree CLI
   # entry run via bun — no engine build required; the sidecar falls back to
@@ -1118,7 +1148,7 @@ cmd_desktop() {
     desktop_env+=(ELLAMAKA_DSH_INSTALL_COMMAND="bun $root/packages/opencode/src/index.ts")
   fi
   if $cdp_debug; then
-    desktop_env+=(ELAMAKA_DESKTOP_CDP=1)
+    desktop_env+=(ELLAMAKA_DESKTOP_CDP=1)
   fi
   if [ -n "$WOPAL_HOME" ]; then
     desktop_env+=(WOPAL_HOME="$WOPAL_HOME")

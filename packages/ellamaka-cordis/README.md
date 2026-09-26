@@ -14,8 +14,9 @@ converges here.
   no webserver, agent-loop plugins disabled). These replay the dsh boot
   sequence on the host context — one process, one container ([dsh fusion foundation](../../docs/DESIGN-dsh-base.md)).
 - `createCordisLogExporter` — routes every dsh plugin's `ctx.logger` output
-  to a dedicated log file (`dsh-plugins.log`), independent of the ellamaka
-  main log ([tool container design](../../docs/DESIGN-ellamaka-tools.md)).
+  to its profile's dedicated log file (`dsh-plugins-<profile>.log`),
+  independent of the ellamaka main log
+  ([tool container design](../../docs/DESIGN-ellamaka-tools.md)).
 
 ## Mountable plugin list (Q3, rolling)
 

@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { createDshLogger, createDshLogWriter } from "./log"
+import { createDshLogger, createDshLogWriter, dshPluginLogFileName, toDshLogLevel } from "./log"
 
 const homes: string[] = []
 
@@ -104,6 +104,46 @@ test("suppresses records that differ only by timestamp without escalating their 
   expect(contents.match(/tool outcome rejected/g)?.length).toBe(1)
   expect(contents).toContain("[DEBUG] [dsh] suppressed 2 repeated dsh log records")
   expect(contents).not.toContain("[WARN] [dsh] suppressed")
+})
+
+test("maps host levels to the four DSH levels at one boundary", () => {
+  // DSH has four levels; the host TRACE maps down to DEBUG so `--trace` runs
+  // still widen DSH diagnostics instead of silencing them.
+  expect(toDshLogLevel("TRACE")).toBe("DEBUG")
+  expect(toDshLogLevel("DEBUG")).toBe("DEBUG")
+  expect(toDshLogLevel("INFO")).toBe("INFO")
+  expect(toDshLogLevel("WARN")).toBe("WARN")
+  expect(toDshLogLevel("ERROR")).toBe("ERROR")
+  // Absent or invalid input falls back to the unified default.
+  expect(toDshLogLevel(undefined)).toBe("INFO")
+  expect(toDshLogLevel("nonsense")).toBe("INFO")
+})
+
+test("derives the per-profile plugin log file name", () => {
+  // The derivation is the single naming point: a new profile automatically
+  // gets its own file without a mount-logic change.
+  expect(dshPluginLogFileName("web")).toBe("dsh-plugins-web.log")
+  expect(dshPluginLogFileName("ellamaka-tools")).toBe("dsh-plugins-ellamaka-tools.log")
+  expect(dshPluginLogFileName("future-profile")).toBe("dsh-plugins-future-profile.log")
+})
+
+test("per-profile plugin log files are bounded independently", () => {
+  const home = mkdtempSync(join(tmpdir(), "ellamaka-dsh-log-"))
+  homes.push(home)
+  const webLog = join(home, "logs", dshPluginLogFileName("web"))
+  const toolsLog = join(home, "logs", dshPluginLogFileName("ellamaka-tools"))
+  const webWrite = createDshLogWriter({ logFile: webLog, maxBytes: 40, backupCount: 2, now: () => 0 })
+  const toolsWrite = createDshLogWriter({ logFile: toolsLog, maxBytes: 40, backupCount: 2, now: () => 0 })
+
+  // Push the web file past its own cap; the tools file must stay untouched.
+  webWrite("web record one\n")
+  webWrite("web record two\n")
+  webWrite("web record three\n")
+  toolsWrite("tools record one\n")
+
+  expect(readFileSync(`${webLog}.1`, "utf8")).toContain("web record one")
+  expect(existsSync(`${toolsLog}.1`)).toBe(false)
+  expect(readFileSync(toolsLog, "utf8")).toContain("tools record one")
 })
 
 test("reports an unwritable DSH log destination only once", () => {

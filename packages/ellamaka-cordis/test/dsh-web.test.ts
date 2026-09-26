@@ -311,15 +311,16 @@ describe("dsh web engine", () => {
     }
   }, 30_000)
 
-  test("mountDshWeb writes dsh plugin logs to the dedicated log file", async () => {
+  test("mountDshWeb writes dsh plugin logs to the per-profile log file", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
-    const logFile = join(home, "dsh-plugins.log")
+    const logDir = join(home, "logs")
+    const logFile = join(logDir, "dsh-plugins-web.log")
     const ctx = new Context()
     let logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
     const host = await mountDshWeb(ctx, {
       home,
       port: 4097,
-      logFile,
+      logDir,
       getLogLevel: () => logLevel,
       disableCodeRuntime: true,
     })
@@ -353,6 +354,41 @@ describe("dsh web engine", () => {
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
+  test("mounts each profile into its own plugin log file with no cross-contamination", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-split-"))
+    const logDir = join(home, "logs")
+    const webCtx = new Context()
+    const toolsCtx = new Context()
+    const webHost = await mountDshWeb(webCtx, {
+      home,
+      port: 4098,
+      logDir,
+      disableCodeRuntime: true,
+    })
+
+    try {
+      const toolsHost = await mountDshTools(toolsCtx, { home, port: 0, logDir })
+      try {
+        webCtx.logger("web-probe").warn("web-only-probe")
+        toolsCtx.logger("tools-probe").warn("tools-only-probe")
+        // Give the async Exporter a tick to flush.
+        await new Promise((r) => setTimeout(r, 200))
+        const webLog = readFileSync(join(logDir, "dsh-plugins-web.log"), "utf-8")
+        const toolsLog = readFileSync(join(logDir, "dsh-plugins-ellamaka-tools.log"), "utf-8")
+        expect(webLog).toContain("web-only-probe")
+        expect(webLog).not.toContain("tools-only-probe")
+        expect(toolsLog).toContain("tools-only-probe")
+        expect(toolsLog).not.toContain("web-only-probe")
+      } finally {
+        await toolsHost.dispose()
+        await toolsCtx.fiber.dispose()
+      }
+    } finally {
+      await webHost.dispose()
+      await webCtx.fiber.dispose()
     }
   }, 30_000)
 })

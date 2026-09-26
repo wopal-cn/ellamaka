@@ -359,7 +359,7 @@ const main = Effect.gen(function* () {
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-  if (!app.isPackaged && process.env.ELAMAKA_DESKTOP_CDP === "1") {
+  if (!app.isPackaged && process.env.ELLAMAKA_DESKTOP_CDP === "1") {
     app.commandLine.appendSwitch("remote-debugging-port", "9222")
   }
 

@@ -5,6 +5,7 @@ import { register } from "node:module"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { listenThenClearCredentials } from "./sidecar-credentials"
+import { currentSidecarLogLevel, setSidecarLogLevel } from "./sidecar-log-level"
 
 register(new URL("./source-ts-loader.js", import.meta.url), import.meta.url)
 
@@ -25,8 +26,8 @@ type StartCommand = {
   needsMigration: boolean
   /** The wopal home the dsh runtime manager resolves closures under. */
   wopalHome?: string
-  /** Path to the dedicated dsh-plugins log file. */
-  logFile?: string
+  /** Plugin-log directory; each profile derives `dsh-plugins-<profile>.log`. */
+  pluginLogDir?: string
   /** Path to the dedicated DSH runtime-manager log file. */
   runtimeLogFile?: string
 }
@@ -92,7 +93,12 @@ let dshPluginService:
       replay(): Promise<{ ok: true } | { ok: false; error: string }>
     }
   | undefined
-let sidecarLogLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
+/** The sidecar's effective level lives in the single hub (`sidecar-log-level.ts`). */
+const sidecarLogLevel = {
+  get current(): "TRACE" | "DEBUG" | "INFO" | "WARN" | "ERROR" {
+    return currentSidecarLogLevel()
+  },
+}
 /** Disposer for the /api/onboarding mount; runs before the listener stops. */
 let disposeOnboarding: (() => void) | undefined
 
@@ -112,8 +118,14 @@ let dshLaunchState:
     }
   | undefined
 
-parentPort.on("message", (event) => {
-  const command = parseCommand(event.data)
+/**
+ * The sidecar's message contract, exported so the wiring stays directly
+ * assertable regardless of bun's shared module registry across test files
+ * (the module-scope `parentPort.on` binding below happens exactly once, in
+ * whichever test file imports this module first).
+ */
+export function handleSidecarMessage(data: unknown) {
+  const command = parseCommand(data)
   if (!command) return
   if (command.type === "stop") {
     void stop()
@@ -124,23 +136,31 @@ parentPort.on("message", (event) => {
     return
   }
   void start(command)
+}
+
+parentPort.on("message", (event) => {
+  handleSidecarMessage(event.data)
 })
 
 async function start(command: StartCommand) {
   try {
     ensureLoopbackNoProxy()
     const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
-    // Desktop dev.sh 通过 ELAMAKA_DESKTOP_* 环境变量控制日志行为：
-    //   ELAMAKA_DESKTOP_DEV=1             → dev 模式（写到 WOPAL_DEBUG_LOG_DIR/ellamaka-dev-sidecar.log）
-    //   ELAMAKA_DESKTOP_LOG_LEVEL=<LEVEL> → 日志级别（默认 WARN，向后兼容）
-    // 未设置时（打包发布版 / 普通用户）走默认行为，与历史一致。
-    const sidecarDev = process.env.ELAMAKA_DESKTOP_DEV === "1"
-    sidecarLogLevel = (process.env.ELAMAKA_DESKTOP_LOG_LEVEL ?? "WARN") as "DEBUG" | "INFO" | "WARN" | "ERROR"
+    // Desktop dev tooling controls the sidecar through the double-L
+    // `ELLAMAKA_DESKTOP_*` variables (shared with the onboarding reader):
+    //   ELLAMAKA_DESKTOP_DEV=1 → dev channel (honors WOPAL_DEBUG_LOG_DIR and
+    //   the role-derived `ellamaka-dev-sidecar.log` file)
+    // The level follows the unified mechanism (ELLAMAKA_LOG_LEVEL →
+    // wopal.logging.level → INFO); the Desktop debug toggle can still lower it
+    // at runtime through `setLogLevel`.
+    const sidecarDev = process.env.ELLAMAKA_DESKTOP_DEV === "1"
+    const initialLevel = Log.resolveEffectiveLevel()
+    setSidecarLogLevel(initialLevel)
+    process.env.ELLAMAKA_LOG_LEVEL = initialLevel
     await Log.init({
       print: false,
-      level: sidecarLogLevel,
+      level: initialLevel,
       dev: sidecarDev,
-      devFile: "ellamaka-dev-sidecar.log",
       role: "sidecar",
     })
     const startupLog = Log.create({ service: "sidecar" })
@@ -214,12 +234,12 @@ async function start(command: StartCommand) {
   }
 }
 
-/** Resolve the wopal home plus separate DSH runtime and plugin log files. */
+/** Resolve the wopal home plus the DSH runtime log file and plugin-log directory. */
 function dshLaunch(command: StartCommand) {
   const wopalHome = command.wopalHome ?? process.env.WOPAL_HOME ?? join(homedir(), ".wopal")
-  const logFile = command.logFile ?? join(wopalHome, "logs", "dsh-plugins.log")
+  const logDir = command.pluginLogDir ?? join(wopalHome, "logs")
   const runtimeLogFile = command.runtimeLogFile ?? join(wopalHome, "logs", "dsh-runtime.log")
-  return { wopalHome, logFile, runtimeLogFile, home: join(wopalHome, "dsh") }
+  return { wopalHome, logDir, runtimeLogFile, home: join(wopalHome, "dsh") }
 }
 
 /**
@@ -283,11 +303,11 @@ export async function resolveEllamakaInstallCommand(wopalHomeOverride?: string):
  * (B-06).
  */
 async function mountDshIfPresent(command: StartCommand): Promise<void> {
-  const { wopalHome, logFile, home } = dshLaunch(command)
-  const { bootDshWeb, setDshUrlGetter, Log } = await import("virtual:opencode-server")
+  const { wopalHome, logDir, home } = dshLaunch(command)
+  const { bootDshWeb, setDshUrlGetter, Log, toDshLogLevel } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   try {
-    sidecarLog.info("dsh.desktop.web.start", { home, logFile })
+    sidecarLog.info("dsh.desktop.web.start", { home, logDir })
     const launch = await initDshLaunch(command)
     if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
       sidecarLog.warn("dsh.desktop.web.skip", { status: launch.status })
@@ -305,9 +325,9 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
       home,
       port: listener?.port ?? 0,
       installAnchor: launch.anchor.path,
-      logFile,
-      logLevel: sidecarLogLevel,
-      getLogLevel: () => sidecarLogLevel,
+      logDir,
+      logLevel: toDshLogLevel(sidecarLogLevel.current),
+      getLogLevel: () => toDshLogLevel(sidecarLogLevel.current),
       runtime,
       ellamakaCommand,
     })
@@ -364,8 +384,8 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
  * builtins keep serving.
  */
 async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
-  const { logFile, home } = dshLaunch(command)
-  const { bootDshTools, Log } = await import("virtual:opencode-server")
+  const { logDir, home } = dshLaunch(command)
+  const { bootDshTools, Log, toDshLogLevel } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   try {
     const launch = await initDshLaunch(command)
@@ -379,9 +399,9 @@ async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
       home,
       port: 0,
       installAnchor: launch.anchor.path,
-      logFile,
-      logLevel: sidecarLogLevel,
-      getLogLevel: () => sidecarLogLevel,
+      logDir,
+      logLevel: toDshLogLevel(sidecarLogLevel.current),
+      getLogLevel: () => toDshLogLevel(sidecarLogLevel.current),
       runtime,
     })
     dshToolsHost = {
@@ -418,6 +438,7 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
     createDshRuntimeApi,
     setDshStatus,
     Log,
+    toDshLogLevel,
   } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
@@ -425,7 +446,7 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
   const status = await initializeDshRuntime({
     wopalHome,
     logFile: runtimeLogFile,
-    logLevel: sidecarLogLevel,
+    logLevel: toDshLogLevel(sidecarLogLevel.current),
     entry: "tui",
     manifest,
   })
@@ -513,7 +534,10 @@ async function stop() {
 
 async function setLogLevel(level: "DEBUG" | "INFO" | "WARN" | "ERROR") {
   const { Log } = await import("virtual:opencode-server")
-  sidecarLogLevel = level
+  setSidecarLogLevel(level)
+  // The hub owns the process-tree value: keep the inherited env in sync so a
+  // child launched after a live toggle speaks the toggled level too.
+  process.env.ELLAMAKA_LOG_LEVEL = level
   Log.setLevel(level)
 }
 
@@ -585,7 +609,7 @@ function dshPluginLogger(ctx: unknown, fallback: DshPluginLogger): DshPluginLogg
 }
 
 function parseCommand(value: unknown): SidecarCommand | undefined {
-  if (!value || typeof value !== "object") return
+  if (!value || typeof value !== "object") return undefined
   const command = value as Partial<StartCommand | StopCommand | SetLogLevelCommand>
   if (command.type === "stop") return { type: "stop" }
   if (command.type === "setLogLevel") {
@@ -597,13 +621,13 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
     ) {
       return { type: "setLogLevel", level: command.level }
     }
-    return
+    return undefined
   }
-  if (command.type !== "start") return
-  if (typeof command.hostname !== "string") return
-  if (typeof command.port !== "number") return
-  if (typeof command.password !== "string") return
-  if (typeof command.needsMigration !== "boolean") return
+  if (command.type !== "start") return undefined
+  if (typeof command.hostname !== "string") return undefined
+  if (typeof command.port !== "number") return undefined
+  if (typeof command.password !== "string") return undefined
+  if (typeof command.needsMigration !== "boolean") return undefined
   return {
     type: "start",
     hostname: command.hostname,
@@ -611,7 +635,7 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
     password: command.password,
     needsMigration: command.needsMigration,
     wopalHome: typeof command.wopalHome === "string" ? command.wopalHome : undefined,
-    logFile: typeof command.logFile === "string" ? command.logFile : undefined,
+    pluginLogDir: typeof command.pluginLogDir === "string" ? command.pluginLogDir : undefined,
     runtimeLogFile: typeof command.runtimeLogFile === "string" ? command.runtimeLogFile : undefined,
   }
 }

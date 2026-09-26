@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, describe, expect, test } from "bun:test"
 import fs from "fs/promises"
+import { mkdtempSync, rmSync, writeFileSync } from "fs"
 import path from "path"
 import os from "os"
 import { Log } from "@wopal/ellamaka-core/util/log"
@@ -250,5 +251,88 @@ describe("trace level and category filtering", () => {
     // level now emits nothing.
     expect(content).not.toContain("reset-bus")
     expect(content).not.toContain("reset-permission")
+  })
+})
+
+/**
+ * The unified level mechanism (DESIGN-config-settings.md "Logging Level"):
+ * `requested` > `ELLAMAKA_LOG_LEVEL` > `wopal.logging.level` (global
+ * `settings.jsonc`) > `INFO`. Each source is tried in order; an invalid value
+ * is not a hit and the next source is consulted; an unreadable config falls
+ * back to INFO and never blocks startup. TRACE is legal only as an explicit
+ * (command-line / env) value — the persistent config domain is the four
+ * operational levels.
+ */
+describe("effective log level resolution", () => {
+  const levelDirs: string[] = []
+
+  afterAll(() => {
+    for (const dir of levelDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+  })
+
+  function settings(content: string): string {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "ellamaka-level-"))
+    levelDirs.push(dir)
+    const file = path.join(dir, "settings.jsonc")
+    writeFileSync(file, content)
+    return file
+  }
+
+  test("explicit level wins over env and config", () => {
+    const configFile = settings(`{ "wopal": { "logging": { "level": "DEBUG" } } }`)
+    expect(Log.resolveEffectiveLevel({ requested: "ERROR", env: { ELLAMAKA_LOG_LEVEL: "WARN" }, configFile })).toBe(
+      "ERROR",
+    )
+  })
+
+  test("env wins over config", () => {
+    const configFile = settings(`{ "wopal": { "logging": { "level": "DEBUG" } } }`)
+    expect(Log.resolveEffectiveLevel({ env: { ELLAMAKA_LOG_LEVEL: "WARN" }, configFile })).toBe("WARN")
+  })
+
+  test("reads wopal.logging.level when no env is set", () => {
+    const configFile = settings(`{ "wopal": { "logging": { "level": "DEBUG" } } }`)
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile })).toBe("DEBUG")
+  })
+
+  test("defaults to INFO without env and config", () => {
+    expect(Log.resolveEffectiveLevel({ env: {} })).toBe("INFO")
+  })
+
+  test("an invalid value is skipped in favor of the next source", () => {
+    const configFile = settings(`{ "wopal": { "logging": { "level": "WARN" } } }`)
+    expect(Log.resolveEffectiveLevel({ env: { ELLAMAKA_LOG_LEVEL: "nonsense" }, configFile })).toBe("WARN")
+    expect(Log.resolveEffectiveLevel({ env: { ELLAMAKA_LOG_LEVEL: "nonsense" } })).toBe("INFO")
+  })
+
+  test("an invalid config value falls back to INFO", () => {
+    const configFile = settings(`{ "wopal": { "logging": { "level": "verbose" } } }`)
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile })).toBe("INFO")
+  })
+
+  test("rejects TRACE in the config domain but accepts it from the env", () => {
+    const configFile = settings(`{ "wopal": { "logging": { "level": "TRACE" } } }`)
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile })).toBe("INFO")
+    expect(Log.resolveEffectiveLevel({ env: { ELLAMAKA_LOG_LEVEL: "TRACE" } })).toBe("TRACE")
+  })
+
+  test("an unreadable or malformed config falls back to INFO", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "ellamaka-level-"))
+    levelDirs.push(dir)
+    // A directory as the settings path cannot be read; malformed JSONC is
+    // parsed as an empty document. Neither may throw or block startup.
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile: dir })).toBe("INFO")
+    const malformed = settings(`{ "wopal": { "logging": `)
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile: malformed })).toBe("INFO")
+  })
+
+  test("a syntactically invalid document never yields a configured level", () => {
+    // jsonc-parser is fault-tolerant: a document with trailing garbage or a
+    // trailing comma still parses to a recoverable tree, but the file is not
+    // valid JSONC — the level inside it must be ignored (INFO), not honored.
+    const trailingGarbage = settings(`{ "wopal": { "logging": { "level": "DEBUG" } } } garbage`)
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile: trailingGarbage })).toBe("INFO")
+    const trailingComma = settings(`{ "wopal": { "logging": { "level": "DEBUG", } } }`)
+    expect(Log.resolveEffectiveLevel({ env: {}, configFile: trailingComma })).toBe("INFO")
   })
 })

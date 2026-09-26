@@ -238,12 +238,13 @@ export async function spawnLocalServer(
       port,
       password,
       needsMigration: options.needsMigration,
-      // Pass the wopal home and dsh-plugins log path explicitly so the sidecar
+      // Pass the wopal home and the DSH log paths explicitly so the sidecar
       // drives the unified DSH Runtime Manager from the same WOPAL_HOME the
       // Electron main process resolved (probe + shell-merge in index.ts), not
-      // from a possibly-stale child env.
+      // from a possibly-stale child env. The plugin-log directory is enough;
+      // each profile derives its own `dsh-plugins-<profile>.log` inside it.
       wopalHome: process.env.WOPAL_HOME,
-      logFile: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs", "dsh-plugins.log") : undefined,
+      pluginLogDir: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs") : undefined,
       runtimeLogFile: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs", "dsh-runtime.log") : undefined,
     })
   }).catch((error) => {
@@ -337,20 +338,24 @@ export function createSidecarEnv(password: string): Record<string, string> {
   // Desktop defaults are applied first, then the user-configured experimental
   // switches captured by preferAppEnv are overlaid so explicit user intent wins
   // (e.g. OPENCODE_EXPERIMENTAL_LSP_TY set in the shell reaches the sidecar).
-  return Object.assign(env, {
-    ELLAMAKA_SERVER_USERNAME: "ellamaka",
-    ELLAMAKA_SERVER_PASSWORD: password,
-    OPENCODE_CLIENT: "ellamaka-desktop",
-    OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
-    OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
-    OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-    // Official rc.1 packages resolve their harness home through $DSH_HOME
-    // directly (e.g. dsh-agent-presets' user preset root), bypassing every
-    // ctx/config seam the integration owns. Point it at the official-layout
-    // home so those resolutions land inside $WOPAL_HOME/dsh/home (A1 layout
-    // alignment) and never touch ~/.dsh.
-    DSH_HOME: join(process.env.WOPAL_HOME ?? "", "dsh", "home"),
-  }, getCapturedSidecarExperimentalConfig())
+  return Object.assign(
+    env,
+    {
+      ELLAMAKA_SERVER_USERNAME: "ellamaka",
+      ELLAMAKA_SERVER_PASSWORD: password,
+      OPENCODE_CLIENT: "ellamaka-desktop",
+      OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
+      OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
+      OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+      // Official rc.1 packages resolve their harness home through $DSH_HOME
+      // directly (e.g. dsh-agent-presets' user preset root), bypassing every
+      // ctx/config seam the integration owns. Point it at the official-layout
+      // home so those resolutions land inside $WOPAL_HOME/dsh/home (A1 layout
+      // alignment) and never touch ~/.dsh.
+      DSH_HOME: join(process.env.WOPAL_HOME ?? "", "dsh", "home"),
+    },
+    getCapturedSidecarExperimentalConfig(),
+  )
 }
 
 function delay(ms: number) {

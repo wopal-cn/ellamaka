@@ -48,6 +48,32 @@ export interface DshLogWriterOptions {
 
 export type DshLogWriter = (line: string) => void
 
+/** The four levels DSH understands; the host TRACE maps down to DEBUG. */
+export type DshLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
+
+/**
+ * The single host→DSH level boundary: DSH has four levels, so the host TRACE
+ * level maps down to DEBUG (a `--trace` run still widens DSH diagnostics
+ * instead of silencing them). Absent or invalid input falls back to INFO, the
+ * unified default. DSH performs no level resolution of its own.
+ */
+export function toDshLogLevel(level: string | undefined): DshLogLevel {
+  if (level === "TRACE") return "DEBUG"
+  return level === "DEBUG" || level === "INFO" || level === "WARN" || level === "ERROR" ? level : "INFO"
+}
+
+/**
+ * The per-profile DSH plugin log file name: `dsh-plugins-<profile>.log`.
+ *
+ * This is the single naming point: every mounted profile owns an independent
+ * file (and therefore an independent bound and rotation history), so `web` and
+ * `ellamaka-tools` records never interleave, and a new profile automatically
+ * gets its own file without any mount-logic change.
+ */
+export function dshPluginLogFileName(profile: string): string {
+  return `dsh-plugins-${profile}.log`
+}
+
 export function createDshLogWriter(options: DshLogWriterOptions): DshLogWriter {
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_LOG_BYTES
   const backupCount = options.backupCount ?? DEFAULT_BACKUP_COUNT

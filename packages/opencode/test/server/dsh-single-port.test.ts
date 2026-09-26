@@ -64,7 +64,7 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const status = await initializeDshRuntime({
     wopalHome,
-    logFile: join(wopalHome, "logs", "dsh-plugins.log"),
+    logFile: join(wopalHome, "logs", "dsh-runtime.log"),
     entry: "serve",
     manifest,
     // The runtime manager gates on `ELLAMAKA_DSH` from its `env` (defaults to
@@ -87,7 +87,7 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
   const dsh = await mountDshWeb(webHub.ctx, {
     home,
     port: listener.port,
-    logFile: join(home, "dsh-plugins.log"),
+    logDir: join(wopalHome, "logs"),
     installAnchor: resolved.path,
     runtime,
     // The test runs under bun, which lacks node:module.stripTypeScriptTypes.

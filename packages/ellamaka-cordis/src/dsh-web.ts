@@ -23,7 +23,7 @@ import { readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { createCordisLogExporter, type EllamakaLogLevel } from "./log-bridge.js"
-import { createDshLogWriter } from "./runtime/log.js"
+import { createDshLogWriter, dshPluginLogFileName } from "./runtime/log.js"
 import { VirtualWebServer, DSH_MOUNT_PREFIX } from "./dsh-virtual-webserver.js"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "./runtime/loader.js"
 import {
@@ -356,13 +356,15 @@ export interface DshHostOptions {
    */
   prepare?: (ctx: Context) => Promise<void> | void
   /**
-   * Optional path to a dedicated dsh-plugins log file. When set, a cordis
-   * log Exporter is registered on the host context so every dsh plugin's
-   * `ctx.logger` output lands in this file (independent of the ellamaka main
-   * log). When omitted, dsh plugin logs fall through to the default cordis
-   * console exporter.
+   * Optional directory for the dedicated per-profile plugin log. When set, a
+   * cordis log Exporter is registered on the host context so every dsh
+   * plugin's `ctx.logger` output lands in
+   * `<logDir>/dsh-plugins-<profile>.log` (independent of the ellamaka main
+   * log; the file name is derived from the profile, so each profile gets its
+   * own bounded file). When omitted, dsh plugin logs fall through to the
+   * default cordis console exporter.
    */
-  logFile?: string
+  logDir?: string
   /** Minimum log level for the dsh-plugins log; defaults to WARN. */
   logLevel?: EllamakaLogLevel
   /**
@@ -437,7 +439,7 @@ type MountProfileOptions = DshHostOptions & {
  * @returns a {@link DshHost} handle.
  */
 async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<DshHost> {
-  const { home, port, prepare, logFile, logLevel, profileName, extraPatches, requireWebServer, virtualWebServer } = opts
+  const { home, port, prepare, logDir, logLevel, profileName, extraPatches, requireWebServer } = opts
   // The DSH runtime module handle: preferred from an injected runtime. The
   // package-closure fallback below is a DEV-ONLY seam (B-01) — every production
   // mount call site (CLI serve/web, TUI, Desktop sidecar) injects the
@@ -491,11 +493,13 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
 
   const { healProfilesModuleFallback, loadProfile, resolveProfileDir, initProfile } = runtime.appBoot
   // The dsh-plugins log Exporter is registered before any plugin mounts, so
-  // every dsh plugin's ctx.logger output lands in the dedicated file. The
-  // Exporter is auto-disposed with the host fiber (zero manual cleanup). The
-  // closure-resolved runtime is injected so the exporter never falls back to
-  // the host package closure on packaged hosts (B-01).
-  if (logFile) {
+  // every dsh plugin's ctx.logger output lands in this profile's dedicated
+  // file (`dsh-plugins-<profile>.log`; the single naming point lives in
+  // runtime/log.ts). The Exporter is auto-disposed with the host fiber (zero
+  // manual cleanup). The closure-resolved runtime is injected so the exporter
+  // never falls back to the host package closure on packaged hosts (B-01).
+  if (logDir) {
+    const logFile = join(logDir, dshPluginLogFileName(profileName))
     const write = createDshLogWriter({ logFile })
     const exporter = createCordisLogExporter({
       logFile,

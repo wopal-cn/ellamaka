@@ -16,7 +16,9 @@ export {
   initializeDshRuntime,
   DEFAULT_DSH_RUNTIME_MANIFEST,
   resolveInstallAnchor,
+  toDshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
+export type { DshLogLevel } from "@wopal/ellamaka-cordis/runtime"
 export type { InstallAnchor } from "@wopal/ellamaka-cordis/runtime"
 export { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export type { DshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
