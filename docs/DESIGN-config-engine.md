@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Active
-> **Updated**: 2026-09-25
+> **Updated**: 2026-09-26
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 > - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系总体设计："只有 CLI 能写配置"的规则由它定
@@ -45,6 +45,10 @@ WopalSpace 模式下，引擎启动时按现有合并链读取配置（低 → �
 TUI 插件走同一契约的另一条装载链：TUI 配置链（`TuiConfig`）在 WopalSpace 模式读三层 settings 时合并 `wopal.pluginConfig`，TUI 运行时装配 TUI 插件时把同一张生效表经 `TuiPluginApi.pluginConfig`（类型与 `PluginInput.pluginConfig` 一致）整表交付，TUI 插件按自身配置键自取并校验，同样不读配置文件。内联 mount options 保持为兼容 fallback，`pluginConfig` 优先。
 
 运行中的重载：引擎监听配置文件变化，CLI 写完文件后热重载自动接住，当前实例即时生效（现有 ReloadController 链路）。
+
+`pluginConfig` 是两个契约类型上的必选字段。空间探测失败（非 WopalSpace 实例）或三层文件都没有 `wopal` 段时，字段取空对象 `{}`——形状不变，插件按自身键取不到条目即是「未配置」。字段设为必选而非可选，是为了让每个构造点显式表态：漏传会立刻类型报错，而不是静默变成 `undefined` 让插件在运行时才发现。
+
+合并阶段的输入形状由引擎把关：`wopal.pluginConfig` 的值必须是对象，字符串、数组或 `null` 视为配置错误，合并失败并报出文件路径与键名。不做静默跳过——手写配置把一个值写错类型时，跳过会让它悄悄退回插件内置默认，表现为「配置写了但不生效」，比启动失败难定位得多。插件装载阶段的行为配置校验仍归插件自己（见上），两类失败的报告渠道不同：合并期错在配置，装载期错在插件。
 
 ---
 
@@ -124,11 +128,15 @@ adapter 侧的调用形态（复用既有 `CliContract` 的进程边界、超时
 
 `PATCH /config-v2` 与 `reset-key` 端点内部就是这个 adapter 调用，没有第二实现。schema、OpenAPI 描述、SDK 生成遵循 `API-CONTRACT.md` 的纪律。
 
+端点层负责请求形状的校验：target 枚举、keyPath 为非空数组、值可序列化。这一层只回答「这个请求是否成立」，不回答「这个值是否合法」——后者是 CLI 的单一判断。错误码的归一分工同样如此：端点专属的失败（只读目标、请求形状不成立）用端点自己的错误码；CLI 判定出来的失败（未知键、非法值）原样透传 CLI 的稳定错误码，不重新编号。这样「配置为什么不生效」的答案只有 CLI 一处定义，端点不产生第二套语义。
+
 ---
 
 ## Settings Panel
 
 面板顶部一个作用域切换：**用户全局设置 | 空间设置**。选全局 → 写全局层；选空间 → 写空间本地层。界面上不存在"编辑空间 settings.jsonc"的入口——那是本体维护人员的 Git 工作流，不是设置面板的事。
+
+工作台里现有的沙箱模式切换辅助函数依赖插件条目的内联 options。条目零内联之后它不再有可达调用点，但函数本身保留：它表达的是「这个空间默认用哪种沙箱模式」这条产品意图，后续设置面板要提供空间级默认值时会复用同一语义。确认无引用后可以清理，不在本次改动范围内。
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────┐
