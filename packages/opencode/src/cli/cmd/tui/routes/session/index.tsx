@@ -66,6 +66,7 @@ import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
+import { strReplaceEditorDisplay, type StrReplaceEditorDisplay } from "./str-replace-editor"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import * as Clipboard from "../../util/clipboard"
@@ -1713,6 +1714,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "edit"}>
           <Edit {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "str_replace_editor"}>
+          <StrReplaceEditor {...toolprops} />
+        </Match>
         <Match when={props.part.tool === "task"}>
           <Task {...toolprops} />
         </Match>
@@ -2302,6 +2306,85 @@ function Edit(props: ToolProps<typeof EditTool>) {
         <InlineTool icon="←" pending="Preparing edit..." complete={props.input.filePath} part={props.part}>
           Edit {pathFormatter.format(props.input.filePath)} {input({ replaceAll: props.input.replaceAll })}
         </InlineTool>
+      </Match>
+    </Switch>
+  )
+}
+
+function StrReplaceEditor(props: ToolProps<any>) {
+  const ctx = use()
+  const { theme, syntax } = useTheme()
+  const pathFormatter = usePathFormatter()
+  const display = createMemo<StrReplaceEditorDisplay>(() =>
+    strReplaceEditorDisplay(
+      props.input as Record<string, unknown>,
+      props.metadata as Record<string, unknown>,
+      props.output,
+    ),
+  )
+  const [expanded, setExpanded] = createSignal(false)
+  const output = createMemo(() => {
+    const value = display()
+    return value.family === "generic" ? "" : value.text
+  })
+  const diff = createMemo(() => {
+    const value = display()
+    return value.family === "edit" ? value.diff : undefined
+  })
+  const collapsed = createMemo(() => collapseToolOutput(output(), 10, 10 * Math.max(20, ctx.width - 6)))
+  const shown = createMemo(() => (expanded() || !collapsed().overflow ? output() : collapsed().output))
+  const label = createMemo(() => {
+    const value = display()
+    const file = value.path ? pathFormatter.format(value.path) : "file"
+    return value.family === "context" ? `# View ${file}` : `← ${value.command} ${file}`
+  })
+
+  return (
+    <Switch>
+      <Match when={display().family === "generic"}>
+        <GenericTool {...props} />
+      </Match>
+      <Match when={diff()}>
+        {(diff) => (
+          <BlockTool title={label()} part={props.part}>
+            <box paddingLeft={1}>
+              <diff
+                diff={diff()}
+                view={ctx.tui.diff_style === "stacked" || ctx.width <= 120 ? "unified" : "split"}
+                filetype={filetype(display().path)}
+                syntaxStyle={syntax()}
+                showLineNumbers={true}
+                width="100%"
+                wrapMode={ctx.diffWrapMode()}
+                fg={theme.text}
+                addedBg={theme.diffAddedBg}
+                removedBg={theme.diffRemovedBg}
+                contextBg={theme.diffContextBg}
+                addedSignColor={theme.diffHighlightAdded}
+                removedSignColor={theme.diffHighlightRemoved}
+                lineNumberFg={theme.diffLineNumber}
+                lineNumberBg={theme.diffContextBg}
+                addedLineNumberBg={theme.diffAddedLineNumberBg}
+                removedLineNumberBg={theme.diffRemovedLineNumberBg}
+              />
+            </box>
+          </BlockTool>
+        )}
+      </Match>
+      <Match when={true}>
+        <BlockTool
+          title={label()}
+          part={props.part}
+          spinner={props.part.state.status === "running"}
+          onClick={collapsed().overflow ? () => setExpanded((value) => !value) : undefined}
+        >
+          <Show when={shown()}>
+            <text fg={theme.text}>{shown()}</text>
+          </Show>
+          <Show when={collapsed().overflow}>
+            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+          </Show>
+        </BlockTool>
       </Match>
     </Switch>
   )
