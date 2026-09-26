@@ -1,4 +1,14 @@
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, type Accessor, type Component } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Index,
+  onCleanup,
+  Show,
+  type Accessor,
+  type Component,
+} from "solid-js"
 import type { AssistantMessage, Part, SessionStatus, ToolPart, UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { Icon } from "@wopal/ui/icon"
@@ -25,6 +35,7 @@ import {
   FileChangeBlock,
   GenericToolBlock,
   ShellActivityBlock,
+  StrReplaceEditorBlock,
   SubagentActivityBlock,
   type OpenCodeEditRendererProps,
 } from "./chat-tool-blocks"
@@ -183,7 +194,16 @@ function ToolPartBlock(props: {
                 <Show
                   when={kind() === "subagent"}
                   fallback={
-                    <Show when={kind() === "interaction"} fallback={<GenericToolBlock part={props.part} message={props.message} defaultOpen={props.shellToolPartsExpanded} />}>
+                    <Show
+                      when={kind() === "interaction"}
+                      fallback={
+                        <GenericToolBlock
+                          part={props.part}
+                          message={props.message}
+                          defaultOpen={props.shellToolPartsExpanded}
+                        />
+                      }
+                    >
                       <InteractionBlock part={props.part} message={props.message} />
                     </Show>
                   }
@@ -192,25 +212,39 @@ function ToolPartBlock(props: {
                 </Show>
               }
             >
-              <FileChangeBlock
-                part={props.part}
-                message={props.message}
-                defaultOpen={props.editToolPartsExpanded}
-                directory={props.directory}
-                editRenderer={props.editRenderer}
-              />
+              <Show
+                when={props.part.tool === "str_replace_editor"}
+                fallback={
+                  <FileChangeBlock
+                    part={props.part}
+                    message={props.message}
+                    defaultOpen={props.editToolPartsExpanded}
+                    directory={props.directory}
+                    editRenderer={props.editRenderer}
+                  />
+                }
+              >
+                <StrReplaceEditorBlock
+                  part={props.part}
+                  message={props.message}
+                  defaultOpen={props.editToolPartsExpanded}
+                  directory={props.directory}
+                  editRenderer={props.editRenderer}
+                />
+              </Show>
             </Show>
           }
         >
-          <ShellActivityBlock
-            part={props.part}
-            message={props.message}
-            defaultOpen={props.shellToolPartsExpanded}
-          />
+          <ShellActivityBlock part={props.part} message={props.message} defaultOpen={props.shellToolPartsExpanded} />
         </Show>
       }
     >
-      <ContextToolBlock part={props.part} message={props.message} defaultOpen={props.shellToolPartsExpanded} directory={props.directory} />
+      <ContextToolBlock
+        part={props.part}
+        message={props.message}
+        defaultOpen={props.shellToolPartsExpanded}
+        directory={props.directory}
+      />
     </Show>
   )
 }
@@ -239,10 +273,7 @@ function AssistantPartBlock(props: {
                     <Show
                       when={kind() === "retry"}
                       fallback={
-                        <Show
-                          when={kind() === "interaction"}
-                          fallback={<UnknownPartBlock part={props.part} />}
-                        >
+                        <Show when={kind() === "interaction"} fallback={<UnknownPartBlock part={props.part} />}>
                           <InteractionBlock part={props.part} message={props.message} />
                         </Show>
                       }
@@ -383,13 +414,7 @@ function TranscriptRowView(props: {
           )}
         </Show>
         <Show when={userRow()}>
-          {(current) => (
-            <UserRowContent
-              row={current()}
-              actions={props.actions}
-              actionLabels={props.actionLabels}
-            />
-          )}
+          {(current) => <UserRowContent row={current()} actions={props.actions} actionLabels={props.actionLabels} />}
         </Show>
         <Show when={assistantRow()}>
           {(current) => (
@@ -403,7 +428,15 @@ function TranscriptRowView(props: {
                   <Show when={part().id} keyed>
                     <Show
                       when={toolPart()}
-                      fallback={<AssistantPartBlock part={part()} message={current().message} showMeta={part().id === metaPartID()} showReasoningSummaries={props.showReasoningSummaries} modelName={props.modelName} />}
+                      fallback={
+                        <AssistantPartBlock
+                          part={part()}
+                          message={current().message}
+                          showMeta={part().id === metaPartID()}
+                          showReasoningSummaries={props.showReasoningSummaries}
+                          modelName={props.modelName}
+                        />
+                      }
                     >
                       {(tool) => (
                         <ToolPartBlock
@@ -423,9 +456,7 @@ function TranscriptRowView(props: {
             </Index>
           )}
         </Show>
-        <Show when={errorRow()}>
-          {(current) => <TurnOutcome message={current().message} />}
-        </Show>
+        <Show when={errorRow()}>{(current) => <TurnOutcome message={current().message} />}</Show>
       </div>
     </ChatTurnFrame>
   )
@@ -791,12 +822,7 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
       cancelLatestScroll()
       props.onUserScroll?.()
     }
-    if (
-      el.scrollTop < 200 &&
-      props.historyMore &&
-      !props.historyLoading &&
-      Date.now() > jumpHistorySuppressUntil
-    ) {
+    if (el.scrollTop < 200 && props.historyMore && !props.historyLoading && Date.now() > jumpHistorySuppressUntil) {
       const task = props.loadOlder
       if (typeof task === "function") void task()
     }
@@ -862,12 +888,7 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
     }
 
     const currentIndex = messages.findIndex((message) => message.id === activeUserMessageID())
-    const targetIndex =
-      direction === "first"
-        ? 0
-        : direction === "previous"
-          ? currentIndex - 1
-          : currentIndex + 1
+    const targetIndex = direction === "first" ? 0 : direction === "previous" ? currentIndex - 1 : currentIndex + 1
 
     if (targetIndex < 0 || targetIndex >= messages.length) return false
     const target = messages[targetIndex]
@@ -897,7 +918,10 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
   }
 
   return (
-    <div data-component="chat-timeline" style="display:flex; position:relative; height:100%; min-width:0; isolation:isolate;">
+    <div
+      data-component="chat-timeline"
+      style="display:flex; position:relative; height:100%; min-width:0; isolation:isolate;"
+    >
       <Show when={props.showSessionProgressBar && status().type !== "idle"}>
         <div data-component="session-progress" data-state="showing" aria-hidden="true">
           <div
@@ -922,7 +946,12 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
       />
       <Show when={props.scroll.overflow && props.scroll.jump}>
         <div data-component="chat-resume-scroll">
-          <button type="button" data-action="chat-resume-scroll" aria-label="Scroll to bottom" on:click={() => props.onResumeScroll?.()}>
+          <button
+            type="button"
+            data-action="chat-resume-scroll"
+            aria-label="Scroll to bottom"
+            on:click={() => props.onResumeScroll?.()}
+          >
             <Icon name="arrow-down-to-line" size="normal" />
           </button>
         </div>
@@ -985,9 +1014,7 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
                 <div data-component="chat-live-activity" role="status" aria-live="polite">
                   <Spinner class="size-3.5 shrink-0 text-v2-icon-icon-accent" />
                   <span data-slot="chat-live-activity-label">{activity().label}</span>
-                  <span data-slot="chat-live-activity-elapsed">
-                    {formatElapsed(busyTurnStartedAt(), now())}
-                  </span>
+                  <span data-slot="chat-live-activity-elapsed">{formatElapsed(busyTurnStartedAt(), now())}</span>
                 </div>
               )}
             </Show>

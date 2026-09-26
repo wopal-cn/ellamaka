@@ -113,12 +113,8 @@ describe("WorkbenchMarkdown table layout", () => {
     expect(css).toMatch(
       /\[data-slot="workbench-markdown-content"\] th,[\s\S]*?\[data-slot="workbench-markdown-content"\] td \{[\s\S]*?border: 0;[\s\S]*?border-block-end: 1px solid var\(--border-base\);/,
     )
-    expect(css).toContain(
-      '[data-slot="workbench-markdown-content"] th {\n  background: transparent;',
-    )
-    expect(css).toContain(
-      '[data-slot="workbench-markdown-content"] tbody tr:last-child td {\n  border-block-end: 0;',
-    )
+    expect(css).toContain('[data-slot="workbench-markdown-content"] th {\n  background: transparent;')
+    expect(css).toContain('[data-slot="workbench-markdown-content"] tbody tr:last-child td {\n  border-block-end: 0;')
     expect(css).not.toContain('[data-slot="workbench-markdown-content"] tbody tr:hover td')
   })
 
@@ -141,14 +137,21 @@ describe("Chat tool scrollbar geometry", () => {
     expect(css).toMatch(
       /\[data-slot="chat-shell-command"\]::-webkit-scrollbar-thumb,[\s\S]*?\)::-webkit-scrollbar-thumb \{\n  background: transparent;/,
     )
-    expect(css).toContain('scrollbar-color: transparent transparent;')
+    expect(css).toContain("scrollbar-color: transparent transparent;")
     expect(css).not.toContain('[data-slot="chat-shell-command"]:hover::-webkit-scrollbar,')
   })
 
   test("marks every custom tool output as nested scrollable content", async () => {
     const source = await Bun.file(new URL("./chat-tool-blocks.tsx", import.meta.url)).text()
 
-    for (const slot of ["chat-shell-command", "chat-shell-output", "chat-shell-error", "chat-context-output", "chat-generic-output"]) {
+    for (const slot of [
+      "chat-shell-command",
+      "chat-shell-output",
+      "chat-shell-error",
+      "chat-context-output",
+      "chat-str-replace-output",
+      "chat-generic-output",
+    ]) {
       expect(source).toContain(`<pre data-slot="${slot}" data-scrollable="">`)
     }
     expect(source).toContain('<div data-component="chat-file-change-wrapper" data-scrollable="">')
@@ -159,18 +162,12 @@ describe("Chat tool header width", () => {
   test("lets long tool details yield to the trailing status and keeps their tail visible", async () => {
     const css = await Bun.file(new URL("../../index.css", import.meta.url)).text()
 
-    expect(css).toMatch(
-      /\[data-slot="chat-tool-header"\]\s*\{[^}]*\bwidth: 100%;[^}]*\bmin-width: 0;[^}]*\}/,
-    )
+    expect(css).toMatch(/\[data-slot="chat-tool-header"\]\s*\{[^}]*\bwidth: 100%;[^}]*\bmin-width: 0;[^}]*\}/)
     expect(css).toMatch(
       /\[data-slot="chat-tool-trigger"\]\s*\{[^}]*\bflex: 1 1 auto;[^}]*\bmin-width: 0;[^}]*\boverflow: hidden;[^}]*\}/,
     )
-    expect(css).toMatch(
-      /\[data-slot="chat-tool-trailing"\]\s*\{[^}]*\bflex: 0 0 auto;[^}]*\}/,
-    )
-    expect(css).toMatch(
-      /\[data-slot="chat-tool-subtitle"\]\s*\{[^}]*\bdirection: rtl;[^}]*\btext-align: left;[^}]*\}/,
-    )
+    expect(css).toMatch(/\[data-slot="chat-tool-trailing"\]\s*\{[^}]*\bflex: 0 0 auto;[^}]*\}/)
+    expect(css).toMatch(/\[data-slot="chat-tool-subtitle"\]\s*\{[^}]*\bdirection: rtl;[^}]*\btext-align: left;[^}]*\}/)
     expect(css).toMatch(
       /\[data-slot="chat-context-info-bar"\]\s*\{[^}]*\bbox-sizing: border-box;[^}]*\bwidth: 100%;[^}]*\}/,
     )

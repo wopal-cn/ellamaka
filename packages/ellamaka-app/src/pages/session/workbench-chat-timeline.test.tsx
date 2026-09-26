@@ -131,9 +131,7 @@ function withSync(messages: Message[], parts: Part[], status: { type: "idle" } |
     useSync: () => ({
       data: {
         message: { ses_1: messages },
-        part: Object.fromEntries(
-          messages.map((m) => [m.id, parts.filter((p) => p.messageID === m.id)]),
-        ),
+        part: Object.fromEntries(messages.map((m) => [m.id, parts.filter((p) => p.messageID === m.id)])),
         session_status: { ses_1: status },
       },
       session: {
@@ -150,7 +148,10 @@ function withSync(messages: Message[], parts: Part[], status: { type: "idle" } |
 function withReactiveSync(messages: Message[], parts: Part[], status: { type: "idle" } | { type: "busy" }) {
   const [data, setData] = createStore({
     message: { ses_1: messages },
-    part: Object.fromEntries(messages.map((m) => [m.id, parts.filter((p) => p.messageID === m.id)])) as Record<string, Part[]>,
+    part: Object.fromEntries(messages.map((m) => [m.id, parts.filter((p) => p.messageID === m.id)])) as Record<
+      string,
+      Part[]
+    >,
     session_status: { ses_1: status },
   })
   mock.module("@/context/sync", () => ({
@@ -214,7 +215,14 @@ describe("WorkbenchChatTimeline", () => {
     const u1 = userMessage("u-reason-on")
     const a1 = assistantMessage("a-reason-on", "u-reason-on") // completed
     const messages: Message[] = [u1, a1]
-    const reasoning = { id: "r-on", sessionID: "ses_1", messageID: "a-reason-on", type: "reasoning", text: "detailed chain", time: { start: 0, end: 1 } } as Part
+    const reasoning = {
+      id: "r-on",
+      sessionID: "ses_1",
+      messageID: "a-reason-on",
+      type: "reasoning",
+      text: "detailed chain",
+      time: { start: 0, end: 1 },
+    } as Part
     const parts = [textPart("p-u-on", "u-reason-on", "q"), reasoning, textPart("p-a-on", "a-reason-on", "answer")]
     withSync(messages, parts, { type: "idle" })
 
@@ -237,7 +245,14 @@ describe("WorkbenchChatTimeline", () => {
     const u1 = userMessage("u-reason-off")
     const a1 = assistantMessage("a-reason-off", "u-reason-off")
     const messages: Message[] = [u1, a1]
-    const reasoning = { id: "r-off", sessionID: "ses_1", messageID: "a-reason-off", type: "reasoning", text: "chain", time: { start: 0, end: 1 } } as Part
+    const reasoning = {
+      id: "r-off",
+      sessionID: "ses_1",
+      messageID: "a-reason-off",
+      type: "reasoning",
+      text: "chain",
+      time: { start: 0, end: 1 },
+    } as Part
     const parts = [textPart("p-u-off", "u-reason-off", "q"), reasoning, textPart("p-a-off", "a-reason-off", "answer")]
     withSync(messages, parts, { type: "idle" })
 
@@ -265,8 +280,22 @@ describe("WorkbenchChatTimeline", () => {
     const messages: Message[] = [u1, a1]
     const parts: Part[] = [
       textPart("p-u", "u-inject", "prompt"),
-      { id: "p-u-inj", sessionID: "ses_1", messageID: "u-inject", type: "text", text: "<rules-context>rule body</rules-context>", synthetic: true },
-      { id: "p-a-inj", sessionID: "ses_1", messageID: "a-inject", type: "text", text: "<system-reminder>task note</system-reminder>", synthetic: true },
+      {
+        id: "p-u-inj",
+        sessionID: "ses_1",
+        messageID: "u-inject",
+        type: "text",
+        text: "<rules-context>rule body</rules-context>",
+        synthetic: true,
+      },
+      {
+        id: "p-a-inj",
+        sessionID: "ses_1",
+        messageID: "a-inject",
+        type: "text",
+        text: "<system-reminder>task note</system-reminder>",
+        synthetic: true,
+      },
       textPart("p-a", "a-inject", "answer"),
     ]
     withSync(messages, parts, { type: "idle" })
@@ -322,7 +351,9 @@ describe("WorkbenchChatTimeline", () => {
     expect(host.querySelector("[data-component='chat-injection']")).not.toBeNull()
     expect(host.querySelector("[data-slot='chat-user-text']")?.textContent).toBe("real prompt")
     // The raw shell text never leaks into the user bubble.
-    expect(host.querySelector("[data-component='chat-user-message']")?.textContent ?? "").not.toContain("system-reminder")
+    expect(host.querySelector("[data-component='chat-user-message']")?.textContent ?? "").not.toContain(
+      "system-reminder",
+    )
     host.remove()
   })
 
@@ -331,7 +362,14 @@ describe("WorkbenchChatTimeline", () => {
     const a1 = assistantMessage("a-notify", "u-notify")
     const messages: Message[] = [u1, a1]
     const parts: Part[] = [
-      { id: "p-u-notify", sessionID: "ses_1", messageID: "u-notify", type: "text", text: "<system-reminder>sandbox mode changed</system-reminder>", synthetic: true },
+      {
+        id: "p-u-notify",
+        sessionID: "ses_1",
+        messageID: "u-notify",
+        type: "text",
+        text: "<system-reminder>sandbox mode changed</system-reminder>",
+        synthetic: true,
+      },
       textPart("p-a", "a-notify", "answer"),
     ]
     withSync(messages, parts, { type: "idle" })
@@ -422,9 +460,7 @@ describe("WorkbenchChatTimeline", () => {
     }))
 
     const host = mount(() => (
-      <WorkbenchChatTimeline
-        {...baseProps({ userMessages: [u1], virtualize: false, shellToolPartsExpanded: false })}
-      />
+      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false, shellToolPartsExpanded: false })} />
     ))
     const before = host.querySelector("[data-call-id='t-tool-stream-call']")
     expect(before).not.toBeNull()
@@ -480,9 +516,7 @@ describe("WorkbenchChatTimeline", () => {
     }))
 
     const host = mount(() => (
-      <WorkbenchChatTimeline
-        {...baseProps({ userMessages: [u1], directory: "/repo", virtualize: false })}
-      />
+      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], directory: "/repo", virtualize: false })} />
     ))
     const before = host.querySelector("[data-call-id='t-read-stream-call']")
     expect(before?.querySelector("[data-slot='chat-tool-subtitle']")?.textContent).toBe("src/first.ts")
@@ -585,9 +619,7 @@ describe("WorkbenchChatTimeline", () => {
     )
     withSync([u1, a1], [generic], { type: "idle" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     expect(host.querySelector("[data-component='chat-generic-tool']")).not.toBeNull()
     expect(host.textContent).toContain("memory_manage")
@@ -612,9 +644,7 @@ describe("WorkbenchChatTimeline", () => {
     )
     withSync([u1, a1], [todo], { type: "idle" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     expect(host.querySelector("[data-component='chat-todo']")).toBeNull()
     expect(host.textContent).not.toContain("task one")
@@ -626,9 +656,7 @@ describe("WorkbenchChatTimeline", () => {
     const a1 = assistantMessage("a-thinking", "u-thinking", { time: { created: Date.now() } })
     withSync([u1, a1], [], { type: "busy" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     const activity = host.querySelector("[data-component='chat-live-activity']")
     expect(activity?.textContent).toContain("正在思考")
@@ -650,9 +678,7 @@ describe("WorkbenchChatTimeline", () => {
     })
     withSync([u1, a1], [shell], { type: "busy" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     expect(host.querySelector("[data-component='chat-live-activity']")?.textContent).toContain("正在考虑下一步")
     host.remove()
@@ -669,9 +695,7 @@ describe("WorkbenchChatTimeline", () => {
     })
     withSync([u1, a1], [shell], { type: "busy" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     expect(host.querySelector("[data-component='chat-live-activity']")?.textContent).toContain("正在运行命令")
     expect(host.querySelector("[data-slot='chat-tool-status']")?.textContent).toContain("正在运行")
@@ -690,9 +714,7 @@ describe("WorkbenchChatTimeline", () => {
     })
     withSync([u1, a1], [shell], { type: "busy" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     expect(host.querySelector("[data-slot='chat-live-activity-elapsed']")?.textContent).toMatch(/1m\s+5s/)
     host.remove()
@@ -702,9 +724,7 @@ describe("WorkbenchChatTimeline", () => {
     const u1 = userMessage("u-idle-slot")
     withSync([u1], [], { type: "idle" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     expect(host.querySelector("[data-component='chat-live-activity-slot']")).not.toBeNull()
     expect(host.querySelector("[data-component='chat-live-activity']")).toBeNull()
@@ -718,11 +738,7 @@ describe("WorkbenchChatTimeline", () => {
     const parts = [textPart("p-user", "u-stream", "hello"), textPart("p-stream", "a-stream", "first")]
     const setPartText = withReactiveSync(messages, parts, { type: "busy" })
 
-    const host = mount(() => (
-      <WorkbenchChatTimeline
-        {...baseProps({ userMessages: [u1], virtualize: false })}
-      />
-    ))
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
 
     const markdown = host.querySelector("[data-slot='chat-markdown']") as HTMLElement
     expect(markdown.textContent).toBe("first")
@@ -837,7 +853,12 @@ describe("WorkbenchChatTimeline", () => {
     const u2 = userMessage("u2")
     const a2 = assistantMessage("a2", "u2")
     const messages: Message[] = [u1, a1, u2, a2]
-    const parts = [textPart("p1", "u1", "hello"), textPart("p2", "a1", "reply"), textPart("p3", "u2", "later"), textPart("p4", "a2", "later reply")]
+    const parts = [
+      textPart("p1", "u1", "hello"),
+      textPart("p2", "a1", "reply"),
+      textPart("p3", "u2", "later"),
+      textPart("p4", "a2", "later reply"),
+    ]
     withSync(messages, parts, { type: "idle" })
 
     const host = mount(() => (
@@ -1121,7 +1142,14 @@ describe("WorkbenchChatTimeline", () => {
         type: "tool",
         callID: "c_q",
         tool: "question",
-        state: { status: "completed", input: {}, output: "", title: "question", metadata: {}, time: { start: 0, end: 1 } },
+        state: {
+          status: "completed",
+          input: {},
+          output: "",
+          title: "question",
+          metadata: {},
+          time: { start: 0, end: 1 },
+        },
       },
       {
         id: "u1",
@@ -1280,6 +1308,71 @@ describe("WorkbenchChatTimeline", () => {
     const activeTickAfter = host.querySelector("[data-slot='chat-prompt-tick'][data-active='true']") as HTMLElement
     expect(activeTickAfter.getAttribute("data-message-id")).toBe("u2")
     expect(host.querySelector("[data-row-type='user'][data-active='true']")?.getAttribute("data-turn-id")).toBe("u2")
+    host.remove()
+  })
+})
+
+describe("str_replace_editor display compatibility", () => {
+  test("renders the view command as context activity with its actual text", () => {
+    const u1 = userMessage("u-sre-view")
+    const a1 = assistantMessage("a-sre-view", "u-sre-view")
+    const view = toolPart(
+      "t-sre-view",
+      "a-sre-view",
+      {
+        status: "completed",
+        input: { command: "view", path: "/repo/src/a.ts" },
+        output: "1  const a = 1\n2  const b = 2\n3  const c = 3",
+        title: "str_replace_editor",
+        metadata: { source: "dsh-container", containerTool: "str_replace_editor" },
+        time: { start: Date.now() - 2000, end: Date.now() - 1000 },
+      },
+      "str_replace_editor",
+    )
+    withSync([u1, a1], [view], { type: "idle" })
+
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({ userMessages: [u1], virtualize: false, shellToolPartsExpanded: true, directory: "/repo" })}
+      />
+    ))
+
+    const block = host.querySelector("[data-component='chat-context-tool']")
+    expect(block).not.toBeNull()
+    expect(block?.getAttribute("data-tool")).toBe("str_replace_editor")
+    expect(block?.querySelector("[data-slot='chat-tool-subtitle']")?.textContent).toBe("src/a.ts")
+    expect(block?.querySelector("[data-slot='chat-context-output']")?.textContent).toContain("const b = 2")
+    expect(host.querySelector("[data-component='chat-generic-tool']")).toBeNull()
+    host.remove()
+  })
+
+  test("renders mutation commands as edit activity without fabricating a diff", () => {
+    const u1 = userMessage("u-sre-mutate")
+    const a1 = assistantMessage("a-sre-mutate", "u-sre-mutate")
+    const output = "The file /repo/src/a.ts has been updated. Here's the result of running cat -n: ..."
+    const mutate = toolPart(
+      "t-sre-mutate",
+      "a-sre-mutate",
+      {
+        status: "completed",
+        input: { command: "str_replace", path: "/repo/src/a.ts" },
+        output,
+        title: "str_replace_editor",
+        metadata: { source: "dsh-container", containerTool: "str_replace_editor" },
+        time: { start: Date.now() - 2000, end: Date.now() - 1000 },
+      },
+      "str_replace_editor",
+    )
+    withSync([u1, a1], [mutate], { type: "idle" })
+
+    const host = mount(() => <WorkbenchChatTimeline {...baseProps({ userMessages: [u1], virtualize: false })} />)
+
+    const block = host.querySelector("[data-component='chat-str-replace-editor']")
+    expect(block).not.toBeNull()
+    // The specialized edit block owns this part; the generic file-change block
+    // (which embeds the upstream renderer) must not claim a diff here.
+    expect(host.querySelector("[data-component='chat-file-change']")).toBeNull()
+    expect(block?.querySelector("[data-slot='chat-str-replace-output']")?.textContent).toBe(output)
     host.remove()
   })
 })

@@ -25,6 +25,16 @@ const CONTEXT_TOOLS = new Set(["read", "glob", "grep", "list"])
 const SHELL_TOOLS = new Set(["bash", "shell"])
 const FILE_CHANGE_TOOLS = new Set(["edit", "write", "apply_patch"])
 
+/**
+ * The dsh `str_replace_editor` tool is command-driven: `view` reads a file
+ * while `create` / `str_replace` / `insert` mutate it. The owning block family
+ * is chosen by the command, so `view` renders as read/context activity and the
+ * mutation commands render as file-change (edit) activity.
+ */
+const STR_REPLACE_EDITOR_TOOL = "str_replace_editor"
+const STR_REPLACE_EDITOR_VIEW_COMMANDS = new Set(["view"])
+const STR_REPLACE_EDITOR_EDIT_COMMANDS = new Set(["create", "str_replace", "insert"])
+
 // Snapshot/patch parts are no longer produced (snapshot mechanism removed);
 // they stay in the hidden set only so legacy history parts never render.
 const HIDDEN_PART_TYPES = new Set(["step-start", "step-finish", "snapshot", "patch"])
@@ -100,6 +110,17 @@ export function classifyPart(part: Part, message: Message): PartClassification {
       return { kind: "retry" }
     case "tool": {
       const tool = part.tool
+      if (tool === STR_REPLACE_EDITOR_TOOL) {
+        // Command-driven tool: classify by its command. A missing command
+        // (still-streaming input) or a future command stays on the safe
+        // generic path instead of being guessed into a file change.
+        const command = part.state.input?.command
+        if (typeof command === "string" && STR_REPLACE_EDITOR_VIEW_COMMANDS.has(command)) return { kind: "context" }
+        if (typeof command === "string" && STR_REPLACE_EDITOR_EDIT_COMMANDS.has(command)) {
+          return { kind: "file-change" }
+        }
+        return { kind: "generic" }
+      }
       if (CONTEXT_TOOLS.has(tool)) return { kind: "context" }
       if (SHELL_TOOLS.has(tool)) return { kind: "shell" }
       if (FILE_CHANGE_TOOLS.has(tool)) return { kind: "file-change" }

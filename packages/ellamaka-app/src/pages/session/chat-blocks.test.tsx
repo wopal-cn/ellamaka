@@ -35,12 +35,8 @@ type FileDiffStubProps = {
 mock.module("@wopal/ui/context/file", () => ({
   useFileComponent: () => (props: FileDiffStubProps) => (
     <div data-component="file-diff-block" data-mode={props.mode}>
-      <span data-slot="file-diff-deletions">
-        {props.fileDiff?.deletionLines?.join("") ?? props.before?.contents}
-      </span>
-      <span data-slot="file-diff-additions">
-        {props.fileDiff?.additionLines?.join("") ?? props.after?.contents}
-      </span>
+      <span data-slot="file-diff-deletions">{props.fileDiff?.deletionLines?.join("") ?? props.before?.contents}</span>
+      <span data-slot="file-diff-additions">{props.fileDiff?.additionLines?.join("") ?? props.after?.contents}</span>
     </div>
   ),
 }))
@@ -59,9 +55,11 @@ function OpenCodeMessagePartStub(props: OpenCodeMessagePartStubProps) {
     return typeof path === "string" ? path.split("/").pop() : undefined
   }
   const diff = () =>
-    (props.part.state as ToolPart["state"] & {
-      metadata?: { filediff?: { additions?: number; deletions?: number } }
-    }).metadata?.filediff
+    (
+      props.part.state as ToolPart["state"] & {
+        metadata?: { filediff?: { additions?: number; deletions?: number } }
+      }
+    ).metadata?.filediff
 
   return (
     <div
@@ -118,6 +116,7 @@ import {
   FileChangeBlock,
   GenericToolBlock,
   ShellActivityBlock,
+  StrReplaceEditorBlock,
   SubagentActivityBlock,
 } from "./chat-tool-blocks"
 import { chatExpansionState } from "./chat-expansion-state"
@@ -164,7 +163,13 @@ function reasoningPart(id: string, messageID: string, text: string): Part {
   return { id, sessionID: "ses_1", messageID, type: "reasoning", text, time: { start: 0, end: 1 } }
 }
 
-function toolPart(id: string, messageID: string, tool: string, callID: string, state?: Partial<ToolPart["state"]>): ToolPart {
+function toolPart(
+  id: string,
+  messageID: string,
+  tool: string,
+  callID: string,
+  state?: Partial<ToolPart["state"]>,
+): ToolPart {
   return {
     id,
     sessionID: "ses_1",
@@ -205,7 +210,15 @@ describe("UserMessageBlock", () => {
     const u = userMessage("u1")
     const parts: Part[] = [
       textPart("p1", "u1", "check this"),
-      { id: "f1", sessionID: "s", messageID: "u1", type: "file", mime: "text/plain", url: "file:///a.ts", filename: "a.ts" },
+      {
+        id: "f1",
+        sessionID: "s",
+        messageID: "u1",
+        type: "file",
+        mime: "text/plain",
+        url: "file:///a.ts",
+        filename: "a.ts",
+      },
     ]
     const host = mount(() => <UserMessageBlock message={u} parts={parts} />)
     expect(host.querySelector("[data-slot='chat-user-attachment']")).not.toBeNull()
@@ -286,7 +299,6 @@ describe("UserMessageBlock", () => {
     ;(host.querySelector("[data-action='chat-user-fork-current']") as HTMLButtonElement).click()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(calls[0]).toEqual({ sessionID: "ses_1", messageID: "u-actions", target: "current" })
-
     ;(host.querySelector("[data-action='chat-user-revert']") as HTMLButtonElement).click()
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(calls[1]).toEqual({ sessionID: "ses_1", messageID: "u-actions" })
@@ -334,7 +346,11 @@ describe("ContextInjectionBlock", () => {
   })
 
   test("renders shell-wrapped parts that lack the synthetic flag", () => {
-    const part = textPart("p-inj-flagless", "u1", "<system-reminder>[WOPAL TASK IDLE]\ntask finished\n</system-reminder>")
+    const part = textPart(
+      "p-inj-flagless",
+      "u1",
+      "<system-reminder>[WOPAL TASK IDLE]\ntask finished\n</system-reminder>",
+    )
     const host = mount(() => <ContextInjectionBlock part={part} />)
     const block = host.querySelector("[data-component='chat-injection']")
     expect(block).not.toBeNull()
@@ -344,7 +360,11 @@ describe("ContextInjectionBlock", () => {
   })
 
   test("expands via stored expansion state and shows the tag-stripped markdown body", () => {
-    const part = syntheticTextPart("p-inj-open", "u1", "<system-reminder>\n## Sandbox changed\n\n- mode: off\n</system-reminder>")
+    const part = syntheticTextPart(
+      "p-inj-open",
+      "u1",
+      "<system-reminder>\n## Sandbox changed\n\n- mode: off\n</system-reminder>",
+    )
     chatExpansionState.set(part.sessionID, "injection", part.id, true)
     const host = mount(() => <ContextInjectionBlock part={part} />)
     const trigger = host.querySelector("[data-slot='chat-injection-trigger']") as HTMLElement
@@ -358,9 +378,7 @@ describe("ContextInjectionBlock", () => {
   test("uses the reminder tag for content without a recognized shell", () => {
     const part = syntheticTextPart("p-inj-plain", "u1", "plain injected text")
     const host = mount(() => <ContextInjectionBlock part={part} />)
-    expect(host.querySelector("[data-component='chat-injection']")?.getAttribute("data-injection-tag")).toBe(
-      "reminder",
-    )
+    expect(host.querySelector("[data-component='chat-injection']")?.getAttribute("data-injection-tag")).toBe("reminder")
     host.remove()
   })
 
@@ -476,7 +494,9 @@ describe("ReasoningBlock", () => {
   test("collapsed preview pins the latest tail and updates as the stream grows", () => {
     const running = assistantMessage("a-tail", "u-tail", { time: { created: 2000 } })
     const longText = "prefix " + "mid ".repeat(50) + "the-latest-thinking"
-    const [part, setPart] = createStore(reasoningPart("r-tail", "a-tail", longText) as Extract<Part, { type: "reasoning" }>)
+    const [part, setPart] = createStore(
+      reasoningPart("r-tail", "a-tail", longText) as Extract<Part, { type: "reasoning" }>,
+    )
     const host = mount(() => <ReasoningBlock part={part} message={running} defaultOpen={false} />)
     const preview = host.querySelector("[data-slot='chat-reasoning-preview']") as HTMLElement
     expect(preview).not.toBeNull()
@@ -516,7 +536,9 @@ describe("ReasoningBlock", () => {
 
   test("follows streamed reasoning inside its capped scroll region until the user scrolls away", async () => {
     const running = assistantMessage("a-natural", "u-natural", { time: { created: 2000 } })
-    const [part, setPart] = createStore(reasoningPart("r-natural", "a-natural", "line 1") as Extract<Part, { type: "reasoning" }>)
+    const [part, setPart] = createStore(
+      reasoningPart("r-natural", "a-natural", "line 1") as Extract<Part, { type: "reasoning" }>,
+    )
     const host = mount(() => <ReasoningBlock part={part} message={running} />)
     const content = host.querySelector("[data-slot='chat-reasoning-content']") as HTMLDivElement
     expect(content).not.toBeNull()
@@ -578,7 +600,8 @@ describe("InteractionBlock", () => {
     const part = toolPart("t-q", "a-q", "question", "c-q", {
       status: "completed",
       input: { question: "继续吗?" },
-      output: 'User has answered your questions: "继续吗?"="继续". You can now continue with the user\'s answers in mind.',
+      output:
+        'User has answered your questions: "继续吗?"="继续". You can now continue with the user\'s answers in mind.',
     })
     const host = mount(() => <InteractionBlock part={part} message={a} />)
     expect(host.querySelector("[data-component='chat-interaction']")).not.toBeNull()
@@ -815,7 +838,7 @@ describe("ShellActivityBlock", () => {
 
   test("uses the model-provided action description in the compact header", () => {
     const a = assistantMessage("a-shell-description", "u1")
-    const command = "for d in projects/*; do cat \"$d/package.json\"; done"
+    const command = 'for d in projects/*; do cat "$d/package.json"; done'
     const part = toolPart("t-shell-description", "a-shell-description", "bash", "c-shell-description", {
       input: {
         command,
@@ -868,10 +891,16 @@ describe("ShellActivityBlock", () => {
 
   test("snapshots the default-open preference so changing settings does not reflow mounted history", async () => {
     const a = assistantMessage("a-shell-preference-snapshot", "u1")
-    const part = toolPart("t-shell-preference-snapshot", "a-shell-preference-snapshot", "bash", "c-shell-preference-snapshot", {
-      input: { command: "bun test", description: "Run focused tests" },
-      output: "pass",
-    })
+    const part = toolPart(
+      "t-shell-preference-snapshot",
+      "a-shell-preference-snapshot",
+      "bash",
+      "c-shell-preference-snapshot",
+      {
+        input: { command: "bun test", description: "Run focused tests" },
+        output: "pass",
+      },
+    )
     const [expanded, setExpanded] = createSignal(true)
     const host = mount(() =>
       createComponent(ShellActivityBlock, {
@@ -1000,9 +1029,122 @@ describe("FileChangeBlock", () => {
     const host = mount(() => (
       <FileChangeBlock part={part} message={a} defaultOpen={true} editRenderer={OpenCodeMessagePartStub} />
     ))
-    const trigger = host.querySelector("[data-slot='chat-tool-trigger']") as HTMLButtonElement
+    expect(host.querySelector("[data-slot='chat-tool-trigger']")?.getAttribute("aria-expanded")).toBe("true")
+    host.remove()
+  })
+})
 
-    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+describe("StrReplaceEditorBlock", () => {
+  const output = "Replaced 2 occurrences in /repo/src/a.ts\n\nsecond line of the real result text"
+
+  function mutationPart(state: Partial<ToolPart["state"]> = {}) {
+    return toolPart("t-sre", "a-sre", "str_replace_editor", "c-sre", {
+      input: { command: "str_replace", path: "/repo/src/a.ts" },
+      output,
+      metadata: { source: "dsh-container", containerTool: "str_replace_editor" },
+      ...state,
+    })
+  }
+
+  test("shows path, command and the full result text when no truthful diff exists", () => {
+    const a = assistantMessage("a-sre", "u1")
+    const part = mutationPart()
+    const host = mount(() => (
+      <StrReplaceEditorBlock
+        part={part}
+        message={a}
+        defaultOpen={true}
+        directory="/repo"
+        editRenderer={OpenCodeMessagePartStub}
+      />
+    ))
+
+    expect(host.querySelector("[data-component='chat-str-replace-editor']")).not.toBeNull()
+    expect(host.querySelector("[data-slot='chat-tool-title']")?.textContent).toBe("str_replace_editor")
+    expect(host.querySelector("[data-slot='chat-tool-subtitle']")?.textContent).toBe("src/a.ts")
+    expect(host.querySelector("[data-slot='chat-tool-arg']")?.textContent).toBe("str_replace")
+    expect(host.querySelector("[data-slot='chat-str-replace-output']")?.textContent).toBe(output)
+    // No structured diff metadata: never embed the file renderer (which would
+    // fall back to an empty before/after) and never claim applied changes.
+    expect(host.querySelector("[data-renderer='opencode-message-part']")).toBeNull()
+    host.remove()
+  })
+
+  test("routes a truthful adapter-supplied filediff through the existing file renderer", () => {
+    const a = assistantMessage("a-sre-diff", "u1")
+    const part = toolPart("t-sre-diff", "a-sre-diff", "str_replace_editor", "c-sre-diff", {
+      input: { command: "str_replace", path: "/repo/src/a.ts" },
+      output,
+      metadata: {
+        source: "dsh-container",
+        containerTool: "str_replace_editor",
+        filediff: { file: "/repo/src/a.ts", before: "before\n", after: "after\n", additions: 1, deletions: 1 },
+      },
+    })
+    const host = mount(() => (
+      <StrReplaceEditorBlock
+        part={part}
+        message={a}
+        defaultOpen={true}
+        directory="/repo"
+        editRenderer={OpenCodeMessagePartStub}
+      />
+    ))
+
+    const renderer = host.querySelector("[data-renderer='opencode-message-part']")
+    expect(renderer).not.toBeNull()
+    expect(renderer?.textContent).toContain("a.ts")
+    expect(host.querySelector("[data-slot='chat-str-replace-output']")).toBeNull()
+    host.remove()
+  })
+
+  test("falls back to the result text when the filediff has no renderable payload", () => {
+    const a = assistantMessage("a-sre-partial", "u1")
+    // Counts without patch/before/after would render an empty diff; the block
+    // must show the real result text instead.
+    const part = mutationPart({
+      metadata: {
+        source: "dsh-container",
+        containerTool: "str_replace_editor",
+        filediff: { file: "/repo/src/a.ts", additions: 2, deletions: 1 },
+      },
+    })
+    const host = mount(() => (
+      <StrReplaceEditorBlock
+        part={part}
+        message={a}
+        defaultOpen={true}
+        directory="/repo"
+        editRenderer={OpenCodeMessagePartStub}
+      />
+    ))
+
+    expect(host.querySelector("[data-renderer='opencode-message-part']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-str-replace-output']")?.textContent).toBe(output)
+    host.remove()
+  })
+
+  test("does not treat a one-sided partial filediff as an applied change", () => {
+    const a = assistantMessage("a-sre-one-sided", "u1")
+    const part = mutationPart({
+      metadata: { filediff: { file: "/repo/src/a.ts", before: "old\n", additions: 1 } },
+    })
+    const host = mount(() => (
+      <StrReplaceEditorBlock part={part} message={a} defaultOpen={true} editRenderer={OpenCodeMessagePartStub} />
+    ))
+
+    expect(host.querySelector("[data-renderer='opencode-message-part']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-str-replace-output']")?.textContent).toBe(output)
+    host.remove()
+  })
+
+  test("respects the edit default-open preference", () => {
+    const a = assistantMessage("a-sre-default", "u1")
+    const part = mutationPart()
+    const host = mount(() => (
+      <StrReplaceEditorBlock part={part} message={a} defaultOpen={true} editRenderer={OpenCodeMessagePartStub} />
+    ))
+    expect(host.querySelector("[data-slot='chat-tool-trigger']")?.getAttribute("aria-expanded")).toBe("true")
     host.remove()
   })
 })
@@ -1178,7 +1320,9 @@ describe("FileChangeBlock diff", () => {
       },
     })
     const host = mount(() => <FileChangeBlock part={part} message={a} editRenderer={OpenCodeMessagePartStub} />)
-    expect(host.querySelector("[data-component='edit-content'] [data-component='file'][data-mode='diff']")).not.toBeNull()
+    expect(
+      host.querySelector("[data-component='edit-content'] [data-component='file'][data-mode='diff']"),
+    ).not.toBeNull()
     expect(host.querySelector("[data-component='chat-file-diff']")).toBeNull()
     expect(host.querySelector("[data-slot='chat-file-diff-patch']")).toBeNull()
     host.remove()

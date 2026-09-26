@@ -100,6 +100,29 @@ function retryPart(id: string, messageID: string): Part {
   }
 }
 
+/**
+ * Builds a dsh `str_replace_editor` tool part. The display compatibility
+ * layer classifies by the `command` argument, so tests vary it directly.
+ */
+function strReplaceEditorPart(id: string, messageID: string, command?: string): ToolPart {
+  return {
+    id,
+    sessionID: "ses_1",
+    messageID,
+    type: "tool",
+    callID: `${id}-call`,
+    tool: "str_replace_editor",
+    state: {
+      status: "completed",
+      input: command === undefined ? {} : { command, path: "/repo/a.ts" },
+      output: "done",
+      title: "str_replace_editor",
+      metadata: { source: "dsh-container", containerTool: "str_replace_editor" },
+      time: { start: 0, end: 1 },
+    },
+  }
+}
+
 describe("isRenderablePart", () => {
   // snapshot/patch parts are no longer produced (snapshot mechanism removed)
   // but remain in the hidden set so legacy history parts never render.
@@ -235,6 +258,28 @@ describe("classifyPart", () => {
     const a = assistantMessage("a1", "u1")
     const unknown = { id: "x", sessionID: "s", messageID: "a1", type: "future-part" } as unknown as Part
     expect(classifyPart(unknown, a).kind).toBe("generic")
+  })
+})
+
+describe("classifyPart str_replace_editor", () => {
+  test("classifies the view command as context (read-only) activity", () => {
+    const a = assistantMessage("a1", "u1")
+    expect(classifyPart(strReplaceEditorPart("t-view", "a1", "view"), a).kind).toBe("context")
+  })
+
+  test("classifies mutation commands as file-change (edit) activity", () => {
+    const a = assistantMessage("a1", "u1")
+    expect(classifyPart(strReplaceEditorPart("t-create", "a1", "create"), a).kind).toBe("file-change")
+    expect(classifyPart(strReplaceEditorPart("t-replace", "a1", "str_replace"), a).kind).toBe("file-change")
+    expect(classifyPart(strReplaceEditorPart("t-insert", "a1", "insert"), a).kind).toBe("file-change")
+  })
+
+  test("keeps missing and unknown commands on the safe generic path", () => {
+    const a = assistantMessage("a1", "u1")
+    // Pending parts have no parsed input yet; a future dsh command must not be
+    // guessed into a file-change presentation.
+    expect(classifyPart(strReplaceEditorPart("t-pending", "a1", undefined), a).kind).toBe("generic")
+    expect(classifyPart(strReplaceEditorPart("t-future", "a1", "move"), a).kind).toBe("generic")
   })
 })
 

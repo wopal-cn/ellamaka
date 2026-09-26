@@ -19,9 +19,7 @@ export type OpenCodeEditRendererProps = {
 /** Strips ANSI escape sequences from terminal output. */
 function stripAnsi(text: string): string {
   /* eslint-disable no-control-regex */
-  return text
-    .replace(/\u001b\][\s\S]*?(?:\u0007|\u001b\\)/g, "")
-    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+  return text.replace(/\u001b\][\s\S]*?(?:\u0007|\u001b\\)/g, "").replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
   /* eslint-enable no-control-regex */
 }
 
@@ -75,11 +73,7 @@ function ToolBlockHeader(props: {
         <Show when={props.subtitle}>
           <span data-slot="chat-tool-subtitle">{props.subtitle}</span>
         </Show>
-        <For each={props.args}>
-          {(arg) => (
-            <span data-slot="chat-tool-arg">{arg}</span>
-          )}
-        </For>
+        <For each={props.args}>{(arg) => <span data-slot="chat-tool-arg">{arg}</span>}</For>
         <span data-slot="chat-tool-chevron" aria-hidden="true">
           <Icon name="chevron-down" size="small" />
         </span>
@@ -158,6 +152,9 @@ export function ContextToolBlock(props: {
     const i = input()
     const pattern = typeof i.pattern === "string" ? i.pattern : undefined
     const path = typeof i.path === "string" ? i.path : undefined
+    // str_replace_editor `view` carries a file path like read does; show it
+    // relative to the session directory instead of the raw absolute path.
+    if (props.part.tool === "str_replace_editor" && path) return relativizeProjectPath(path, props.directory)
     return readPath() ?? pattern ?? path
   })
   const output = createMemo(() => {
@@ -209,7 +206,9 @@ export function ContextToolBlock(props: {
         />
         <Collapsible.Content>
           <Show when={output()}>
-            <pre data-slot="chat-context-output" data-scrollable="">{output()}</pre>
+            <pre data-slot="chat-context-output" data-scrollable="">
+              {output()}
+            </pre>
           </Show>
         </Collapsible.Content>
       </Collapsible>
@@ -288,7 +287,9 @@ export function ShellActivityBlock(props: { part: ToolPart; message: AssistantMe
         />
         <Collapsible.Content>
           <div data-slot="chat-shell-command-region">
-            <pre data-slot="chat-shell-command" data-scrollable="">$ {command()}</pre>
+            <pre data-slot="chat-shell-command" data-scrollable="">
+              $ {command()}
+            </pre>
             <button
               type="button"
               data-action="chat-shell-copy"
@@ -301,12 +302,16 @@ export function ShellActivityBlock(props: { part: ToolPart; message: AssistantMe
           </div>
           <Show when={output()}>
             <div data-slot="chat-shell-output-region">
-              <pre data-slot="chat-shell-output" data-scrollable="">{output()}</pre>
+              <pre data-slot="chat-shell-output" data-scrollable="">
+                {output()}
+              </pre>
             </div>
           </Show>
           <Show when={error()}>
             <div data-slot="chat-shell-error-region">
-              <pre data-slot="chat-shell-error" data-scrollable="">{error()}</pre>
+              <pre data-slot="chat-shell-error" data-scrollable="">
+                {error()}
+              </pre>
             </div>
           </Show>
         </Collapsible.Content>
@@ -396,6 +401,156 @@ export function FileChangeBlock(props: {
                 <div data-component="chat-file-change-wrapper" data-scrollable="">
                   <Renderer
                     part={props.part}
+                    message={props.message}
+                    defaultOpen={props.defaultOpen}
+                    toolOpen={open()}
+                    onToolOpenChange={setOpen}
+                    deferToolContent={false}
+                    virtualizeDiff={false}
+                  />
+                </div>
+              )
+            }}
+          </Show>
+        </Collapsible.Content>
+      </Collapsible>
+    </div>
+  )
+}
+
+/** A structured diff payload that is safe to hand to the file renderer. */
+type StructuredFilediff = {
+  file?: string
+  patch?: string
+  before?: string
+  after?: string
+  additions?: number
+  deletions?: number
+}
+
+/**
+ * Extracts a renderable structured diff from tool metadata. The diff algorithm
+ * is owned by the adapter, which emits `filediff` only when it can carry the
+ * real before/after state; display code never synthesizes one from tool
+ * arguments. A filediff without a patch or before/after payload would render
+ * an empty diff, so it is treated as unavailable — the caller falls back to
+ * the result text instead.
+ */
+function renderableFilediff(value: unknown): StructuredFilediff | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+  const read = (key: string): unknown => Object.entries(value).find(([name]) => name === key)?.[1]
+  const patchValue = read("patch")
+  const beforeValue = read("before")
+  const afterValue = read("after")
+  const patch = typeof patchValue === "string" && patchValue.trim() ? patchValue : undefined
+  const before = typeof beforeValue === "string" ? beforeValue : undefined
+  const after = typeof afterValue === "string" ? afterValue : undefined
+  if (patch === undefined && (before === undefined || after === undefined)) return undefined
+  const file = read("file")
+  const additions = read("additions")
+  const deletions = read("deletions")
+  return {
+    file: typeof file === "string" && file ? file : undefined,
+    patch,
+    before,
+    after,
+    additions: typeof additions === "number" ? additions : undefined,
+    deletions: typeof deletions === "number" ? deletions : undefined,
+  }
+}
+
+/**
+ * StrReplaceEditorBlock renders the dsh `str_replace_editor` mutation commands
+ * (`create` / `str_replace` / `insert`; `view` is classified as context). The
+ * tool result is plain text and carries no structured diff, so the block shows
+ * the path, the command and the full result text. The upstream file renderer
+ * (the same chain used by edit/write/apply_patch) is embedded only when the
+ * adapter supplied truthful structured diff metadata; no diff is ever
+ * synthesized from the request arguments.
+ */
+export function StrReplaceEditorBlock(props: {
+  part: ToolPart
+  message: AssistantMessage
+  defaultOpen?: boolean
+  directory?: string
+  editRenderer?: Component<OpenCodeEditRendererProps>
+}) {
+  const { open, setOpen } = useToolOpen(
+    props.part,
+    () => props.part.state.status === "error" || (props.defaultOpen ?? isToolRunning(props.part)),
+  )
+
+  const input = () => props.part.state.input ?? {}
+  const metadata = () => ("metadata" in props.part.state ? (props.part.state.metadata ?? {}) : {})
+  const command = createMemo(() => {
+    const value = input().command
+    return typeof value === "string" && value.trim() ? value.trim() : undefined
+  })
+  const fileDiff = createMemo(() => renderableFilediff(metadata().filediff))
+  const filePath = createMemo(() => {
+    const diffFile = fileDiff()?.file
+    if (diffFile) return diffFile
+    const value = input().path
+    return typeof value === "string" && value.trim() ? value : undefined
+  })
+  const output = createMemo(() => {
+    const state = props.part.state
+    return state.status === "completed" && typeof state.output === "string" ? state.output : ""
+  })
+  const additions = createMemo(() => fileDiff()?.additions ?? 0)
+  const deletions = createMemo(() => fileDiff()?.deletions ?? 0)
+
+  // The upstream edit renderer resolves its own file name from `input.filePath`
+  // and its diff from `metadata.filediff`; the derived part only adapts those
+  // two lookups and passes the adapter's diff payload through untouched.
+  const rendererPart = createMemo<ToolPart>(() => {
+    const part = props.part
+    const file = filePath()
+    return {
+      ...part,
+      tool: "edit",
+      state: {
+        ...part.state,
+        input: { ...part.state.input, ...(file === undefined ? {} : { filePath: file }) },
+      },
+    } as ToolPart
+  })
+
+  return (
+    <div data-component="chat-str-replace-editor" data-call-id={props.part.callID}>
+      <Collapsible open={open()} onOpenChange={setOpen}>
+        <ToolBlockHeader
+          icon="code-lines"
+          title={props.part.tool}
+          subtitle={filePath() ? relativizeProjectPath(filePath()!, props.directory) : undefined}
+          args={command() ? [command()!] : []}
+          status={props.part.state.status}
+          open={open()}
+          toggle={(_event: MouseEvent) => setOpen(!open())}
+          actions={
+            <Show when={props.part.state.status === "completed" && (additions() > 0 || deletions() > 0)}>
+              <span data-slot="chat-file-additions">+{additions()}</span>
+              <span data-slot="chat-file-deletions">-{deletions()}</span>
+            </Show>
+          }
+        />
+        <Collapsible.Content>
+          <Show
+            when={fileDiff() ? props.editRenderer : undefined}
+            fallback={
+              <Show when={output()}>
+                <pre data-slot="chat-str-replace-output" data-scrollable="">
+                  {output()}
+                </pre>
+              </Show>
+            }
+          >
+            {(renderer) => {
+              const Renderer = renderer()
+              return (
+                <div data-component="chat-file-change-wrapper" data-scrollable="">
+                  <Renderer
+                    part={rendererPart()}
                     message={props.message}
                     defaultOpen={props.defaultOpen}
                     toolOpen={open()}
@@ -534,7 +689,9 @@ export function GenericToolBlock(props: { part: ToolPart; message: AssistantMess
         />
         <Collapsible.Content>
           <Show when={output()}>
-            <pre data-slot="chat-generic-output" data-scrollable="">{output()}</pre>
+            <pre data-slot="chat-generic-output" data-scrollable="">
+              {output()}
+            </pre>
           </Show>
         </Collapsible.Content>
       </Collapsible>
