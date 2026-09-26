@@ -1,7 +1,7 @@
 # Web profile 设计
 
-> **Status**: Active
-> **Updated**: 2026-09-14
+> **Status**: Draft
+> **Updated**: 2026-09-26
 > **Parent**: `./DESIGN.md`
 
 `web` profile 承载 dsh 的完整界面与会话能力。它是用户直接使用的 dsh 表面，也是插件生态的落点。
