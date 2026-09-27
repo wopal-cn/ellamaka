@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
-> **Status**: Active
-> **Updated**: 2026-09-26
+> **Status**: Draft
+> **Updated**: 2026-09-27
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 > - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系总体设计："只有 CLI 能写配置"的规则由它定
