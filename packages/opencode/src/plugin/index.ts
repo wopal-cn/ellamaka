@@ -175,6 +175,7 @@ export const layer = Layer.effect(
           ...(serverUrl ? {} : { fetch: async (...args) => Server.Default().app.fetch(...args) }),
         })
         const cfg = yield* config.get()
+        const pluginConfig = yield* config.getPluginConfig()
         const wopalSpaceRoot = resolveWopalSpaceRoot(ctx.directory)
         const input: PluginInput = {
           client,
@@ -192,6 +193,7 @@ export const layer = Layer.effect(
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
           ...(wopalSpaceRoot ? { wopalSpaceRoot } : {}),
+          pluginConfig,
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {

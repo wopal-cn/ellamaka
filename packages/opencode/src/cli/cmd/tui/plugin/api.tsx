@@ -315,6 +315,7 @@ export function createTuiApi(input: Input): TuiPluginApi {
     get tuiConfig() {
       return input.tuiConfig
     },
+    pluginConfig: input.tuiConfig.pluginConfig,
     kv: {
       get(key, fallback) {
         return input.kv.get(key, fallback)

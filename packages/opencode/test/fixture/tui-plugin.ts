@@ -93,6 +93,7 @@ type Opts = {
   count?: Count
   keymap?: HostPluginApi["keymap"]
   tuiConfig?: Partial<HostPluginApi["tuiConfig"]>
+  pluginConfig?: HostPluginApi["pluginConfig"]
   app?: Partial<HostPluginApi["app"]>
   state?: {
     ready?: HostPluginApi["state"]["ready"]
@@ -287,6 +288,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       },
     },
     tuiConfig: tuiConfig(opts.tuiConfig),
+    pluginConfig: opts.pluginConfig ?? {},
     kv: {
       get: kvGet,
       set(name, value) {

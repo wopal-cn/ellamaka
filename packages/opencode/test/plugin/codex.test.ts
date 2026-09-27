@@ -434,6 +434,7 @@ describe("plugin.codex", () => {
         },
         serverUrl: new URL("https://example.com"),
         $: {} as never,
+        pluginConfig: {},
       },
       {
         issuer: server.url.origin,

@@ -41,6 +41,7 @@ import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
 import { Npm } from "@wopal/ellamaka-core/npm"
 import { tryLoadWopalSpaceConfig, localPluginInstallDeps, collectPluginDeps, needsPluginDepInstall, writeDirDepFingerprint, writeInstallManifest, cleanPluginDepArtifacts, withPluginDepInstallLock, type InstallDependency } from "./wopal-space"
+import type { PluginConfigSources, PluginConfigTable } from "./wopal-plugin-config"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ConfigExperimental } from "@wopal/ellamaka-core/config/experimental"
 
@@ -338,12 +339,15 @@ type State = {
   deps: Fiber.Fiber<void>[]
   consoleState: ConsoleState
   isWopalSpace: boolean
+  pluginConfig: PluginConfigTable
+  pluginConfigSources: PluginConfigSources
 }
 
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
+  readonly getPluginConfig: () => Effect.Effect<PluginConfigTable>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
@@ -915,6 +919,8 @@ export const layer = Layer.effect(
             switchableOrgCount: 0,
           },
           isWopalSpace: false,
+          pluginConfig: {},
+          pluginConfigSources: {},
         }
       },
       Effect.provideService(AppFileSystem.Service, fs),
@@ -936,6 +942,10 @@ export const layer = Layer.effect(
 
     const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
       return yield* InstanceState.use(state, (s) => s.consoleState)
+    })
+
+    const getPluginConfig = Effect.fn("Config.getPluginConfig")(function* () {
+      return yield* InstanceState.use(state, (s) => s.pluginConfig)
     })
 
     const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
@@ -998,6 +1008,7 @@ export const layer = Layer.effect(
       get,
       getGlobal,
       getConsoleState,
+      getPluginConfig,
       update,
       updateGlobal,
       invalidate,

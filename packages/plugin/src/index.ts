@@ -85,6 +85,14 @@ export type PluginInput = {
   serverUrl: URL
   $: BunShell
   wopalSpaceRoot?: string
+  /**
+   * Effective plugin behaviour config merged across the global, space and
+   * space-local settings layers (`wopal.pluginConfig`), delivered whole: the
+   * engine does not slice it by plugin name. Empty object outside a WopalSpace
+   * instance. Consumption precedence (plugin-side) is:
+   * built-in defaults < inline plugin options < `pluginConfig[plugin name]`.
+   */
+  pluginConfig: Record<string, Record<string, unknown>>
 }
 
 export type PluginOptions = Record<string, unknown>

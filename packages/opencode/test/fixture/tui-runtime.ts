@@ -5,10 +5,11 @@ import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { TuiKeybind } from "../../src/cli/cmd/tui/config/keybind"
 
 type PluginSpec = string | [string, Record<string, unknown>]
-type ResolvedInput = Omit<TuiConfig.Resolved, "attention" | "keybinds" | "leader_timeout"> & {
+type ResolvedInput = Omit<TuiConfig.Resolved, "attention" | "keybinds" | "leader_timeout" | "pluginConfig"> & {
   attention?: Partial<TuiConfig.Resolved["attention"]>
   keybinds?: Partial<TuiKeybind.Keybinds>
   leader_timeout?: number
+  pluginConfig?: TuiConfig.Resolved["pluginConfig"]
 }
 
 export function createTuiResolvedKeybinds(input: Partial<TuiKeybind.Keybinds> = {}): TuiConfig.Resolved["keybinds"] {
@@ -23,6 +24,7 @@ export function createTuiResolvedConfig(input: ResolvedInput = {}): TuiConfig.Re
   const keybinds = TuiKeybind.Keybinds.parse(input.keybinds ?? {})
   return {
     ...input,
+    pluginConfig: input.pluginConfig ?? {},
     attention: {
       enabled: false,
       notifications: true,

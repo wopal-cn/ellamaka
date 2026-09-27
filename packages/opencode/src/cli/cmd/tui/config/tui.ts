@@ -22,6 +22,7 @@ import * as Log from "@wopal/ellamaka-core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@wopal/ellamaka-core/npm"
 import { tryLoadWopalSpaceTuiConfig } from "./wopal-space"
+import type { PluginConfigTable } from "@/config/wopal-plugin-config"
 import type { DeepMutable } from "@wopal/ellamaka-core/schema"
 import type { TuiAttentionSoundName } from "@wopal/ellamaka-plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
@@ -47,6 +48,9 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout"> &
   }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
+  // Effective plugin behaviour config (three-layer `wopal.pluginConfig` merge);
+  // empty object outside a WopalSpace instance.
+  pluginConfig: PluginConfigTable
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
 }
@@ -268,6 +272,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   const parsedKeybinds = TuiKeybind.parse(keybinds)
   const result: Resolved = {
     ...acc.result,
+    pluginConfig: wopal?.pluginConfig ?? {},
     attention: {
       enabled: acc.result.attention?.enabled ?? false,
       notifications: acc.result.attention?.notifications ?? true,

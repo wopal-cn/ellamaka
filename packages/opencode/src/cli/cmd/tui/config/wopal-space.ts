@@ -1,8 +1,12 @@
 export * as TuiConfigWopalSpace from "./wopal-space"
 
+import path from "path"
 import { Effect } from "effect"
 import * as Log from "@wopal/ellamaka-core/util/log"
+import { Global } from "@wopal/ellamaka-core/global"
 import { ConfigParse } from "@/config/parse"
+import { ConfigWopalPluginConfig } from "@/config/wopal-plugin-config"
+import type { PluginConfigTable } from "@/config/wopal-plugin-config"
 import { loadWopalSpaceSettingsFiles } from "@/config/wopal-space-settings"
 import type { Info } from "./tui"
 
@@ -16,6 +20,7 @@ export interface WopalSpaceDeps {
 
 export interface WopalSpaceResult {
   dirs: string[]
+  pluginConfig: PluginConfigTable
 }
 
 export function tryLoadWopalSpaceTuiConfig(deps: WopalSpaceDeps, ctx: { directory: string }) {
@@ -24,6 +29,19 @@ export function tryLoadWopalSpaceTuiConfig(deps: WopalSpaceDeps, ctx: { director
     if (!loaded) {
       return undefined
     }
+
+    // Same three-layer `wopal.pluginConfig` merge as the engine config chain:
+    // the global settings file plus the already-loaded space layer texts.
+    const globalSettingsPath = path.join(Global.Path.config, "settings.jsonc")
+    const globalSettings = yield* deps.readConfigFile(globalSettingsPath)
+    const { pluginConfig } = ConfigWopalPluginConfig.mergePluginConfig([
+      { source: "global", path: globalSettingsPath, text: globalSettings },
+      ...loaded.files.map((file) => ({
+        source: ConfigWopalPluginConfig.settingsFileSource(file.path),
+        path: file.path,
+        text: file.text,
+      })),
+    ])
 
     for (const file of loaded.files) {
       const raw = ConfigParse.jsonc(file.text, file.path) as Record<string, unknown>
@@ -45,6 +63,7 @@ export function tryLoadWopalSpaceTuiConfig(deps: WopalSpaceDeps, ctx: { director
 
     return {
       dirs: loaded.localWopalDirs,
+      pluginConfig,
     } satisfies WopalSpaceResult
   })
 }

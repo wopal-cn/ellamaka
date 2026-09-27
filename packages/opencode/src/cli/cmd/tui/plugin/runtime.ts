@@ -637,6 +637,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     route,
     ui: api.ui,
     tuiConfig: api.tuiConfig,
+    pluginConfig: api.pluginConfig,
     kv: api.kv,
     state: api.state,
     theme,

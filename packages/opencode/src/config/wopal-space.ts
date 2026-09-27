@@ -9,6 +9,8 @@ import { ConfigAgent } from "./agent"
 import { Glob } from "@wopal/ellamaka-core/util/glob"
 import { ConfigPlugin } from "./plugin"
 import { loadWopalSpaceSettingsFiles } from "./wopal-space-settings"
+import { mergePluginConfig, settingsFileSource } from "./wopal-plugin-config"
+import type { PluginConfigSources, PluginConfigTable } from "./wopal-plugin-config"
 import { Effect, Fiber } from "effect"
 import type { Info } from "./config"
 import type { ConsoleState } from "./console-state"
@@ -281,6 +283,8 @@ export interface WopalSpaceResult {
   directories: string[]
   deps: Fiber.Fiber<void, never>[]
   consoleState: ConsoleState
+  pluginConfig: PluginConfigTable
+  pluginConfigSources: PluginConfigSources
 }
 
 export function tryLoadWopalSpaceConfig(
@@ -301,6 +305,21 @@ export function tryLoadWopalSpaceConfig(
 
     const directories = settings.directories
     const localWopalDirs = settings.localWopalDirs
+
+    // Independent `wopal.pluginConfig` channel: the `wopal` section is not part
+    // of the engine Config schema, so it never travels through the whitelist
+    // merge below. The global layer is read here on top of the already-loaded
+    // space settings texts (no second file read for space layers).
+    const globalSettingsPath = path.join(Global.Path.config, "settings.jsonc")
+    const globalSettings = yield* deps.readConfigFile(globalSettingsPath)
+    const { pluginConfig, sources: pluginConfigSources } = mergePluginConfig([
+      { source: "global", path: globalSettingsPath, text: globalSettings },
+      ...settings.files.map((file) => ({
+        source: settingsFileSource(file.path),
+        path: file.path,
+        text: file.text,
+      })),
+    ])
 
     const global = yield* deps.getGlobal()
     yield* deps.merge(Global.Path.config, global, "global")
@@ -396,6 +415,8 @@ export function tryLoadWopalSpaceConfig(
         activeOrgName: undefined,
         switchableOrgCount: 0,
       },
+      pluginConfig,
+      pluginConfigSources,
     } satisfies WopalSpaceResult
   })
 }
