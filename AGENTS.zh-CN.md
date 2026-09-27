@@ -181,7 +181,8 @@ Agent 无法自动验证的行为（GUI 交互、引导流程、桌面壳）通�
 | TUI | `./scripts/dev.sh tui` | 默认内嵌后端 |
 | 停止 | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
-- 日志：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`（`<scope>` 由 worktree 路径派生）。
+- 日志（dev 运行）：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`。`<scope>` 为 dev.sh 所在仓库/worktree 根目录（符号链接解析后）md5 的前 10 位十六进制字符——可从 `.wopal-space/logs/dev/registry` 查得（每行 `<scope> <root>`），或按 dev.sh 同款算法重算：`printf '%s' "<root>" | md5 -q | cut -c1-10`。worktree 内的运行汇入其所属空间的日志账本（`.worktrees` 路径锚定到空间根）。
+- dev 运行只写稳定的 `ellamaka-dev-<role>.log` 文件名——同一次运行不会出现带时间戳的 `<role>-<timestamp>.log`。找不到 dev 日志时先查 `dev/<scope>/` 再另行搜索，用 `./scripts/dev.sh status` 查看运行中的实例。排查 TUI 插件装载时，在 `ellamaka-dev-tui.log` 中 grep `service=tui.plugin`；`chrome-devtools` 的 MCP ERROR 为存量噪声。
 - Plan 的 User Validation 必须引用本表并给出用户可直接复制执行的命令，不得只写"启动应用"之类的泛指。
 
 ## User-Supplied Rules

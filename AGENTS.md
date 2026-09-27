@@ -181,7 +181,8 @@ Behaviors an agent cannot verify automatically (GUI interaction, onboarding flow
 | TUI | `./scripts/dev.sh tui` | In-process backend by default |
 | Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
-- Logs: `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log` (`<scope>` is derived from the worktree path).
+- Logs (dev runs): `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`. `<scope>` is the first 10 hex chars of the md5 of the repo/worktree root that owns `scripts/dev.sh` (symlinks resolved) — resolve it from `.wopal-space/logs/dev/registry` (one `<scope> <root>` per line) or recompute the same way dev.sh does: `printf '%s' "<root>" | md5 -q | cut -c1-10`. A worktree run logs into its base space's ledger (a `.worktrees` path anchors to the space root).
+- Dev runs write only the stable `ellamaka-dev-<role>.log` names — no timestamped `<role>-<timestamp>.log` file appears for the same run. If dev logs seem missing, look under `dev/<scope>/` before searching elsewhere, and use `./scripts/dev.sh status` to see running instances. To check TUI plugin loading, grep `service=tui.plugin` in `ellamaka-dev-tui.log`; MCP `chrome-devtools` ERROR lines are pre-existing noise.
 - A Plan's User Validation must reference this table and give a command the user can copy and run directly; generic wording such as "start the app" is not acceptable.
 
 ## User-Supplied Rules
