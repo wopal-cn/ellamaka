@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-09-25
+> **Updated**: 2026-09-27
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -49,6 +49,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | DSH 双引擎融合            | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                        | [DSH 双引擎融合](#dsh-双引擎融合)       |
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
 | 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`config-v2` 查询（生效树+来源）由引擎直答，写入经 CLI 转发        | [DESIGN-config-engine.md](./DESIGN-config-engine.md) |
+| 能力发现层                | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                    | [Capability Discovery Layer](#capability-discovery-layer) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
@@ -179,6 +180,7 @@ ellamaka 按当前执行目录识别运行模式。检测逻辑由 `packages/ell
 | Plugins  | `.wopal/plugins/`                                | 向 runtime 暴露 plugin tools                   |
 | Settings | `.wopal/config/settings.jsonc`                   | `ellamaka` 字段配置 engine，`tui` 字段配置 TUI |
 | Skills   | `$WOPAL_HOME/skills/` → `<space>/.wopal/skills/` | 并发解析 + 按序合并，右侧优先                  |
+| Rules    | `$WOPAL_HOME/rules/` → `<space>/.wopal/rules/`   | 目录扫描 `**/*.{md,mdc}`，空间层按相对路径覆盖全局同名 |
 
 ### TUI 配置加载
 
@@ -191,6 +193,27 @@ WopalSpace 模式下 `/help` 由空间级 `commands/help.md` 接管，而非 TUI
 WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）与 `<space>/.wopal/`（空间 ontology）可以包含同一插件，其文件路径不同但 runtime `id` 相同。按 file URL 去重无法识别这类重复，会导致插件被加载两次。
 
 `deduplicateLoadedPluginsByRuntimeId()` 在插件模块加载完成后、执行 `server()` 之前按 runtime `id` 去重，同一 id 保留后加载（高优先级）的插件。去重发生在模块加载与执行之间的边界上，对 config 层零侵入。
+
+## Capability Discovery Layer
+
+引擎内部严格区分两个能力层次，两者读不同的方法，互不干扰：
+
+| 层次 | 职责 | 过滤权限 | 代表方法 |
+|------|------|---------|---------|
+| 发现层 | "引擎加载了什么" | 否，返回完整列表 | `Skill.all()`、`ToolRegistry.all()`、`MCP.tools()`、`Rule.all()` |
+| 运行时过滤层 | "这个 agent 这次能用什么" | 是，按 agent 权限与 model 过滤 | `Skill.available(agent)`、`ToolRegistry.tools(agent, model)`、会话执行时 `permission.ask` |
+
+系统提示词生成、工具清单构建、执行授权全部走运行时过滤层。
+
+发现层通过 HTTP API 与 SDK 向外部消费者暴露完整能力列表，供 wopal-cli 的 `wopal space capability list` 命令查询空间武器库。发现层端点只返回武器元数据（名称、描述、来源、路径），不传递工具的执行方法：
+
+| 端点 | 发现层方法 | 返回内容 |
+|------|-----------|---------|
+| GET `/skill` | `Skill.all()` | 全部已加载技能（name、description、location） |
+| GET `/rule` | `Rule.all()` | 全部已发现规则（相对路径、description、keywords、agentScope） |
+| GET `/tool` | `ToolRegistry.all()` + `MCP.tools()` | 全部注册工具（id、description、来源类型：builtin / custom / mcp），不含 execute |
+
+发现层端点不按 agent 权限过滤，不触碰运行时过滤层的任何方法。规则发现是引擎新增能力：扫描全局 `$WOPAL_HOME/rules/` 与空间 `<spaceRoot>/.wopal/rules/` 两层目录的 `**/*.{md,mdc}` 文件，空间层按相对路径覆盖全局同名，直接子目录名作为 agent 作用域。规则的运行时注入（按 agent 与用户提示匹配）仍由 wopal-plugin 负责，与发现层分离。
 
 ## Upstream Merge Boundary
 
