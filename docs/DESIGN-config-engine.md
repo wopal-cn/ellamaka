@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Draft
-> **Updated**: 2026-09-27
+> **Updated**: 2026-09-28
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 > - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系总体设计："只有 CLI 能写配置"的规则由它定
@@ -81,6 +81,8 @@ HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
 ```
 
 ### Read Surface
+
+> **P2 先行 · 读面简版**：`GET /config-v2` 首版（`effective.ellamaka` + `effective.wopal.pluginConfig`，供权限选择器消费）现载于主设计 `./DESIGN.md`「Config Read Surface」，由 P2 计划 `enhance-config-read-surface` 实施；本文档定稿（P3 细节设计）时将这部分迁入，并补齐逐项来源、`tui` 段与写面（`PATCH` / `reset-key`）、面板的完整契约。
 
 `GET /config-v2` 覆盖三层继承链上的三个设置段：`ellamaka`、`wopal`、`tui`。`spaces` / `ontologies` 注册表走各自命令与既有读取通道，不进入本端点。返回形态：
 

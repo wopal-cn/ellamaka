@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-09-27
+> **Updated**: 2026-09-28
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -48,7 +48,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | Runtime API 与 SDK        | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API    | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约) |
 | DSH 双引擎融合            | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                        | [DSH 双引擎融合](#dsh-双引擎融合)       |
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
-| 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`config-v2` 查询（生效树+来源）由引擎直答，写入经 CLI 转发        | [DESIGN-config-engine.md](./DESIGN-config-engine.md) |
+| 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经 CLI 转发        | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 能力发现层                | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                    | [Capability Discovery Layer](#capability-discovery-layer) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
@@ -133,6 +133,34 @@ WopalSpace 模式下配置加载优先级（低→高）：
 空间配置分为公开与私有两层：`config/settings.jsonc` 随 ontology 提交分发，承载公共默认值；`config/settings.local.jsonc` 为用户私有覆盖，不提交。两层通过 `mergeDeep` 合并，后者优先。
 
 非 WopalSpace 模式下，能力扫描在 OpenCode 生态目录（`.opencode/`、`~/.opencode/`、`~/.config/opencode/`）之后叠加 `$WOPAL_HOME/` 全局能力，后者最后加载并覆盖同名能力。`$WOPAL_HOME/config/` 是纯配置目录，不参与能力扫描。
+
+### Config Read Surface
+
+Workbench 经引擎 HTTP 读面获取生效配置，供权限选择器等界面消费。读面由引擎从自己的加载状态直答，不经 CLI；既有 `/config` 端点维持运行时视图，不扩展。
+
+```typescript
+// 读——引擎直接从自己的加载状态回答，不走 CLI
+HttpApiEndpoint.get("configGet", "/config-v2", {
+  query: WorkspaceRoutingQuery,
+  success: described(ConfigV2ReadResponse, "Effective configuration read surface"),
+})
+```
+
+响应形状：
+
+```jsonc
+{
+  "effective": {
+    "ellamaka": { /* 实例合并后的引擎配置，与 /config 同源同值 */ },
+    "wopal": { "pluginConfig": { /* 三层合并后的插件行为配置表 */ } }
+  }
+}
+```
+
+- 端点挂实例作用域中间件（Instance Context + Workspace Routing + Authorization），两种运行模式通用；非 WopalSpace 实例返回空段，响应形状不变。
+- `effective.ellamaka` 与 `/config` 同源同值（`$VAR` 已在加载时代换）；`effective.wopal.pluginConfig` 为三层文件镜像，`$VAR` 不代换，引用解析发生在消费方插件内部。
+- 权限选择器：显示条件为 dock 变体 + DSH `ready`（状态自 `/global/health`）+ 装配条目含 dsh-adapter + `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true`；默认模式取 `sandbox.mode`。
+- 配置写入（`PATCH` / `reset-key` 经 CLI 转发）与设置面板的完整契约由 [DESIGN-config-engine.md](./DESIGN-config-engine.md) 承载。
 
 ### External Capability Directories
 
