@@ -3,6 +3,7 @@ import { Command } from "@/command"
 import { Format } from "@/format"
 import { LSP } from "@/lsp/lsp"
 import { Vcs } from "@/project/vcs"
+import { Rule } from "@/rule"
 import { Skill } from "@/skill"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -30,6 +31,18 @@ export const VcsDiffQuery = Schema.Struct({
   context: Schema.optional(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0))),
 })
 
+// Capability discovery metadata: identity, description, origin and a flat
+// parameter summary. Runtime fields (`execute`, full JSON Schema bodies) are
+// never part of this surface.
+export const ToolCapabilityInfo = Schema.Struct({
+  id: Schema.String,
+  description: Schema.String,
+  source: Schema.Literals(["builtin", "custom", "mcp"]),
+  service: Schema.optional(Schema.String),
+  parameters: Schema.optional(Schema.Array(Schema.Struct({ name: Schema.String, type: Schema.String }))),
+}).annotate({ identifier: "ToolCapabilityInfo" })
+export type ToolCapabilityInfo = Schema.Schema.Type<typeof ToolCapabilityInfo>
+
 export class ApiVcsApplyError extends Schema.ErrorClass<ApiVcsApplyError>("VcsApplyError")(
   {
     name: Schema.Literal("VcsApplyError"),
@@ -52,6 +65,8 @@ export const InstancePaths = {
   command: "/command",
   agent: "/agent",
   skill: "/skill",
+  rule: "/rule",
+  tool: "/tool",
   lsp: "/lsp",
   formatter: "/formatter",
 } as const
@@ -165,6 +180,26 @@ export const InstanceApi = HttpApi.make("instance")
             identifier: "app.skills",
             summary: "List skills",
             description: "Get a list of all available skills in the OpenCode system.",
+          }),
+        ),
+        HttpApiEndpoint.get("rule", InstancePaths.rule, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(Rule.Info), "List of rules"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "app.ruleCapabilities",
+            summary: "List rules",
+            description: "Get a list of all discovered rules in the OpenCode system.",
+          }),
+        ),
+        HttpApiEndpoint.get("tool", InstancePaths.tool, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(ToolCapabilityInfo), "List of tools"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "app.toolCapabilities",
+            summary: "List tools",
+            description: "Get a list of all registered tools in the OpenCode system.",
           }),
         ),
         HttpApiEndpoint.get("lsp", InstancePaths.lsp, {

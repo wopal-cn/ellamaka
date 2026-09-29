@@ -70,9 +70,15 @@ type State = {
   read: ReadDef
 }
 
+export interface CapabilityEntry {
+  readonly def: Tool.Def
+  readonly source: "builtin" | "custom"
+}
+
 export interface Interface {
   readonly ids: () => Effect.Effect<string[]>
   readonly all: () => Effect.Effect<Tool.Def[]>
+  readonly capabilityEntries: () => Effect.Effect<CapabilityEntry[]>
   readonly named: () => Effect.Effect<{ task: TaskDef; read: ReadDef }>
   readonly tools: (model: { providerID: ProviderID; modelID: ModelID; agent: Agent.Info }) => Effect.Effect<Tool.Def[]>
 }
@@ -279,6 +285,17 @@ export const layer: Layer.Layer<
       return [...s.builtin, ...s.custom] as Tool.Def[]
     })
 
+    // Discovery read: the complete static registration surface with its origin
+    // preserved. No model/agent input and no runtime filtering; `all()` keeps
+    // its flat shape for existing callers.
+    const capabilityEntries: Interface["capabilityEntries"] = Effect.fn("ToolRegistry.capabilityEntries")(function* () {
+      const s = yield* InstanceState.get(state)
+      return [
+        ...s.builtin.map((def) => ({ def, source: "builtin" as const })),
+        ...s.custom.map((def) => ({ def, source: "custom" as const })),
+      ]
+    })
+
     const ids: Interface["ids"] = Effect.fn("ToolRegistry.ids")(function* () {
       return (yield* all()).map((tool) => tool.id)
     })
@@ -401,7 +418,7 @@ export const layer: Layer.Layer<
       return { task: s.task, read: s.read }
     })
 
-    return Service.of({ ids, all, named, tools })
+    return Service.of({ ids, all, capabilityEntries, named, tools })
   }),
 )
 

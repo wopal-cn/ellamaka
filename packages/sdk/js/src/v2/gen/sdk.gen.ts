@@ -8,8 +8,12 @@ import type {
   AppAgentsResponses,
   AppLogErrors,
   AppLogResponses,
+  AppRuleCapabilitiesErrors,
+  AppRuleCapabilitiesResponses,
   AppSkillsErrors,
   AppSkillsResponses,
+  AppToolCapabilitiesErrors,
+  AppToolCapabilitiesResponses,
   Auth as Auth3,
   AuthRemoveErrors,
   AuthRemoveResponses,
@@ -511,6 +515,66 @@ export class App extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<AppSkillsResponses, AppSkillsErrors, ThrowOnError>({
       url: "/skill",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List rules
+   *
+   * Get a list of all discovered rules in the OpenCode system.
+   */
+  public ruleCapabilities<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppRuleCapabilitiesResponses, AppRuleCapabilitiesErrors, ThrowOnError>({
+      url: "/rule",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List tools
+   *
+   * Get a list of all registered tools in the OpenCode system.
+   */
+  public toolCapabilities<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<AppToolCapabilitiesResponses, AppToolCapabilitiesErrors, ThrowOnError>({
+      url: "/tool",
       ...options,
       ...params,
     })

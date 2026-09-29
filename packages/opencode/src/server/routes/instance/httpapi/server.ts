@@ -47,6 +47,7 @@ import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Skill } from "@/skill"
+import { Rule } from "@/rule"
 import { SyncEvent } from "@/sync"
 import { ToolRegistry } from "@/tool/registry"
 import { lazy } from "@/util/lazy"
@@ -237,6 +238,7 @@ export function createRoutes(
       PtyTicket.defaultLayer,
       Question.defaultLayer,
       Ripgrep.defaultLayer,
+      Rule.defaultLayer,
       RuntimeFlags.defaultLayer,
       Session.defaultLayer,
       SessionCompaction.defaultLayer,

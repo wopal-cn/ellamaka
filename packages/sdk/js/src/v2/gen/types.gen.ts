@@ -1692,6 +1692,26 @@ export type Agent = {
   steps?: number
 }
 
+export type RuleCapabilityInfo = {
+  name: string
+  description?: string
+  keywords?: Array<string>
+  agentScope?: string
+  source: "global" | "space"
+  location: string
+}
+
+export type ToolCapabilityInfo = {
+  id: string
+  description: string
+  source: "builtin" | "custom" | "mcp"
+  service?: string
+  parameters?: Array<{
+    name: string
+    type: string
+  }>
+}
+
 export type LspStatus = {
   id: string
   name: string
@@ -5387,6 +5407,62 @@ export type AppSkillsResponses = {
 }
 
 export type AppSkillsResponse = AppSkillsResponses[keyof AppSkillsResponses]
+
+export type AppRuleCapabilitiesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/rule"
+}
+
+export type AppRuleCapabilitiesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AppRuleCapabilitiesError = AppRuleCapabilitiesErrors[keyof AppRuleCapabilitiesErrors]
+
+export type AppRuleCapabilitiesResponses = {
+  /**
+   * List of rules
+   */
+  200: Array<RuleCapabilityInfo>
+}
+
+export type AppRuleCapabilitiesResponse = AppRuleCapabilitiesResponses[keyof AppRuleCapabilitiesResponses]
+
+export type AppToolCapabilitiesData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/tool"
+}
+
+export type AppToolCapabilitiesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AppToolCapabilitiesError = AppToolCapabilitiesErrors[keyof AppToolCapabilitiesErrors]
+
+export type AppToolCapabilitiesResponses = {
+  /**
+   * List of tools
+   */
+  200: Array<ToolCapabilityInfo>
+}
+
+export type AppToolCapabilitiesResponse = AppToolCapabilitiesResponses[keyof AppToolCapabilitiesResponses]
 
 export type LspStatusData = {
   body?: never

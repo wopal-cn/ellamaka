@@ -240,9 +240,59 @@ interface State {
   defs: Record<string, MCPToolDef[]>
 }
 
+// Read-only discovery entry for a connected MCP server tool. `service` is the
+// raw configured server key and `id` is the same runtime composite key
+// `MCP.tools()` mounts (`sanitize(client) + "_" + sanitize(tool)`); the raw
+// association is preserved here because sanitized keys cannot be reversed.
+export interface CapabilityEntry {
+  readonly id: string
+  readonly service: string
+  readonly name: string
+  readonly description?: string
+  readonly inputSchema?: unknown
+}
+
+// A connected-server tool under its runtime composite key. `client` and `tool`
+// carry what `convertMcpTool` needs; `service` stays the raw configured key.
+interface ProjectedTool {
+  readonly id: string
+  readonly service: string
+  readonly client: MCPClient
+  readonly tool: MCPToolDef
+}
+
+// Effective runtime projection shared by the runtime mount (`tools()`) and the
+// discovery read (`capabilityEntries()`). Servers are walked in state insertion
+// order and each server's cached tool list in order; `sanitize` is not
+// injective (`tool.one` and `tool_one` both map to `tool_one`), so the LAST
+// writer wins on a composite-key collision — exactly the repeated
+// `result[key] = ...` assignment the runtime mount performed. Both callers use
+// this single projection so the discovery set can never diverge from the
+// runtime-effective set.
+function projectTools(s: State): ProjectedTool[] {
+  const effective = new Map<string, ProjectedTool>()
+  for (const [service, client] of Object.entries(s.clients)) {
+    if (s.status[service]?.status !== "connected") continue
+    const listed = s.defs[service]
+    if (!listed) {
+      log.warn("missing cached tools for connected server", { clientName: service })
+      continue
+    }
+    for (const tool of listed) {
+      const id = sanitize(service) + "_" + sanitize(tool.name)
+      // Map.set keeps the first insertion position for an existing key, which
+      // matches the property-order behavior of the Record the runtime mount
+      // used before this projection was extracted.
+      effective.set(id, { id, service, client, tool })
+    }
+  }
+  return [...effective.values()]
+}
+
 export interface Interface {
   readonly status: () => Effect.Effect<Record<string, Status>>
   readonly clients: () => Effect.Effect<Record<string, MCPClient>>
+  readonly capabilityEntries: () => Effect.Effect<CapabilityEntry[]>
   readonly tools: () => Effect.Effect<Record<string, Tool>>
   readonly prompts: () => Effect.Effect<Record<string, PromptInfo & { client: string }>>
   readonly resources: () => Effect.Effect<Record<string, ResourceInfo & { client: string }>>
@@ -668,38 +718,38 @@ export const layer = Layer.effect(
       s.status[name] = { status: "disabled" }
     })
 
-    const tools = Effect.fn("MCP.tools")(function* () {
-      const result: Record<string, Tool> = {}
+    // Discovery read: metadata for every tool in the runtime-effective
+    // projection, with the raw service key preserved from the domain-internal
+    // association. No execute binding, no permission filtering; the mounted
+    // set is identical to `tools()` by construction.
+    const capabilityEntries = Effect.fn("MCP.capabilityEntries")(function* () {
       const s = yield* InstanceState.get(state)
+      return projectTools(s)
+        .map(
+          (projected): CapabilityEntry => ({
+            id: projected.id,
+            service: projected.service,
+            name: projected.tool.name,
+            ...(projected.tool.description === undefined ? {} : { description: projected.tool.description }),
+            ...(projected.tool.inputSchema === undefined ? {} : { inputSchema: projected.tool.inputSchema }),
+          }),
+        )
+        .toSorted((a, b) => a.id.localeCompare(b.id))
+    })
 
+    const tools = Effect.fn("MCP.tools")(function* () {
+      const s = yield* InstanceState.get(state)
       const cfg = yield* cfgSvc.get()
       const config = cfg.mcp ?? {}
       const defaultTimeout = cfg.experimental?.mcp_timeout
 
-      const connectedClients = Object.entries(s.clients).filter(
-        ([clientName]) => s.status[clientName]?.status === "connected",
-      )
-
-      yield* Effect.forEach(
-        connectedClients,
-        ([clientName, client]) =>
-          Effect.gen(function* () {
-            const mcpConfig = config[clientName]
-            const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[clientName]
-
-            const listed = s.defs[clientName]
-            if (!listed) {
-              log.warn("missing cached tools for connected server", { clientName })
-              return
-            }
-
-            const timeout = entry?.timeout ?? defaultTimeout
-            for (const mcpTool of listed) {
-              result[sanitize(clientName) + "_" + sanitize(mcpTool.name)] = convertMcpTool(mcpTool, client, timeout)
-            }
-          }),
-        { concurrency: "unbounded" },
-      )
+      const result: Record<string, Tool> = {}
+      for (const projected of projectTools(s)) {
+        const mcpConfig = config[projected.service]
+        const entry = mcpConfig && isMcpConfigured(mcpConfig) ? mcpConfig : s.config[projected.service]
+        const timeout = entry?.timeout ?? defaultTimeout
+        result[projected.id] = convertMcpTool(projected.tool, projected.client, timeout)
+      }
       return result
     })
 
@@ -948,6 +998,7 @@ export const layer = Layer.effect(
     return Service.of({
       status,
       clients,
+      capabilityEntries,
       tools,
       prompts,
       resources,

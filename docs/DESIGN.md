@@ -228,7 +228,7 @@ WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）与 `<space>/.wopal/`�
 
 | 层次 | 职责 | 过滤权限 | 代表方法 |
 |------|------|---------|---------|
-| 发现层 | "引擎加载了什么" | 否，返回完整列表 | `Skill.all()`、`ToolRegistry.all()`、`MCP.tools()`、`Rule.all()` |
+| 发现层 | "引擎加载了什么" | 否，返回完整列表 | `Skill.all()`、`ToolRegistry.capabilityEntries()`、`MCP.capabilityEntries()`、`Rule.all()` |
 | 运行时过滤层 | "这个 agent 这次能用什么" | 是，按 agent 权限与 model 过滤 | `Skill.available(agent)`、`ToolRegistry.tools(agent, model)`、会话执行时 `permission.ask` |
 
 系统提示词生成、工具清单构建、执行授权全部走运行时过滤层。
@@ -239,7 +239,7 @@ WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）与 `<space>/.wopal/`�
 |------|-----------|---------|
 | GET `/skill` | `Skill.all()` | 全部已加载技能（name、description、location） |
 | GET `/rule` | `Rule.all()` | 全部已发现规则（相对路径、description、keywords、agentScope） |
-| GET `/tool` | `ToolRegistry.all()` + `MCP.tools()` | 全部注册工具（id、description、来源类型：builtin / custom / mcp），不含 execute |
+| GET `/tool` | `ToolRegistry.capabilityEntries()` + `MCP.capabilityEntries()` | 全部注册工具（id、description、来源类型：builtin / custom / mcp），不含 execute；registry 侧保留 builtin / custom 来源标注，MCP 侧保留原始 service key 并输出与运行时一致的复合 id |
 
 发现层端点不按 agent 权限过滤，不触碰运行时过滤层的任何方法。规则发现是引擎新增能力：扫描全局 `$WOPAL_HOME/rules/` 与空间 `<spaceRoot>/.wopal/rules/` 两层目录的 `**/*.{md,mdc}` 文件，空间层按相对路径覆盖全局同名，直接子目录名作为 agent 作用域。规则的运行时注入（按 agent 与用户提示匹配）仍由 wopal-plugin 负责，与发现层分离。
 
