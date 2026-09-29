@@ -1,6 +1,7 @@
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"
+import { LSPObserver } from "@/lsp/lsp-observer"
 import { File } from "../file"
 import * as Project from "./project"
 import * as Vcs from "./vcs"
@@ -27,6 +28,7 @@ export const layer = Layer.effect(
     const fileWatcher = yield* FileWatcher.Service
     const format = yield* Format.Service
     const lsp = yield* LSP.Service
+    const lspObserver = yield* LSPObserver.Service
     const plugin = yield* Plugin.Service
     const project = yield* Project.Service
     const reference = yield* Reference.Service
@@ -42,8 +44,10 @@ export const layer = Layer.effect(
       yield* plugin.init()
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
+      // The LSP observer registers into the internal hook registry when this
+      // instance's config enables LSP (per-instance registration).
       yield* Effect.forEach(
-        [reference, lsp, shareNext, format, file, fileWatcher, vcs, project],
+        [reference, lsp, shareNext, format, file, fileWatcher, vcs, project, lspObserver],
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
@@ -61,6 +65,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
     FileWatcher.defaultLayer,
     Format.defaultLayer,
     LSP.defaultLayer,
+    LSPObserver.defaultLayer,
     Plugin.defaultLayer,
     Project.defaultLayer,
     Reference.defaultLayer,

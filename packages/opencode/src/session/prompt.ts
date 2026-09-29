@@ -61,6 +61,7 @@ import { SessionTable } from "./session.sql"
 import { referencePromptMetadata, referenceTextPart } from "./prompt/reference"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
+import { InternalHook } from "@/hook/internal-hook"
 import { LLMEvent } from "@wopal/llm"
 
 // @ts-ignore
@@ -118,6 +119,7 @@ export const layer = Layer.effect(
     const lsp = yield* LSP.Service
     const registry = yield* ToolRegistry.Service
     const truncate = yield* Truncate.Service
+    const internalHook = yield* InternalHook.Service
     const image = yield* Image.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const scope = yield* Scope.Scope
@@ -1430,6 +1432,7 @@ export const layer = Layer.effect(
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
+              Effect.provideService(InternalHook.Service, internalHook),
             )
 
             if (lastUser.format?.type === "json_schema") {
@@ -1722,6 +1725,7 @@ export const defaultLayer = Layer.suspend(() =>
         Bus.layer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
+        InternalHook.defaultLayer,
       ),
     ),
   ),

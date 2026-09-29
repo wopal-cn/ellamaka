@@ -48,7 +48,6 @@ export const ServeCommand = effectCmd({
       const { mountOnboarding } = await import("@wopal/ellamaka-onboarding/mount")
       return mountOnboarding(server, { serverPassword: Flag.ELLAMAKA_SERVER_PASSWORD })
     })
-    console.log(`onboarding: /api/onboarding`)
 
     // Optional dsh engine (single-process, dual-container, DESIGN-dsh-base.md
     // §2.1/§2.2). The unified Runtime Manager (in dsh-mount.ts, shared with the

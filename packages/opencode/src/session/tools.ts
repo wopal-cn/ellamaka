@@ -9,6 +9,7 @@ import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
 import { ModelID } from "@/provider/schema"
 import { Plugin } from "@/plugin"
+import { InternalHook } from "@/hook/internal-hook"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
@@ -18,8 +19,49 @@ import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { EffectBridge } from "@/effect/bridge"
+import { isRecord } from "@/util/record"
 
 const log = Log.create({ service: "session.tools" })
+
+/**
+ * Extract the file paths a tool call touched, for the `FileOpEvent` published
+ * to internal hook observers. Sources:
+ * - read/write/edit: `args.filePath` (identical for native and DSH-projected
+ *   tools — the adapter maps container snake_case arguments to camelCase);
+ * - str_replace_editor: `args.path`;
+ * - apply_patch: `result.metadata.files` entries, `movePath ?? filePath`,
+ *   skipping deletes;
+ * - everything else: empty (the event is still published).
+ */
+export function extractFilePaths(toolId: string, args: Record<string, unknown>, result: Tool.ExecuteResult): string[] {
+  switch (toolId) {
+    case "read":
+    case "write":
+    case "edit": {
+      const filePath = args["filePath"]
+      return typeof filePath === "string" && filePath.length > 0 ? [filePath] : []
+    }
+    case "str_replace_editor": {
+      const filePath = args["path"]
+      return typeof filePath === "string" && filePath.length > 0 ? [filePath] : []
+    }
+    case "apply_patch": {
+      const files = (result.metadata as { files?: unknown }).files
+      if (!Array.isArray(files)) return []
+      const paths: string[] = []
+      for (const entry of files) {
+        if (!isRecord(entry)) continue
+        if (entry["type"] === "delete") continue
+        const movePath = entry["movePath"]
+        const target = typeof movePath === "string" && movePath.length > 0 ? movePath : entry["filePath"]
+        if (typeof target === "string" && target.length > 0) paths.push(target)
+      }
+      return paths
+    }
+    default:
+      return []
+  }
+}
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -41,6 +83,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const internalHook = yield* InternalHook.Service
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -99,6 +142,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { args },
             )
             const result = yield* item.execute(args, ctx)
+            // Publish the file operation before building the final output:
+            // observers (write class) may augment `result`, and the
+            // augmentation flows into `output` below. Also before
+            // `tool.execute.after`, so external plugins see the final result.
+            yield* internalHook.emit({
+              toolId: item.id,
+              args,
+              filePaths: extractFilePaths(item.id, args, result),
+              result,
+              sessionID: ctx.sessionID,
+            })
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({

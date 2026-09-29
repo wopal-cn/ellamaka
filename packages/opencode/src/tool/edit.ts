@@ -6,7 +6,6 @@
 import * as path from "path"
 import { Effect, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
-import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./edit.txt"
 import { File } from "../file"
@@ -57,7 +56,6 @@ export const Parameters = Schema.Struct({
 export const EditTool = Tool.define(
   "edit",
   Effect.gen(function* () {
-    const lsp = yield* LSP.Service
     const afs = yield* AppFileSystem.Service
     const format = yield* Format.Service
     const bus = yield* Bus.Service
@@ -174,16 +172,12 @@ export const EditTool = Tool.define(
             },
           })
 
-          let output = "Edit applied successfully."
-          yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilePath = AppFileSystem.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
-          if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
+          const output = "Edit applied successfully."
 
           return {
             metadata: {
-              diagnostics,
+              // Backfilled by the LSP observer (internal hook) after execution.
+              diagnostics: {},
               diff,
             },
             title: `${path.relative(instance.worktree, filePath)}`,

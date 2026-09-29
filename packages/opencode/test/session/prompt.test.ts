@@ -11,6 +11,7 @@ import { Bus } from "../../src/bus"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
 import { LSP } from "@/lsp/lsp"
+import { InternalHook } from "@/hook/internal-hook"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
@@ -180,6 +181,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     status,
     SyncEvent.defaultLayer,
     EventV2Bridge.defaultLayer,
+    InternalHook.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -309,9 +311,8 @@ const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (ur
   const { directory: dir } = yield* TestInstance
   const llm = yield* TestLLMServer
   yield* writeConfig(config(llm.url))
-  return yield* Effect.acquireRelease(
-    Effect.succeed({ dir, llm }),
-    () => Effect.promise(() => removeGlobalTestConfig()),
+  return yield* Effect.acquireRelease(Effect.succeed({ dir, llm }), () =>
+    Effect.promise(() => removeGlobalTestConfig()),
   )
 })
 
@@ -461,91 +462,89 @@ noLLMServer.instance(
 // assistant as the reply to the new user and exit silently. isAfter orders by
 // `time.created` (id tie-break), so the loop must continue past the exit
 // check instead of returning the pre-wrap assistant.
-it.instance(
-  "loop continues across message-id wrap-around for a historical session",
-  () =>
-    Effect.gen(function* () {
-      const { llm } = yield* useServerConfig(providerCfg)
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const chat = yield* sessions.create({
-        title: "Pinned",
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-      })
+it.instance("loop continues across message-id wrap-around for a historical session", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
 
-      // Pre-wrap historical turn (created before the 26th wrap on 2026-08-14).
-      const preWrapUserID = MessageID.make("msg_fa2c3af72001")
-      const preWrapTime = 1784448447887
-      yield* sessions.updateMessage({
-        id: preWrapUserID,
-        role: "user",
-        sessionID: chat.id,
-        agent: "build",
-        model: ref,
-        time: { created: preWrapTime },
-      })
-      yield* sessions.updatePart({
-        id: PartID.ascending(),
-        messageID: preWrapUserID,
-        sessionID: chat.id,
-        type: "text",
-        text: "old question",
-      })
+    // Pre-wrap historical turn (created before the 26th wrap on 2026-08-14).
+    const preWrapUserID = MessageID.make("msg_fa2c3af72001")
+    const preWrapTime = 1784448447887
+    yield* sessions.updateMessage({
+      id: preWrapUserID,
+      role: "user",
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      time: { created: preWrapTime },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: preWrapUserID,
+      sessionID: chat.id,
+      type: "text",
+      text: "old question",
+    })
 
-      const preWrapAssistant: MessageV2.Assistant = {
-        id: MessageID.make("msg_fa2c3af72002"),
-        role: "assistant",
-        parentID: preWrapUserID,
-        sessionID: chat.id,
-        mode: "build",
-        agent: "build",
-        cost: 0,
-        path: { cwd: "/tmp", root: "/tmp" },
-        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        modelID: ref.modelID,
-        providerID: ref.providerID,
-        time: { created: preWrapTime + 1 },
-        finish: "stop",
-      }
-      yield* sessions.updateMessage(preWrapAssistant)
-      yield* sessions.updatePart({
-        id: PartID.ascending(),
-        messageID: preWrapAssistant.id,
-        sessionID: chat.id,
-        type: "text",
-        text: "old reply",
-      })
+    const preWrapAssistant: MessageV2.Assistant = {
+      id: MessageID.make("msg_fa2c3af72002"),
+      role: "assistant",
+      parentID: preWrapUserID,
+      sessionID: chat.id,
+      mode: "build",
+      agent: "build",
+      cost: 0,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: ref.modelID,
+      providerID: ref.providerID,
+      time: { created: preWrapTime + 1 },
+      finish: "stop",
+    }
+    yield* sessions.updateMessage(preWrapAssistant)
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: preWrapAssistant.id,
+      sessionID: chat.id,
+      type: "text",
+      text: "old reply",
+    })
 
-      // Post-wrap new user message, chronologically after the pre-wrap turn.
-      const postWrapUserID = MessageID.make("msg_002ceb729001")
-      yield* sessions.updateMessage({
-        id: postWrapUserID,
-        role: "user",
-        sessionID: chat.id,
-        agent: "build",
-        model: ref,
-        time: { created: 1786753496981 },
-      })
-      yield* sessions.updatePart({
-        id: PartID.ascending(),
-        messageID: postWrapUserID,
-        sessionID: chat.id,
-        type: "text",
-        text: "continue the work",
-      })
+    // Post-wrap new user message, chronologically after the pre-wrap turn.
+    const postWrapUserID = MessageID.make("msg_002ceb729001")
+    yield* sessions.updateMessage({
+      id: postWrapUserID,
+      role: "user",
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      time: { created: 1786753496981 },
+    })
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: postWrapUserID,
+      sessionID: chat.id,
+      type: "text",
+      text: "continue the work",
+    })
 
-      // The loop must NOT silently exit with the pre-wrap assistant. It should
-      // continue and attempt to reach the LLM. Queue a non-retryable 401 so the
-      // attempt fails fast (a retryable connection error would retry forever).
-      yield* llm.error(401, { error: { message: "unauthorized" } })
-      const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
-      // The loop must have reached the local mock server (not silently exited
-      // with the pre-wrap assistant, and not failed before any LLM request).
-      expect(yield* llm.hits).toHaveLength(1)
-      if (Exit.isSuccess(exit)) {
-        expect(exit.value.info.id).not.toBe(preWrapAssistant.id)
-      }
-    }),
+    // The loop must NOT silently exit with the pre-wrap assistant. It should
+    // continue and attempt to reach the LLM. Queue a non-retryable 401 so the
+    // attempt fails fast (a retryable connection error would retry forever).
+    yield* llm.error(401, { error: { message: "unauthorized" } })
+    const exit = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.exit)
+    // The loop must have reached the local mock server (not silently exited
+    // with the pre-wrap assistant, and not failed before any LLM request).
+    expect(yield* llm.hits).toHaveLength(1)
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value.info.id).not.toBe(preWrapAssistant.id)
+    }
+  }),
 )
 
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
@@ -602,30 +601,28 @@ it.instance("loop calls LLM and returns assistant message", () =>
   }),
 )
 
-it.instance(
-  "loop entry finalizes an orphaned assistant without finish (error + completed)",
-  () =>
-    Effect.gen(function* () {
-      const { llm } = yield* useServerConfig(providerCfg)
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const chat = yield* sessions.create({
-        title: "Pinned",
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-      })
-      const seeded = yield* seed(chat.id)
-      yield* llm.text("world")
+it.instance("loop entry finalizes an orphaned assistant without finish (error + completed)", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    const seeded = yield* seed(chat.id)
+    yield* llm.text("world")
 
-      yield* prompt.loop({ sessionID: chat.id })
+    yield* prompt.loop({ sessionID: chat.id })
 
-      const orphan = [...MessageV2.stream(chat.id)].find((m) => m.info.id === seeded.assistant.id)
-      expect(orphan?.info.role).toBe("assistant")
-      if (orphan?.info.role === "assistant") {
-        expect(typeof orphan.info.time.completed).toBe("number")
-        expect(orphan.info.error).toBeDefined()
-        expect(orphan.info.error?.name).toBe("MessageAbortedError")
-      }
-    }),
+    const orphan = [...MessageV2.stream(chat.id)].find((m) => m.info.id === seeded.assistant.id)
+    expect(orphan?.info.role).toBe("assistant")
+    if (orphan?.info.role === "assistant") {
+      expect(typeof orphan.info.time.completed).toBe("number")
+      expect(orphan.info.error).toBeDefined()
+      expect(orphan.info.error?.name).toBe("MessageAbortedError")
+    }
+  }),
 )
 
 noLLMServer.instance(
@@ -713,47 +710,51 @@ noLLMServer.instance(
   { config: cfg },
 )
 
-it.instance("prompt persists sandboxMode on the user message", () =>
-  Effect.gen(function* () {
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
+it.instance(
+  "prompt persists sandboxMode on the user message",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      noReply: true,
-      sandboxMode: "read-only",
-      parts: [{ type: "text", text: "hello sandbox" }],
-    })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        sandboxMode: "read-only",
+        parts: [{ type: "text", text: "hello sandbox" }],
+      })
 
-    const stored = [...MessageV2.stream(chat.id)].find((m) => m.info.role === "user")
-    expect(stored?.info.role).toBe("user")
-    if (stored?.info.role === "user") {
-      expect(stored.info.sandboxMode).toBe("read-only")
-    }
-  }),
+      const stored = [...MessageV2.stream(chat.id)].find((m) => m.info.role === "user")
+      expect(stored?.info.role).toBe("user")
+      if (stored?.info.role === "user") {
+        expect(stored.info.sandboxMode).toBe("read-only")
+      }
+    }),
   { config: cfg },
 )
 
-it.instance("prompt omits sandboxMode when not selected", () =>
-  Effect.gen(function* () {
-    const prompt = yield* SessionPrompt.Service
-    const sessions = yield* Session.Service
-    const chat = yield* sessions.create({ title: "Pinned" })
+it.instance(
+  "prompt omits sandboxMode when not selected",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
 
-    yield* prompt.prompt({
-      sessionID: chat.id,
-      agent: "build",
-      noReply: true,
-      parts: [{ type: "text", text: "no sandbox choice" }],
-    })
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "no sandbox choice" }],
+      })
 
-    const stored = [...MessageV2.stream(chat.id)].find((m) => m.info.role === "user")
-    if (stored?.info.role === "user") {
-      expect(stored.info.sandboxMode).toBeUndefined()
-    }
-  }),
+      const stored = [...MessageV2.stream(chat.id)].find((m) => m.info.role === "user")
+      if (stored?.info.role === "user") {
+        expect(stored.info.sandboxMode).toBeUndefined()
+      }
+    }),
   { config: cfg },
 )
 
