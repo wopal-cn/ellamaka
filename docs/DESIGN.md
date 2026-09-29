@@ -50,6 +50,8 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
 | 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经 CLI 转发        | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 能力发现层                | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                    | [Capability Discovery Layer](#capability-discovery-layer) |
+| Session 能力边界          | 保留静态 config/agent 权限；session permission 作为增量 overlay，Skill/Tool 可见性与执行共享 effective permission | [Session Capability Contract](#session-capability-contract) |
+| Runtime Context Contribution | 为插件提供 request-tail 动态上下文贡献点；默认空、不回写历史，用于 cache-safe 的运行时上下文激活 | [Runtime Context Contribution](#runtime-context-contribution) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
@@ -242,6 +244,24 @@ WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）与 `<space>/.wopal/`�
 | GET `/tool` | `ToolRegistry.capabilityEntries()` + `MCP.capabilityEntries()` | 全部注册工具（id、description、来源类型：builtin / custom / mcp），不含 execute；registry 侧保留 builtin / custom 来源标注，MCP 侧保留原始 service key 并输出与运行时一致的复合 id |
 
 发现层端点不按 agent 权限过滤，不触碰运行时过滤层的任何方法。规则发现是引擎新增能力：扫描全局 `$WOPAL_HOME/rules/` 与空间 `<spaceRoot>/.wopal/rules/` 两层目录的 `**/*.{md,mdc}` 文件，空间层按相对路径覆盖全局同名，直接子目录名作为 agent 作用域。规则的运行时注入（按 agent 与用户提示匹配）仍由 wopal-plugin 负责，与发现层分离。
+
+## Session Capability Contract
+
+ellamaka 不引入第二套 Wopal 专属 capability/permission 系统。现有 config 与 agent frontmatter 继续形成静态权限基线；Session 记录已有的 `permission` 是通用的 session-scoped overlay，按既有最后匹配者生效语义与 agent permission 合成。没有 session overlay 时行为与现状完全一致。
+
+Wopal P2 只使用 overlay 做**增量授予**。一次子会话的 capability envelope 必须在首个模型请求之前完成并在会话生命周期内保持稳定；运行过程中不得用频繁修改 permission/tool visibility 的方式表达 Rule/Skill 动态上下文。Session metadata 可承载插件私有的装配意图，但其内容不得成为 engine core 的 Wopal 专属概念。
+
+Tool 已在 schema visibility 与 execution gate 两处消费 `Permission.merge(agent.permission, session.permission)`。Skill 必须遵守同一不变量：available/catalog 与 `skill` tool 执行门禁均消费同一个 effective permission。修复该一致性属于通用 Session permission 语义，不改变静态权限接口。
+
+子会话创建方若还需禁止自身递归派发工具，应把该 deny 与增量授予一起编入创建时 overlay；不得在首轮 prompt 用会覆盖 session permission 的临时 tool rewrite 擦除 envelope。
+
+## Runtime Context Contribution
+
+插件需要一个通用、可选、默认空的 **request-tail context contribution** seam。它在每个正常 model step 的 retained history 已确定后、provider request 发出前执行，允许插件贡献当前 step 的动态 user-role context。贡献只追加在当前请求尾部，不修改较早的 retained message，也不改 system prompt 或 tool schema。
+
+该 seam 不认识 Rule、Skill、Wopal 或任何产品语义；这些解析属于插件。其目的只是给 plugin runtime 一个 cache-safe 的动态上下文入口：稳定 prefix 保持可复用，变化内容只影响追加点之后的缓存。Contribution 必须进入正常 session/message 生命周期，确保 resume 与 compaction 后由插件按当前状态重新解析，而不是依赖易失的进程内历史补丁。
+
+现有 `messages.transform` 仍保持兼容；新 seam 是更窄的追加式契约，不改变旧插件 hook 的调用和语义。SDK/API 的既有字段不删除、不改名；若新增 plugin type，仅做 additive export。
 
 ## Upstream Merge Boundary
 
