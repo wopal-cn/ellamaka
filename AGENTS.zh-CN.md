@@ -170,17 +170,19 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - 选用 OpenCode 参考仓库代码时，区分参考实现的已知失败、环境问题和 ellamaka 特有问题。
 - 测试安全运行规则（防挂起与孤儿进程）见空间 `REGULATIONS.md`。
 
-### 手动验证入口
+### 验证入口
 
-Agent 无法自动验证的行为（GUI 交互、引导流程、桌面壳）通过以下入口交给用户手动验证。
+GUI、引导流程与桌面壳通过以下入口验证；Desktop 可通过 CDP 由 Agent 自动检查，仍需人工观察的行为再交给用户。
 
 | 入口 | 命令 | 环境隔离 |
 |------|------|----------|
 | Desktop（常规） | `./scripts/dev.sh desktop` | 使用真实环境；首次需加 `--rebuild` 构建 sidecar |
+| Desktop（CDP） | `./scripts/dev.sh desktop --rebuild --cdp-debug` | 使用真实环境；需先确保 5173、9222 端口空闲 |
 | Workbench / 后端 | `./scripts/dev.sh serve` | 端口 4096；`--cdp-debug` 开启 9222 CDP |
 | TUI | `./scripts/dev.sh tui` | 默认内嵌后端 |
 | 停止 | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
+- Desktop CDP 验证：先用 `lsof -nP -iTCP:9222 -sTCP:LISTEN` 核对端口占用；需要释放时，只关闭已确认身份的冲突进程。启动后用 `./scripts/dev.sh status` 和 `lsof` 确认 Electron 监听 9222，再用 `agent-browser --session <name> connect 9222`、`tab --json`、`snapshot -i -c` 检查真实 Desktop 窗口。打开空 Chat 面板，检查沙箱选项与切换后刷新保留。用 `agent-browser --session <name> network requests --filter config-v2 --json | jq '[.data.requests[] | select(.method=="GET") | .status]'` 确认状态为 200；勿输出可能含授权头的原始网络记录。恢复原选项后，用 `./scripts/dev.sh stop desktop` 停止本次启动的实例。
 - 日志（dev 运行）：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`。`<scope>` 为 dev.sh 所在仓库/worktree 根目录（符号链接解析后）md5 的前 10 位十六进制字符——可从 `.wopal-space/logs/dev/registry` 查得（每行 `<scope> <root>`），或按 dev.sh 同款算法重算：`printf '%s' "<root>" | md5 -q | cut -c1-10`。worktree 内的运行汇入其所属空间的日志账本（`.worktrees` 路径锚定到空间根）。
 - dev 运行只写稳定的 `ellamaka-dev-<role>.log` 文件名——同一次运行不会出现带时间戳的 `<role>-<timestamp>.log`。找不到 dev 日志时先查 `dev/<scope>/` 再另行搜索，用 `./scripts/dev.sh status` 查看运行中的实例。排查 TUI 插件装载时，在 `ellamaka-dev-tui.log` 中 grep `service=tui.plugin`；`chrome-devtools` 的 MCP ERROR 为存量噪声。
 - Plan 的 User Validation 必须引用本表并给出用户可直接复制执行的命令，不得只写"启动应用"之类的泛指。

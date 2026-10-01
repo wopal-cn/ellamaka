@@ -170,17 +170,19 @@ When diagnosing serve, TUI, or sidecar behavior, widen output through the log le
 - When selecting code from the OpenCode reference repo, distinguish reference-implementation known failures, environment issues, and ellamaka-specific problems.
 - Test safety rules (preventing hangs and orphan processes) are in the space `REGULATIONS.md`.
 
-### Manual Verification Entry Points
+### Verification Entry Points
 
-Behaviors an agent cannot verify automatically (GUI interaction, onboarding flow, desktop shell) are handed to the user for manual verification through the entries below.
+Use these entries to verify GUI, onboarding, and desktop shell behavior. An agent can check Desktop through CDP; hand off only behavior that still needs human observation.
 
 | Entry | Command | Isolation |
 |-------|---------|-----------|
 | Desktop (regular) | `./scripts/dev.sh desktop` | Uses the real environment; first run needs `--rebuild` to build the sidecar |
+| Desktop (CDP) | `./scripts/dev.sh desktop --rebuild --cdp-debug` | Uses the real environment; ports 5173 and 9222 must be free |
 | Workbench / backend | `./scripts/dev.sh serve` | Port 4096; `--cdp-debug` opens 9222 CDP |
 | TUI | `./scripts/dev.sh tui` | In-process backend by default |
 | Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
+- Desktop CDP verification: first check port ownership with `lsof -nP -iTCP:9222 -sTCP:LISTEN`; if it is occupied, stop only a conflicting process whose identity has been confirmed. After launch, use `./scripts/dev.sh status` and `lsof` to confirm Electron owns 9222, then inspect the real Desktop window with `agent-browser --session <name> connect 9222`, `tab --json`, and `snapshot -i -c`. Open an empty Chat panel, inspect the sandbox choices and persistence across reload. Check for a 200 response with `agent-browser --session <name> network requests --filter config-v2 --json | jq '[.data.requests[] | select(.method=="GET") | .status]'`; never show raw request records, which can expose authorization headers. Restore the original selection, then stop the instance started for this check with `./scripts/dev.sh stop desktop`.
 - Logs (dev runs): `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`. `<scope>` is the first 10 hex chars of the md5 of the repo/worktree root that owns `scripts/dev.sh` (symlinks resolved) — resolve it from `.wopal-space/logs/dev/registry` (one `<scope> <root>` per line) or recompute the same way dev.sh does: `printf '%s' "<root>" | md5 -q | cut -c1-10`. A worktree run logs into its base space's ledger (a `.worktrees` path anchors to the space root).
 - Dev runs write only the stable `ellamaka-dev-<role>.log` names — no timestamped `<role>-<timestamp>.log` file appears for the same run. If dev logs seem missing, look under `dev/<scope>/` before searching elsewhere, and use `./scripts/dev.sh status` to see running instances. To check TUI plugin loading, grep `service=tui.plugin` in `ellamaka-dev-tui.log`; MCP `chrome-devtools` ERROR lines are pre-existing noise.
 - A Plan's User Validation must reference this table and give a command the user can copy and run directly; generic wording such as "start the app" is not acceptable.
