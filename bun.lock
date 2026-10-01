@@ -36,7 +36,7 @@
     },
     "packages/effect-drizzle-sqlite": {
       "name": "@wopal/effect-drizzle-sqlite",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "drizzle-orm": "catalog:",
         "effect": "catalog:",
@@ -50,7 +50,7 @@
     },
     "packages/ellamaka-app": {
       "name": "@wopal/ellamaka-app",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@sentry/solid": "catalog:",
@@ -121,7 +121,7 @@
     },
     "packages/ellamaka-brand": {
       "name": "@wopal/ellamaka-brand",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "devDependencies": {
         "@opentui/solid": "catalog:",
         "bun-types": "latest",
@@ -129,7 +129,7 @@
     },
     "packages/ellamaka-cli": {
       "name": "@wopal/ellamaka-cli",
-      "version": "2.0.7-rc.1",
+      "version": "2.0.8-rc.1",
       "bin": {
         "opencode": "./src/index.ts",
       },
@@ -146,7 +146,7 @@
     },
     "packages/ellamaka-cordis": {
       "name": "@wopal/ellamaka-cordis",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@deepseek-ai/cordis": "4.0.2",
         "@deepseek-ai/cordis-plugin-include": "1.0.7",
@@ -200,7 +200,7 @@
     },
     "packages/ellamaka-core": {
       "name": "@wopal/ellamaka-core",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@ai-sdk/alibaba": "1.0.17",
         "@ai-sdk/amazon-bedrock": "4.0.107",
@@ -318,7 +318,7 @@
     },
     "packages/ellamaka-onboarding": {
       "name": "@wopal/ellamaka-onboarding",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@wopal/ellamaka-core": "workspace:*",
       },
@@ -330,7 +330,7 @@
     },
     "packages/ellamaka-release": {
       "name": "@wopal/ellamaka-release",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@wopal/ellamaka-core": "workspace:*",
         "semver": "^7.6.3",
@@ -344,7 +344,7 @@
     },
     "packages/http-recorder": {
       "name": "@wopal/http-recorder",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@effect/platform-node": "catalog:",
         "effect": "catalog:",
@@ -357,7 +357,7 @@
     },
     "packages/llm": {
       "name": "@wopal/llm",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@smithy/eventstream-codec": "4.2.14",
         "@smithy/util-utf8": "4.2.2",
@@ -375,7 +375,7 @@
     },
     "packages/opencode": {
       "name": "@wopal/ellamaka",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@actions/core": "1.11.1",
         "@actions/github": "6.0.1",
@@ -516,7 +516,7 @@
     },
     "packages/plugin": {
       "name": "@wopal/ellamaka-plugin",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@wopal/ellamaka-sdk": "workspace:*",
         "effect": "catalog:",
@@ -544,7 +544,7 @@
     },
     "packages/sdk/js": {
       "name": "@wopal/ellamaka-sdk",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "cross-spawn": "catalog:",
       },
@@ -559,7 +559,7 @@
     },
     "packages/ui": {
       "name": "@wopal/ui",
-      "version": "2.0.7",
+      "version": "2.0.8",
       "dependencies": {
         "@kobalte/core": "catalog:",
         "@pierre/diffs": "catalog:",
@@ -2591,7 +2591,7 @@
 
     "@vscode/ripgrep-win32-x64": ["@vscode/ripgrep-win32-x64@1.18.0", "https://registry.npmmirror.com/@vscode/ripgrep-win32-x64/-/ripgrep-win32-x64-1.18.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-KNPvtElldqILHdnAetujPaowkNbpqJy3ssIGGN6F6Kve9Qi+nNLI2DN01O83JjCEVQbCzl8Ov3QZ9Eov3BR8Dg=="],
 
-    "@wopal/cli-capability-schema": ["@wopal/cli-capability-schema@0.3.23", "", { "dependencies": { "@sinclair/typebox": "^0.34.52" } }, "sha512-rnewLHWxCiCmciGBg9QOvrCXg7gz1g7vseF94TL/gtTJTDt0+bT4qBvI2c5hDTAnNjkFGGGJc1n+hCNquI7Aww=="],
+    "@wopal/cli-capability-schema": ["@wopal/cli-capability-schema@0.3.23", "https://registry.npmmirror.com/@wopal/cli-capability-schema/-/cli-capability-schema-0.3.23.tgz", { "dependencies": { "@sinclair/typebox": "^0.34.52" } }, "sha512-rnewLHWxCiCmciGBg9QOvrCXg7gz1g7vseF94TL/gtTJTDt0+bT4qBvI2c5hDTAnNjkFGGGJc1n+hCNquI7Aww=="],
 
     "@wopal/effect-drizzle-sqlite": ["@wopal/effect-drizzle-sqlite@workspace:packages/effect-drizzle-sqlite"],
 
