@@ -72,6 +72,7 @@ import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/
 import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
+import { PromptInputSandboxControl } from "./prompt-input/sandbox-control-view"
 import { designPromptPlaceholder, promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@wopal/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
@@ -81,10 +82,6 @@ import { pathKey } from "@/utils/path-key"
 import { base64Encode } from "@wopal/ellamaka-core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
 import {
-  SANDBOX_PRESETS,
-  readDshAdapterSandbox,
-  sandboxToPreset,
-  shouldShowSandboxControl,
   setPendingSessionSandbox,
   drainPendingSessionSandbox,
   subscribeEscalatedSandboxPreset,
@@ -161,6 +158,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const prompt = usePrompt()
   const layout = useLayout()
   const server = useServer()
+  const checkServerHealth = useCheckServerHealth()
   const comments = useComments()
   const dialog = useDialog()
   const providers = useProviders()
@@ -338,44 +336,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   // hold — the DSH kill switch is open (`ELLAMAKA_DSH` not `0`), the DSH runtime
   // is actually `ready` (not degraded), and the instance-level (directory)
   // effective config loads the dsh-adapter plugin. The mode is a PER-SESSION
-  // choice kept in browser storage; the space-level `ellamaka.dsh.sandbox`
-  // default in the effective config is the fallback when the session has no
-  // explicit choice. The choice rides on the prompt payload (`sandboxMode`);
+  // choice kept in browser storage; its default comes from
+  // `effective.wopal.pluginConfig["dsh-adapter"].sandbox` when the session has no explicit choice.
+  // The choice rides on the prompt payload (`sandboxMode`);
   // settings files are never written from here.
-  const checkServerHealth = useCheckServerHealth()
-  const [sandboxHealth] = createResource(
-    () => server.current,
-    (current) => checkServerHealth(current.http).catch(() => undefined),
-  )
-  const [sandboxConfig] = createResource(
-    () => pathKey(sdk.directory),
-    (directory) =>
-      sdk
-        .createClient({ directory })
-        .config.get()
-        .then((r) => r.data ?? undefined)
-        .catch(() => undefined),
-  )
-  const sandboxPlugin = createMemo(() => sandboxConfig()?.plugin)
-  const sandboxVisible = createMemo(() =>
-    shouldShowSandboxControl({
-      variant: props.variant,
-      dshStatus: sandboxHealth()?.dsh,
-      plugins: sandboxPlugin() as Parameters<typeof shouldShowSandboxControl>[0]["plugins"],
-    }),
-  )
-  const sandboxDefaultPreset = createMemo(() =>
-    sandboxToPreset(readDshAdapterSandbox(sandboxPlugin() as Parameters<typeof readDshAdapterSandbox>[0])),
-  )
   const sandboxSessionID = createMemo(() => (props.variant === "new-session" ? undefined : params.id))
   const [sandboxSaved, setSandboxSaved] = persisted(
     Persist.workspace(sdk.directory, SANDBOX_CHOICE_KEY, [`${SANDBOX_CHOICE_KEY}.v1`]),
     createStore<{ session: Record<string, SandboxPreset | undefined> }>({ session: {} }),
   )
-  const sandboxPreset = createMemo<SandboxPreset>(() => {
+  const sandboxPreset = createMemo<SandboxPreset | undefined>(() => {
     const id = sandboxSessionID()
-    if (!id) return sandboxDefaultPreset()
-    return sandboxSaved.session[id] ?? sandboxDefaultPreset()
+    if (!id) return undefined
+    return sandboxSaved.session[id]
   })
   const sandboxSelect = (preset: SandboxPreset, options?: { fromEscalation?: boolean }) => {
     const id = sandboxSessionID()
@@ -1741,15 +1714,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       style={control()}
                     />
                   </Show>
-                  <Show when={sandboxVisible()}>
-                    <ComposerSandboxControl
-                      preset={sandboxPreset}
-                      disabled={() => false}
-                      onSelect={sandboxSelect}
-                      t={(key) => language.t(key as Parameters<typeof language.t>[0])}
-                      style={control()}
-                    />
-                  </Show>
+                  <PromptInputSandboxControl
+                    variant={props.variant}
+                    sdk={sdk}
+                    serverHttp={() => server.current?.http}
+                    checkServerHealth={checkServerHealth}
+                    preset={sandboxPreset}
+                    onSelect={sandboxSelect}
+                    t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+                    style={control()}
+                  />
                 </div>
                 <Tooltip placement="top" value={language.t("prompt.action.compact")}>
                   <IconButton
@@ -1976,39 +1950,6 @@ function ComposerVariantControl(props: {
         variant="ghost"
       />
     </TooltipKeybind>
-  )
-}
-
-function ComposerSandboxControl(props: {
-  preset: () => SandboxPreset
-  disabled: () => boolean
-  onSelect: (preset: SandboxPreset) => void
-  t: (key: string) => string
-  style?: JSX.CSSProperties
-}) {
-  return (
-    <div class="relative">
-      <div class="pointer-events-none absolute left-2 top-1/2 z-10 flex size-4 -translate-y-1/2 items-center justify-center text-v2-icon-icon-muted">
-        <Icon name="shield" size="small" />
-      </div>
-      <Select
-        size="normal"
-        options={SANDBOX_PRESETS}
-        current={props.preset()}
-        value={(x) => x}
-        label={(x) => props.t(`prompt.sandbox.${x}`)}
-        onSelect={(value) => {
-          if (!value || value === props.preset()) return
-          props.onSelect(value)
-        }}
-        disabled={props.disabled()}
-        class="max-w-[150px] justify-start text-v2-text-text-faint [&_[data-component=icon]]:text-v2-icon-icon-muted"
-        valueClass="truncate pl-5 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-        triggerStyle={props.style}
-        triggerProps={{ "data-action": "prompt-sandbox" }}
-        variant="ghost"
-      />
-    </div>
   )
 }
 

@@ -1,5 +1,6 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
@@ -7,6 +8,14 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/config"
+const ConfigV2ReadResponse = Schema.Struct({
+  effective: Schema.Struct({
+    ellamaka: Config.Info,
+    wopal: Schema.Struct({
+      pluginConfig: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)),
+    }),
+  }),
+})
 
 export const ConfigApi = HttpApi.make("config")
   .add(
@@ -20,6 +29,17 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.get",
             summary: "Get configuration",
             description: "Retrieve the current OpenCode configuration settings and preferences.",
+          }),
+        ),
+        HttpApiEndpoint.get("configGet", "/config-v2", {
+          query: WorkspaceRoutingQuery,
+          success: described(ConfigV2ReadResponse, "Effective configuration read surface"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.configGet",
+            summary: "Get effective configuration",
+            description:
+              "Read the loaded engine configuration and merged Wopal plugin configuration for this instance.",
           }),
         ),
         HttpApiEndpoint.patch("update", root, {

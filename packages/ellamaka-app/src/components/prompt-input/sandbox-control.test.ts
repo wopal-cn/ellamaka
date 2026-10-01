@@ -3,7 +3,8 @@ import {
   SANDBOX_PRESETS,
   sandboxToPreset,
   presetToSandbox,
-  readDshAdapterSandbox,
+  readSandboxOptions,
+  sandboxControlConfig,
   hasDshAdapterPlugin,
   patchDshAdapterSandbox,
   promptSandboxMode,
@@ -84,18 +85,22 @@ describe("dsh-adapter visibility", () => {
 })
 
 describe("sandbox control visibility matrix (Issue #221)", () => {
-  const plugins: Spec[] = [
-    ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: true, mode: "workspace-write" } }],
-  ]
-  const base = { variant: "dock", plugins }
+  const plugins = ["file:///x/plugins/dsh-adapter/index.ts"]
+  const base = { variant: "dock", plugins, sandbox: { enabled: true, mode: "read-only" } }
 
   test("dock composer + ready runtime + sandbox-enabled dsh-adapter config shows the control", () => {
     expect(shouldShowSandboxControl({ ...base, dshStatus: "ready" })).toBe(true)
   })
 
+  test("zero-inline dsh-adapter assembly uses config-v2 sandbox data and keeps the configured default", () => {
+    expect(plugins).toEqual(["file:///x/plugins/dsh-adapter/index.ts"])
+    expect(shouldShowSandboxControl({ ...base, dshStatus: "ready" })).toBe(true)
+    expect(sandboxToPreset(base.sandbox)).toBe("read-only")
+  })
+
   test("non-dock composer never shows the control", () => {
     for (const variant of ["new-session", "inline", "shell"]) {
-      expect(shouldShowSandboxControl({ variant, dshStatus: "ready", plugins })).toBe(false)
+      expect(shouldShowSandboxControl({ variant, dshStatus: "ready", plugins, sandbox: base.sandbox })).toBe(false)
     }
   })
 
@@ -116,25 +121,62 @@ describe("sandbox control visibility matrix (Issue #221)", () => {
   })
 
   test("ready runtime but no dsh-adapter in the effective config hides the control", () => {
-    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: ["file:///x/other.ts"] })).toBe(false)
-    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: undefined })).toBe(false)
-  })
-
-  test("sandbox disabled hides the control: the adapter idles the tool projection", () => {
-    const off: Spec[] = [
-      ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: false, mode: "workspace-write" } }],
-    ]
-    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: off })).toBe(false)
-  })
-
-  test("dsh-adapter without a sandbox option hides the control (absent means off)", () => {
     expect(
       shouldShowSandboxControl({
         variant: "dock",
         dshStatus: "ready",
-        plugins: ["file:///x/plugins/dsh-adapter/index.ts"],
+        plugins: ["file:///x/other.ts"],
+        sandbox: base.sandbox,
       }),
     ).toBe(false)
+    expect(
+      shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: undefined, sandbox: base.sandbox }),
+    ).toBe(false)
+  })
+
+  test("sandbox disabled hides the control: the adapter idles the tool projection", () => {
+    expect(
+      shouldShowSandboxControl({
+        variant: "dock",
+        dshStatus: "ready",
+        plugins,
+        sandbox: { enabled: false, mode: "workspace-write" },
+      }),
+    ).toBe(false)
+  })
+
+  test("dsh-adapter without a sandbox option hides the control (absent means off)", () => {
+    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins })).toBe(false)
+  })
+})
+
+describe("config-v2 sandbox inputs", () => {
+  test("reads assembly from effective.ellamaka and behavior from effective.wopal.pluginConfig", () => {
+    const inlineAssembly: Spec[] = [
+      ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: false } }],
+    ]
+    const inputs = sandboxControlConfig({
+      ellamaka: { plugin: inlineAssembly },
+      wopal: { pluginConfig: { "dsh-adapter": { sandbox: { enabled: true, mode: "read-only" } } } },
+    })
+
+    expect(inputs).toEqual({
+      plugins: inlineAssembly,
+      sandbox: { enabled: true, mode: "read-only" },
+    })
+    expect(readSandboxOptions(inputs.sandbox)).toEqual({ enabled: true, mode: "read-only" })
+    expect(
+      shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", ...inputs }),
+    ).toBe(true)
+    expect(sandboxToPreset(readSandboxOptions(inputs.sandbox))).toBe("read-only")
+  })
+
+  test("returns no sandbox config when the pluginConfig entry is missing", () => {
+    expect(sandboxControlConfig({ ellamaka: { plugin: ["dsh-adapter"] }, wopal: { pluginConfig: {} } })).toEqual({
+      plugins: ["dsh-adapter"],
+      sandbox: undefined,
+    })
+    expect(readSandboxOptions({ enabled: "yes" })).toBeUndefined()
   })
 })
 
@@ -188,31 +230,6 @@ describe("patchDshAdapterSandbox", () => {
     expect(Object.keys((next![0] as [string, Record<string, unknown>])[1].sandbox as SandboxOptions)).toEqual([
       "enabled",
     ])
-  })
-})
-
-describe("readDshAdapterSandbox", () => {
-  test("reads sandbox from a tuple spec", () => {
-    expect(readDshAdapterSandbox([["file:///x/dsh-adapter/index.ts", { sandbox: { enabled: true, mode: "read-only" } }]])).toEqual({
-      enabled: true,
-      mode: "read-only",
-    })
-  })
-
-  test("returns undefined for bare string spec or missing sandbox", () => {
-    expect(readDshAdapterSandbox(["file:///x/dsh-adapter/index.ts"])).toBeUndefined()
-    expect(readDshAdapterSandbox([["file:///x/dsh-adapter/index.ts", { tools: ["bash"] }]])).toBeUndefined()
-    expect(readDshAdapterSandbox(undefined)).toBeUndefined()
-  })
-
-  test("ignores malformed sandbox shapes", () => {
-    expect(readDshAdapterSandbox([["file:///x/dsh-adapter/index.ts", { sandbox: "nope" }]])).toBeUndefined()
-  })
-
-  test("reads the sandbox written by patch (read/patch consistency)", () => {
-    const next = patchDshAdapterSandbox(["file:///x/dsh-adapter/index.ts"], { enabled: true, mode: "workspace-write" })
-    expect(readDshAdapterSandbox(next)).toEqual({ enabled: true, mode: "workspace-write" })
-    expect(sandboxToPreset(readDshAdapterSandbox(next))).toBe("workspace-write")
   })
 })
 

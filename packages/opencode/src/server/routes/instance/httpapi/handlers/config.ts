@@ -15,6 +15,12 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       return yield* configSvc.get()
     })
 
+    const configGet = Effect.fn("ConfigHttpApi.configGet")(function* () {
+      const ellamaka = yield* configSvc.get()
+      const pluginConfig = yield* configSvc.getPluginConfig()
+      return { effective: { ellamaka, wopal: { pluginConfig } } }
+    })
+
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
       yield* configSvc.update(ctx.payload)
       yield* markInstanceForDisposal(yield* InstanceState.context)
@@ -29,6 +35,10 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
       }
     })
 
-    return handlers.handle("get", get).handle("update", update).handle("providers", providers)
+    return handlers
+      .handle("get", get)
+      .handle("configGet", configGet)
+      .handle("update", update)
+      .handle("providers", providers)
   }),
 )

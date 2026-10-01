@@ -6,6 +6,7 @@ import { ChildProcessSpawner } from "effect/unstable/process"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { Global } from "@wopal/ellamaka-core/global"
 import { createOpencodeClient } from "@wopal/ellamaka-sdk/v2"
 import { validateSession } from "../../src/cli/cmd/tui/validate-session"
 import { InstanceBootstrap } from "../../src/project/bootstrap-service"
@@ -20,6 +21,7 @@ import { Session as SessionNs } from "@/session/session"
 import { errorMessage } from "../../src/util/error"
 import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
+import fs from "fs/promises"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
@@ -60,6 +62,7 @@ function app(serverPath: ServerPath, input?: { password?: string; username?: str
           ConfigProvider.fromUnknown({
             ELLAMAKA_SERVER_PASSWORD: input?.password,
             ELLAMAKA_SERVER_USERNAME: input?.username,
+            OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
           }),
         ),
       ),
@@ -209,6 +212,149 @@ function httpapiInstance<A, E>(
     { git: options.git ?? true, config: { formatter: false, lsp: false, ...options.config } },
   )
 }
+
+httpapiInstance(
+  "reads the effective config from the instance with file-mirrored plugin configuration",
+  {
+    serverPath: "raw",
+    config: {},
+    setup: (directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            path.join(Global.Path.config, "settings.jsonc"),
+            JSON.stringify({
+              ellamaka: { formatter: false, lsp: false },
+              wopal: { pluginConfig: { "dsh-adapter": { global: true, sandbox: { mode: "read-only" } } } },
+            }),
+          ),
+        )
+        const configDir = path.join(directory, ".wopal", "config")
+        yield* Effect.promise(() => fs.mkdir(configDir, { recursive: true }))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, ".wopal", ".git"), ""))
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            path.join(configDir, "settings.jsonc"),
+            JSON.stringify({
+              ellamaka: { username: "space-user" },
+              wopal: { pluginConfig: { "dsh-adapter": { space: true, sandbox: { mode: "workspace-write" } } } },
+            }),
+          ),
+        )
+        yield* Effect.promise(() =>
+          fs.writeFile(
+            path.join(configDir, "settings.local.jsonc"),
+            JSON.stringify({ wopal: { pluginConfig: { "dsh-adapter": { local: "$KEEP_LITERAL" } } } }),
+          ),
+        )
+      }),
+  },
+  ({ sdk }) =>
+    Effect.gen(function* () {
+      const current = yield* capture(() => sdk.config.get())
+      const response = yield* capture(() => sdk.config.configGet())
+      expect(current.status).toBe(200)
+      expect(response.status).toBe(200)
+      const body = record(response.data)
+      expect(Object.keys(body)).toEqual(["effective"])
+      expect(Object.keys(record(body.effective)).sort()).toEqual(["ellamaka", "wopal"])
+      expect(record(body.effective).ellamaka).toEqual(current.data)
+      expect(record(record(record(body.effective).wopal).pluginConfig)["dsh-adapter"]).toEqual({
+        global: true,
+        space: true,
+        local: "$KEEP_LITERAL",
+        sandbox: { mode: "workspace-write" },
+      })
+    }),
+)
+
+httpapiInstance(
+  "keeps the config-v2 response shape and an empty wopal table outside a space",
+  { serverPath: "raw" },
+  ({ sdk, directory }) =>
+    Effect.gen(function* () {
+      const current = yield* capture(() => sdk.config.get())
+      const response = yield* call(() =>
+        serverFetch("raw")(new Request(`http://localhost/config-v2?directory=${encodeURIComponent(directory)}`)),
+      )
+      expect(response.status, yield* call(() => response.clone().text())).toBe(200)
+      const body = yield* call(() => response.json())
+      expect(Object.keys(body)).toEqual(["effective"])
+      expect(Object.keys(record(body.effective)).sort()).toEqual(["ellamaka", "wopal"])
+      expect(record(body.effective).ellamaka).toEqual(current.data)
+      expect(record(record(body.effective).wopal).pluginConfig).toEqual({})
+    }),
+)
+
+httpapiInstance(
+  "requires valid basic authorization for config-v2 when the server has a password",
+  { serverPath: "raw" },
+  ({ directory }) =>
+    Effect.gen(function* () {
+      const missing = yield* capture(() => client("raw", directory, { password: "secret" }).config.configGet())
+      const invalid = yield* capture(() =>
+        client("raw", directory, {
+          password: "secret",
+          headers: { authorization: authorization("ellamaka", "wrong") },
+        }).config.configGet(),
+      )
+      const valid = yield* capture(() =>
+        client("raw", directory, {
+          password: "secret",
+          headers: { authorization: authorization("ellamaka", "secret") },
+        }).config.configGet(),
+      )
+
+      expect(statuses({ missing, invalid, valid })).toEqual({ missing: 401, invalid: 401, valid: 200 })
+      expect(missing.data).toBeUndefined()
+      expect(invalid.data).toBeUndefined()
+      expect(record(valid.data).effective).toBeDefined()
+    }),
+)
+
+httpapi(
+  "routes config-v2 to each directory without leaking effective configuration",
+  Effect.gen(function* () {
+    const first = yield* tmpdirScoped({ git: true, config: { formatter: false, lsp: false } })
+    const second = yield* tmpdirScoped({ git: true })
+    const writeSpace = (directory: string, username: string, mode: string) =>
+      Effect.promise(async () => {
+        const configDir = path.join(directory, ".wopal", "config")
+        await fs.mkdir(configDir, { recursive: true })
+        await fs.writeFile(path.join(directory, ".wopal", ".git"), "")
+        await fs.writeFile(
+          path.join(configDir, "settings.jsonc"),
+          JSON.stringify({
+            ellamaka: { username },
+            wopal: { pluginConfig: { "dsh-adapter": { sandbox: { enabled: true, mode } } } },
+          }),
+        )
+      })
+    yield* writeSpace(first, "first-user", "read-only")
+    yield* writeSpace(second, "second-user", "full-access")
+
+    const fetch = serverFetch("raw")
+    const firstSdk = createOpencodeClient({ baseUrl: "http://localhost", directory: first, fetch })
+    const secondSdk = createOpencodeClient({ baseUrl: "http://localhost", directory: second, fetch })
+    const firstRead = yield* capture(() => firstSdk.config.configGet())
+    const secondRead = yield* capture(() => secondSdk.config.configGet())
+    const firstAgain = yield* capture(() => firstSdk.config.configGet())
+
+    expect(statuses({ firstRead, secondRead, firstAgain })).toEqual({
+      firstRead: 200,
+      secondRead: 200,
+      firstAgain: 200,
+    })
+    const effective = (result: Captured) => record(record(result.data).effective)
+    const adapter = (result: Captured) => record(record(record(effective(result).wopal).pluginConfig)["dsh-adapter"])
+    expect(record(effective(firstRead).ellamaka).username).toBe("first-user")
+    expect(record(effective(secondRead).ellamaka).username).toBe("second-user")
+    expect(record(effective(firstAgain).ellamaka).username).toBe("first-user")
+    expect(adapter(firstRead)).toEqual({ sandbox: { enabled: true, mode: "read-only" } })
+    expect(adapter(secondRead)).toEqual({ sandbox: { enabled: true, mode: "full-access" } })
+    expect(adapter(firstAgain)).toEqual(adapter(firstRead))
+  }),
+)
 
 function serverPathParity<A, E>(name: string, scenario: (serverPath: ServerPath) => Effect.Effect<A, E, TestScope>) {
   it.live(

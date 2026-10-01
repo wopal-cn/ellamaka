@@ -22,6 +22,8 @@ import type {
   CommandListErrors,
   CommandListResponses,
   Config as Config3,
+  ConfigConfigGetErrors,
+  ConfigConfigGetResponses,
   ConfigGetErrors,
   ConfigGetResponses,
   ConfigProvidersErrors,
@@ -1082,6 +1084,36 @@ export class Config2 extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Get effective configuration
+   *
+   * Read the loaded engine configuration and merged Wopal plugin configuration for this instance.
+   */
+  public configGet<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ConfigConfigGetResponses, ConfigConfigGetErrors, ThrowOnError>({
+      url: "/config-v2",
+      ...options,
+      ...params,
     })
   }
 

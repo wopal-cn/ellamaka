@@ -4559,6 +4559,45 @@ export type ConfigUpdateResponses = {
 
 export type ConfigUpdateResponse = ConfigUpdateResponses[keyof ConfigUpdateResponses]
 
+export type ConfigConfigGetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config-v2"
+}
+
+export type ConfigConfigGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigConfigGetError = ConfigConfigGetErrors[keyof ConfigConfigGetErrors]
+
+export type ConfigConfigGetResponses = {
+  /**
+   * Effective configuration read surface
+   */
+  200: {
+    effective: {
+      ellamaka: Config
+      wopal: {
+        pluginConfig: {
+          [key: string]: {
+            [key: string]: unknown
+          }
+        }
+      }
+    }
+  }
+}
+
+export type ConfigConfigGetResponse = ConfigConfigGetResponses[keyof ConfigConfigGetResponses]
+
 export type ConfigProvidersData = {
   body?: never
   path?: never
