@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-09-28
+> **Updated**: 2026-10-07
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -51,7 +51,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经 CLI 转发        | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 能力发现层                | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                    | [Capability Discovery Layer](#capability-discovery-layer) |
 | Session 能力边界          | 保留静态 config/agent 权限；session permission 作为增量 overlay，Skill/Tool 可见性与执行共享 effective permission | [Session Capability Contract](#session-capability-contract) |
-| Runtime Context Contribution | 为插件提供 request-tail 动态上下文贡献点；默认空、不回写历史，用于 cache-safe 的运行时上下文激活 | [Runtime Context Contribution](#runtime-context-contribution) |
+| Runtime Context Contribution | 插件通过 messages.transform 调整本次请求消息；会话合成消息承担持久记录与界面展示 | [Runtime Context Contribution](#runtime-context-contribution) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
@@ -231,7 +231,7 @@ WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）与 `<space>/.wopal/`�
 | 层次 | 职责 | 过滤权限 | 代表方法 |
 |------|------|---------|---------|
 | 发现层 | "引擎加载了什么" | 否，返回完整列表 | `Skill.all()`、`ToolRegistry.capabilityEntries()`、`MCP.capabilityEntries()`、`Rule.all()` |
-| 运行时过滤层 | "这个 agent 这次能用什么" | 是，按 agent 权限与 model 过滤 | `Skill.available(agent)`、`ToolRegistry.tools(agent, model)`、会话执行时 `permission.ask` |
+| 运行时过滤层 | "这个 agent 这次能用什么" | 是，按 agent 权限与 model 过滤 | `Skill.available(agent, sessionPermission)`、`ToolRegistry.tools({ agent, sessionPermission, ...model })`、会话执行时 `permission.ask` |
 
 系统提示词生成、工具清单构建、执行授权全部走运行时过滤层。
 
@@ -257,11 +257,13 @@ Tool 已在 schema visibility 与 execution gate 两处消费 `Permission.merge(
 
 ## Runtime Context Contribution
 
-插件需要一个通用、可选、默认空的 **request-tail context contribution** seam。它在每个正常 model step 的 retained history 已确定后、provider request 发出前执行，允许插件贡献当前 step 的动态 user-role context。贡献只追加在当前请求尾部，不修改较早的 retained message，也不改 system prompt 或 tool schema。
+插件通过 `experimental.chat.messages.transform` 在每个正常模型请求的消息转换前调整本次请求消息。插件可在数组末尾追加普通文本或 `synthetic` TextPart；本次请求数组中的修改由引擎转换为模型消息。会话数据库仍由 Session 消息写入流程管理。
 
-该 seam 不认识 Rule、Skill、Wopal 或任何产品语义；这些解析属于插件。其目的只是给 plugin runtime 一个 cache-safe 的动态上下文入口：稳定 prefix 保持可复用，变化内容只影响追加点之后的缓存。Contribution 必须进入正常 session/message 生命周期，确保 resume 与 compaction 后由插件按当前状态重新解析，而不是依赖易失的进程内历史补丁。
+临时上下文由插件根据当前会话事实重新生成，并追加到本次请求末尾。插件负责保留先前消息内容和顺序，使动态内容只影响追加点之后的请求前缀。模型步数上限的 MAX_STEPS assistant guard 由引擎在转换后的消息末尾追加。
 
-现有 `messages.transform` 仍保持兼容；新 seam 是更窄的追加式契约，不改变旧插件 hook 的调用和语义。SDK/API 的既有字段不删除、不改名；若新增 plugin type，仅做 additive export。
+需要在 Chat 中展示和追溯的注入内容，通过 Session 消息写入流程保存为 `synthetic` TextPart，并由已有注入信息组件呈现。`synthetic` 标记描述内容来源；是否持久保存由消息写入流程决定，是否进入后续模型上下文由历史构造流程决定。持久合成消息参与后续历史，临时 transform 追加内容仅用于本次请求。
+
+Rule/Skill 的匹配、文本格式和状态重建由插件负责。插件接口使用既有 messages/system transform 契约，Session permission 负责 Skill/Tool 授权与可见性。
 
 ## Upstream Merge Boundary
 

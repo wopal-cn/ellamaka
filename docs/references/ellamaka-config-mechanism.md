@@ -1,5 +1,6 @@
 # Ellamaka 配置机制
 > **日期**: 2026-04-26
+> **Updated**: 2026-10-07
 > **文档目标**: 理解 Ellamaka 配置加载链路、provider auth 配置方式、环境变量覆盖机制
 
 ---
@@ -398,10 +399,11 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Rule[
 
 ### Skill 可见性过滤
 
-`skill/index.ts` 中 `available` 函数通过 permission 评估决定每个 agent 能看到哪些 skill：
+`skill/index.ts` 中 `available(agent, sessionPermission)` 合并 Agent 权限与当前 Session 权限，再按 Skill 名称评估可见性：
 
 ```typescript
-list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+const permission = Permission.merge(agent.permission, sessionPermission ?? [])
+list.filter((skill) => Permission.evaluate("skill", skill.name, permission).action !== "deny")
 ```
 
 - `deny` → 从列表移除（agent 看不到）

@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
+import { Permission } from "../../src/permission"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { Bus } from "../../src/bus"
@@ -100,6 +101,39 @@ const withWopalSpace = <A, E, R>(spaceRoot: string, self: Effect.Effect<A, E, R>
   }).pipe(Effect.andThen(self))
 
 describe("skill", () => {
+  it.live("filters available skills with each session permission overlay", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all(
+              ["session-a-skill", "session-b-skill"].map((name) =>
+                Bun.write(
+                  path.join(dir, ".opencode", "skill", name, "SKILL.md"),
+                  `---\nname: ${name}\ndescription: ${name}.\n---\n\n# ${name}\n`,
+                ),
+              ),
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const agent = {
+            name: "build",
+            mode: "primary" as const,
+            permission: [{ permission: "skill", pattern: "*", action: "deny" }] as Permission.Rule[],
+            options: {},
+          }
+          const sessionA = [{ permission: "skill", pattern: "session-a-skill", action: "allow" }] as Permission.Rule[]
+          const sessionB = [{ permission: "skill", pattern: "session-b-skill", action: "allow" }] as Permission.Rule[]
+
+          expect((yield* skill.available(agent, sessionA)).map((item) => item.name)).toEqual(["session-a-skill"])
+          expect((yield* skill.available(agent, sessionB)).map((item) => item.name)).toEqual(["session-b-skill"])
+          expect((yield* skill.available(agent)).map((item) => item.name)).toEqual([])
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("discovers skills from .opencode/skill/ directory", () =>
     provideTmpdirInstance(
       (dir) =>

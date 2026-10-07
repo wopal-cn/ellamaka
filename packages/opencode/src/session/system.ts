@@ -34,7 +34,7 @@ export function provider(model: Provider.Model) {
 
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
-  readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
+  readonly skills: (agent: Agent.Info, sessionPermission?: Permission.Ruleset) => Effect.Effect<string | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SystemPrompt") {}
@@ -62,10 +62,11 @@ export const layer = Layer.effect(
         ]
       }),
 
-      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
-        if (Permission.disabled(["skill"], agent.permission).has("skill")) return
+      skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info, sessionPermission?: Permission.Ruleset) {
+        const permission = Permission.merge(agent.permission, sessionPermission ?? [])
+        if (Permission.disabled(["skill"], permission).has("skill")) return undefined
 
-        const list = yield* skill.available(agent)
+        const list = yield* skill.available(agent, sessionPermission)
 
         return [
           "Skills provide specialized instructions and workflows for specific tasks.",

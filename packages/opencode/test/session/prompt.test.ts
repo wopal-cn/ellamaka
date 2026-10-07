@@ -2557,3 +2557,119 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+it.instance("keeps persisted synthetic context in subsequent model requests", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ title: "Persisted synthetic context" })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [
+        { type: "text", text: "first persisted context probe" },
+        { type: "text", text: "persisted-synthetic-reminder", synthetic: true },
+      ],
+    })
+    const stored = yield* sessions.messages({ sessionID: session.id })
+    expect(stored.flatMap((message) => message.parts)).toContainEqual(
+      expect.objectContaining({ type: "text", text: "persisted-synthetic-reminder", synthetic: true }),
+    )
+    yield* llm.text("first answer without echoing context")
+    yield* prompt.loop({ sessionID: session.id })
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      model: ref,
+      noReply: true,
+      parts: [{ type: "text", text: "second persisted context probe" }],
+    })
+    yield* llm.text("second answer without echoing context")
+    yield* prompt.loop({ sessionID: session.id })
+    const requests = (yield* llm.inputs).filter((input) =>
+      JSON.stringify(input.messages).includes("first persisted context probe"),
+    )
+    expect(requests).toHaveLength(2)
+    for (const request of requests) {
+      expect(JSON.stringify(request.messages)).toContain("persisted-synthetic-reminder")
+    }
+  }),
+)
+
+for (const { synthetic, lastStep } of [
+  { synthetic: true, lastStep: false },
+  { synthetic: false, lastStep: false },
+  { synthetic: true, lastStep: true },
+]) {
+  it.instance(
+    `messages.transform appends ${synthetic ? "synthetic" : "ordinary"} request context without persisting it${lastStep ? " before the final MAX_STEPS guard" : ""}`,
+    () =>
+      Effect.gen(function* () {
+        const { dir, llm } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          ...(lastStep ? { agent: { build: { steps: 1 } } } : {}),
+        }))
+        const source = [
+          "let calls = 0",
+          "export default async () => ({",
+          '  "experimental.chat.messages.transform": async (_input, output) => {',
+          '    const user = output.messages.findLast((message) => message.info.role === "user")',
+          "    if (!user) return",
+          "    calls += 1",
+          "    const id = `${user.info.id}_context_${calls}`",
+          "    output.messages.push({",
+          "      info: { ...user.info, id },",
+          "      parts: [{",
+          '        type: "text", id: `${id}_part`, messageID: id, sessionID: user.info.sessionID,',
+          `        synthetic: ${synthetic}, text: \`transient-context-\${calls}\`,`,
+          "      }],",
+          "    })",
+          "  },",
+          "})",
+        ].join("\n")
+        yield* Effect.promise(() => Bun.write(path.join(dir, ".opencode", "plugin", "context.ts"), source))
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "Existing transform context",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        for (const question of ["first context probe", "second context probe"]) {
+          yield* prompt.prompt({
+            sessionID: session.id,
+            agent: "build",
+            model: ref,
+            noReply: true,
+            parts: [{ type: "text", text: question }],
+          })
+          yield* llm.text("answer without echoing the injected content")
+          yield* prompt.loop({ sessionID: session.id })
+        }
+        const requests = (yield* llm.inputs).filter((input) =>
+          JSON.stringify(input.messages).includes("transient-context-"),
+        )
+        expect(requests).toHaveLength(2)
+        expect(JSON.stringify(requests[0]!.messages)).toContain("transient-context-1")
+        expect(JSON.stringify(requests[1]!.messages)).toContain("transient-context-2")
+        expect(JSON.stringify(requests[1]!.messages)).not.toContain("transient-context-1")
+        for (const request of requests) {
+          const messages = request.messages as { role: string; content: unknown }[]
+          if (lastStep) {
+            expect(messages.at(-1)?.role).toBe("assistant")
+            expect(JSON.stringify(messages.at(-1)?.content)).toContain("MAXIMUM STEPS REACHED")
+          }
+          const tail = messages.at(lastStep ? -2 : -1)
+          expect(tail?.role).toBe("user")
+          expect(JSON.stringify(tail?.content)).toContain("transient-context-")
+        }
+        const stored = JSON.stringify(yield* sessions.messages({ sessionID: session.id }))
+        expect(stored).toContain("first context probe")
+        expect(stored).toContain("second context probe")
+        expect(stored).not.toContain("transient-context-")
+        expect(stored).not.toContain("_context_")
+      }),
+  )
+}

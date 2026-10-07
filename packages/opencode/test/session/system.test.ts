@@ -40,6 +40,8 @@ const build: Agent.Info = {
   options: {},
 }
 
+let availablePermissions: Permission.Ruleset[] = []
+
 const it = testEffect(
   SystemPrompt.layer.pipe(
     Layer.provide(
@@ -54,7 +56,10 @@ const it = testEffect(
           },
           all: () => Effect.succeed(skills),
           dirs: () => Effect.succeed([]),
-          available: () => Effect.succeed(skills),
+          available: (_agent, permission) => {
+            availablePermissions.push(permission ?? [])
+            return Effect.succeed(skills)
+          },
         }),
       ),
     ),
@@ -62,6 +67,23 @@ const it = testEffect(
 )
 
 describe("session.system", () => {
+  it.effect("passes the session overlay through to the skill catalog", () =>
+    Effect.gen(function* () {
+      availablePermissions = []
+      const prompt = yield* SystemPrompt.Service
+      const agent: Agent.Info = {
+        ...build,
+        permission: [{ permission: "skill", pattern: "*", action: "deny" }],
+      }
+      const sessionPermission: Permission.Ruleset = [{ permission: "skill", pattern: "alpha-skill", action: "allow" }]
+
+      const output = yield* prompt.skills(agent, sessionPermission)
+
+      expect(output).toContain("<name>alpha-skill</name>")
+      expect(availablePermissions).toEqual([sessionPermission])
+    }),
+  )
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service

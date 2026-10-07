@@ -91,7 +91,7 @@ export interface Interface {
   readonly require: (name: string) => Effect.Effect<Info, NotFoundError>
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
-  readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly available: (agent?: Agent.Info, sessionPermission?: Permission.Ruleset) => Effect.Effect<Info[]>
 }
 
 const parseSkill = Effect.fnUntraced(function* (match: string, bus: Bus.Interface, state?: ScanState) {
@@ -256,11 +256,7 @@ const discoverSkills = Effect.fnUntraced(function* (
     for (const root of upDirs) {
       const dirName = path.basename(root)
       const disabled =
-        dirName === ".claude"
-          ? disableClaudeCodeSkills
-          : dirName === ".agents"
-            ? disableAgentsSkills
-            : false
+        dirName === ".claude" ? disableClaudeCodeSkills : dirName === ".agents" ? disableAgentsSkills : false
       if (disabled) continue
 
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
@@ -379,11 +375,15 @@ export const layer = Layer.effect(
       return (yield* InstanceState.get(discovered)).dirs
     })
 
-    const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
+    const available = Effect.fn("Skill.available")(function* (
+      agent?: Agent.Info,
+      sessionPermission?: Permission.Ruleset,
+    ) {
       const s = yield* InstanceState.get(state)
       const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
-      return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
+      const permission = Permission.merge(agent.permission, sessionPermission ?? [])
+      return list.filter((skill) => Permission.evaluate("skill", skill.name, permission).action !== "deny")
     })
 
     return Service.of({ get, require, all, dirs, available })
