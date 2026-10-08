@@ -50,8 +50,8 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | 运行时重载                | 单元化 ReloadController 与两级重载协议                                                            | [Unified Reload & Lifecycle](#unified-reload--lifecycle) |
 | 引擎配置消费              | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经 CLI 转发        | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 能力发现层                | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                    | [Capability Discovery Layer](#capability-discovery-layer) |
-| Session 能力边界          | 保留静态 config/agent 权限；session permission 作为增量 overlay，Skill/Tool 可见性与执行共享 effective permission | [Session Capability Contract](#session-capability-contract) |
-| Runtime Context Contribution | 插件通过 messages.transform 调整本次请求消息；会话合成消息承担持久记录与界面展示 | [Runtime Context Contribution](#runtime-context-contribution) |
+| Session 能力边界          | 保留静态 config/agent 权限与持久 session permission；可选 plugin runtime rules 只在单次 permission ask 前临时叠加，不改 run loop/Permission Service 持久状态 | [Session Capability Contract](#session-capability-contract) |
+| Runtime Context Contribution | 插件通过 messages.transform 在 retained history 尾部追加本次请求的临时上下文；动态 Skill catalog 等运行态信息不改 system/tool 前缀 | [Runtime Context Contribution](#runtime-context-contribution) |
 | 引擎安装识别              | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                  | [Install Contract](./DESIGN-distribution.md#install-contract) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
@@ -247,13 +247,18 @@ WopalSpace 模式下，`$WOPAL_HOME/`（全局 ontology）与 `<space>/.wopal/`�
 
 ## Session Capability Contract
 
-ellamaka 不引入第二套 Wopal 专属 capability/permission 系统。现有 config 与 agent frontmatter 继续形成静态权限基线；Session 记录已有的 `permission` 是通用的 session-scoped overlay，按既有最后匹配者生效语义与 agent permission 合成。没有 session overlay 时行为与现状完全一致。
+ellamaka 不引入第二套 Wopal 专属 capability/permission 系统。现有 config 与 agent frontmatter 继续形成静态权限基线；Session 记录已有的 `permission` 仍是通用、持久的 session-scoped overlay，按既有最后匹配者生效语义与 agent permission 合成。没有 session overlay 时行为与现状完全一致。
 
-Wopal P2 只使用 overlay 做**增量授予**。一次子会话的 capability envelope 必须在首个模型请求之前完成并在会话生命周期内保持稳定；运行过程中不得用频繁修改 permission/tool visibility 的方式表达 Rule/Skill 动态上下文。Session metadata 可承载插件私有的装配意图，但其内容不得成为 engine core 的 Wopal 专属概念。
+在持久规则之外，Plugin SDK 提供一个可选的 **runtime permission rules** seam：`experimental.permission.rules`。它只在一次 `ctx.ask()` 求值前运行，输入 `{ sessionID, agent, permission, patterns }`，插件可向 `output.rules` 追加临时规则。引擎按 `agent.permission → session.permission → plugin runtime rules` 的顺序合并后，继续交给现有 Permission evaluator；因此 plugin runtime rule 遵守既有 LAST-wins 语义。
 
-Tool 已在 schema visibility 与 execution gate 两处消费 `Permission.merge(agent.permission, session.permission)`。Skill 必须遵守同一不变量：available/catalog 与 `skill` tool 执行门禁均消费同一个 effective permission。修复该一致性属于通用 Session permission 语义，不改变静态权限接口。
+runtime rules 的边界必须保持窄而清楚：
 
-子会话创建方若还需禁止自身递归派发工具，应把该 deny 与增量授予一起编入创建时 overlay；不得在首轮 prompt 用会覆盖 session permission 的临时 tool rewrite 擦除 envelope。
+- 它们只属于当前 permission ask，不写入 `session.permission`，不写入 project-wide approved pool，也不改变 Permission Service 的持久状态；
+- Hook 是 additive optional contract；没有插件实现时输出为空，行为与现状完全一致；
+- Hook 由 `SessionTools` 在构造 `ctx.ask()` ruleset 时消费，不要求 run loop 重新读取 Session，不修改 `Permission.Service`，也不要求具体 Tool（包括 `skill`）认识插件；
+- Plugin 是受信任的运行时扩展，因而可以追加 allow/ask/deny；具体插件应按自身领域收窄使用范围。Wopal 当前只用它解决动态 Skill grant，不在本阶段用它实现 Tool/Rule 动态权限。
+
+原有 Session permission 一致性仍成立：Tool 的 schema visibility / execution gate，以及 Skill 的原生 available/catalog / execution gate，继续消费 `agent.permission + session.permission`。Plugin runtime rules 不自动改变这些静态/持久清单；需要向模型表达运行时新增能力时，由插件通过 Runtime Context Contribution 追加对应的临时 catalog。这样引擎保持通用权限内核，插件负责自己的动态能力事实。
 
 ## Runtime Context Contribution
 
@@ -263,7 +268,7 @@ Tool 已在 schema visibility 与 execution gate 两处消费 `Permission.merge(
 
 需要在 Chat 中展示和追溯的注入内容，通过 Session 消息写入流程保存为 `synthetic` TextPart，并由已有注入信息组件呈现。`synthetic` 标记描述内容来源；是否持久保存由消息写入流程决定，是否进入后续模型上下文由历史构造流程决定。持久合成消息参与后续历史，临时 transform 追加内容仅用于本次请求。
 
-Rule/Skill 的匹配、文本格式和状态重建由插件负责。插件接口使用既有 messages/system transform 契约，Session permission 负责 Skill/Tool 授权与可见性。
+动态上下文的业务含义、文本格式和状态重建由插件负责。对于动态 Skill，推荐只在 request tail 发布被额外激活 Skill 的 `name + description`，让模型继续调用原生 `skill(name)` 取得 SKILL.md、base directory 与资源文件；不要把 Skill body/path 复制进插件注入。运行时 Skill 的实际 load allow 由 `experimental.permission.rules` 与插件自己的 Session Skill Overlay 同源生成，避免“看得到但加载不了”或“能加载但模型不知道”的双真相源。
 
 ## Upstream Merge Boundary
 
@@ -291,15 +296,16 @@ onboarding 将 ontology base capabilities 物化到 `WOPAL_HOME` 后，ellamaka 
 
 ellamaka 在 OpenCode fork 的 plugin/sdk 契约层之上做了一批增量扩展。这些扩展是 ellamaka 与上游能力的差异面，通过 npm 包 `@wopal/ellamaka-plugin` 与 `@wopal/ellamaka-sdk` 分发，版本跟随产品主版本号（纯 `x.y.z`，不带 rc/beta）。发布机制与版本策略见 `docs/DESIGN-distribution.md` 的 npm 包发布章节。
 
-fork 的 plugin 契约层相对上游基线（OpenCode `1.15.13`）新增五处可选扩展：
+fork 的 plugin 契约层相对上游基线（OpenCode `1.15.13`）新增六处可选扩展：
 
 - `SystemPromptSectionKind` / `SystemPromptSection` / `SystemPromptMetadata` —— 结构化系统提示词元数据，引擎在 `session/prompt.ts` 构造，经 `chat.params.systemMetadata` 传入插件
 - `PluginInput.wopalSpaceRoot` —— 空间根来源，wopal 空间集成的基础
 - `Hooks.chat.params` 的 `systemMetadata` 输入 —— 结构化提示词随模型请求透传
 - `Hooks["tool.provider"]` —— 每次模型请求动态提供工具集，支撑运行时挂载/卸载
 - `ToolContext.extra` —— 宿主向工具调用透传附加上下文（如沙箱模式）
+- `Hooks["experimental.permission.rules"]` —— permission ask 前的临时 rules overlay；输入 session/agent/permission/patterns，输出可追加的 `PermissionRule[]`，合并后仍由原 Permission evaluator 求值
 
-这五处扩展均为可选字段或新增 hook，是上游类型的超集：上游插件可在 fork 引擎上运行，使用扩展的插件则依赖 fork 契约层。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、systemMetadata 的 dump 链路）与 `../../../.wopal/docs/DESIGN-dsh-adapter.md`（tool.provider、ToolContext.extra 的动态工具投影与沙箱语义）。
+六处扩展均为可选字段或新增 hook，是上游类型的超集：上游/旧插件在新引擎上没有对应函数时由 dispatcher 直接跳过，行为保持不变。依赖 `experimental.permission.rules` 的新插件需要与提供该契约的 Ellamaka 版本配套分发；新插件运行在旧引擎上不会获得 runtime permission overlay，因此不属于受支持组合。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、systemMetadata、动态 Skill permission overlay）与 `../../../.wopal/docs/DESIGN-dsh-adapter.md`（tool.provider、ToolContext.extra 的动态工具投影与沙箱语义）。
 
 插件消费这些扩展时直接声明 `@wopal/ellamaka-plugin` 依赖，运行时引擎以 `InstallationVersion` 剥离 rc/beta 后的纯主版本为兜底 pin，保证插件拿到的契约层类型与引擎一致。
 
