@@ -1,25 +1,16 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { Effect, Exit, Layer, Option } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
-import { NodeFileSystem, NodePath } from "@effect/platform-node"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "@/config/config"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
-import { EffectFlock } from "@wopal/ellamaka-core/util/effect-flock"
 
 import { Auth } from "../../src/auth"
 import { Account } from "../../src/account/account"
 import { AccessToken, AccountID, OrgID } from "../../src/account/schema"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Env } from "../../src/env"
-import {
-  provideTmpdirInstance,
-  TestInstance,
-  tmpdir,
-  tmpdirScoped,
-  provideInstanceEffect,
-  testInstanceStoreLayer,
-} from "../fixture/fixture"
+import { TestInstance, tmpdir, tmpdirScoped, provideInstanceEffect, testInstanceStoreLayer } from "../fixture/fixture"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
@@ -34,13 +25,7 @@ import { ConfigPlugin } from "@/config/plugin"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
-
-/** Infra layer that provides FileSystem, Path, ChildProcessSpawner for test fixtures */
-const infra = CrossSpawnSpawner.defaultLayer.pipe(
-  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-)
-
-const testFlock = EffectFlock.defaultLayer
+import { infra, testFlock, wellKnownAuth } from "./config-fixtures"
 
 const unexpectedHttp = HttpClient.make((request) =>
   Effect.die(`unexpected http request: ${request.method} ${request.url}`),
@@ -54,14 +39,6 @@ const json = (request: Parameters<typeof HttpClientResponse.fromWeb>[0], body: u
       headers: { "content-type": "application/json" },
     }),
   )
-
-const wellKnownAuth = (url: string) =>
-  Layer.mock(Auth.Service)({
-    all: () =>
-      Effect.succeed({
-        [url]: new Auth.WellKnown({ type: "wellknown", key: "TEST_TOKEN", token: "test-token" }),
-      }),
-  })
 
 function remoteConfigClient(input: {
   wellKnown: unknown
@@ -373,7 +350,7 @@ it.instance(
     const config = yield* Config.use.get()
     expect(config.lsp).toBe(true)
   }),
-   { config: { lsp: true } },
+  { config: { lsp: true } },
 )
 
 const accountTokenIt = configIt({
@@ -758,55 +735,6 @@ trailingSlashWellKnown.it.instance("wellknown URL with trailing slash is normali
   }),
 )
 
-test("remote well-known config can use FetchHttpClient layer", async () => {
-  let fetchedUrl: string | undefined
-  const server = Bun.serve({
-    port: 0,
-    fetch: (request) => {
-      fetchedUrl = request.url
-      return new Response(
-        JSON.stringify({
-          config: {
-            mcp: { jira: { type: "remote", url: "https://jira.example.com/mcp", enabled: true } },
-          },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      )
-    },
-  })
-
-  try {
-    await provideTmpdirInstance(
-      () =>
-        Config.Service.use((svc) =>
-          Effect.gen(function* () {
-            const config = yield* svc.get()
-            expect(fetchedUrl).toBe(`${server.url.origin}/.well-known/opencode`)
-            expect(config.mcp?.jira?.enabled).toBe(true)
-          }),
-        ),
-      { git: true },
-    ).pipe(
-      Effect.scoped,
-      Effect.provide(
-        Config.layer.pipe(
-          Layer.provide(testFlock),
-          Layer.provide(AppFileSystem.defaultLayer),
-          Layer.provide(Env.defaultLayer),
-          Layer.provide(wellKnownAuth(server.url.origin)),
-          Layer.provide(AccountTest.empty),
-          Layer.provideMerge(infra),
-          Layer.provide(NpmTest.noop),
-          Layer.provide(FetchHttpClient.layer),
-        ),
-      ),
-      Effect.runPromise,
-    )
-  } finally {
-    await server.stop(true)
-  }
-})
-
 const templatedHeaderWellKnown = wellKnown({
   remoteConfig: {
     url: "https://config.example.com/opencode.json",
@@ -999,8 +927,18 @@ describe("deduplicatePluginOrigins", () => {
     const spaceSpec = "file:///work/space/.wopal/plugins/wopal-plugin.ts"
 
     const result = ConfigPlugin.deduplicatePluginOrigins([
-      { spec: globalSpec, source: "/Users/me/.wopal/config/settings.jsonc", scope: "global" as const, id: "wopal-plugin" },
-      { spec: spaceSpec, source: "/work/space/.wopal/config/settings.jsonc", scope: "local" as const, id: "wopal-plugin" },
+      {
+        spec: globalSpec,
+        source: "/Users/me/.wopal/config/settings.jsonc",
+        scope: "global" as const,
+        id: "wopal-plugin",
+      },
+      {
+        spec: spaceSpec,
+        source: "/work/space/.wopal/config/settings.jsonc",
+        scope: "local" as const,
+        id: "wopal-plugin",
+      },
     ])
 
     expect(result).toHaveLength(1)
@@ -1086,7 +1024,6 @@ describe("deduplicatePluginOrigins", () => {
     expect(result).toHaveLength(2)
     expect(result.map((item) => item.id)).toEqual(["user-wopal", "space-wopal"])
   })
-
 })
 
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {

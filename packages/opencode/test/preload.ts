@@ -5,6 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll } from "bun:test"
+import { stripGitLocatorVars } from "./lib/git-env"
 
 // Set WOPAL_HOME FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
@@ -76,6 +77,13 @@ delete process.env["CEREBRAS_API_KEY"]
 delete process.env["SAMBANOVA_API_KEY"]
 delete process.env["ELLAMAKA_SERVER_PASSWORD"]
 delete process.env["ELLAMAKA_SERVER_USERNAME"]
+
+// git exports its repository-locator variables (GIT_DIR, GIT_WORK_TREE, ...) to
+// hook processes. A test run started from a git hook inherits them, and a test
+// that runs bare `git` without the fixture would then resolve — and write — the
+// real checkout instead of its own temporary directory. Strip them for the
+// whole test process; the fixture re-pins them per temp directory when needed.
+stripGitLocatorVars()
 
 // Clear WopalSpace flags so tests run in standard opencode mode.
 // WopalSpace-specific tests set these explicitly in their own setup.

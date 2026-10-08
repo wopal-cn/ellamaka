@@ -18,6 +18,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Config } from "@/config/config"
 import { Session as SessionNs } from "@/session/session"
+import { MIN_WOPAL_CLI_VERSION } from "@/wopal/cli-contract"
 import { errorMessage } from "../../src/util/error"
 import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
@@ -492,7 +493,7 @@ describe("HttpApi SDK", () => {
       expect(health.data).toMatchObject({
         healthy: true,
         cli: {
-          requiredVersion: "0.3.16",
+          requiredVersion: MIN_WOPAL_CLI_VERSION,
         },
       })
       // `dsh` exposes the DSH runtime terminal status (Issue #221): no mount in

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
+import { stripPrerelease } from "@wopal/ellamaka-core/installation/version"
+import { VERSION_ANCHOR } from "@wopal/ellamaka-release/npm/plan"
 
 // Contract test for the published plugin/SDK npm packages.
 //
@@ -45,6 +47,19 @@ function toDistTarget(source: string): string {
 const PLUGIN = "packages/plugin/package.json"
 const SDK = "packages/sdk/js/package.json"
 
+// The product base version is derived from the version anchor through
+// `stripPrerelease` — the single implementation of the prerelease-strip rule —
+// so the assertion tracks the anchor instead of a hardcoded literal that drifts.
+// The anchor path itself is imported from `@wopal/ellamaka-release/npm/plan`
+// (`VERSION_ANCHOR`, the release flow's own constant) rather than restated here,
+// so repointing the anchor cannot silently leave this test reading the old
+// manifest. `InstallationVersion` is `"local"` in the test process (a build-time
+// define), so the anchor manifest is read directly.
+async function productBaseVersion(): Promise<string> {
+  const anchor = await readPackage(VERSION_ANCHOR)
+  return stripPrerelease(anchor.version)
+}
+
 const PLUGIN_EXPORTS: Record<string, string> = {
   ".": "./src/index.ts",
   "./tool": "./src/tool.ts",
@@ -80,7 +95,7 @@ describe("published plugin package", () => {
   test("is branded @wopal/ellamaka-plugin at the product base version", async () => {
     const pkg = await readPackage(PLUGIN)
     expect(pkg.name).toBe("@wopal/ellamaka-plugin")
-    expect(pkg.version).toBe("2.0.5")
+    expect(pkg.version).toBe(await productBaseVersion())
   })
 
   test("is public and ships dist with types", async () => {
@@ -110,7 +125,7 @@ describe("published sdk package", () => {
   test("is branded @wopal/ellamaka-sdk at the product base version", async () => {
     const pkg = await readPackage(SDK)
     expect(pkg.name).toBe("@wopal/ellamaka-sdk")
-    expect(pkg.version).toBe("2.0.5")
+    expect(pkg.version).toBe(await productBaseVersion())
   })
 
   test("is public and ships dist with types", async () => {

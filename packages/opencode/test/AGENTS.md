@@ -85,6 +85,26 @@ await using tmp = await tmpdir({
 - Use `await using` for automatic cleanup when the variable goes out of scope
 - Paths are sanitized to strip null bytes (defensive fix for CI environments)
 
+## Test Layers
+
+`script/run-tests.ts` plans every layer, and `packages/opencode/package.json` exposes four entries (all run from `packages/opencode`):
+
+- `bun run test:unit` — the daily feedback loop.
+- `bun run test:integration` — run whenever a change touches an integration directory (see `INTEGRATION_DIRS`) or a `*-integration.test.ts` file.
+- `bun run test:e2e` — `*-e2e.test.ts` files only.
+- `bun run test:all` — full regression before commit/merge.
+
+The unit layer is the one that must stay green and bounded: it currently covers roughly 94 files / 1434 tests in the low twenties of seconds. Treat that as a budget — a change that pushes the unit layer well past the ~30s timeout is a signal that live-I/O tests leaked into it, not something to absorb.
+
+Every test process starts with git's repository-locator variables removed. `test/preload.ts` strips the list exported by `test/lib/git-env.ts` (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_PREFIX`) before any test file loads, so a value leaked from a git hook can never point a test's git commands at a real repository. `tmpdir({ git: true })` additionally pins its own commands to the temp directory. A test that genuinely needs one of those variables must set it explicitly for the child process.
+
+### Assertion Resilience
+
+Assertions must read the real source of truth instead of restating its current value:
+
+- Do not hardcode product version numbers or protocol-floor literals. The product base version is derived from the version anchor (`packages/ellamaka-cli/package.json`, `VERSION_ANCHOR`) through `stripPrerelease` (`@wopal/ellamaka-core/installation/version`), and the wopal-cli protocol floor is the `MIN_WOPAL_CLI_VERSION` constant (`src/wopal/cli-contract.ts`). Import or derive those values rather than writing their literals.
+- Do not assert on internal log text that carries no business meaning. When a test verifies that a log record was emitted, assert against the level the handler actually emits (e.g. `debug` vs `info`) and keep the logged event itself as the meaningful subject.
+
 ## Testing With Effects
 
 Use `testEffect(...)` from `test/lib/effect.ts` for tests that exercise Effect services or Effect-based workflows.
@@ -120,15 +140,15 @@ describe("my service", () => {
 
 `test:unit` is the daily feedback loop and must stay fast and deterministic. A test belongs to the unit layer only if it runs entirely in-process against in-memory or temp-directory state.
 
-Do **not** put these in the unit layer — they belong in an integration directory (see `INTEGRATION_DIRS` in `script/run-tests.ts`), which runs on demand via `test:integration`:
+Do **not** put these in the unit layer — they belong in the integration layer (an `INTEGRATION_DIRS` directory, or a `*-integration.test.ts` file), which runs on demand via `test:integration`:
 
 - Forking subprocesses (`Process.run`, `Bun.spawn`, `spawnSync`, `execSync`)
 - Watching the filesystem (`fs.watch`, watcher services) or waiting on OS events
-- Running real `git` operations
+- Running `git` against a real repository (the fixture's own throwaway repo, `tmpdir({ git: true })`, is exempt — its git commands are pinned to the temp directory)
 - Making network requests (even to `localhost` servers)
 - Relying on real clocks or wall-clock delays via `it.live(...)`
 
-If a file needs live behavior and lives in a unit directory, move it into the matching integration directory (or add its directory to `INTEGRATION_DIRS`) instead of leaving it to slow down every unit pass. A test that only needs a temp directory (`tmpdir` / `it.instance`) is still a unit test — the temp directory itself is not an integration concern.
+If a file needs live behavior and lives in a unit directory, take it out of the unit layer instead of leaving it to slow down every unit pass: move it into the matching integration directory (or add its directory to `INTEGRATION_DIRS`), or — when moving the file is not practical — rename it with the `*-integration.test.ts` suffix. That suffix is the file-level convention the runner honors: the unit layer ignores those files, while `test:integration` picks them up explicitly. It is equivalent to a directory move without restructuring `test/<domain>/`. A test that only needs a temp directory (`tmpdir` / `it.instance`) is still a unit test — the temp directory itself is not an integration concern.
 
 Prefer event-driven assertions over hard waits. Avoid `"5 seconds"`-style timeouts as a synchronization mechanism; wait on the actual signal (a `Deferred`, a callback) and keep the timeout only as a failure backstop.
 

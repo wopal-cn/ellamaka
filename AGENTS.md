@@ -51,7 +51,10 @@ Wopal capabilities enter the engine through two module groups in `packages/openc
 |---|---|
 | Lint | `bun run lint` |
 | Full-repo typecheck | `bun run typecheck` |
-| opencode package tests | `bun test --timeout 30000 --force-exit` (from `packages/opencode`) |
+| opencode package tests (unit) | `bun run test:unit` (from `packages/opencode`) |
+| opencode package tests (integration) | `bun run test:integration` (from `packages/opencode`) |
+| opencode package tests (e2e) | `bun run test:e2e` (from `packages/opencode`) |
+| opencode package tests (full regression) | `bun run test:all` (from `packages/opencode`) |
 | opencode build | `bun run build` (from `packages/opencode`) |
 | ellamaka-brand package tests | `bun test` (from `packages/ellamaka-brand`) |
 | Build ellamaka-branded CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
@@ -64,6 +67,8 @@ Wopal capabilities enter the engine through two module groups in `packages/openc
 | Desktop package tests | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
 
 Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/build.sh help` for full parameter documentation.
+
+opencode tests run through the layered entries above (`test:unit` for the daily loop, `test:integration` when a change touches an integration directory or a `*-integration.test.ts` file, `test:e2e` for `*-e2e.test.ts` files, `test:all` for full regression). Commits are gated: when the staged change contains `.ts`/`.tsx` files, `.husky/pre-commit` runs the opencode package unit layer (`bun run --cwd packages/opencode test:unit`) and rejects the commit on failure, adding roughly twenty seconds to the commit. Documentation-only commits skip the gate.
 
 ## Implementation Rules
 

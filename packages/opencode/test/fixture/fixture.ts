@@ -17,6 +17,7 @@ import { InstanceBootstrap } from "../../src/project/bootstrap-service"
 import type { InstanceContext } from "../../src/project/instance-context"
 import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { InstanceStore } from "../../src/project/instance-store"
+import { gitEnv } from "../lib/git-env"
 import { TestLLMServer } from "../lib/llm-server"
 
 const noopBootstrap = Layer.succeed(InstanceBootstrap.Service, InstanceBootstrap.Service.of({ run: Effect.void }))
@@ -75,7 +76,7 @@ function clean(dir: string) {
 
 async function stop(dir: string) {
   if (!(await exists(dir))) return
-  await $`git fsmonitor--daemon stop`.cwd(dir).quiet().nothrow()
+  await $`git fsmonitor--daemon stop`.cwd(dir).env(gitEnv(dir)).quiet().nothrow()
 }
 
 // Global test config path. Global.Path.config is fixed at module load time
@@ -86,10 +87,7 @@ const globalSettingsFile = path.join(Global.Path.config, "settings.jsonc")
 // Write a bare config (no ellamaka wrapper) to the global settings path that the
 // engine actually loads. Idempotent cleanup deletes the file when the fixture scope ends.
 export function writeGlobalTestConfig(config: Partial<Config.Info>) {
-  return fs.writeFile(
-    globalSettingsFile,
-    JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }),
-  )
+  return fs.writeFile(globalSettingsFile, JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }))
 }
 
 export function removeGlobalTestConfig() {
@@ -122,12 +120,13 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   const dirpath = sanitizePath(path.join(os.tmpdir(), "opencode-test-" + Math.random().toString(36).slice(2)))
   await fs.mkdir(dirpath, { recursive: true })
   if (options?.git) {
-    await $`git init`.cwd(dirpath).quiet()
-    await $`git config core.fsmonitor false`.cwd(dirpath).quiet()
-    await $`git config commit.gpgsign false`.cwd(dirpath).quiet()
-    await $`git config user.email "test@opencode.test"`.cwd(dirpath).quiet()
-    await $`git config user.name "Test"`.cwd(dirpath).quiet()
-    await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).quiet()
+    const git = gitEnv(dirpath)
+    await $`git init`.cwd(dirpath).env(git).quiet()
+    await $`git config core.fsmonitor false`.cwd(dirpath).env(git).quiet()
+    await $`git config commit.gpgsign false`.cwd(dirpath).env(git).quiet()
+    await $`git config user.email "test@opencode.test"`.cwd(dirpath).env(git).quiet()
+    await $`git config user.name "Test"`.cwd(dirpath).env(git).quiet()
+    await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).env(git).quiet()
   }
   let wroteConfig = false
   if (options?.config) {
@@ -192,7 +191,9 @@ export function tmpdirScoped(options?: {
     )
 
     const git = (...args: string[]) =>
-      spawner.spawn(ChildProcess.make("git", args, { cwd: dir })).pipe(Effect.flatMap((handle) => handle.exitCode))
+      spawner
+        .spawn(ChildProcess.make("git", args, { cwd: dir, env: gitEnv(dir) }))
+        .pipe(Effect.flatMap((handle) => handle.exitCode))
 
     if (options?.git) {
       yield* git("init")

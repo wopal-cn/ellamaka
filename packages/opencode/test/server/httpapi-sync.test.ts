@@ -35,7 +35,7 @@ describe("sync HttpApi", () => {
         Flag.OPENCODE_EXPERIMENTAL_WORKSPACES = true
         const tmp = yield* TestInstance
         const headers = { "x-opencode-directory": tmp.directory, "content-type": "application/json" }
-        const info = spyOn(Log.create({ service: "server.sync" }), "info")
+        const debug = spyOn(Log.create({ service: "server.sync" }), "debug")
         const session = yield* Session.use.create({ title: "sync" })
 
         const started = yield* Effect.promise(() =>
@@ -85,8 +85,8 @@ describe("sync HttpApi", () => {
         )
         expect(replayed.status).toBe(200)
         expect(yield* Effect.promise(() => replayed.json())).toEqual({ sessionID: session.id })
-        expect(info.mock.calls.some(([message]) => message === "sync replay requested")).toBe(true)
-        expect(info.mock.calls.some(([message]) => message === "sync replay complete")).toBe(true)
+        expect(debug.mock.calls.some(([message]) => message === "sync replay requested")).toBe(true)
+        expect(debug.mock.calls.some(([message]) => message === "sync replay complete")).toBe(true)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

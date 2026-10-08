@@ -10,4 +10,24 @@ if [ -n "$staged_ts" ]; then
   if [ -n "$non_test" ]; then
     bun typecheck
   fi
+
+  # Git exports repository-locator variables (GIT_DIR, GIT_INDEX_FILE, ...) to
+  # hooks. Tests build throwaway repositories in temp directories, so a leaked
+  # GIT_DIR redirects them at this checkout: false failures, and fixture
+  # `git init` / `git config` writes landing in the real repository config.
+  # Clear them so the unit layer sees the same environment as a direct run.
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+  unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
+
+  # Any staged TypeScript (source or test) must pass the opencode unit layer.
+  # Only the opencode package runs here: the root test:unit fans out through
+  # run-tests-root.ts to app/desktop/cordis, far beyond the commit budget.
+  if ! bun run --cwd packages/opencode test:unit; then
+    echo ""
+    echo "✖ pre-commit blocked: the opencode unit layer failed."
+    echo "  The commit was rejected; no bad revision enters history."
+    echo "  Reproduce with: bun run --cwd packages/opencode test:unit"
+    echo ""
+    exit 1
+  fi
 fi

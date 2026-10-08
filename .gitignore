@@ -32,3 +32,4 @@ logs/
 tsconfig.tsbuildinfo
 CLAUDE.md
 release/legacy-inventory.dry-run.json
+.bun-cache

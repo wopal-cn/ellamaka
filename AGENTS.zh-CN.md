@@ -51,7 +51,10 @@ Wopal 能力经 `packages/opencode/src/` 下的两个模块组进入引擎：`wo
 |---|---|
 | Lint | `bun run lint` |
 | 全仓类型检查 | `bun run typecheck` |
-| opencode 包测试 | `bun test --timeout 30000 --force-exit`（from `packages/opencode`） |
+| opencode 包测试（unit） | `bun run test:unit`（from `packages/opencode`） |
+| opencode 包测试（integration） | `bun run test:integration`（from `packages/opencode`） |
+| opencode 包测试（e2e） | `bun run test:e2e`（from `packages/opencode`） |
+| opencode 包测试（全量回归） | `bun run test:all`（from `packages/opencode`） |
 | opencode 构建 | `bun run build`（from `packages/opencode`） |
 | ellamaka-brand 包测试 | `bun test`（from `packages/ellamaka-brand`） |
 | 构建 ellamaka 品牌 CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
@@ -64,6 +67,8 @@ Wopal 能力经 `packages/opencode/src/` 下的两个模块组进入引擎：`wo
 | 桌面包测试 | `bun test --preload ./electron-mock.ts --force-exit src`（from `packages/ellamaka-desktop`） |
 
 测试不能从 repo root 运行。`./scripts/dev.sh help` 和 `./scripts/build.sh help` 查看完整参数说明。
+
+opencode 测试走上表的分层入口（`test:unit` 用于日常循环，改动涉及集成目录或 `*-integration.test.ts` 文件时跑 `test:integration`，`*-e2e.test.ts` 文件跑 `test:e2e`，`test:all` 用于全量回归）。提交设有门禁：当暂存变更包含 `.ts`/`.tsx` 文件时，`.husky/pre-commit` 会运行 opencode 包的单元层（`bun run --cwd packages/opencode test:unit`），失败即拒绝提交，给提交增加约二十秒。纯文档提交跳过门禁。
 
 ## Implementation Rules
 
