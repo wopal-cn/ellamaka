@@ -30,7 +30,7 @@ const generated = await import("./generate.ts")
 
 // ── DSH runtime manifest freshness gate ─────────────────────────────
 // This script is the generic opencode binary bundling point: the compiled
-// `src/index.ts` transitively imports `@wopal/ellamaka-cordis/runtime`, whose
+// `src/bootstrap.ts` transitively imports `@wopal/ellamaka-cordis/runtime`, whose
 // `embed-manifest.ts` statically imports `generated/dsh-runtime-manifest.json`
 // and is inlined by Bun at bundle time. Ensure the manifest exists and matches
 // the source before bundling. Release builds verify only (`--check`); dev
@@ -270,7 +270,12 @@ for (const item of buildTargets) {
       windows: {},
     },
     files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
-    entrypoints: ["./src/index.ts", parserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
+    entrypoints: [
+      "./src/bootstrap.ts",
+      parserWorker,
+      workerPath,
+      ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : []),
+    ],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MIGRATIONS: JSON.stringify(migrations),

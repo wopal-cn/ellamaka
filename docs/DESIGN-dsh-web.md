@@ -1,7 +1,7 @@
 # Web profile 设计
 
 > **Status**: Draft
-> **Updated**: 2026-10-08
+> **Updated**: 2026-10-09
 > **Parent**: `./DESIGN.md`
 
 `web` profile 承载 DSH 的完整界面与会话。宿主基座、home、包解析、数据导入和配置队列由 [DSH 基础设计](./DESIGN-dsh-base.md) 拥有，本文定义 Web 的插件供应链、声明式 preset 和界面承载。
@@ -84,9 +84,9 @@ Web 的 preset 目录由 agent-preset 声明与 agent-preset-registry 服务组�
 
 ### Runtime Capability Policy
 
-Web 的能力组合与执行后端一致。Bun 使用 native 工具模式，Node PTC provider 不进入其执行面；标准与 Cordis 声明去除需要该 provider 的 workflow 行，PTC 定义不进入可选目录。
+Web 的能力组合与执行后端一致。Bun 与 Node Desktop 都装配标准 `ptcRuntime`，标准、PTC、Cordis 以及依赖 `workflow-ptc` 的用户配置单不再因 Bun 宿主而裁掉 PTC 行。Bun 仍复用 rc.2 的官方 `@deepseek-ai/dsh-ptc-runtime-node` provider；Bridge 只适配两个宿主差异：用 Amaro 的 strip-only 结果补齐缺失的 `node:module.stripTypeScriptTypes`，以及把 Bun 不稳定的额外 fd 控制 pipe 映射为标准 stdin/stdout Duplex。stderr 仍承载 bootstrap/进程诊断，DSH 的 JsonChannel framing、binding、期限、取消、沙箱、输出限制和清理逻辑保持上游实现。
 
-Node Desktop 按实际运行时能力装配原生 ptcRuntime。程序以独立子进程执行，执行世界、bootstrap、期限、清理、环境和平台沙箱遵守 provider 契约，复用产品已携带的运行时。
+源码 Bun 执行 Bridge 的极小 child entry 后进入官方 `process.js`；编译后的 CLI 复用同一个 Ellamaka 可执行文件，通过 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 私有角色在正常 CLI 初始化之前进入 child bootstrap。Node Desktop 继续直接使用原生 Node provider，不经过 Bun 兼容层。两种 Bun 形态都必须验证真实程序执行、连续多次进程启动、取消与平台沙箱拒绝；在 macOS 上 `workspace-write` 的验收要求 provider 报告 full enforcement，`read-only` 必须拒绝临时目录写入。Bun 的 heap 参数不声明为 Node/V8 等价的硬内存上限；资源边界以已验证的沙箱、deadline、取消和输出上限为准。
 
 宿主能力补丁在每次完整配置生成中应用，原生管理操作也消费该补丁。用户自建声明引用不可用服务时保留具体诊断。Ellamaka 主 Session 的外部能力装配属于独立的 Session 设计。
 

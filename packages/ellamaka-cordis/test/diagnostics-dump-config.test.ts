@@ -23,13 +23,16 @@ async function installedPlugin(home: string, name: string, version = "1.0.0"): P
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, "package.json"),
-    JSON.stringify({ name, version, type: "module", main: "index.js", dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+    JSON.stringify({
+      name,
+      version,
+      type: "module",
+      main: "index.js",
+      dsh: { bundle: { patch: "./cordis.patch.yml" } },
+    }),
   )
   writeFileSync(join(dir, "index.js"), `export const name = ${JSON.stringify(name)}\n`)
-  writeFileSync(
-    join(dir, "cordis.patch.yml"),
-    `- insert:\n    - id: dsh-plugin:${name}\n      name: ${name}\n`,
-  )
+  writeFileSync(join(dir, "cordis.patch.yml"), `- insert:\n    - id: dsh-plugin:${name}\n      name: ${name}\n`)
   await withProfileManifestWrite(profileDir, (manifest) => {
     // Seed the official web template bundles first (initProfile semantics
     // for a pre-created manifest), then the fixture plugin.
@@ -124,9 +127,7 @@ describe("composeDshDumpLayers", () => {
       homePatches: [],
     })
 
-    expect(layers.map((l) => l.label)).toEqual([
-      "@deepseek-ai/dsh-base",
-    ])
+    expect(layers.map((l) => l.label)).toEqual(["@deepseek-ai/dsh-base"])
   })
 })
 
@@ -157,13 +158,14 @@ describe("dumpDshConfig", () => {
     // The injected dshHome value must be EXACTLY the derived DSH home
     // (<root>/home), never the territory root itself — pins the
     // territory-root -> homeDir derivation against a dshRoot mispass.
-    // renderConfigDump emits each config value as a YAML folded scalar: a
-    // `dshHome: >-` key line followed by the path indented on its own line,
-    // so the value is read from the line after each key.
-    const outputLines = output.split("\n")
-    const dshHomeValues = outputLines
-      .map((line, i) => (line.trim() === "dshHome: >-" ? outputLines[i + 1]?.trim() : undefined))
-      .filter((v): v is string => v !== undefined)
+    // Assert the semantic value rather than one YAML scalar style: rc.2's
+    // renderer emits ordinary paths as plain scalars while expressions may
+    // still use folded scalars.
+    const dshHomeValues = output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith("dshHome: "))
+      .map((line) => line.slice("dshHome: ".length))
     expect(dshHomeValues.length).toBeGreaterThan(0)
     expect(dshHomeValues.every((v) => v === join(home, "home"))).toBe(true)
   })
@@ -191,10 +193,7 @@ describe("dumpDshConfig", () => {
         },
       }) + "\n",
     )
-    writeFileSync(
-      join(webDir, "cordis.patch.yml"),
-      "- { id: timer, config: { note: user-marker } }\n",
-    )
+    writeFileSync(join(webDir, "cordis.patch.yml"), "- { id: timer, config: { note: user-marker } }\n")
 
     const output = await dumpDshConfig({
       dshHome: home,
@@ -238,11 +237,9 @@ describe("lifted patch builders snapshot equality", () => {
 
   test("webExtraPatches matches mountDshWeb rc.1 shape exactly", () => {
     const patches = webExtraPatches({
-      disableCodeRuntime: true,
       extraPatches: [{ id: "custom", extra: 1 }],
     })
     expect(patches).toEqual([
-      { id: "code-runtime", disabled: true },
       { id: "webserver", disabled: true },
       {
         id: "web-runtime",
@@ -253,7 +250,7 @@ describe("lifted patch builders snapshot equality", () => {
   })
 
   test("webExtraPatches without trustedHosts keeps the empty default (auth-fix-1 default behavior unchanged)", () => {
-    const patches = webExtraPatches({ disableCodeRuntime: false })
+    const patches = webExtraPatches({})
     const webRuntimeRow = patches.find((row) => (row as { id?: string }).id === "web-runtime")
     expect(webRuntimeRow).toEqual({
       id: "web-runtime",
@@ -441,4 +438,3 @@ describe("dumpDshConfig trustedHosts injection (auth-fix-1)", () => {
     expect(output).toContain("trustedHosts")
   })
 })
-

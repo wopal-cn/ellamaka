@@ -1,7 +1,7 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-08
+> **Updated**: 2026-10-09
 > **Parent**: `./DESIGN.md`
 > **Scope**: DSH v0.2 的现有工具采用、容器装配、审批与沙箱兼容。
 
@@ -89,4 +89,4 @@ Workbench 的选择器依据实际 ready、已装 adapter 与有效 sandbox 配�
 
 enforcing backend 不可用时返回 sandbox-unavailable，不能把受限请求转为无沙箱执行。运行结果区分执行结果、拒绝与实际 enforcement。
 
-PTC 的独立执行 provider 不属于当前工具投影所需的运行时。其启用、SDK 注入和 Session grant 由后续装配契约拥有。
+PTC 的独立执行 provider 不属于当前 native 工具投影所需的运行时；`ellamaka-tools` 仍以 native presentation 服务现有 read/edit/bash 等采用面。Web/Bun 宿主已经具备可用的 PTC 执行底座，后续 Session Assembly 可在同一 DSH 能力池上通过 scope + `tools.restrict()` + `presentAs("ptc")` 投影 `run_code`，SDK 注入和 Session grant 仍由独立装配契约拥有。

@@ -265,9 +265,9 @@ export async function mountDshEngine(
     // the host package closure, which packaged builds do not carry (B-01).
     webHub = new CordisHub(null, { context: new runtime.cordis.Context() })
     toolsHub = new CordisHub(null, { context: new runtime.cordis.Context() })
-    // The CLI serve/web runtime is bun, which lacks
-    // node:module.stripTypeScriptTypes, so code-runtime is disabled here; the
-    // Desktop sidecar (Node 22.18+) keeps it enabled.
+    // Bun keeps the released DSH PTC provider enabled. ellamaka-cordis
+    // supplies only the Bun compatibility seams (type stripping and a stable
+    // stdin/stdout child control transport); the DSH provider still owns execution.
     const dsh = await mountDshWeb(webHub.ctx, {
       home,
       port: server.port,
@@ -275,7 +275,6 @@ export async function mountDshEngine(
       logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
       installAnchor: anchor.path,
       runtime,
-      disableCodeRuntime: true,
       ellamakaCommand: resolveEllamakaCommand(),
       // The fence allowlist rides the web-runtime row into the official
       // webRuntime -> connection fence chain: user CORS trust for cross-origin

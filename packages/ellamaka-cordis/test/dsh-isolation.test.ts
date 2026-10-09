@@ -26,7 +26,7 @@ describe("dsh runtime isolation", () => {
     const ctx = new Context()
     let host: Awaited<ReturnType<typeof mountDshWeb>> | undefined
     try {
-      host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+      host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
       expect(process.env.DSH_HOME).toBeUndefined()
     } finally {
       if (prevDshHome !== undefined) process.env.DSH_HOME = prevDshHome
@@ -38,7 +38,7 @@ describe("dsh runtime isolation", () => {
   test("settings persist to the owned profile patch, not ~/.dsh", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-settings-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // The settings service is mounted; a namespaced update persists through
       // the file provider to `<home>/settings.yaml`.
@@ -85,7 +85,7 @@ describe("dsh runtime isolation", () => {
   test("ctx dshHomePath override resolves storages/sessions under home/", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-dshhomepath-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // The ctx-injected dshHomePath is what `!!js dshHomePath('sessions')`
       // expressions evaluate. Reading it directly proves the override is in
@@ -110,7 +110,7 @@ describe("dsh runtime isolation", () => {
     const ctx = new Context()
     let host: { dispose(): Promise<void> }
     try {
-      host = await mountDshWeb(ctx, { port: 4097, disableCodeRuntime: true })
+      host = await mountDshWeb(ctx, { port: 4097, disablePtcRuntime: true })
       const injected = ctx.get("dshHomePath") as ((...s: string[]) => string) | undefined
       expect(injected).toBeDefined()
       expect(injected!("sessions")).toBe(join(wopalHome, "dsh", "home", "sessions"))
@@ -133,7 +133,7 @@ describe("dsh runtime isolation", () => {
     // write to the user's default ~/.dsh.
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-llm-deepseek-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // Deterministic proof: with llm-deepseek disabled, its provider route is
       // not registered, so neither the anonymous-user-id resolution (runs on
@@ -157,7 +157,7 @@ describe("dsh runtime isolation", () => {
     process.env.DSH_TELEMETRY_MODE = "FULL"
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-telemetry-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // With session-telemetry-otel disabled, the `telemetry` service is absent.
       expect(ctx.get("telemetry")).toBeUndefined()

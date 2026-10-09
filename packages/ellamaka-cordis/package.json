@@ -7,8 +7,8 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
-    "test:unit": "bun test --path-ignore-patterns '**/plugins-runtime.test.ts'",
-    "test:integration": "bun test test/plugins-runtime.test.ts test/dsh-web.test.ts"
+    "test:unit": "bun test --path-ignore-patterns '**/plugins-runtime.test.ts' --path-ignore-patterns '**/bun-ptc-runtime.test.ts'",
+    "test:integration": "bun test test/plugins-runtime.test.ts test/dsh-web.test.ts test/bun-ptc-runtime.test.ts"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -28,7 +28,8 @@
     "./plugins/migrate-store": "./src/plugins/migrate-store.ts",
     "./plugins/patch-layer": "./src/plugins/patch-layer.ts",
     "./plugins/package-worker": "./src/plugins/package-worker.ts",
-    "./runtime/preload": "./src/runtime/preload.ts"
+    "./runtime/preload": "./src/runtime/preload.ts",
+    "./runtime/bun-ptc-child": "./src/runtime/bun-ptc-child.ts"
   },
   "files": [
     "dist"
@@ -72,6 +73,7 @@
     "@deepseek-ai/dsh-workflow": "0.2.0-rc.2",
     "@deepseek-ai/schemastery": "3.18.4",
     "@npmcli/arborist": "9.4.0",
+    "amaro": "1.1.8",
     "chokidar": "4.0.3",
     "pacote": "22.0.0",
     "resolve.exports": "2.0.3",

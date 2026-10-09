@@ -1,7 +1,7 @@
 # DSH 融合基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-08
+> **Updated**: 2026-10-09
 > **Parent**: `./DESIGN.md`
 > **Scope**: DSH v0.2 的文件领地、依赖闭包、profile 装配、配置重放与持久数据。
 
@@ -139,6 +139,8 @@ Bun 缺少官方 provider 消费的标准诊断 API 时，由 Bridge 在加载�
 Electron 使用产品内置 Node。宿主以官方 LocalSubprocessRuntime 的子类提供同一个公共 subprocess 服务，仅在控制通道、当前 Electron 可执行文件与官方 PTC bootstrap 三者同时匹配时恢复 `ELECTRON_RUN_AS_NODE=1`。控制协议、沙箱包装、进程所有权、取消及回收仍由 DSH 管理；用户不需要安装独立 Node。程序求值前清空环境变量。
 
 Bun 在引擎和界面 preload 之前安装 Node diagnostic 兼容层，解决 `getSystemErrorMessage` 的命名导出初始化时序；Node 原生实现保持。该处理仅涉及公开 builtin 函数，不伪造 Loader internal 或私有 Node 接口。
+
+Bun 的 PTC 兼容同样限制在确定的宿主差异上。主进程通过 Bun loader 对固定 rc.2 provider 的单一 `stripTypeScriptTypes` import 做精确替换，实际 strip-only 转换由随 Bridge 发布的 Amaro 执行。rc.2 默认把 JsonChannel 放在 `child_process` 的额外 fd 7 双向 pipe 上，而 Bun 连续创建额外 pipe 会出现可复现的 `ENOENT` / `EPIPE`；因此 Bun 路径只把该私有控制通道改走标准 stdin/stdout，stderr 保留为 bootstrap/进程诊断，官方 JsonChannel framing、binding、沙箱、取消、超时、输出预算与进程回收仍原样复用。源码态由 Bun 执行极小 child entry，编译态由同一产品二进制在 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 标记下进入私有 child 角色。固定 provider 的 strip、stdio/control、child bootstrap 任一适配锚点变化时，兼容层必须显式失败，禁止静默降级到无 PTC。
 
 ## Persistent Data
 

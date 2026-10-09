@@ -90,8 +90,6 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
     logDir: join(wopalHome, "logs"),
     installAnchor: resolved.path,
     runtime,
-    // The test runs under bun, which lacks node:module.stripTypeScriptTypes.
-    disableCodeRuntime: true,
   })
   const unmount = listener.mountNodeRoute({
     prefix: dsh.mountPath,
@@ -152,10 +150,15 @@ describe("dsh single-port integration", () => {
       const asset = await fetch(base + htmlAttr(assetMatch![1]), { headers })
       expect(asset.status).toBe(200)
 
-      // DSH plugin bundle under /dsh/plugins.
-      const pluginMatch = html.match(/src="(\/dsh\/plugins\/[^"]+)"/)
+      // rc.2 injects client modules as document-relative combo scripts
+      // (`plugins/??<id>/client.js,...&rev=...`). Resolve the advertised URL
+      // against the mounted DSH document and prove the combo route is served
+      // through the same Ellamaka listener.
+      const pluginMatch = html.match(/src="(plugins\/\?\?[^"]+)"/)
       expect(pluginMatch).not.toBeNull()
-      const plugin = await fetch(base + htmlAttr(pluginMatch![1]), { headers })
+      const pluginUrl = new URL(htmlAttr(pluginMatch![1]), base + "/dsh/")
+      expect(pluginUrl.pathname).toBe("/dsh/plugins/")
+      const plugin = await fetch(pluginUrl, { headers })
       expect(plugin.status).toBe(200)
 
       // Ellamaka API still served on the same port.

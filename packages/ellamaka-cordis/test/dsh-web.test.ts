@@ -9,6 +9,7 @@ import { once } from "node:events"
 import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
 import { bootDshWeb, migrateToolsProfileApprovalPatch, mountDshWeb, mountDshTools } from "../src/dsh-web"
+import { createDshRuntimeApi } from "../src/runtime/loader"
 
 /** Attach a VirtualWebServer to a raw server and return its base URL. */
 async function attachAndListen(webServer: { attach(server: Server): void }) {
@@ -106,7 +107,7 @@ describe("dsh web engine", () => {
     const host = await mountDshWeb(ctx, {
       home,
       port: 4097,
-      disableCodeRuntime: true,
+      disablePtcRuntime: true,
       ellamakaCommand: [process.execPath],
     })
 
@@ -175,6 +176,29 @@ describe("dsh web engine", () => {
     }
   }, 30_000)
 
+  test("mountDshWeb exposes the PTC runtime by default under Bun", async () => {
+    if (!process.versions.bun) return
+
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-ptc-"))
+    const req = createRequire(import.meta.url)
+    const anchor = req.resolve("@deepseek-ai/dsh/package.json")
+    const runtime = createDshRuntimeApi(anchor)
+    const ctx = new runtime.cordis.Context()
+    const host = await mountDshWeb(ctx, { home, port: 0, installAnchor: anchor, runtime })
+
+    try {
+      const ptcRuntime = ctx.get("ptcRuntime") as { language?: string; isolation?: string } | undefined
+      expect(ptcRuntime).toBeDefined()
+      expect(ptcRuntime?.language).toBe("typescript")
+      expect(ptcRuntime?.isolation).toBe("process")
+      const presets = await (ctx.get("agentPresets") as { list(): Promise<{ id: string; broken?: unknown }[]> }).list()
+      expect(presets.find((preset) => preset.id === "ptc")?.broken).toBeUndefined()
+    } finally {
+      await host.dispose()
+      await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
   test("mountDshWeb with an explicit installAnchor discovers presets from that closure", async () => {
     // Packaged-CLI scheme: the anchor lives in the materialised closure under
     // the dsh home, not in the module graph (DESIGN-dsh-base.md). The preset
@@ -185,7 +209,7 @@ describe("dsh web engine", () => {
     const req = createRequire(import.meta.url)
     const anchor = req.resolve("@deepseek-ai/dsh/package.json")
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, installAnchor: anchor, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, installAnchor: anchor, disablePtcRuntime: true })
 
     try {
       const presets = await ctx.agentPresets.list()
@@ -203,7 +227,7 @@ describe("dsh web engine", () => {
 
   test("bootDshWeb owns a fresh context and disposes it", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
-    const host = await bootDshWeb({ home, port: 4097, disableCodeRuntime: true })
+    const host = await bootDshWeb({ home, port: 4097, disablePtcRuntime: true })
 
     try {
       expect(host.mountPath).toBe("/dsh")
@@ -223,7 +247,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb injects the iframe adapter as a real <script> node that executes", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
     try {
       const { server, baseUrl } = await attachAndListen(host.webServer)
@@ -262,7 +286,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb dispose closes upgrade sockets dispatched through the virtual webserver", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
-    const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
     const { server, baseUrl } = await attachAndListen(host.webServer)
     const port = (server.address() as { port: number }).port
@@ -323,7 +347,7 @@ describe("dsh web engine", () => {
       port: 4097,
       logDir,
       getLogLevel: () => logLevel,
-      disableCodeRuntime: true,
+      disablePtcRuntime: true,
     })
 
     try {
@@ -367,7 +391,7 @@ describe("dsh web engine", () => {
       home,
       port: 4098,
       logDir,
-      disableCodeRuntime: true,
+      disablePtcRuntime: true,
     })
 
     try {

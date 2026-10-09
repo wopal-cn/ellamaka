@@ -39,7 +39,7 @@ beforeAll(async () => {
   // EEXIST-tolerant write; the plugins healer finds no user profiles yet),
   // and each owns its own cordis context — so they boot concurrently.
   ;[web, tools] = await Promise.all([
-    bootDshWeb({ home, port: 4097, disableCodeRuntime: true }),
+    bootDshWeb({ home, port: 4097, disablePtcRuntime: true }),
     bootDshTools({ home, port: 0 }),
   ])
   updates = 0

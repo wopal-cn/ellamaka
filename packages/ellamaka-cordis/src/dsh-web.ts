@@ -33,6 +33,7 @@ import { installProfileModuleRouting, projectRuntimePackages } from "./plugins/p
 import { profileCapabilityPatches } from "./plugins/profile-capabilities.js"
 import { createProfilePackages, createProfilePluginManager } from "./plugins/plugin-metadata.js"
 import { installElectronSubprocess } from "./runtime/electron-subprocess.js"
+import { installBunPtcCompatibility } from "./runtime/bun-ptc.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
@@ -379,13 +380,11 @@ export interface DshHostOptions {
    */
   extraPatches?: Record<string, unknown>[]
   /**
-   * Disable the `code-runtime` plugin. It depends on
-   * `node:module.stripTypeScriptTypes` (Node 22.18+), which the bun dev
-   * runtime lacks — so the CLI serve path (bun) must disable it. The Desktop
-   * sidecar runs under Node 22.18+ and should keep it enabled. Defaults to
-   * `false` (enabled).
+   * Explicitly disable the DSH PTC runtime and PTC-backed preset rows. Bun
+   * normally keeps PTC enabled through the Bridge compatibility layer; this
+   * switch is reserved for diagnostics, recovery and focused tests.
    */
-  disableCodeRuntime?: boolean
+  disablePtcRuntime?: boolean
   /**
    * The resolved DSH runtime module handle, loaded via
    * `@wopal/ellamaka-cordis/runtime` from the materialised closure
@@ -499,6 +498,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // installed closure even when the anchor path is a symlink (pnpm layout,
   // test fixtures); for a real materialised closure it is a no-op.
   const installAnchor = realpathSync(opts.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"))
+  installBunPtcCompatibility()
 
   const { createRuntimeResolution, resolveProfileDir, initProfile } = runtime.appBoot
   const loadProfile = (...args: Parameters<typeof runtime.appBoot.loadProfile>) => {
@@ -608,7 +608,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     profileCapabilityPatches(
       profileName,
       runtime.appBoot.composeEntries([input as Parameters<typeof runtime.appBoot.composeEntries>[0][number]]),
-      opts.disableCodeRuntime === true || process.versions.bun !== undefined,
+      opts.disablePtcRuntime === true,
     )
   const patches = composeFullPatchStack(stackContext)
   const rootConfig = join(profile.dir, "cordis.yml")
@@ -893,7 +893,6 @@ export async function mountDshWeb(ctx: Context, opts: DshHostOptions): Promise<D
     requireWebServer: true,
     virtualWebServer,
     extraPatches: webExtraPatches({
-      disableCodeRuntime: opts.disableCodeRuntime,
       trustedHosts: opts.trustedHosts,
       extraPatches: opts.extraPatches,
     }),

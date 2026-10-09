@@ -29,7 +29,7 @@ describe("rc.2 profile assembly", () => {
     const host = await bootDshWeb({
       home,
       port: 0,
-      disableCodeRuntime: true,
+      disablePtcRuntime: true,
       ellamakaCommand: [process.execPath, "fixture.ts"],
     })
     try {

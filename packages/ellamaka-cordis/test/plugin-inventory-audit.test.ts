@@ -7,7 +7,7 @@ import { bootDshWeb } from "../src/dsh-web"
 
 test("actual Web inventory has metadata for every global and shipped preset row without Node internals", async () => {
   const home = mkdtempSync(join(tmpdir(), "dsh-inventory-audit-"))
-  const host = await bootDshWeb({ home, port: 0, disableCodeRuntime: true })
+  const host = await bootDshWeb({ home, port: 0, disablePtcRuntime: true })
   try {
     const inventory = await createRequire(import.meta.url)(
       "@deepseek-ai/dsh-host-plugin-inventory",
