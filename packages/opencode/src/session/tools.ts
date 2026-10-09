@@ -113,14 +113,25 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }
       }),
     ask: (req) =>
-      permission
-        .ask({
+      Effect.gen(function* () {
+        const runtime = { rules: [] as Permission.Rule[] }
+        yield* plugin.trigger(
+          "experimental.permission.rules",
+          {
+            sessionID: input.session.id,
+            agent: input.agent.name,
+            permission: req.permission,
+            patterns: req.patterns,
+          },
+          runtime,
+        )
+        yield* permission.ask({
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? [], runtime.rules),
         })
-        .pipe(Effect.orDie),
+      }).pipe(Effect.orDie),
   })
 
   for (const item of yield* registry.tools({

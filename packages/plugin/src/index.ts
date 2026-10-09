@@ -10,7 +10,7 @@ import type {
   Part,
   Config as SDKConfig,
 } from "@wopal/ellamaka-sdk"
-import type { Provider as ProviderV2, Model as ModelV2, Auth } from "@wopal/ellamaka-sdk/v2"
+import type { Provider as ProviderV2, Model as ModelV2, Auth, PermissionRule } from "@wopal/ellamaka-sdk/v2"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
@@ -50,7 +50,7 @@ export type WorkspaceInfo = {
   name: string
   branch: string | null
   directory: string | null
-  extra: unknown | null
+  extra: unknown
   projectID: string
 }
 
@@ -289,6 +289,10 @@ export interface Hooks {
     output: { headers: Record<string, string> },
   ) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
+  "experimental.permission.rules"?: (
+    input: { sessionID: string; agent: string; permission: string; patterns: string[] },
+    output: { rules: PermissionRule[] },
+  ) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },
