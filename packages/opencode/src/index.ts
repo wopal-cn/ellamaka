@@ -1,3 +1,4 @@
+import "@wopal/ellamaka-cordis/runtime/preload"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
@@ -38,6 +39,7 @@ import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
+import { DshPackageWorkerCommand } from "./cli/cmd/dsh-package-worker"
 import { DshInitCommand } from "./cli/cmd/dsh-init"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
@@ -119,6 +121,9 @@ const cli = yargs(args)
     }
 
     const command = typeof opts._?.[0] === "string" ? opts._[0] : ""
+    // Native plugin-management children consume stdout as machine data and
+    // only operate on their scoped profile; they do not initialize the engine.
+    if (command === "dsh") return
     const role: "serve" | "tui" = SERVER_COMMANDS.has(command) ? "serve" : "tui"
     const detection = detectWopalSpace(process.cwd())
     // The logger routes by role and space itself (`WOPAL_SPACE_ROOT` below) —
@@ -279,6 +284,7 @@ const cli = yargs(args)
         .command(DshPluginCommand)
         .command(DshDumpConfigCommand)
         .command(DshInitCommand)
+        .command(DshPackageWorkerCommand)
         .epilogue(DSH_HELP_EXAMPLES),
     handler: async (argv) => {
       // Official resolveBoot semantics (Plan 223 D-01/D-03): the root flags

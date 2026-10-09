@@ -17,11 +17,7 @@ import { dirname, join } from "node:path"
 import { DEFAULT_DSH_RUNTIME_MANIFEST, resolveInstallAnchor } from "@wopal/ellamaka-cordis/runtime"
 
 /** The real `@deepseek-ai/*` tree shipped with the cordis package. */
-const CORDIS_DEEPSEEK_AI_DIR = join(
-  dirname(require.resolve("@wopal/ellamaka-cordis/package.json")),
-  "node_modules",
-  "@deepseek-ai",
-)
+const CORDIS_DEEPSEEK_AI_DIR = dirname(dirname(require.resolve("@deepseek-ai/dsh/package.json")))
 
 /**
  * A minimal valid npm lockfile v3 document — the runtime-lock shape the real

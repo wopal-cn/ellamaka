@@ -26,17 +26,17 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 
 Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.wopal/` ontology → `.wopal-space/` runtime.
 
-| Directory | Responsibility |
-|---|---|
-| `packages/opencode/` | Inherited OpenCode engine main package; see `packages/opencode/AGENTS.md` for internal rules |
-| `packages/ellamaka-core/` | Shared core, flags, global paths, installation/runtime primitives |
-| `packages/ui/` | Inherited UI component library; only modify when engine/TUI requires |
-| `packages/plugin/` | Workspace support package |
-| `packages/sdk/` | SDK workspace; JS SDK regeneration uses existing script |
-| `packages/ellamaka-brand/` | Brand constants, logo, build wrapper, WopalSpace auto-detection, install path detection, and package-level tests |
-| `packages/ellamaka-app/` | Workbench Web UI frontend; see `packages/ellamaka-app/AGENTS.md` for internal rules |
+| Directory                    | Responsibility                                                                                                            |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `packages/opencode/`         | Inherited OpenCode engine main package; see `packages/opencode/AGENTS.md` for internal rules                              |
+| `packages/ellamaka-core/`    | Shared core, flags, global paths, installation/runtime primitives                                                         |
+| `packages/ui/`               | Inherited UI component library; only modify when engine/TUI requires                                                      |
+| `packages/plugin/`           | Workspace support package                                                                                                 |
+| `packages/sdk/`              | SDK workspace; JS SDK regeneration uses existing script                                                                   |
+| `packages/ellamaka-brand/`   | Brand constants, logo, build wrapper, WopalSpace auto-detection, install path detection, and package-level tests          |
+| `packages/ellamaka-app/`     | Workbench Web UI frontend; see `packages/ellamaka-app/AGENTS.md` for internal rules                                       |
 | `packages/ellamaka-desktop/` | Electron desktop app hosting ellamaka-app Workbench and local Ellamaka sidecar; see `packages/ellamaka-desktop/AGENTS.md` |
-| `docs/` | Project DESIGN, API contract, references, research, and plans |
+| `docs/`                      | Project DESIGN, API contract, references, research, and plans                                                             |
 
 ### Wopal Integration
 
@@ -47,21 +47,21 @@ Wopal capabilities enter the engine through two module groups in `packages/openc
 
 ## Development Commands
 
-| Scenario | Command |
-|---|---|
-| Lint | `bun run lint` |
-| Full-repo typecheck | `bun run typecheck` |
-| opencode package tests | `bun test --timeout 30000 --force-exit` (from `packages/opencode`) |
-| opencode build | `bun run build` (from `packages/opencode`) |
-| ellamaka-brand package tests | `bun test` (from `packages/ellamaka-brand`) |
-| Build ellamaka-branded CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
-| Build CLI binary | `./scripts/build.sh cli` |
-| Build desktop app | `./scripts/build.sh desktop` |
-| Release CLI | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]` |
-| Release Desktop | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
-| Withdraw a released version | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
-| Dev server (TUI/Workbench/Desktop) | `./scripts/dev.sh` |
-| Desktop package tests | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
+| Scenario                           | Command                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| Lint                               | `bun run lint`                                                                              |
+| Full-repo typecheck                | `bun run typecheck`                                                                         |
+| opencode package tests             | `bun test --timeout 30000 --force-exit` (from `packages/opencode`)                          |
+| opencode build                     | `bun run build` (from `packages/opencode`)                                                  |
+| ellamaka-brand package tests       | `bun test` (from `packages/ellamaka-brand`)                                                 |
+| Build ellamaka-branded CLI         | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app`                      |
+| Build CLI binary                   | `./scripts/build.sh cli`                                                                    |
+| Build desktop app                  | `./scripts/build.sh desktop`                                                                |
+| Release CLI                        | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]`                    |
+| Release Desktop                    | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]`              |
+| Withdraw a released version        | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]`           |
+| Dev server (TUI/Workbench/Desktop) | `./scripts/dev.sh`                                                                          |
+| Desktop package tests              | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
 
 Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/build.sh help` for full parameter documentation.
 
@@ -109,7 +109,7 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 
 ### Cordis Development Constraints
 
-- **Dependency boundary**: `@deepseek-ai/cordis` appears only inside `@wopal/ellamaka-cordis` (the version is owned by that package's `package.json` and never restated in docs); deeply-coupled dsh packages (agent-loop/session/session-query/compaction/subagent/schedule) stay out of mainline runtime for now (see [ellamaka design](./docs/DESIGN.md) current conventions — no red lines in PoC, changes need user+Wopal joint confirmation); the runtime probe test (`forbidden-load.test.ts`) remains as an observation tool
+- **Dependency boundary**: `@deepseek-ai/cordis` appears only inside `@wopal/ellamaka-cordis`, whose package.json owns the version. Keep DSH session/agent-loop providers out of the Ellamaka tool-adoption path; the independent web profile owns the complete DSH runtime. Contract/type packages in the closure do not imply provider activation. Changes to the adoption boundary require user and Wopal agreement; `forbidden-load.test.ts` remains an observation tool.
 - **Live-home quarantine (dsh in ellamaka)**: while the ellamaka engine is running, nothing outside the engine process may write under `$WOPAL_HOME/dsh/home/profiles/` — including "idempotent" writes whose content is unchanged (the loader's standing rebuild keys on composition-file mtime/size, not content, so a same-content write races the engine and can trigger the tool-cordis registration-conflict error storm). Tests, dumps, and diagnostics that would touch profile files run against a temp home by injection (`dumpDshConfig`/`mountDshWeb` accept `dshHome`/`installAnchor`); CLI tests assert definitions or use injected temp homes, never the real `Global.Path.wopalHome`. Engine restart is the user's action; the host never repairs the live home. The plugin install area is the profile's own `node_modules/` + the profile `package.json` declaration (official semantics) — the legacy `plugins/` install area and `installed.json` store are retired (a leftover store file migrates once into the profile manifests on the next CLI run).
 - **Toolchain isolation — dsh profiles vs wopal root**: dsh profile plugins are installed by the Bun installer into each profile's own `node_modules/`. The official `dsh` CLI is a pnpm shell; never point any command at `$WOPAL_HOME/dsh/home` — a `pnpm-workspace.yaml` at the wopal root makes pnpm climb to `$WOPAL_HOME` as the workspace root, listing root deps instead of the profile's plugins and destroying Bun-managed topologies on add/remove (verified 2026-09-09). `$WOPAL_HOME` root dependencies are owned exclusively by the npm/arborist toolchain (`package.json` + `package-lock.json`); never run `pnpm install` or `bun install` at the wopal root — it overwrites the node_modules layout and produces the three-lockfile pollution (npm/pnpm/bun on the same dependency set, observed 2026-09-09).
 - **Bridge form**: all Effect↔async bridges follow the bridge API rules in [ellamaka design](./docs/DESIGN.md) (`Effect.forkIn(scope)(work)` with the work Fiber held; interrupt via `runtime.runFork(Fiber.interrupt(fiber))`; never drive long-running work via `runPromise`)
@@ -117,10 +117,10 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - **Test gate**: the bridge package's own tests live in `packages/ellamaka-cordis/test/`; cross-package behavior is carried by the opencode-side `test/cli/serve/dsh-mount.test.ts`, `test/cli/cmd/tui/dsh-mount.test.ts`, `test/server/dsh-single-port.test.ts`, and peers; bridge package changes keep those tests green
 - **Event-log folds are LAST-wins**: dsh session events (`sandbox/mode`, `approval/policy`) fold with the last event winning. "Restore the default" requires appending the default value explicitly; "equal to default" and "not chosen" are different semantics and must never share a code path (see the approval bridge section and its fold invariant in [tool container design](./docs/DESIGN-ellamaka-tools.md)). A test that asserts "same value appends nothing" pins the wrong semantics unless the log carries no prior overrides.
 - **Host never repairs the live dsh home**: closure materialization is the Runtime Manager's job at startup. A missing or corrupt closure triggers automatic materialization. Never ask the user to run a repair script, and never hand-edit `$WOPAL_HOME/dsh` content to fix a startup failure.
-- **Bun host compatibility gate**: the released `ellamaka serve` runs as a single Bun process. User plugins must not require Node private module loaders or `--expose-internals`. `plugin add` completes a static dependency scan and an isolated mount precheck before writing the profile declaration or touching a running container; an incompatible plugin is rejected with an actionable diagnostic. Never fake `loader.internal`, switch to Node, or degrade the whole host to work around it. The official Node-only `cordis-plugin-hmr` is a host-side exception: the Bun path uses the Bridge's HMR adapter instead, and that exception never transfers to third-party plugins.
+- **Bun host compatibility gate**: the released `ellamaka serve` runs as a single Bun process. User plugins must not require Node private module loaders or `--expose-internals`. `plugin add` completes a static dependency scan and an isolated mount precheck before writing the profile declaration or touching a running container; an incompatible plugin is rejected with an actionable diagnostic. Never fake `loader.internal`, switch to Node, or degrade the whole host to work around it. The Bridge owns the v0.2 configuration HMR seam (`watchConfig` and `runExclusive`) and public profile module routing on each host; third-party plugins must pass the same compatibility gate.
 - **Plugin installation uses no external toolchain**: the installer never forwards to pnpm or npm. It reuses the Runtime Manager's pacote download and registry speed-probe, and resolves user plugin trees with the built-in minimal resolver at runtime.
 - **Plugins install once, activate per profile**: installation is a process-level action (install, upgrade, uninstall happen once for the whole host); activation is declared per container through the profile bundle list. Never run two versions of the same package in one process.
-- **Tool container never creates a session**: tool calls go through the dedicated `ellamaka-tools` profile. The container creates and holds no dsh session, and the adapter passes only the minimal per-call context the tools consume. The web profile stays complete and is never reused as a tool backend. The disable list is the profile's user patch layer: ellamaka seeds it only when the template is empty and never overwrites user edits.
+- **Tool container never creates a session**: tool calls go through the dedicated `ellamaka-tools` profile. The container creates and holds no dsh session, and the adapter passes only the minimal per-call context the tools consume. The web profile stays complete and is never reused as a tool backend. User patch content is preserved. Host capability guards separately enforce the session-free profile and available backends across every composition replay.
 - **`ELLAMAKA_DSH` is the only enable switch**: it defaults to on. serve, web, TUI, and the Desktop sidecar all disable through `ELLAMAKA_DSH=0`. Never introduce a second enable branch.
 - **DSH territory is `$WOPAL_HOME/dsh` only**: dependency closures, profile definitions, and runtime data live there. The host sets `DSH_HOME=$WOPAL_HOME/dsh/home` at process start; integration code never reads that env var for its own paths. `~/.dsh` belongs to the official dsh CLI — never create, modify, or delete anything inside it.
 - **Multi-profile isolation**: the core containers (web and `ellamaka-tools`) stay in one process. Experimental third-party profiles run in separate processes with their own DSH_HOME. They never enter the main web container and never share the main engine's home or profiles — a running engine's `profiles/` directory is engine territory. Closures are read-only and may be shared; home must be isolated.
@@ -143,16 +143,16 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 
 When diagnosing serve, TUI, or sidecar behavior, widen output through the log level rather than adding temporary records to the code. One level mechanism serves every component: `--log-level` (engine process tree) > `ELLAMAKA_LOG_LEVEL` > `wopal.logging.level` (`$WOPAL_HOME/config/settings.jsonc`) > `INFO`. TRACE always names its categories; `--log-level TRACE` without `--trace` is rejected on purpose.
 
-| Scenario | Command | Notes |
-|----------|---------|-------|
-| List trace categories | `ellamaka serve --trace` | Prints the registry and exits |
-| Default (quiet, structured) | `ellamaka serve` | `INFO`, warnings, and failures only |
-| Permission + event lifecycle | `ellamaka serve --trace permission,bus` | Promotes the level to `TRACE`; other categories stay silent |
-| Session/LLM loop detail | `ellamaka serve --trace session,llm` | The loops that historically flooded the log |
-| Plugin and I/O startup | `ellamaka serve --trace plugin,io` | Plugin load, MCP connect, LSP/format activity |
-| Every category (escape hatch) | `ellamaka serve --trace all` | Must be explicit; no implicit all |
-| Implementation diagnostics | `ellamaka serve --log-level DEBUG` | Bounded, still redacted |
-| Override trace promotion | `ellamaka serve --log-level INFO --trace bus` | Explicit level wins; no `TRACE` records emit |
+| Scenario                      | Command                                       | Notes                                                       |
+| ----------------------------- | --------------------------------------------- | ----------------------------------------------------------- |
+| List trace categories         | `ellamaka serve --trace`                      | Prints the registry and exits                               |
+| Default (quiet, structured)   | `ellamaka serve`                              | `INFO`, warnings, and failures only                         |
+| Permission + event lifecycle  | `ellamaka serve --trace permission,bus`       | Promotes the level to `TRACE`; other categories stay silent |
+| Session/LLM loop detail       | `ellamaka serve --trace session,llm`          | The loops that historically flooded the log                 |
+| Plugin and I/O startup        | `ellamaka serve --trace plugin,io`            | Plugin load, MCP connect, LSP/format activity               |
+| Every category (escape hatch) | `ellamaka serve --trace all`                  | Must be explicit; no implicit all                           |
+| Implementation diagnostics    | `ellamaka serve --log-level DEBUG`            | Bounded, still redacted                                     |
+| Override trace promotion      | `ellamaka serve --log-level INFO --trace bus` | Explicit level wins; no `TRACE` records emit                |
 
 - Log routing is role-scoped: `serve`/`sidecar` (and `web`) always write the global domain `$WOPAL_HOME/logs/`; the interactive `tui` role writes `<space>/.wopal-space/logs/` when launched inside a WopalSpace and `$WOPAL_HOME/logs/` otherwise. Dev runs (`dev.sh`) override the directory through `WOPAL_DEBUG_LOG_DIR` → `.wopal-space/logs/dev/<scope>/`, with stable dev file names `ellamaka-dev-<role>.log`. Cleanup keeps the latest 10 timestamped files per directory.
 - DSH has four levels, so host `TRACE` maps to DSH `DEBUG` at the boundary; DSH log files are `$WOPAL_HOME/logs/dsh-runtime.log` (single file) and one bounded `dsh-plugins-<profile>.log` per profile (`web`, `ellamaka-tools`).
@@ -174,13 +174,13 @@ When diagnosing serve, TUI, or sidecar behavior, widen output through the log le
 
 Use these entries to verify GUI, onboarding, and desktop shell behavior. An agent can check Desktop through CDP; hand off only behavior that still needs human observation.
 
-| Entry | Command | Isolation |
-|-------|---------|-----------|
-| Desktop (regular) | `./scripts/dev.sh desktop` | Uses the real environment; first run needs `--rebuild` to build the sidecar |
-| Desktop (CDP) | `./scripts/dev.sh desktop --rebuild --cdp-debug` | Uses the real environment; ports 5173 and 9222 must be free |
-| Workbench / backend | `./scripts/dev.sh serve` | Port 4096; `--cdp-debug` opens 9222 CDP |
-| TUI | `./scripts/dev.sh tui` | In-process backend by default |
-| Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
+| Entry               | Command                                                   | Isolation                                                                   |
+| ------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Desktop (regular)   | `./scripts/dev.sh desktop`                                | Uses the real environment; first run needs `--rebuild` to build the sidecar |
+| Desktop (CDP)       | `./scripts/dev.sh desktop --rebuild --cdp-debug`          | Uses the real environment; ports 5173 and 9222 must be free                 |
+| Workbench / backend | `./scripts/dev.sh serve`                                  | Port 4096; `--cdp-debug` opens 9222 CDP                                     |
+| TUI                 | `./scripts/dev.sh tui`                                    | In-process backend by default                                               |
+| Stop                | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | —                                                                           |
 
 - Desktop CDP: `agent-browser --session <name> connect 9222` connects to the Electron window for UI verification.
 - Logs (dev runs): `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`. `<scope>` is the first 10 hex chars of the md5 of the repo/worktree root that owns `scripts/dev.sh` (symlinks resolved) — resolve it from `.wopal-space/logs/dev/registry` (one `<scope> <root>` per line) or recompute the same way dev.sh does: `printf '%s' "<root>" | md5 -q | cut -c1-10`. A worktree run logs into its base space's ledger (a `.worktrees` path anchors to the space root).

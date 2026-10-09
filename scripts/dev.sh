@@ -42,6 +42,10 @@ space="$(find_space_root "$root")"
 opencode_entry="$root/packages/opencode/src/index.ts"
 opencode_dir="$root/packages/opencode"
 opencode_preload="$opencode_dir/node_modules/@opentui/solid/scripts/preload.ts"
+if [ ! -f "$opencode_preload" ]; then
+  opencode_preload="$root/node_modules/@opentui/solid/scripts/preload.ts"
+fi
+dsh_diagnostic_preload="$root/packages/ellamaka-cordis/src/runtime/preload.ts"
 ellamaka_app_dir="$root/packages/ellamaka-app"
 DESKTOP_DIR_ABS="$root/packages/ellamaka-desktop"
 
@@ -665,7 +669,7 @@ start_backend() {
   fi
   args+=("$@")
   [ -f "$preload" ] || { echo "missing OpenTUI preload: $preload"; return 1; }
-  start_process backend "$port" "$BACKEND_LOG" "$opencode_dir" env "${env_args[@]}" bun --preload "$preload" "$opencode_entry" "${args[@]}"
+  start_process backend "$port" "$BACKEND_LOG" "$opencode_dir" env "${env_args[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$preload" "$opencode_entry" "${args[@]}"
 }
 
 start_frontend() {
@@ -891,7 +895,7 @@ cmd_tui() {
       fi
       cd "$opencode_dir"
       write_record tui - "$$" "$(pgid_of "$$")"
-      exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$RECORD_PORT" --dir "$caller_pwd"
+      exec env "${attach_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$RECORD_PORT" --dir "$caller_pwd"
     fi
 
     if ! require_own_instance_stopped backend "$PORT" || ! require_own_instance_stopped frontend "$APP_PORT"; then
@@ -916,7 +920,7 @@ cmd_tui() {
     echo "  → $(workbench_entry_url "$APP_PORT")"
     cd "$opencode_dir"
     write_record tui - "$$" "$(pgid_of "$$")"
-    exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
+    exec env "${attach_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
   fi
 
   mkdir -p "$DEV_DIR"
@@ -931,7 +935,7 @@ cmd_tui() {
   fi
   cd "$caller_pwd"
   write_record tui - "$$" "$(pgid_of "$$")"
-  exec env "${tui_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${tui_args[@]}" "${ns_arg[@]}" "${passthrough[@]}"
+  exec env "${tui_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${tui_args[@]}" "${ns_arg[@]}" "${passthrough[@]}"
 }
 
 cmd_serve() {

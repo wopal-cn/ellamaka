@@ -1,4 +1,6 @@
 [install]
+# DSH services retain identity across package imports; isolated peer copies split scopes.
+linker = "hoisted"
 exact = true
 # Only install newly resolved package versions published at least 3 days ago.
 minimumReleaseAge = 259200

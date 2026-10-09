@@ -1,0 +1,4 @@
+preload = ["./src/runtime/preload.ts"]
+
+[test]
+preload = ["./src/runtime/preload.ts"]

@@ -227,6 +227,19 @@ async function start(command: StartCommand) {
     await mountDshIfPresent(command)
     await mountDshToolsIfPresent(command)
     await startDshPluginWatcher(command)
+    const { setDshStatus } = await import("virtual:opencode-server")
+    if (dshLaunchState?.status === "ready") {
+      if (dshHost && dshToolsHost) setDshStatus("ready")
+      else {
+        setDshStatus("degraded")
+        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+        await dshPluginService?.stop()
+        dshPluginService = undefined
+        await Promise.allSettled([dshHost?.dispose(), dshToolsHost?.dispose()])
+        dshHost = undefined
+        dshToolsHost = undefined
+      }
+    }
     parentPort.postMessage({ type: "ready" })
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
@@ -450,7 +463,7 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
     entry: "tui",
     manifest,
   })
-  setDshStatus(status)
+  if (status !== "ready") setDshStatus(status)
   sidecarLog.info("dsh.desktop.init.status", { status })
   if (status !== "ready") {
     dshLaunchState = { status }

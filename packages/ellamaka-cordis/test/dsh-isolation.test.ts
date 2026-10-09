@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, existsSync } from "node:fs"
+import { mkdtempSync, existsSync, readFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
@@ -35,7 +35,7 @@ describe("dsh runtime isolation", () => {
     }
   }, 30_000)
 
-  test("settings runtime file lands in home/ not ~/.dsh", async () => {
+  test("settings persist to the owned profile patch, not ~/.dsh", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-settings-"))
     const ctx = new Context()
     const host = await mountDshWeb(ctx, { home, port: 4097, disableCodeRuntime: true })
@@ -50,8 +50,9 @@ describe("dsh runtime isolation", () => {
       // Wait a tick for the async persist to flush to disk.
       await new Promise((r) => setTimeout(r, 300))
 
-      const homeSettings = join(home, "home", "settings.yaml")
+      const homeSettings = join(home, "home", "profiles", "web", "cordis.patch.yml")
       expect(existsSync(homeSettings)).toBe(true)
+      expect(readFileSync(homeSettings, "utf8")).toContain("test-provider")
 
       // The written document lives under the mount's home/ dir — never the
       // user's default ~/.dsh home. The home dir for this mount is a temp dir,

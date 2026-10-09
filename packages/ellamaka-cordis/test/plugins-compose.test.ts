@@ -76,12 +76,7 @@ describe("composeFullPatchStack (official bundle semantics)", () => {
       extraPatches: [{ id: "extra-row" }],
       homePatches: [{ id: "home-row" }],
     })
-    expect(stack).toEqual([
-      { id: "bundle-row" },
-      { id: "user-row" },
-      { id: "extra-row" },
-      { id: "home-row" },
-    ])
+    expect(stack).toEqual([{ id: "bundle-row" }, { id: "user-row" }, { id: "extra-row" }, { id: "home-row" }])
   })
 
   test("a closure callback for profileLayers is called and flattened", () => {
@@ -202,10 +197,22 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
     mkdirSync(src, { recursive: true })
     writeFileSync(
       join(src, "package.json"),
-      JSON.stringify({ name: "fixture-dsh-plugin", version: "1.0.0", type: "module", main: "index.js", dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+      JSON.stringify({
+        name: "fixture-dsh-plugin",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        dsh: { bundle: { patch: "./cordis.patch.yml" } },
+      }),
     )
-    writeFileSync(join(src, "cordis.patch.yml"), "- insert:\n    - id: dsh-plugin:fixture-dsh-plugin\n      name: fixture-dsh-plugin\n")
-    writeFileSync(join(src, "index.js"), "export const name = \"fixture-dsh-plugin\"\nexport function apply(ctx) { ctx.provide(\"fixture-dsh-plugin.marker\", \"mounted\") }\n")
+    writeFileSync(
+      join(src, "cordis.patch.yml"),
+      "- insert:\n    - id: dsh-plugin:fixture-dsh-plugin\n      name: fixture-dsh-plugin\n",
+    )
+    writeFileSync(
+      join(src, "index.js"),
+      'export const name = "fixture-dsh-plugin"\nexport function apply(ctx) { ctx.provide("fixture-dsh-plugin.marker", "mounted") }\n',
+    )
     const profileDir = profileDirOf(root, "ellamaka-tools")
     mkdirSync(join(profileDir, "node_modules"), { recursive: true })
     cpSync(src, join(profileDir, "node_modules", "fixture-dsh-plugin"), { recursive: true })
@@ -220,18 +227,24 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
     const ctx = new Context()
     const host = await mountDshTools(ctx, { home: root, port: 0 })
     try {
-      const config = (host.includeEntry as unknown as {
-        options?: { config?: { patches?: unknown[] } }
-      }).options?.config
+      const config = (
+        host.includeEntry as unknown as {
+          options?: { config?: { patches?: unknown[] } }
+        }
+      ).options?.config
       const allPatches = config?.patches ?? []
-      const insertRows = allPatches.flatMap((row) => (row as { insert?: { id?: string; name?: string }[] }).insert ?? [])
+      const insertRows = allPatches.flatMap(
+        (row) => (row as { insert?: { id?: string; name?: string }[] }).insert ?? [],
+      )
       const pluginRow = insertRows.find((row) => row.id === "dsh-plugin:fixture-dsh-plugin")
       expect(pluginRow).toBeDefined()
       expect(pluginRow!.name!.startsWith("file://")).toBe(true)
       expect(decodeURIComponent(pluginRow!.name!)).toContain(join("node_modules", "fixture-dsh-plugin", "index.js"))
       expect(ctx.get("fixture-dsh-plugin.marker", false)).toBe("mounted")
 
-      const officialRows = insertRows.filter((row) => typeof row.name === "string" && row.name.startsWith("@deepseek-ai/"))
+      const officialRows = insertRows.filter(
+        (row) => typeof row.name === "string" && row.name.startsWith("@deepseek-ai/"),
+      )
       expect(officialRows.length).toBeGreaterThan(0)
       expect(officialRows.every((row) => !row.name!.startsWith("file://"))).toBe(true)
     } finally {
@@ -251,10 +264,14 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
       expect(loader).toBeDefined()
       expect(loader!.internal).toBeUndefined()
 
-      const includeConfig = (host.includeEntry as unknown as {
-        options?: { config?: { patches?: Record<string, unknown>[] } }
-      }).options?.config
-      const hmrRows = (includeConfig?.patches ?? []).flatMap((row) => (row as { insert?: { id?: string; disabled?: boolean }[] }).insert ?? []).filter((row) => row.id === "hmr")
+      const includeConfig = (
+        host.includeEntry as unknown as {
+          options?: { config?: { patches?: Record<string, unknown>[] } }
+        }
+      ).options?.config
+      const hmrRows = (includeConfig?.patches ?? [])
+        .flatMap((row) => (row as { insert?: { id?: string; disabled?: boolean }[] }).insert ?? [])
+        .filter((row) => row.id === "hmr")
       expect(hmrRows.length).toBeGreaterThan(0)
       expect(hmrRows.every((row) => row.disabled === true)).toBe(true)
     } finally {
@@ -266,16 +283,25 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
 })
 
 describe("loader.internal.import profiles fallback (rook W-01, post-B1)", () => {
-  test("an EXISTING internal import is wrapped so user plugins resolve via profiles", async () => {
+  test("public EntryTree import resolves the active profile without replacing loader.internal", async () => {
     const root = mkdtempSync(join(tmpdir(), "dsh-plugin-w01-"))
     const srcRoot = mkdtempSync(join(tmpdir(), "dsh-plugin-w01-src-"))
     const src = join(srcRoot, "fixture-dsh-plugin")
     mkdirSync(src, { recursive: true })
     writeFileSync(
       join(src, "package.json"),
-      JSON.stringify({ name: "fixture-dsh-plugin", version: "1.0.0", type: "module", main: "index.js", dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+      JSON.stringify({
+        name: "fixture-dsh-plugin",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+        dsh: { bundle: { patch: "./cordis.patch.yml" } },
+      }),
     )
-    writeFileSync(join(src, "cordis.patch.yml"), "- insert:\n    - id: dsh-plugin:fixture-dsh-plugin\n      name: fixture-dsh-plugin\n")
+    writeFileSync(
+      join(src, "cordis.patch.yml"),
+      "- insert:\n    - id: dsh-plugin:fixture-dsh-plugin\n      name: fixture-dsh-plugin\n",
+    )
     writeFileSync(
       join(src, "index.js"),
       'export const name = "fixture-dsh-plugin"\nexport function apply(ctx) { ctx.provide("fixture-dsh-plugin.marker", "mounted") }\n',
@@ -295,24 +321,13 @@ describe("loader.internal.import profiles fallback (rook W-01, post-B1)", () => 
     const host = await mountDshTools(ctx, {
       home: root,
       port: 0,
-      prepare: (bootCtx) => {
-        const loader = bootCtx.get("loader") as { internal?: { import(name: string): Promise<unknown> } } | undefined
-        if (loader && loader.internal === undefined) {
-          loader.internal = {
-            import: async (name: string) => {
-              if (name.startsWith("file://")) {
-                return import(/* @vite-ignore */ name)
-              }
-              throw new Error(`stub internal loader cannot resolve ${name}`)
-            },
-          }
-        }
-      },
     })
     try {
       expect(ctx.get("fixture-dsh-plugin.marker", false)).toBe("mounted")
       const loader = ctx.get("loader") as { internal?: { import(name: string): Promise<unknown> } }
-      const viaProfiles = await loader.internal!.import("fixture-dsh-plugin")
+      expect(loader.internal).toBeUndefined()
+      const tree = (host.includeEntry as unknown as { subtree: { import(name: string): Promise<unknown> } }).subtree
+      const viaProfiles = await tree.import("fixture-dsh-plugin")
       expect(viaProfiles).toBeDefined()
     } finally {
       await host.dispose()

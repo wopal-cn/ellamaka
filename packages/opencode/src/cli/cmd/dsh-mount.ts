@@ -240,8 +240,10 @@ export async function mountDshEngine(
   })
   // Publish the terminal runtime status so /global/health can answer with a
   // runtime fact (disabled / ready / degraded) instead of the raw kill switch.
-  setDshStatus(status)
-  if (status !== "ready") return undefined
+  if (status !== "ready") {
+    setDshStatus(status)
+    return undefined
+  }
 
   const anchor = resolveInstallAnchor(wopalHome, manifest)
 
@@ -359,12 +361,15 @@ export async function mountDshEngine(
       })
     }
 
+    setDshStatus("ready")
     return {
       mountPath: dsh.mountPath,
       dispose: async () => {
         // dsh.dispose() closes the VirtualWebServer's upgrade sockets first,
         // then unmounts the dsh plugin tree from the web hub.
         setDshUrlGetter(() => undefined)
+        setDshStatus("disabled")
+        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
         unmountDsh?.()
         await pluginService?.stop()
         await dsh.dispose()
@@ -374,6 +379,8 @@ export async function mountDshEngine(
       },
     }
   } catch (error) {
+    setDshStatus("degraded")
+    setDshUrlGetter(() => undefined)
     // Never crash the host: log, dispose partial resources, and continue
     // without dsh (B-06).
     Log.Default.error("dsh engine mount failed", {

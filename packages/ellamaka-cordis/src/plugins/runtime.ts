@@ -1,13 +1,7 @@
 import { watch, type FSWatcher } from "chokidar"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import {
-  composeFullPatchStack,
-  healPluginsModuleFallback,
-  profileDirOf,
-  readUserPatchLayer,
-  type DshPluginStackContext,
-} from "./compose.js"
+import { composeFullPatchStack, profileDirOf, readUserPatchLayer, type DshPluginStackContext } from "./compose.js"
 
 /**
  * Plugin Runtime Service: watches the profile composition files and replays
@@ -123,6 +117,7 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   const containers = options.containers
   const logger = options.logger ?? defaultLogger()
   let lastHash: string | undefined
+  let lastObservation: { hash: string; result: DshPluginReplayResult } | undefined
   let stopped = false
   /** Serialization: change events spotted mid-replay coalesce into one rerun. */
   let replaying = false
@@ -168,23 +163,40 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
       throw new Error(
         `dsh plugin runtime: container for profile ${JSON.stringify(container.profile)} has no boot stack context`,
       )
-    const patches = composeFullPatchStack({
-      profileLayers: stack.profileLayers,
-      userPatches: readUserPatchLayer(options.home, container.profile),
-      extraPatches: stack.extraPatches,
-      homePatches: stack.homePatches,
-    })
-    // Shallow-merge contract (spike 2): spread the previous config, replace
-    // only `patches`.
-    const previousConfig = (
-      container.includeEntry as unknown as {
-        options?: { config?: Record<string, unknown> }
-      }
-    ).options?.config
-    const { patches: _prev, ...rest } = previousConfig ?? {}
-    await container.includeEntry.update({
-      config: { ...rest, patches },
-    })
+    const mutate = async () => {
+      const patches = composeFullPatchStack({
+        profileLayers: stack.profileLayers,
+        userPatches: readUserPatchLayer(options.home, container.profile),
+        extraPatches: stack.extraPatches,
+        homePatches: stack.homePatches,
+        hostPatches: stack.hostPatches,
+      })
+      // Shallow-merge contract (spike 2): spread the previous config, replace
+      // only `patches`.
+      const previousConfig = (
+        container.includeEntry as unknown as {
+          options?: { config?: Record<string, unknown> }
+        }
+      ).options?.config
+      const { patches: _prev, ...rest } = previousConfig ?? {}
+      await container.includeEntry.update({
+        config: { ...rest, patches },
+      })
+    }
+    // SettingsForms, loader reconciliation, and CLI acknowledgement use
+    // the profile's one transaction queue and activation/rollback checks.
+    const hmr = (
+      container.ctx as
+        | {
+            get?(
+              name: string,
+              strict?: boolean,
+            ): { runExclusive<T>(operation: () => Promise<T>): Promise<T> } | undefined
+          }
+        | undefined
+    )?.get?.("hmr", false)
+    if (hmr) await hmr.runExclusive(mutate)
+    else await mutate()
     options.onReplay?.(container.profile)
   }
 
@@ -192,7 +204,8 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   const runReplay = (queueWhenBusy = false): Promise<DshPluginReplayResult> => {
     if (stopped) return Promise.resolve({ ok: false, error: "dsh plugin runtime is stopped" })
     const hash = currentHash()
-    if (hash === lastHash) return Promise.resolve({ ok: true }) // short-circuit: nothing changed
+    if (hash === lastHash) return Promise.resolve({ ok: true })
+    if (hash === lastObservation?.hash) return Promise.resolve(lastObservation.result)
     if (replaying) {
       if (queueWhenBusy) pendingReplay = true
       return activeReplay ?? Promise.resolve({ ok: false, error: "dsh plugin replay lost its active task" })
@@ -201,7 +214,6 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     activeReplay = (async (): Promise<DshPluginReplayResult> => {
       // Heal BEFORE composing: a newly installed plugin needs its
       // profiles/node_modules symlink to exist for the loader's import.
-      healPluginsModuleFallback(options.home)
       let failed = false
       let firstError: string | undefined
       for (const container of containers) {
@@ -224,9 +236,11 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
       // change arrives. Only a fully successful run adopts the new hash.
       if (!failed) {
         lastHash = hash
-        return { ok: true }
+        lastObservation = { hash, result: { ok: true } }
+        return lastObservation.result
       }
-      return { ok: false, error: firstError ?? "dsh plugin composition replay failed" }
+      lastObservation = { hash, result: { ok: false, error: firstError ?? "dsh plugin composition replay failed" } }
+      return lastObservation.result
     })()
     return activeReplay.finally(() => {
       replaying = false
@@ -277,6 +291,9 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   const watcher = watch(allWatched, {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
+  })
+  watcher.on("error", (error) => {
+    logger.error("plugin composition watcher failed", { error: error instanceof Error ? error.message : String(error) })
   })
   watcher.on("all", () => {
     if (stopped) return

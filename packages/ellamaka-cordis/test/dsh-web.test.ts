@@ -33,7 +33,7 @@ async function loginCookie(baseUrl: string, authenticatedPath: string): Promise<
   const entry = new URL(authenticatedPath, "http://dsh.invalid")
   const res = await fetch(baseUrl + entry.search, { redirect: "manual" })
   expect(res.status).toBe(303)
-  expect(res.headers.get("location")).toBe("/dsh/")
+  expect(new URL(res.headers.get("location")!, entry).pathname).toBe("/dsh/")
   const setCookie = res.headers.get("set-cookie")
   expect(setCookie).toBeDefined()
   expect(setCookie).toContain("HttpOnly")
@@ -191,9 +191,10 @@ describe("dsh web engine", () => {
       const presets = await ctx.agentPresets.list()
       const standard = presets.find((p) => p.id === "standard")
       expect(standard).toBeDefined()
-      // rc.1 bundles the shipped roster inside dsh-agent-presets; the shipped
-      // set must come from that package, not an anchor-relative directory.
-      expect(standard!.path.includes("@deepseek-ai/dsh-agent-presets")).toBe(true)
+      // rc.2 publishes declarations through the selected closure's registry.
+      expect(standard!.broken).toBeUndefined()
+      const lease = await ctx.agentPresets.acquireScope("standard")
+      await lease[Symbol.asyncDispose]()
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()

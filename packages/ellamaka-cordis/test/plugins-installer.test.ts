@@ -1,5 +1,16 @@
+import { resolveProfileModule } from "../src/plugins/profile-resolution"
 import { describe, expect, test } from "bun:test"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { installPackage, listInstalled, NotInstalledError, removePackage } from "../src/plugins/installer"
@@ -20,7 +31,8 @@ function fixturePluginDir(root: string, name = "fixture-greeter", version = "1.0
   }
   writeFileSync(join(dir, "package.json"), JSON.stringify(manifest))
   writeFileSync(join(dir, "index.js"), "export const name = 'fixture'\nexport function apply() {}\n")
-  if (withBundle) writeFileSync(join(dir, "cordis.patch.yml"), "- insert:\n    - id: dsh-plugin:fixture\n      name: fixture\n")
+  if (withBundle)
+    writeFileSync(join(dir, "cordis.patch.yml"), "- insert:\n    - id: dsh-plugin:fixture\n      name: fixture\n")
   return dir
 }
 
@@ -71,13 +83,17 @@ function expectSlotDest(extracted: Array<{ spec: string; dest: string }>): void 
 
 function fakeResolveTree(packages: [string, string, string[]][]) {
   const map = new Map(
-    packages.map(([name, version, deps]) => [`${name}@${version}`, { name, version, dependencies: deps.map((d) => d), tarball: "" }]),
+    packages.map(([name, version, deps]) => [
+      `${name}@${version}`,
+      { name, version, dependencies: deps.map((d) => d), tarball: "" },
+    ]),
   )
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return async (spec: { kind: string; name?: string; version?: string }) => ({
-    root: { name: spec.name ?? "", version: spec.version ?? "" },
-    packages: map,
-  }) as never
+  return async (spec: { kind: string; name?: string; version?: string }) =>
+    ({
+      root: { name: spec.name ?? "", version: spec.version ?? "" },
+      packages: map,
+    }) as never
 }
 
 describe("Bun installer: registry pipeline (official end state)", () => {
@@ -216,14 +232,18 @@ describe("Bun installer: dir pipeline", () => {
     mkdirSync(nested, { recursive: true })
     writeFileSync(join(nested, "package.json"), JSON.stringify({ name: "tiny-dep", version: "0.0.1" }))
     await installPackage({ kind: "dir", path: src }, { home: root })
-    expect(existsSync(join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules", "tiny-dep", "package.json"))).toBe(true)
+    expect(
+      existsSync(
+        join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules", "tiny-dep", "package.json"),
+      ),
+    ).toBe(true)
   })
 
   test("dir install prunes nested node_modules entries not reachable from dependencies (devDeps/build tools)", async () => {
     const root = tempRoot()
     const srcRoot = mkdtempSync(join(tmpdir(), "dsh-plugin-src-"))
     const src = fixturePluginDir(srcRoot)
-    writeManifestDeps(src, { "js-yaml": "^4.1.0", "undici": "^7.0.0" })
+    writeManifestDeps(src, { "js-yaml": "^4.1.0", undici: "^7.0.0" })
     // Runtime deps (declared) — must survive.
     for (const name of ["js-yaml", "undici"]) {
       const dep = join(src, "node_modules", name)
@@ -256,7 +276,10 @@ describe("Bun installer: dir pipeline", () => {
     // Official peers present in the source tree (npm install pulled them as devDeps) — must NOT ship.
     const official = join(src, "node_modules", "@deepseek-ai", "dsh-settings")
     mkdirSync(official, { recursive: true })
-    writeFileSync(join(official, "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh-settings", version: "0.1.2-rc.1" }))
+    writeFileSync(
+      join(official, "package.json"),
+      JSON.stringify({ name: "@deepseek-ai/dsh-settings", version: "0.1.2-rc.1" }),
+    )
     await installPackage({ kind: "dir", path: src }, { home: root })
     const entityModules = join(profileDirOf(root, "web"), "node_modules", "fixture-greeter", "node_modules")
     expect(existsSync(join(entityModules, "js-yaml", "package.json"))).toBe(true)
@@ -294,7 +317,10 @@ describe("Bun installer: failure semantics (profile untouched)", () => {
     const resolve = fakeResolveTree([["is-odd", "3.0.1", []]])
     const beforeStages = new Set(readdirSync(tmpdir()).filter((d) => d.startsWith("dsh-plugins-stage-")))
     await expect(
-      installPackage({ kind: "registry", name: "is-odd", version: "3.0.1" }, { home: root, extract: fake.extract, resolve }),
+      installPackage(
+        { kind: "registry", name: "is-odd", version: "3.0.1" },
+        { home: root, extract: fake.extract, resolve },
+      ),
     ).rejects.toThrow("download failed for is-odd@3.0.1")
     // The profile manifest and node_modules are untouched.
     expect(existsSync(join(profileDir, "node_modules", "is-odd"))).toBe(false)
@@ -333,10 +359,13 @@ describe("Bun installer: failure semantics (profile untouched)", () => {
         {
           home: root,
           extract: fakeExtract().extract,
-          resolve: async () => ({
-            root: { name: "../escape", version: "1.0.0" },
-            packages: new Map([["../escape@1.0.0", { name: "../escape", version: "1.0.0", dependencies: [], tarball: "" }]]),
-          }) as never,
+          resolve: async () =>
+            ({
+              root: { name: "../escape", version: "1.0.0" },
+              packages: new Map([
+                ["../escape@1.0.0", { name: "../escape", version: "1.0.0", dependencies: [], tarball: "" }],
+              ]),
+            }) as never,
         },
       ),
     ).rejects.toThrow(/unsafe package name/)
@@ -378,7 +407,12 @@ describe("Bun installer: replace semantics (official CLI)", () => {
     mkdirSync(v2dir, { recursive: true })
     writeFileSync(
       join(v2dir, "package.json"),
-      JSON.stringify({ name: "upgradable", version: "2.0.0", type: "module", dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+      JSON.stringify({
+        name: "upgradable",
+        version: "2.0.0",
+        type: "module",
+        dsh: { bundle: { patch: "./cordis.patch.yml" } },
+      }),
     )
     writeFileSync(join(v2dir, "cordis.patch.yml"), "- insert:\n    - id: dsh-plugin:fixture\n      name: fixture\n")
     const result = await installPackage({ kind: "dir", path: v2dir }, { home: root })
@@ -418,14 +452,18 @@ describe("Bun installer: listInstalled (profile manifest source)", () => {
   })
 })
 
-describe("Bun installer: symlink heal integration", () => {
-  test("install re-runs the module-fallback heal so the fresh package resolves", async () => {
+describe("Bun installer: profile resolution integration", () => {
+  test("fresh packages resolve in their profile without global user-package links", async () => {
     const root = tempRoot()
     const src = fixturePluginDir(mkdtempSync(join(tmpdir(), "dsh-plugin-src-")))
     await installPackage({ kind: "dir", path: src }, { home: root })
     const link = join(root, "home", "profiles", "node_modules", "fixture-greeter")
-    expect(existsSync(link)).toBe(true)
-    expect(realpathSync(link)).toBe(realpathSync(join(profileDirOf(root, "web"), "node_modules", "fixture-greeter")))
+    expect(existsSync(link)).toBe(false)
+    const resolved = resolveProfileModule("fixture-greeter", {
+      dir: profileDirOf(root, "web"),
+      installAnchor: import.meta.resolve("@deepseek-ai/dsh/package.json").replace("file://", ""),
+    })
+    expect(resolved).toContain("/web/node_modules/fixture-greeter/")
   })
 })
 
@@ -435,7 +473,9 @@ describe("Bun installer: multi-profile placement", () => {
     const src = fixturePluginDir(mkdtempSync(join(tmpdir(), "dsh-plugin-src-")))
     await installPackage({ kind: "dir", path: src }, { home: root, profiles: ["web", "ellamaka-tools"] })
     for (const profile of ["web", "ellamaka-tools"]) {
-      expect(existsSync(join(profileDirOf(root, profile), "node_modules", "fixture-greeter", "package.json"))).toBe(true)
+      expect(existsSync(join(profileDirOf(root, profile), "node_modules", "fixture-greeter", "package.json"))).toBe(
+        true,
+      )
       const manifest = readProfileManifest(profileDirOf(root, profile))
       expect(manifest.dependencies["fixture-greeter"]).toBe("1.0.0")
       expect(manifest.bundles).toContain("fixture-greeter")

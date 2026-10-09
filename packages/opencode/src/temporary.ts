@@ -1,3 +1,4 @@
+import "@wopal/ellamaka-cordis/runtime/preload"
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"

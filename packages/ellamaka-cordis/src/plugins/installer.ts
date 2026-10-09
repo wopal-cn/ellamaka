@@ -1,5 +1,16 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs"
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
+import { createRequire } from "node:module"
 import { dirname, join, relative, resolve, sep } from "node:path"
 import {
   withPluginsLock,
@@ -9,7 +20,7 @@ import {
   dropPlugin,
   appendBundle,
 } from "./profile-manifest.js"
-import { profileDirOf, healPluginsModuleFallback, removePluginSymlink } from "./compose.js"
+import { profileDirOf, removePluginSymlink } from "./compose.js"
 import { resolveTree, type ResolveSpec, type ResolvedTree } from "./resolver.js"
 
 /**
@@ -34,7 +45,11 @@ import { resolveTree, type ResolveSpec, type ResolvedTree } from "./resolver.js"
  */
 
 /** `pacote.extract`-shaped download boundary (production: dynamic import). */
-export type ExtractLike = (spec: string, dest: string, opts?: { registry?: string }) => Promise<unknown>
+export type ExtractLike = (
+  spec: string,
+  dest: string,
+  opts?: { registry?: string; signal?: AbortSignal },
+) => Promise<unknown>
 
 /** Where a package install comes from. */
 export type InstallSpec = ResolveSpec
@@ -46,6 +61,12 @@ export interface InstallOptions {
    * profiles live under `home/profiles/`.
    */
   home: string
+  /** Cancels download/staging before entity and manifest publication. */
+  signal?: AbortSignal
+  /** Selected runtime closure, supplied by packaged hosts. */
+  installAnchor?: string
+  /** Native PluginManager already owns its profile file lock. */
+  profileLockHeld?: boolean
   /** Injected extract (production: pacote). Tests inject fakes. */
   extract?: ExtractLike
   /** Injected tree resolver (production: plugins/resolver.ts). */
@@ -157,8 +178,11 @@ function readManifest(pkgDir: string): Record<string, unknown> {
 
 /** Whether the manifest declares a mountable dsh bundle patch. */
 export function manifestIsBundle(manifest: Record<string, unknown>): boolean {
-  const dsh = manifest.dsh as { bundle?: { patch?: string } } | undefined
-  return typeof dsh?.bundle?.patch === "string" && dsh.bundle.patch.length > 0
+  const dsh = manifest.dsh as { bundle?: { patch?: unknown } } | undefined
+  const patch = dsh?.bundle?.patch
+  return typeof patch === "string"
+    ? patch.length > 0
+    : Array.isArray(patch) && patch.length > 0 && patch.every((file) => typeof file === "string" && file.length > 0)
 }
 
 /** Official packages never download into a profile (shared heal covers them). */
@@ -166,11 +190,69 @@ function isOfficialPackage(name: string): boolean {
   return name.startsWith("@deepseek-ai/")
 }
 
+type InstallSnapshot = { restore(): void; discard(): void }
+const installSnapshots = new WeakMap<InstallOptions, InstallSnapshot[]>()
+
+function installBoot(options: InstallOptions) {
+  const anchor = options.installAnchor ?? createRequire(import.meta.url).resolve("@deepseek-ai/dsh/package.json")
+  return createRequire(anchor)("@deepseek-ai/dsh-app-boot") as typeof import("@deepseek-ai/dsh-app-boot")
+}
+
+function checkCompatibility(manifest: object, profiles: readonly string[], options: InstallOptions): void {
+  const boot = installBoot(options)
+  for (const profile of profiles) {
+    const exemptions = boot.readProfileVersionExemptions(profileDirOf(options.home, profile))
+    const issue = boot.evaluatePluginCompatibility(manifest, exemptions)
+    if (issue && !issue.exempted) throw new Error(boot.pluginCompatibilityWarning(issue))
+  }
+}
+
+async function withInstallLocks<T>(options: InstallOptions, operation: () => Promise<T>): Promise<T> {
+  const profiles = [...new Set(options.profiles ?? options.enabledIn ?? DEFAULT_PROFILES)].sort()
+  for (const profile of profiles) assertSafeProfileName(profile)
+  if (options.profileLockHeld) return withPluginsLock(options.home, operation)
+  const anchor = options.installAnchor ?? createRequire(import.meta.url).resolve("@deepseek-ai/dsh/package.json")
+  const { withFileLock } = createRequire(anchor)(
+    "@deepseek-ai/dsh-atomic-write",
+  ) as typeof import("@deepseek-ai/dsh-atomic-write")
+  const lock = (index: number): Promise<T> => {
+    options.signal?.throwIfAborted()
+    if (index === profiles.length) return withPluginsLock(options.home, operation)
+    const dir = profileDirOf(options.home, profiles[index])
+    mkdirSync(dir, { recursive: true })
+    return withFileLock(join(dir, "package.json"), () => lock(index + 1), { waitMs: 30000 })
+  }
+  return lock(0)
+}
+
 /** Install a plugin (registry or local dir). Holds the plugins mutex. */
 export async function installPackage(spec: InstallSpec, options: InstallOptions): Promise<InstallResult> {
-  return withPluginsLock(options.home, () =>
-    spec.kind === "dir" ? installFromDir(spec.path, options) : installFromRegistry(spec, options),
-  )
+  options.signal?.throwIfAborted()
+  return withInstallLocks(options, async () => {
+    options.signal?.throwIfAborted()
+    const snapshots: InstallSnapshot[] = []
+    installSnapshots.set(options, snapshots)
+    try {
+      const result = spec.kind === "dir" ? installFromDir(spec.path, options) : await installFromRegistry(spec, options)
+      for (const snapshot of snapshots) snapshot.discard()
+      return result
+    } catch (failure) {
+      const errors: unknown[] = [failure]
+      for (const snapshot of snapshots.reverse()) {
+        try {
+          snapshot.restore()
+          snapshot.discard()
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+      if (errors.length > 1)
+        throw new AggregateError(errors, "DSH install rollback failed; retained backup directories require recovery")
+      throw failure
+    } finally {
+      installSnapshots.delete(options)
+    }
+  })
 }
 
 /** Read name+version from a package directory's manifest. */
@@ -209,17 +291,56 @@ function placeIntoProfile(
   const modulesDir = join(profileDir, "node_modules")
   const entityDir = join(modulesDir, ...entryName.split("/"))
   assertTargetInsideProfileModules(modulesDir, entityDir)
-  mkdirSync(modulesDir, { recursive: true })
-  // Replace semantics: an existing entity (same or different version) is
-  // overwritten (official CLI reinstall semantics).
-  rmSync(entityDir, { recursive: true, force: true })
-  place(entityDir)
-
-  writeProfileManifestLocked(profileDir, (manifest) => {
-    setDependency(manifest, entryName, entryVersion)
-    if (isBundle) appendBundle(manifest, entryName)
-    else dropBundleRowIfPresent(manifest, entryName)
-  })
+  options.signal?.throwIfAborted()
+  // Read before staging: corrupt composition must not replace a working entity.
+  readProfileManifest(profileDir)
+  const manifestFile = join(profileDir, "package.json")
+  const previousManifest = existsSync(manifestFile) ? readFileSync(manifestFile) : undefined
+  mkdirSync(dirname(entityDir), { recursive: true })
+  const staging = mkdtempSync(join(dirname(entityDir), ".dsh-install-"))
+  const candidate = join(staging, "candidate")
+  const backup = join(staging, "previous")
+  let published = false
+  let saved = false
+  let retained = false
+  const restore = () => {
+    if (published) rmSync(entityDir, { recursive: true, force: true })
+    if (saved) renameSync(backup, entityDir)
+    if (published) {
+      if (previousManifest) {
+        const restoreFile = join(staging, "package.json")
+        writeFileSync(restoreFile, previousManifest)
+        renameSync(restoreFile, manifestFile)
+      } else rmSync(manifestFile, { force: true })
+    }
+  }
+  try {
+    place(candidate)
+    options.signal?.throwIfAborted()
+    if (existsSync(entityDir)) {
+      renameSync(entityDir, backup)
+      saved = true
+    }
+    renameSync(candidate, entityDir)
+    published = true
+    writeProfileManifestLocked(profileDir, (manifest) => {
+      setDependency(manifest, entryName, entryVersion)
+      if (isBundle) appendBundle(manifest, entryName)
+      else dropBundleRowIfPresent(manifest, entryName)
+    })
+    installSnapshots.get(options)?.push({ restore, discard: () => rmSync(staging, { recursive: true, force: true }) })
+    retained = true
+  } catch (failure) {
+    try {
+      restore()
+    } catch (error) {
+      retained = true
+      throw new AggregateError([failure, error], "DSH install restoration failed; backup retained at " + staging)
+    }
+    throw failure
+  } finally {
+    if (!retained) rmSync(staging, { recursive: true, force: true })
+  }
   return {
     name: entryName,
     version: entryVersion,
@@ -283,7 +404,8 @@ async function installFromRegistry(
   options: InstallOptions,
 ): Promise<InstallResult> {
   assertNotGithubSource(spec.version ?? spec.name)
-  const resolve = options.resolve ?? ((s: InstallSpec) => resolveTree(s, { registry: options.registry }))
+  const resolve =
+    options.resolve ?? ((s: InstallSpec) => resolveTree(s, { registry: options.registry, signal: options.signal }))
   const tree = await resolve({ kind: "registry", name: spec.name, version: spec.version })
 
   const rootId = `${tree.root.name}@${tree.root.version}`
@@ -313,21 +435,25 @@ async function installFromRegistry(
     }
     for (const pkg of tree.packages.values()) {
       if (isOfficialPackage(pkg.name)) continue // shared heal resolves them
+      options.signal?.throwIfAborted()
       const spec2 = `${pkg.name}@${pkg.version}`
       // pacote.extract strips the tarball's `package/` root into dest — pass
       // each package's FINAL slot so the staged tree matches the layout
       // placeStagedTree reads (staging/node_modules/<name>).
-      await extract(
-        spec2,
-        join(staging, "node_modules", ...pkg.name.split("/")),
-        options.registry ? { registry: options.registry } : undefined,
-      )
+      await extract(spec2, join(staging, "node_modules", ...pkg.name.split("/")), {
+        registry: options.registry,
+        signal: options.signal,
+      })
     }
     const stagedRoot = join(staging, "node_modules", ...rootPkg.name.split("/"))
     if (!existsSync(join(stagedRoot, "package.json"))) {
       throw new Error(`dsh plugin installer: staged tree missing the entry package at ${stagedRoot}`)
     }
     const stagedManifest = readManifest(stagedRoot)
+    for (const pkg of tree.packages.values()) {
+      if (!isOfficialPackage(pkg.name))
+        checkCompatibility(readManifest(join(staging, "node_modules", ...pkg.name.split("/"))), profiles, options)
+    }
     const isBundle = manifestIsBundle(stagedManifest)
 
     let result: InstallResult | undefined
@@ -340,7 +466,6 @@ async function installFromRegistry(
       )
     }
     if (!result) throw new Error("dsh plugin installer: no target profiles")
-    healPluginsModuleFallback(options.home)
     return result
   } finally {
     // Staging is always drained: on success the packages were renamed out of
@@ -366,6 +491,7 @@ function installFromDir(path: string, options: InstallOptions): InstallResult {
   for (const profile of profiles) {
     assertSafeProfileName(profile)
   }
+  checkCompatibility(manifest, profiles, options)
   const isBundle = manifestIsBundle(manifest)
   // A local directory may carry a full `npm install` tree (dev tooling, test
   // runners, official @deepseek-ai/* peers). Only the transitive closure of
@@ -384,7 +510,6 @@ function installFromDir(path: string, options: InstallOptions): InstallResult {
     })
   }
   if (!result) throw new Error("dsh plugin installer: no target profiles")
-  healPluginsModuleFallback(options.home)
   return result
 }
 
@@ -532,12 +657,15 @@ function removeEmptyModulesDirs(modulesDir: string): void {
  * declaration. Holding the plugins mutex for the whole operation keeps
  * CLI-side writers serialised.
  */
-export async function removePackage(name: string, options: { home: string }): Promise<void> {
+export async function removePackage(
+  name: string,
+  options: { home: string; profiles?: readonly string[] },
+): Promise<void> {
   assertSafePackageIdentity(name, "0.0.0")
   return withPluginsLock(options.home, async () => {
     const profilesDir = join(options.home, "home", "profiles")
     let removed = false
-    for (const profile of listProfileNames(options.home)) {
+    for (const profile of options.profiles ?? listProfileNames(options.home)) {
       const manifest = readProfileManifest(join(profilesDir, profile))
       const hasDependency = name in manifest.dependencies
       const hasBundle = manifest.bundles.includes(name)
@@ -548,13 +676,12 @@ export async function removePackage(name: string, options: { home: string }): Pr
       writeProfileManifestLocked(join(profilesDir, profile), (manifest2) => {
         dropPlugin(manifest2, name)
       })
-      removePluginSymlink(options.home, name)
+      if (options.profiles === undefined) removePluginSymlink(options.home, name)
     }
     if (!removed) {
       // Nothing declared the package anywhere: not installed.
       throw new NotInstalledError(name)
     }
-    healPluginsModuleFallback(options.home)
   })
 }
 

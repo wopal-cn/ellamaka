@@ -73,7 +73,7 @@ export function packumentUrl(registry: string, name: string): string {
 }
 
 /** Fetch one abridged packument (memoised per resolver run). */
-function createPackumentFetcher(fetchFn: FetchLike, registry: string) {
+function createPackumentFetcher(fetchFn: FetchLike, registry: string, signal?: AbortSignal) {
   const cache = new Map<string, Promise<Packument>>()
   return (name: string): Promise<Packument> => {
     let pending = cache.get(name)
@@ -84,6 +84,7 @@ function createPackumentFetcher(fetchFn: FetchLike, registry: string) {
         try {
           response = await fetchFn(url, {
             headers: { accept: "application/vnd.npm.install-v1+json" },
+            signal,
           })
         } catch (error) {
           throw new Error(
@@ -213,6 +214,7 @@ export type ResolveSpec = { kind: "registry"; name: string; version?: string } |
 
 /** Options for {@link resolveTree}. */
 export interface ResolveOptions {
+  signal?: AbortSignal
   /** Fetch implementation; production defaults to the global fetch. */
   fetch?: FetchLike
   /** Registry base URL; defaults to {@link DEFAULT_RESOLVER_REGISTRY}. */
@@ -244,7 +246,7 @@ export async function resolveTree(spec: ResolveSpec, options: ResolveOptions = {
 
   const fetchFn = options.fetch ?? ((url, init) => fetch(url, init))
   const registry = options.registry ?? DEFAULT_RESOLVER_REGISTRY
-  const fetchPackument = createPackumentFetcher(fetchFn, registry)
+  const fetchPackument = createPackumentFetcher(fetchFn, registry, options.signal)
 
   const packages = new Map<string, ResolvedPackage>()
   /** BFS queue: name + range + the chain that led here (diagnostics). */

@@ -6,12 +6,10 @@ import { createHash } from "node:crypto"
 //
 // The manifest carries ONLY the DSH official DIRECT dependencies as exact
 // versions (the single editing source is `packages/ellamaka-cordis/package.json`).
-// It deliberately carries NO lock snapshot and NO registry derivation from a
-// lock file: the materialiser resolves the exact versions at runtime with npm
-// (Arborist), which produces the real runtime lock (package-lock.json) for the
-// closure. The fingerprint therefore covers the exact dependency set, not a
-// transitive lock tree — a version bump changes the fingerprint, a registry
-// drift does not.
+// The complete transitive lock is generated at build time and binds this
+// manifest's fingerprint. Runtime materialization consumes that embedded lock
+// without solving dependencies. The fingerprint covers the exact direct
+// dependency set and Bridge ABI; registry choice affects transport only.
 // ---------------------------------------------------------------------------
 
 export interface DshRuntimeManifestV1 {
@@ -28,7 +26,7 @@ export interface DshDependencies {
 
 /** The manifest schema string this runtime understands. */
 export const DSH_RUNTIME_SCHEMA = "ellamaka.dsh-runtime/v1"
-export const DSH_RUNTIME_ABI = 1
+export const DSH_RUNTIME_ABI = 2
 
 // ---------------------------------------------------------------------------
 // Canonical serialization

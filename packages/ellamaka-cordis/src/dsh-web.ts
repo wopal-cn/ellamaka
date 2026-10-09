@@ -19,22 +19,20 @@
 import type { Context } from "@deepseek-ai/cordis"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
-import { readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { createCordisLogExporter, type EllamakaLogLevel } from "./log-bridge.js"
 import { createDshLogWriter, dshPluginLogFileName } from "./runtime/log.js"
 import { VirtualWebServer, DSH_MOUNT_PREFIX } from "./dsh-virtual-webserver.js"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "./runtime/loader.js"
-import {
-  composeFullPatchStack,
-  healPluginsModuleFallback,
-  resolveUserBundleNames,
-  type DshPluginStackContext,
-} from "./plugins/compose.js"
+import { composeFullPatchStack, resolveUserBundleNames, type DshPluginStackContext } from "./plugins/compose.js"
 import { createBunHmr } from "./plugins/bun-hmr.js"
 import { createDesktopWorker } from "./plugins/desktop-worker.js"
-import { wrapInternalWithProfilesFallback } from "./plugins/resolve-specifiers.js"
+import { installProfileModuleRouting, projectRuntimePackages } from "./plugins/profile-resolution.js"
+import { profileCapabilityPatches } from "./plugins/profile-capabilities.js"
+import { installElectronSubprocess } from "./runtime/electron-subprocess.js"
+import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
 import type { Entry } from "@deepseek-ai/cordis-plugin-loader"
@@ -458,6 +456,16 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // official resolution paths (A-class config injection and B-class env reads)
   // converge there.
   const homeDir = dshHomeDirOf(dshRoot)
+  if (profileName === WEB_PROFILE_NAME) {
+    const legacy = ["settings.yaml", "settings.yml"].find((name) => existsSync(join(homeDir, name)))
+    if (legacy) {
+      throw new Error(
+        "Legacy DSH settings require migration before Web startup: " +
+          join(homeDir, legacy) +
+          ". Back up this file, retain it outside the active home, and configure profiles/web/cordis.patch.yml through the new settings UI.",
+      )
+    }
+  }
   const pluginActivation = profileName === WEB_PROFILE_NAME ? createPluginActivation() : undefined
   // Profile patch rows that give the dsh plugins that read `config.dshHome`
   // (via `resolveDshHome(config.dshHome)`) an explicit home rooted at the
@@ -491,7 +499,17 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // test fixtures); for a real materialised closure it is a no-op.
   const installAnchor = realpathSync(opts.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"))
 
-  const { healProfilesModuleFallback, loadProfile, resolveProfileDir, initProfile } = runtime.appBoot
+  const { createRuntimeResolution, resolveProfileDir, initProfile } = runtime.appBoot
+  const loadProfile = (...args: Parameters<typeof runtime.appBoot.loadProfile>) => {
+    const loaded = runtime.appBoot.loadProfile(...args)
+    if (loaded.skippedBundles.length) {
+      throw new Error(
+        "DSH selected bundles could not load: " +
+          loaded.skippedBundles.map((bundle) => bundle.packageName + ": " + bundle.reason).join("; "),
+      )
+    }
+    return loaded
+  }
   // The dsh-plugins log Exporter is registered before any plugin mounts, so
   // every dsh plugin's ctx.logger output lands in this profile's dedicated
   // file (`dsh-plugins-<profile>.log`; the single naming point lives in
@@ -524,12 +542,12 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // profile's plugin rows resolve against this installation's dependency
   // closure (matches how the dsh launcher boots a profile). rc.1 API: an
   // options object + async (was `(anchor, home?)` sync in rc.2).
-  await healProfilesModuleFallback({ installAnchor, home: homeDir })
+  // Resolution is projected after profile initialization below.
   // Plugin supply chain heal (D-05): one symlink per installed user plugin
   // under the same profiles/node_modules fallback, so a bare plugin-layer
   // name resolves by parent-walk. Self-owned — the official closure heal is
   // untouched; this only adds the user install area's links.
-  healPluginsModuleFallback(dshRoot)
+  // User entities are resolved from their own profile, never a sibling.
 
   // The tool-container profile seeds its default patch layer (disable the
   // agent-loop-only plugins) on first mount. The file is user-owned: once the
@@ -585,6 +603,12 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     extraPatches,
     homePatches,
   }
+  stackContext.hostPatches = (input) =>
+    profileCapabilityPatches(
+      profileName,
+      runtime.appBoot.composeEntries([input as Parameters<typeof runtime.appBoot.composeEntries>[0][number]]),
+      opts.disableCodeRuntime === true || process.versions.bun !== undefined,
+    )
   const patches = composeFullPatchStack(stackContext)
   const rootConfig = join(profile.dir, "cordis.yml")
   // The root config is the host-owned include: an empty entry list. The
@@ -629,7 +653,51 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       )
     }
   }
+  const packageManager = opts.ellamakaCommand?.length
+    ? {
+        command: opts.ellamakaCommand[0]!,
+        args: [
+          ...opts.ellamakaCommand.slice(1),
+          "dsh",
+          "package-worker",
+          "--home",
+          dshRoot,
+          "--profile",
+          profileName,
+          "--install-anchor",
+          installAnchor,
+          "--",
+        ],
+        env: { ELLAMAKA_DSH: "0", WOPAL_HOME: dirname(dshRoot), DSH_HOME: homeDir },
+      }
+    : undefined
+  ctx.provide("profileContext", {
+    name: profileName,
+    dir: profile.dir,
+    patchPath: profile.patchPath,
+    installAnchor,
+    cwd: process.cwd(),
+    home: homeDir,
+    startedBundles: profile.layers.map((layer) => layer.packageName),
+    get overlays() {
+      const current = loadProfile("ellamaka", profileName, installAnchor, homeDir)
+      const layers = [
+        ...current.layers.flatMap((layer) => layer.patches),
+        ...current.patches,
+        ...extraPatches,
+        ...homePatches,
+      ]
+      return [...extraPatches, ...homePatches, ...(stackContext.hostPatches?.(layers) ?? [])]
+    },
+    telemetryDisabledEnv: "1",
+    ...(profileName === WEB_PROFILE_NAME && packageManager ? { packageManager } : {}),
+  })
+  const resolution = await createRuntimeResolution({ installAnchor, profile, home: homeDir })
+  projectRuntimePackages(resolution)
+  await ctx.registry.plugin(runtime.appBoot.PluginPackages, {})
   const loaderFiber = await ctx.registry.plugin(runtime.pluginLoader)
+  const loaderModule = createRequire(installAnchor)("@deepseek-ai/cordis-plugin-loader")
+  installProfileModuleRouting(loaderModule.EntryTree.prototype)
   // B1 拆雷 (DESIGN-dsh-base.md 「Bun 下不伪造 loader.internal（拆雷）」): the
   // Bridge no longer injects a fake `loader.internal` when the runtime
   // provides none — the fake object fooled the official hmr capability guard
@@ -653,6 +721,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // official web plugins register their routes against it instead of a real
   // socket. The official `webserver` entry is disabled via extraPatches.
   await prepare?.(ctx)
+  await installElectronSubprocess(ctx, installAnchor)
   // When the runtime provides a REAL internal loader (Node sidecar), wrap its
   // import with the profiles fallback (rook W-01): the internal loader
   // resolves official closure packages but not user plugins under
@@ -661,10 +730,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // symlinks. An unresolved name throws the original error. This runs AFTER
   // `prepare` so an internal injected there is wrapped too, and BEFORE the
   // root include mount below (the only consumer of internal.import).
-  const preparedLoader = ctx.get("loader")
-  if (preparedLoader !== undefined && preparedLoader.internal !== undefined) {
-    wrapInternalWithProfilesFallback(preparedLoader.internal, dshRoot)
-  }
   // Bare package names in the patch layers (e.g. `@deepseek-ai/dsh-web-app`)
   // must resolve against the closure the install anchor lives in, not the
   // host module graph: a bundled host (packaged CLI bunfs, Desktop sidecar)
@@ -675,7 +740,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // passing the base unconditionally is mode-independent.
   const bareModuleBaseUrl = pathToFileURL(join(installAnchor, "..", "..", "..")).href + "/"
   const includeEntry = await runtime.appBoot.mountRootInclude(
-    ctx,
+    ctx as unknown as Parameters<typeof runtime.appBoot.mountRootInclude>[0],
     rootConfig,
     patches as Parameters<typeof runtime.appBoot.mountRootInclude>[2],
     bareModuleBaseUrl,
@@ -684,92 +749,80 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   if (ctx.get("loader") === undefined || includeEntry === undefined) {
     throw new Error("ellamaka-cordis: dsh boot did not provide a loader service")
   }
-  await runtime.appBoot.assertEntriesActivated(ctx, "ellamaka")
+  await runtime.appBoot.auditStartupEntries(
+    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
+    "ellamaka",
+  )
 
-  // User patch-layer reload is selected by the loader capability, not merely
-  // by the runtime name. Bun has no Node private loader. Packaged Electron
-  // utility processes can also lack it after packaging. The adapter implements
-  // the exact watchUserPatches contract (registerConfig + serial refresh),
-  // while a fully-capable Node host retains the official empty-root watcher.
-  const patchFile = join(profile.dir, "cordis.patch.yml")
-  const loader = ctx.get("loader") as
-    | { internal?: unknown; create(options: { name: string; config?: unknown }): Promise<unknown> }
-    | undefined
-  const hmrBackend = selectUserPatchHmr({
-    isBun: process.versions.bun !== undefined,
-    loaderInternal: loader?.internal,
-  })
-  let hmrStop: () => Promise<void> = async () => {}
-  let watchAvailable = true
-  if (hmrBackend === "adapter") {
-    if (process.versions.bun === undefined) {
-      ctx.logger.warn(
-        new Error("[dsh] Node loader internals unavailable; using the compatible configuration HMR adapter"),
-      )
-    }
-    const bunHmr = createBunHmr({
-      containers: [
-        {
-          profile: profileName,
-          ctx,
-          includeEntry: includeEntry as unknown as { id: string; update(o: unknown): Promise<void> },
-        },
-      ],
-      dshRoot,
-      ctx,
-      installAnchor,
-      // Structured logging (W-02): replay/reload failures land in the
-      // dsh-plugins log (with the profile tag from the log exporter) instead
-      // of the console fallback, whose raw output corrupts the TUI surface.
-      logger: {
-        info: (message, extra) => ctx.logger.info(message, extra),
-        warn: (message, extra) => ctx.logger.warn(message, extra),
-        error: (message, extra) => ctx.logger.error(message, extra),
-      },
-    })
-    await bunHmr.mount()
-    hmrStop = () => bunHmr.stop()
-  } else if (ctx.get("hmr") === undefined) {
-    // The official empty-root instance supplies registerConfig to
-    // watchUserPatches when the loader exposes the required internals.
-    if (loader?.create !== undefined) {
-      if (ctx.get("timer") === undefined) {
-        await loader.create({ name: "@deepseek-ai/cordis-plugin-timer" })
-      }
-      await loader.create({ name: "@deepseek-ai/cordis-plugin-hmr", config: { root: [] } })
+  const validate = async () => {
+    await ctx.get("loader")?.await()
+    await runtime.appBoot.auditStartupEntries(
+      ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
+      "ellamaka",
+    )
+    if (profileName === TOOLS_PROFILE_NAME) {
+      const tools = ctx.get("tools") as { schemas(): { name: string }[] } | undefined
+      const expected = [
+        "read",
+        "write",
+        "edit",
+        "glob",
+        "grep",
+        "str_replace_editor",
+        process.platform === "win32" ? "pwsh" : "bash",
+      ]
+      const names = new Set(tools?.schemas().map((schema) => schema.name))
+      const missing = expected.filter((name) => !names.has(name))
+      if (missing.length) throw new Error("DSH adopted tools unavailable: " + missing.join(", "))
+      if (ctx.get("sessions", false) || ctx.get("agents", false))
+        throw new Error("DSH tool profile activated Session lifecycle")
     } else {
-      ctx.logger.warn(new Error("[dsh] official HMR requires a loader with create(); patch watching unavailable"))
-      watchAvailable = false
+      const registry = ctx.get("agentPresets") as { acquireScope(): Promise<AsyncDisposable> } | undefined
+      if (!ctx.get("configEditor", false) || !registry)
+        throw new Error("DSH web profile configuration services unavailable")
+      const lease = await registry.acquireScope()
+      await lease[Symbol.asyncDispose]()
     }
   }
-  const watchDispose =
-    watchAvailable === false
-      ? async () => {}
-      : await runtime.appBoot
-          .watchUserPatches(ctx, {
-            binName: "ellamaka",
-            filename: patchFile,
-            compose: (userRows): typeof userRows => {
-              // The candidate composition: official bundle layers (every
-              // bundle, official or user plugin) are carried by the boot-time
-              // stack context; the refreshed user rows replace the snapshot
-              // captured at boot.
-              return composeFullPatchStack({
-                profileLayers: stackContext.profileLayers,
-                userPatches: [...userRows],
-                extraPatches: stackContext.extraPatches,
-                homePatches: stackContext.homePatches,
-              }) as typeof userRows
-            },
-          })
-          .catch((error: unknown) => {
-            // The official caller degrades when the file cannot be watched; the
-            // container keeps its boot composition (hmr logs via the loader).
-            ctx.logger("dsh-web").warn("user patch-layer watching unavailable", {
-              error: (error as Error).message,
-            })
-            return async () => {}
-          })
+  await validate()
+  const containers: DshPluginContainer[] = [
+    {
+      profile: profileName,
+      ctx,
+      includeEntry,
+      stackContext,
+    },
+  ]
+  const bunHmr = createBunHmr({
+    containers,
+    dshRoot,
+    ctx,
+    installAnchor,
+    afterApply: validate,
+    logger: {
+      info: (message, extra) => ctx.logger.info(message, extra),
+      warn: (message, extra) => ctx.logger.warn(message, extra),
+      error: (message, extra) => ctx.logger.error(message, extra),
+    },
+  })
+  await bunHmr.mount()
+  const refresh = async () => {
+    const profile = loadProfile("ellamaka", profileName, installAnchor, homeDir)
+    const patches = composeFullPatchStack({ ...stackContext, userPatches: profile.patches })
+    await runtime.appBoot.reconcileProfilePatches(
+      ctx as unknown as Parameters<typeof runtime.appBoot.reconcileProfilePatches>[0],
+      patches as Parameters<typeof runtime.appBoot.reconcileProfilePatches>[1],
+      "ellamaka",
+    )
+  }
+  const watchDisposers: (() => Promise<void>)[] = []
+  for (const file of [profile.patchPath, join(profile.dir, "package.json"), join(homeDir, "cordis.patch.yml")]) {
+    watchDisposers.push(await bunHmr.watchConfig(file, refresh))
+  }
+  const watchDispose = async () => {
+    for (const dispose of watchDisposers) await dispose()
+  }
+  const hmrStop = () => bunHmr.stop()
 
   const dispose = async () => {
     try {
@@ -907,7 +960,13 @@ export async function mountDshTools(ctx: Context, opts: DshHostOptions): Promise
 export async function bootDshWeb(opts: DshHostOptions): Promise<DshWebHost> {
   const runtime = opts.runtime ?? createPackageDshRuntimeApi()
   const ctx = new runtime.cordis.Context()
-  const host = await mountDshWeb(ctx, opts)
+  let host: Awaited<ReturnType<typeof mountDshWeb>>
+  try {
+    host = await mountDshWeb(ctx, opts)
+  } catch (error) {
+    await ctx.fiber.dispose()
+    throw error
+  }
   return {
     mountPath: host.mountPath,
     webServer: host.webServer,
@@ -946,7 +1005,13 @@ export interface DshToolsHost extends DshHost {
 export async function bootDshTools(opts: DshHostOptions): Promise<DshToolsHost> {
   const runtime = opts.runtime ?? createPackageDshRuntimeApi()
   const ctx = new runtime.cordis.Context()
-  const host = await mountDshTools(ctx, opts)
+  let host: Awaited<ReturnType<typeof mountDshTools>>
+  try {
+    host = await mountDshTools(ctx, opts)
+  } catch (error) {
+    await ctx.fiber.dispose()
+    throw error
+  }
   return {
     port: host.port,
     url: host.url,
