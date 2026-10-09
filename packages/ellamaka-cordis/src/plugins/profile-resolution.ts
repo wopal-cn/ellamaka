@@ -42,9 +42,16 @@ export function resolveProfileModule(
   const subpath = specifier === name ? "." : "." + specifier.slice(name.length)
   let filename: string
   if (manifest.exports !== undefined) {
-    const targets = resolveExports(manifest, subpath, {
-      conditions: process.versions.bun ? ["bun"] : [],
-    })
+    let targets: ReturnType<typeof resolveExports>
+    try {
+      targets = resolveExports(manifest, subpath, {
+        conditions: process.versions.bun ? ["bun"] : [],
+      })
+    } catch (error) {
+      if (error instanceof Error && /^(Missing|No known conditions for) /.test(error.message))
+        Object.assign(error, { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" })
+      throw error
+    }
     const target = targets?.[0]
     if (!target?.startsWith("./")) throw new Error(`Invalid or missing export '${specifier}'`)
     filename = resolve(root, target)
@@ -81,7 +88,15 @@ export function installProfileModuleRouting(prototype: ImportPrototype): void {
   const original = prototype.import
   prototype.import = function (name, outerStack) {
     const profile = this.ctx.get?.("profileContext", false) as ProfileModuleContext | undefined
-    return original.call(this, profile ? resolveProfileModule(name, profile, this.ctx.baseUrl) : name, outerStack)
+    const imported = original.call(
+      this,
+      profile ? resolveProfileModule(name, profile, this.ctx.baseUrl) : name,
+      outerStack,
+    )
+    const adapt = this.ctx.get?.("ellamakaPluginModuleAdapter", false) as
+      | ((specifier: string, module: unknown) => unknown)
+      | undefined
+    return adapt ? Promise.resolve(imported).then((module) => adapt(name, module)) : imported
   }
 }
 

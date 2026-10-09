@@ -31,6 +31,7 @@ import { createBunHmr } from "./plugins/bun-hmr.js"
 import { createDesktopWorker } from "./plugins/desktop-worker.js"
 import { installProfileModuleRouting, projectRuntimePackages } from "./plugins/profile-resolution.js"
 import { profileCapabilityPatches } from "./plugins/profile-capabilities.js"
+import { createProfilePackages, createProfilePluginManager } from "./plugins/plugin-metadata.js"
 import { installElectronSubprocess } from "./runtime/electron-subprocess.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
@@ -694,7 +695,16 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   })
   const resolution = await createRuntimeResolution({ installAnchor, profile, home: homeDir })
   projectRuntimePackages(resolution)
-  await ctx.registry.plugin(runtime.appBoot.PluginPackages, {})
+  await ctx.registry.plugin(
+    createProfilePackages(runtime.appBoot.PluginPackages, { installAnchor, dir: profile.dir }),
+    {},
+  )
+  ctx.provide("ellamakaPluginModuleAdapter", (specifier: string, module: unknown) => {
+    if (specifier !== "@deepseek-ai/dsh-plugin-manager") return module
+    const namespace = module as typeof import("@deepseek-ai/dsh-plugin-manager")
+    const Manager = createProfilePluginManager(namespace.PluginManager, { installAnchor, dir: profile.dir })
+    return { ...namespace, default: Manager, PluginManager: Manager }
+  })
   const loaderFiber = await ctx.registry.plugin(runtime.pluginLoader)
   const loaderModule = createRequire(installAnchor)("@deepseek-ai/cordis-plugin-loader")
   installProfileModuleRouting(loaderModule.EntryTree.prototype)

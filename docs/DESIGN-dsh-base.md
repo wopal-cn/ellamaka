@@ -102,6 +102,10 @@ App Boot 审计后，宿主检查采用的必需服务和工具。Web 检查默�
 
 带完整 resolution 的官方 PluginPackages 使用 Node 内部模块拦截器。Bun 使用官方支持的 metadata-only 模式，模块路由由 Bridge 拥有；Desktop 采用同一宿主解析契约。
 
+首次启动自动接入 Bridge 的元数据资源解析，使用已选闭包与当前 profile 的 ESM 导出条件读取 package.json、locale 与受限图标，不执行插件代码。PluginPackages.metaOf 覆盖运行时/预设清单；PluginManager.listBundles 的公开子类适配覆盖官方可选 bundle 与已安装 bundle 清单。该子类由公开 EntryTree.import 路由接入，保留官方配置、Remote 方法标记、安装流程和兼容性诊断，不修改上游包、私有 Node 解析器或用户配置文件。
+
+全新 home 的冷启动验收同时覆盖两类清单：官方资源的本地化字段正确、元数据错误为零、已启用全局插件和默认预设无失败或等待状态。缺少可选资源继续遵循官方契约；损坏元数据、图标越界及包版本不兼容保留真实诊断。API/token 等个人配置迁移由操作者处理，不以人工修补元数据作为首启前置。
+
 Bridge 根据不可变运行时映射维护 `profiles/node_modules` 的官方解析层。插件实体与依赖位于当前 profile 的 node_modules，官方 peer 指向同一闭包。外来实体冲突产生诊断，宿主不覆盖用户的真实目录。
 
 公开 EntryTree import 边界把裸包名解析为绝对模块 URL：官方包从闭包解析，外部包从当前 profile 解析。相对路径以所属声明文件为锚点，嵌套 group 使用相同规则。解析遵守 package exports 的 import/runtime 条件，缺失项明确失败。

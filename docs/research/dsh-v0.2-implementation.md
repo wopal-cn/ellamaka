@@ -75,3 +75,11 @@
 - TUI 真实挂载与 grep 执行 5 pass；Desktop 认证 cookie/代理路由 3 pass；Bridge、opencode、Desktop 类型检查通过。runtime manifest 和 608-package lock 的 --check 通过。
 - macOS arm64 CLI、Node sidecar、Desktop 构建通过。构建目录由 CLI 重建后，顺序重新生成 sidecar，避免并发产物冲突。
 - 当前两个候选升级 worktree 即将保存本次提交，再按用户要求切换主空间的模块分支；尚未把用户实际交互验证标记完成。
+
+### 2026-10-09 Metadata Cold-start Repair
+
+- 用户要求：个人配置迁移可手工，但首次启动必须自动初始化运行时/配置基础与插件元数据能力，不能依赖逐包修补。
+- 修复覆盖 PluginPackages.metaOf（内置与预设清单）及 PluginManager.listBundles（官方可选/已安装 bundle 清单）。采用公开服务/导入接口适配，读取 ESM 导出资源及本地化；不执行插件代码或修改上游包。
+- 全新临时 home 的真实两个 API 审计通过，覆盖官方条目、已启用全局激活状态、默认预设、缺失可选资源与有效标题；损坏 JSON、图标越界仍报错。
+- 18 项相关回归通过，包括模块路由、两 profile 装配与双容器热加载生命周期；类型检查通过。
+- CDP 真实页面：标准模式内置插件元数据错误 0；官方 bundle 清单元数据错误 0，显示中文名称“智能体团队、自动授权审查、自动化任务、语音输入”，网关无错误。旧 0.1 插件的兼容性诊断仍保留，不授予豁免。
