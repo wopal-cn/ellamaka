@@ -268,7 +268,7 @@
     },
     "packages/ellamaka-desktop": {
       "name": "@wopal/ellamaka-desktop",
-      "version": "2.0.6-beta.1",
+      "version": "2.0.9-beta.1",
       "dependencies": {
         "@zip.js/zip.js": "2.7.62",
         "drizzle-orm": "catalog:",
