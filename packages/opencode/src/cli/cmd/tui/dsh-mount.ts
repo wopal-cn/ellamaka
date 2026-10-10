@@ -67,8 +67,10 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
   })
   // Publish the terminal runtime status so /global/health answers with a
   // runtime fact even when the TUI (not the workbench) hosts the server.
-  setDshStatus(status)
-  if (status !== "ready") return undefined
+  if (status !== "ready") {
+    setDshStatus(status)
+    return undefined
+  }
 
   const anchor = resolveInstallAnchor(wopalHome, manifest)
 
@@ -140,8 +142,10 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
       })
     }
 
+    setDshStatus("ready")
     return {
       dispose: async () => {
+        setDshStatus("disabled")
         delete (globalThis as Record<string, unknown>)[CONTAINER_KEY]
         await pluginService?.stop()
         await host.dispose()
@@ -149,6 +153,7 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
       },
     }
   } catch (error) {
+    setDshStatus("degraded")
     // Surface the mount failure through the TUI error area (toast) — a bare
     // console write would corrupt the interface — and keep a structured log
     // record for diagnosis.

@@ -118,7 +118,6 @@ export function homePatches(homeDir: string): Record<string, unknown>[] {
 }
 
 export interface WebExtraPatchesOptions {
-  disableCodeRuntime?: boolean
   extraPatches?: Record<string, unknown>[]
   /**
    * Non-loopback authorities accepted by the connection Host/Origin fence
@@ -134,11 +133,6 @@ export interface WebExtraPatchesOptions {
 
 /**
  * Bridge extra patches for the web profile mount.
- *
- * `code-runtime` depends on node:module.stripTypeScriptTypes (Node 22.18+),
- * which the bun dev runtime lacks. It is a code-execution capability, not part
- * of the web UI chat surface. The CLI serve path (bun) disables it via
- * `disableCodeRuntime`; the Desktop sidecar (Node 22.18+) keeps it.
  *
  * `webserver`: the official webserver binds a real socket; the virtual profile
  * provides VirtualWebServer instead, so disable the real one.
@@ -157,7 +151,6 @@ export interface WebExtraPatchesOptions {
  */
 export function webExtraPatches(opts: WebExtraPatchesOptions): Record<string, unknown>[] {
   return [
-    ...(opts.disableCodeRuntime ? [{ id: "code-runtime", disabled: true }] : []),
     { id: "webserver", disabled: true },
     {
       id: "web-runtime",
@@ -256,10 +249,7 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
   let extra: Record<string, unknown>[] = []
   if (options.defaultOnly !== true) {
     if (options.profileName === "web") {
-      extra = webExtraPatches({
-        disableCodeRuntime: true,
-        trustedHosts: options.trustedHosts,
-      })
+      extra = webExtraPatches({ trustedHosts: options.trustedHosts })
     } else if (options.profileName === "ellamaka-tools") {
       extra = toolsExtraPatches()
     }

@@ -6,6 +6,7 @@ import { bootDshWeb, bootDshTools, type DshWebHost, type DshToolsHost } from "..
 import { startDshPluginService, type DshPluginServiceHandle } from "../src/plugins/runtime"
 import { withProfileManifestWrite, appendBundle } from "../src/plugins/profile-manifest"
 import { profileDirOf } from "../src/plugins/compose"
+import { resolveProfileModule } from "../src/plugins/profile-resolution"
 
 const FIXTURE_PLUGIN = join(import.meta.dir, "fixtures", "fixture-dsh-plugin")
 const MARKER = "fixture-dsh-plugin.marker"
@@ -38,7 +39,7 @@ beforeAll(async () => {
   // EEXIST-tolerant write; the plugins healer finds no user profiles yet),
   // and each owns its own cordis context — so they boot concurrently.
   ;[web, tools] = await Promise.all([
-    bootDshWeb({ home, port: 4097, disableCodeRuntime: true }),
+    bootDshWeb({ home, port: 4097, disablePtcRuntime: true }),
     bootDshTools({ home, port: 0 }),
   ])
   updates = 0
@@ -176,8 +177,16 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     // fixture installed and mounted on BOTH containers, watcher settled.
     // CLI-side semantics: a pure disk operation on the composition files.
     await installFixture(home)
-    await waitForWithRetry(() => marker(webCtxOf(web)), "mounted", () => installFixture(home))
-    await waitForWithRetry(() => marker(tools.ctx), "mounted", () => installFixture(home))
+    await waitForWithRetry(
+      () => marker(webCtxOf(web)),
+      "mounted",
+      () => installFixture(home),
+    )
+    await waitForWithRetry(
+      () => marker(tools.ctx),
+      "mounted",
+      () => installFixture(home),
+    )
     expect(updates).toBeGreaterThanOrEqual(2)
   }, 90_000)
 
@@ -210,7 +219,11 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     // Chain contract: entry = fixture mounted everywhere (cases 1-2); exit =
     // composition emptied (fixture uninstalled), service alive and settled.
     await installFixture(home)
-    await waitForWithRetry(() => marker(webCtxOf(web)), "mounted", () => installFixture(home))
+    await waitForWithRetry(
+      () => marker(webCtxOf(web)),
+      "mounted",
+      () => installFixture(home),
+    )
 
     // Break the composition: a manifest bundle row whose package entity is
     // gone fails the recomposition loud (compose fail-loud semantics).
@@ -256,8 +269,16 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     // exit = fixture remounted on tools, web's manifest row removed and web
     // unmounted (case 5 rebuilds its own web baseline).
     await installFixture(home)
-    await waitForWithRetry(() => marker(webCtxOf(web)), "mounted", () => installFixture(home))
-    await waitForWithRetry(() => marker(tools.ctx), "mounted", () => installFixture(home))
+    await waitForWithRetry(
+      () => marker(webCtxOf(web)),
+      "mounted",
+      () => installFixture(home),
+    )
+    await waitForWithRetry(
+      () => marker(tools.ctx),
+      "mounted",
+      () => installFixture(home),
+    )
 
     // Remove the manifest bundle row for WEB only (disable semantics).
     const removeRow = () =>
@@ -276,18 +297,33 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     // the web install baseline (real change -> replay) so the include entry
     // carries the fixture row again, then inspect the stack.
     await installFixture(home)
-    await waitForWithRetry(() => marker(webCtxOf(web)), "mounted", () => installFixture(home))
+    await waitForWithRetry(
+      () => marker(webCtxOf(web)),
+      "mounted",
+      () => installFixture(home),
+    )
     // The include config still carries the FULL stack after a replay:
     // official bundle rows (bare names) AND the Bridge-composed plugin row
     // (explicit dsh-plugin: id, resolved to an absolute file:// URL).
-    const config = (web.includeEntry as unknown as {
-      options?: { config?: { patches?: { insert?: { id?: string; name?: string }[] }[] } }
-    }).options?.config
+    const config = (
+      web.includeEntry as unknown as {
+        options?: { config?: { patches?: { insert?: { id?: string; name?: string }[] }[] } }
+      }
+    ).options?.config
     const insertRows = (config?.patches ?? []).flatMap((row) => row?.insert ?? [])
     expect(insertRows.some((row) => typeof row?.name === "string" && row.name.startsWith("@deepseek-ai/"))).toBe(true)
     const fixtureRow = insertRows.find((row) => row?.id === "dsh-plugin:fixture-dsh-plugin")
     expect(fixtureRow).toBeDefined()
-    expect(fixtureRow!.name!.startsWith("file://")).toBe(true)
+    const resolved = resolveProfileModule(
+      fixtureRow!.name!,
+      {
+        dir: profileDirOf(home, "web"),
+        installAnchor: import.meta.resolve("@deepseek-ai/dsh/package.json").replace("file://", ""),
+      },
+      new URL("file://" + profileDirOf(home, "web") + "/").href,
+    )
+    expect(resolved).toContain("/web/node_modules/fixture-dsh-plugin/index.js")
+    expect(marker(webCtxOf(web))).toBe("mounted")
   }, 90_000)
 
   test("a user-layer disable row unmounts the plugin and REMOVING it hot-recovers (fresh file read)", async () => {
@@ -301,7 +337,11 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     const disableRow = () => writeFileSync(patchPath, "- id: dsh-plugin:fixture-dsh-plugin\n  disabled: true\n")
     const clearRows = () => writeFileSync(patchPath, "[]\n")
     await installFixture(home)
-    await waitForWithRetry(() => marker(webCtxOf(web)), "mounted", () => installFixture(home))
+    await waitForWithRetry(
+      () => marker(webCtxOf(web)),
+      "mounted",
+      () => installFixture(home),
+    )
     // The tools profile has no disable row — it stays mounted.
     expect(marker(tools.ctx)).toBe("mounted")
 

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks"
+import { readFileSync } from "node:fs"
 import { watch, type FSWatcher } from "chokidar"
 import { isAbsolute, join, resolve } from "node:path"
 import { composeFullPatchStack, profileDirOf, readUserPatchLayer, type DshPluginStackContext } from "./compose.js"
@@ -43,6 +45,10 @@ export interface BunHmrOptions {
   installAnchor?: string
   /** Structured logger; defaults to a console-backed fallback. */
   logger?: BunHmrLogger
+  /** Settle and validate the complete profile after a mutation or restoration. */
+  afterApply?: () => Promise<void>
+  /** A restoration failure invalidates the mount; the owner handles publication. */
+  onFailedRestoration?: (error: unknown) => void
 }
 
 /** One running registration: its watcher and serial refresh chain state. */
@@ -75,8 +81,55 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
   const registrations = new Map<string, Registration>()
   let stopped = false
   let active = false
+  const transaction = new AsyncLocalStorage<boolean>()
+  let operations: Promise<void> = Promise.resolve()
 
   const service: BunHmr = {
+    runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+      if (!active || stopped) {
+        const error = new Error("dsh configuration HMR is inactive or stopped")
+        Object.assign(error, { code: "INACTIVE_EFFECT" })
+        return Promise.reject(error)
+      }
+      if (transaction.getStore()) return Promise.reject(new Error("nested profile configuration transaction"))
+      const result = operations.then(() =>
+        transaction.run(true, async () => {
+          if (stopped) throw new Error("dsh configuration HMR is stopped")
+          const snapshots = containers.map((container) => ({
+            entry: container.includeEntry,
+            config: (container.includeEntry as { options?: { config?: Record<string, unknown> } }).options?.config,
+          }))
+          try {
+            const value = await operation()
+            await options.afterApply?.()
+            return value
+          } catch (failure) {
+            try {
+              for (const snapshot of snapshots) {
+                if (snapshot.config !== undefined) await snapshot.entry.update({ config: snapshot.config })
+              }
+              await options.afterApply?.()
+            } catch (restoration) {
+              const error = new AggregateError([failure, restoration], "profile configuration restoration failed")
+              logger.error("profile configuration restoration failed", {
+                error: error instanceof Error ? error.message : String(error),
+              })
+              options.onFailedRestoration?.(error)
+              throw error
+            }
+            throw failure
+          }
+        }),
+      )
+      operations = result.then(
+        () => {},
+        () => {},
+      )
+      return result
+    },
+    watchConfig(filename, refresh) {
+      return service.registerConfig(filename, refresh)
+    },
     /** Whether the service is mounted (registerConfig requires this). */
     isActive(): boolean {
       return active && !stopped
@@ -89,8 +142,16 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
     async mount(): Promise<void> {
       if (stopped) throw new Error("dsh bun-hmr: service already stopped")
       active = true
-      const ctx = options.ctx as { provide(name: string, value: unknown): unknown } | undefined
+      const ctx = options.ctx as
+        | {
+            provide(name: string, value: unknown): unknown
+            effect?(dispose: () => () => Promise<void>): unknown
+          }
+        | undefined
+      ctx?.effect?.(() => () => service.stop())
       ctx?.provide?.("hmr", {
+        runExclusive: service.runExclusive,
+        watchConfig: service.watchConfig,
         registerConfig: (filename: string, refresh: () => Promise<void> | void) =>
           service.registerConfig(filename, refresh),
       })
@@ -113,31 +174,62 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         throw new Error(`dsh bun-hmr: config path already registered: ${filename}`)
       }
 
-      const watcher = watch(target, { ignoreInitial: true })
+      const watcher = transaction.exit(() => watch(target, { ignoreInitial: true }))
       const registration: Registration = { watchFilename: target, watcher, state: { dirty: false }, disposed: false }
       registrations.set(target, registration)
+      const content = () => {
+        try {
+          return readFileSync(target, "utf8")
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined
+          throw error
+        }
+      }
+      let observed = content()
 
       /** Serial refresh chain (official refreshConfig semantics). */
       const runRefresh = (): void => {
         const state = registration.state
+        // Record observed bytes even on failure: an identical bad file must
+        // not repeatedly activate plugins. A changed file can recover.
+        let current: string | undefined
+        try {
+          current = content()
+        } catch (error) {
+          logger.warn("config read failed", { file: target, error: String(error) })
+          return
+        }
+        if (current === observed) return
+        observed = current
         state.dirty = true
         if (state.running) return
         const task = (async () => {
           do {
             state.dirty = false
             try {
-              await refresh()
+              await service.runExclusive(async () => {
+                if (!registration.disposed) await refresh()
+              })
             } catch (reason) {
               const error = reason instanceof Error ? reason : new Error(String(reason), { cause: reason })
-              logger.warn("config reload failed", { file: target, error: error.message })
+              logger.warn("config reload failed", {
+                file: target,
+                error: error instanceof Error ? error.message : String(error),
+              })
             }
-          } while (state.dirty)
+          } while (state.dirty && !registration.disposed)
         })().finally(() => {
           state.running = undefined
         })
         state.running = task
       }
 
+      watcher.on("error", (error) => {
+        logger.error("config watcher failed", {
+          file: target,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
       watcher.on("all", (_event, path) => {
         const observed = resolve(path)
         if (observed !== target && observed !== registration.watchFilename) return
@@ -146,7 +238,15 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
 
       // Watcher readiness: chokidar resolves on the first scan; a missing
       // file still "watches" for its creation, so readiness is immediate.
-      await new Promise((r) => setTimeout(r, 0))
+      await new Promise<void>((resolveReady, reject) => {
+        watcher.once("ready", resolveReady)
+        watcher.once("error", reject)
+      }).catch(async (error) => {
+        registrations.delete(target)
+        registration.disposed = true
+        await watcher.close()
+        throw error
+      })
 
       return async () => {
         if (registration.disposed) return
@@ -154,7 +254,7 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         if (registrations.get(target) === registration) registrations.delete(target)
         await watcher.close()
         // Await the in-flight refresh (official disposer contract).
-        await registration.state.running
+        if (!transaction.getStore()) await registration.state.running
       }
     },
 
@@ -165,7 +265,10 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
      * recomposed stack IS the candidate; a failed update keeps the last good
      * state (the include update is transactional by id diff).
      */
-    watchCompositionFiles(profile: string): Promise<void> {
+    async watchCompositionFiles(profile: string): Promise<void> {
+      if (stopped) throw new Error("dsh configuration HMR is stopped")
+      // Legacy standalone composition watchers can run without context injection.
+      active = true
       const container = containers.find((c) => c.profile === profile)
       if (!container) {
         return Promise.reject(new Error(`dsh bun-hmr: no container for profile ${JSON.stringify(profile)}`))
@@ -174,8 +277,6 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
       const files = [join(dir, "package.json"), join(dir, "cordis.patch.yml")]
       const replay = async (): Promise<void> => {
         // Heal BEFORE composing (fresh installs need their links).
-        const { healPluginsModuleFallback } = await import("./compose.js")
-        healPluginsModuleFallback(options.dshRoot)
         const stack = (container as { stackContext?: DshPluginStackContext }).stackContext
         if (!stack)
           return Promise.reject(
@@ -189,6 +290,7 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
           userPatches: readUserPatchLayer(options.dshRoot, profile),
           extraPatches: stack.extraPatches,
           homePatches: stack.homePatches,
+          hostPatches: stack.hostPatches,
         })
         const previousConfig = (
           container.includeEntry as unknown as {
@@ -198,10 +300,12 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         const { patches: _prev, ...rest } = previousConfig ?? {}
         await container.includeEntry.update({ config: { ...rest, patches } })
       }
-      const watcher = watch(files, {
-        ignoreInitial: true,
-        awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
-      })
+      const watcher = transaction.exit(() =>
+        watch(files, {
+          ignoreInitial: true,
+          awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
+        }),
+      )
       const registration: Registration = { watchFilename: dir, watcher, state: { dirty: false }, disposed: false }
       for (const file of files) registrations.set(file, registration)
       watcher.on("all", () => {
@@ -213,7 +317,12 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
           do {
             state.dirty = false
             try {
-              await replay()
+              const owner = (
+                container.ctx as
+                  | { get?(name: string): { runExclusive?<T>(operation: () => Promise<T>): Promise<T> } }
+                  | undefined
+              )?.get?.("hmr")
+              await (owner?.runExclusive ? owner.runExclusive(replay) : service.runExclusive(replay))
             } catch (error) {
               logger.error("composition replay failed; keeping last good state", {
                 profile,
@@ -226,11 +335,15 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         })
         state.running = task
       })
-      return Promise.resolve()
+      await new Promise<void>((resolveReady, reject) => {
+        watcher.once("ready", resolveReady)
+        watcher.once("error", reject)
+      })
     },
 
     /** Stop everything. Idempotent; in-flight refreshes are awaited. */
     async stop(): Promise<void> {
+      if (transaction.getStore()) throw new Error("cannot stop HMR inside its configuration transaction")
       if (stopped) return
       stopped = true
       active = false
@@ -245,6 +358,7 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
       )
       // Await any in-flight refresh chains.
       await Promise.all(watchers.map((r) => r.state.running ?? Promise.resolve()))
+      await operations
     },
   }
 
@@ -254,6 +368,8 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
 export interface BunHmr {
   isActive(): boolean
   mount(): Promise<void>
+  runExclusive<T>(operation: () => Promise<T>): Promise<T>
+  watchConfig(filename: string, refresh: () => Promise<void>): Promise<() => Promise<void>>
   registerConfig(filename: string, refresh: () => Promise<void> | void): Promise<() => Promise<void>>
   watchCompositionFiles(profile: string): Promise<void>
   stop(): Promise<void>

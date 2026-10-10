@@ -53,14 +53,8 @@ const channel = Script.channel
 // — they must not regenerate a manifest that is committed to the repo.
 // Development builds generate when the manifest is missing or dirty, with a
 // warning, so a local build never ships a stale closure definition.
-const dshManifestGenerator = path.resolve(
-  __dirname,
-  "../../../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts",
-)
-const dshManifestPath = path.resolve(
-  __dirname,
-  "../../../ellamaka-cordis/generated/dsh-runtime-manifest.json",
-)
+const dshManifestGenerator = path.resolve(__dirname, "../../../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts")
+const dshManifestPath = path.resolve(__dirname, "../../../ellamaka-cordis/generated/dsh-runtime-manifest.json")
 async function ensureDshRuntimeManifest() {
   if (Script.release) {
     console.log("[build] verifying DSH runtime manifest (--check)")
@@ -233,7 +227,12 @@ for (const item of targets) {
       windows: {},
     },
     files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
-    entrypoints: ["./src/index.ts", parserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
+    entrypoints: [
+      "./src/bootstrap.ts",
+      parserWorker,
+      workerPath,
+      ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : []),
+    ],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_MIGRATIONS: JSON.stringify(migrations),

@@ -1,6 +1,9 @@
 import { log } from "@clack/prompts"
 import { Effect } from "effect"
 import { join } from "node:path"
+import { existsSync } from "node:fs"
+import { createRequire } from "node:module"
+import { DEFAULT_DSH_RUNTIME_MANIFEST, resolveInstallAnchor } from "@wopal/ellamaka-cordis/runtime"
 import { Global } from "@wopal/ellamaka-core/global"
 import {
   installPackage,
@@ -42,6 +45,16 @@ const RISK_NOTE =
 
 function dshHome(): string {
   return join(Global.Path.wopalHome, "dsh")
+}
+
+function installerAnchor(): string {
+  const anchor = resolveInstallAnchor(Global.Path.wopalHome, DEFAULT_DSH_RUNTIME_MANIFEST).path
+  if (existsSync(anchor)) return anchor
+  try {
+    return createRequire(import.meta.url).resolve("@deepseek-ai/dsh/package.json")
+  } catch {
+    throw new Error("DSH runtime is not initialized; run ellamaka dsh init before installing plugins")
+  }
 }
 
 /** Map an installer/migration error to a user-visible CliError. */
@@ -125,7 +138,10 @@ export const DshPluginCommand = effectCmd({
             const manifest = await readManifestOf(home, profile)
             const entries = Object.entries(manifest.dependencies)
             for (const [name, range] of entries) {
-              await installPackage({ kind: "registry", name, version: range }, { home, profiles: [profile] })
+              await installPackage(
+                { kind: "registry", name, version: range },
+                { home, profiles: [profile], installAnchor: installerAnchor() },
+              )
             }
             return entries.length
           },
@@ -145,7 +161,7 @@ export const DshPluginCommand = effectCmd({
       if (invocation.local) {
         // Official pnpm path-spec semantics: the operand IS the directory.
         const result = yield* Effect.tryPromise({
-          try: () => installPackage({ kind: "dir", path: pkg! }, { home, profiles }),
+          try: () => installPackage({ kind: "dir", path: pkg! }, { home, profiles, installAnchor: installerAnchor() }),
           catch: toCliError,
         })
         log.success(`Installed ${result.name}@${result.version} (${result.source})`)
@@ -167,7 +183,7 @@ export const DshPluginCommand = effectCmd({
         catch: toCliError,
       })
       const result = yield* Effect.tryPromise({
-        try: () => installPackage(parseRegistrySpec(pkg!), { home, profiles }),
+        try: () => installPackage(parseRegistrySpec(pkg!), { home, profiles, installAnchor: installerAnchor() }),
         catch: toCliError,
       })
       log.success(`Installed ${result.name}@${result.version} (${result.source})`)

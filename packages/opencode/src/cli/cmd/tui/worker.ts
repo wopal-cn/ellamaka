@@ -1,3 +1,4 @@
+import "@wopal/ellamaka-cordis/runtime/preload"
 import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import * as Log from "@wopal/ellamaka-core/util/log"

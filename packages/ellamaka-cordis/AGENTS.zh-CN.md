@@ -17,30 +17,30 @@ description: DSH 融合桥接包 — cordis 容器边界、运行时闭包物化
 
 本包是 ellamaka 与 dsh 运行时之间的桥接层，编译进 CLI 二进制与 Desktop sidecar。它同时承担三个职责：进程内 cordis 容器的唯一入口、dsh 运行时闭包的物化与动态加载、插件供应链。
 
-| 目录 | 职责 |
-|------|------|
-| `src/hub.ts` | `CordisHub` — 仓库内唯一的 cordis 边界，持有 `Context` 生命周期 |
-| `src/dsh-web.ts` | 按 profile 重放 dsh boot 序列：`mountDshWeb` / `bootDshWeb`（web）、`mountDshTools` / `bootDshTools`（ellamaka-tools） |
-| `src/dsh-virtual-webserver.ts` | `VirtualWebServer` — 实现官方 WebServer 接口，持有路由与 upgrade 分发 |
-| `src/runtime/` | Runtime Manager：运行时清单、内嵌锁、闭包物化、installAnchor 解析与状态机 |
-| `src/plugins/` | 插件供应链：profile 声明、解析器、安装器、组合装配、补丁层、HMR 适配器、市场安装工 |
-| `src/log-bridge.ts` | `createCordisLogExporter` — 把插件 `ctx.logger` 桥接进 ellamaka `Log` 体系 |
-| `script/` | 构建期清单与锁生成器，带 `--check` 漂移门禁 |
-| `generated/` | 入仓库的构建产物：`dsh-runtime-manifest.json`、`dsh-runtime-lock.json` |
-| `test/` | 包级测试；`probe-*.ts` 是手动挂载探针，不是单元测试 |
+| 目录                           | 职责                                                                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `src/hub.ts`                   | `CordisHub` — 仓库内唯一的 cordis 边界，持有 `Context` 生命周期                                                        |
+| `src/dsh-web.ts`               | 按 profile 重放 dsh boot 序列：`mountDshWeb` / `bootDshWeb`（web）、`mountDshTools` / `bootDshTools`（ellamaka-tools） |
+| `src/dsh-virtual-webserver.ts` | `VirtualWebServer` — 实现官方 WebServer 接口，持有路由与 upgrade 分发                                                  |
+| `src/runtime/`                 | Runtime Manager：运行时清单、内嵌锁、闭包物化、installAnchor 解析与状态机                                              |
+| `src/plugins/`                 | 插件供应链：profile 声明、解析器、安装器、组合装配、补丁层、HMR 适配器、市场安装工                                     |
+| `src/log-bridge.ts`            | `createCordisLogExporter` — 把插件 `ctx.logger` 桥接进 ellamaka `Log` 体系                                             |
+| `script/`                      | 构建期清单与锁生成器，带 `--check` 漂移门禁                                                                            |
+| `generated/`                   | 入仓库的构建产物：`dsh-runtime-manifest.json`、`dsh-runtime-lock.json`                                                 |
+| `test/`                        | 包级测试；`probe-*.ts` 是手动挂载探针，不是单元测试                                                                    |
 
 ## 开发命令
 
 所有命令从 `packages/ellamaka-cordis/` 运行。
 
-| 场景 | 命令 |
-|------|------|
-| 全量测试 | `bun test` |
-| 单元测试 | `bun run test:unit` |
-| 集成测试 | `bun run test:integration` |
-| 类型检查 | `bun run typecheck` |
-| 重建运行时清单 | `bun script/generate-dsh-runtime-manifest.ts` |
-| 重建运行时锁 | `bun script/generate-dsh-runtime-lock.ts` |
+| 场景           | 命令                                                  |
+| -------------- | ----------------------------------------------------- |
+| 全量测试       | `bun test`                                            |
+| 单元测试       | `bun run test:unit`                                   |
+| 集成测试       | `bun run test:integration`                            |
+| 类型检查       | `bun run typecheck`                                   |
+| 重建运行时清单 | `bun script/generate-dsh-runtime-manifest.ts`         |
+| 重建运行时锁   | `bun script/generate-dsh-runtime-lock.ts`             |
 | 校验生成物漂移 | `bun script/generate-dsh-runtime-manifest.ts --check` |
 
 ## 实现规则
@@ -52,6 +52,9 @@ description: DSH 融合桥接包 — cordis 容器边界、运行时闭包物化
 - **测试隔离**：任何会触碰 `$WOPAL_HOME/dsh/home/profiles/` 的测试、转储与诊断，都通过注入 `dshHome` / `installAnchor` 跑在临时 home 上。
 - **不开监听 socket**：`VirtualWebServer` 只提供路由注册与 upgrade 分发，监听端口归 ellamaka 主服务器。
 - **桥接只做加法**：新增桥接以新文件或包装层落地，删除即完整回滚；不为了腾位置改动上游文件。
+
+- **Profile 修改门禁**：启动、配置编辑、插件管理与文件监听共用完整补丁生成器和串行修改队列。reconcile 失败后先明确恢复运行状态，再返回失败结果。
+- **Home 版本导入**：保持源设置和用户配置单可恢复，以新 schema 验证原始配置，记录部分成功与拒绝字段且不含 secret 值。运行时信号不得序列化为持久 JSON 配置。
 
 ## 测试
 

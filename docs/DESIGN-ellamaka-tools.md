@@ -1,176 +1,92 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-09-25
+> **Updated**: 2026-10-09
 > **Parent**: `./DESIGN.md`
+> **Scope**: DSH v0.2 的现有工具采用、容器装配、审批与沙箱兼容。
 
-ellamaka 通过 `ellamaka-tools` 这个 dsh profile 获得沙箱执行能力。工具容器不承载界面，不创建、不持有任何会话，只对外提供工具执行后端。
+Ellamaka 通过 `ellamaka-tools` profile 获得工具执行后端。容器装配在进程内共享，空间配置决定是否采用沙箱投影。工具容器使用最小调用外观，Ellamaka 拥有持久 Session、权限与消息。
 
-本文描述工具容器装配哪些能力、如何投影进 ellamaka 的工具管道，以及沙箱策略如何按空间隔离。
+## Capability Adoption
 
-融合的整体架构见 [`DESIGN.md`](./DESIGN.md)，profile 目录结构与依赖闭包见 [`DESIGN-dsh-base.md`](./DESIGN-dsh-base.md)。
+每个能力按输入输出与实际依赖采用。工具消费少量调用上下文时由 adapter 补齐；依赖 Ellamaka 的钩子、权限、会话或界面的能力由原生插件拥有。
 
-## 采用范围
+| 能力       | Registry 工具               | 后端                                           |
+| ---------- | --------------------------- | ---------------------------------------------- |
+| 搜索       | grep / glob                 | fs-search 与 subprocess                        |
+| 文件       | read / write / edit         | tool-fs 与 fs-sandbox                          |
+| 字符串编辑 | str_replace_editor          | 明确的 tool-str-replace-editor 行与 fs-sandbox |
+| Shell      | bash；Windows 实际源为 pwsh | 平台 shell executor 与 sandbox                 |
 
-每个 dsh 能力逐项评估。采用成本超过独立实现成本时，保留 ellamaka 的原生能力。
+新 Session 外部能力经 PTC 消费的装配契约由独立设计定义。本文保持当前采用表与权限消费面的兼容。
 
-| 能力形态 | 采用方式 |
-|----------|----------|
-| 输入输出与生命周期可由 dsh 通用工具契约表达 | 经 dsh-adapter 投影进 ellamaka ToolRegistry |
-| 只需少量调用上下文 | adapter 按需传入最小上下文，缺省字段省略 |
-| 依赖 dsh 沙箱底座 | 在工具容器内装配沙箱后端，工具在沙箱内运行 |
-| 依赖 dsh 自身的会话、agent-loop、事件日志、子会话语义 | 不采用该包，按 ellamaka 数据模型复刻所需机制 |
-| 依赖 ellamaka 的钩子、会话、权限或界面 | 由 ellamaka 原生插件负责 |
+## Container Composition
 
-**已采用的能力**：
+ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [基础设计](./DESIGN-dsh-base.md)。工具容器装配 tools、system-prompt、fs、subprocess、sandbox、sandboxPolicy、session-projection、approval，以及所采用的文件和平台 shell provider。
 
-| 能力 | 工具 | 后端 | 沙箱 |
-|------|------|------|------|
-| 文件搜索 | `grep` / `glob` | `fs-search` | 无（纯读取） |
-| 文件操作 | `read` / `write` / `edit` | `tool-fs` | `fs-sandbox` |
-| 字符串替换编辑 | `str_replace_editor` | `tool-str-replace-editor` | `fs-sandbox` |
-| 命令执行 | `bash` | `tool-bash` | `bash-sandbox` |
+session-projection 注册表为最小外观提供策略折叠，容器不生成真实 Session。approval 保持可用，缺失询问闭包时按原生 unavailable 结果关闭提权。
 
-**保留 ellamaka 原生实现**：`edit`、`read` / `write`、`wopal_task_*`。这些工具的现有语义或宿主集成更重要，由 ellamaka 自己提供。
+宿主约束禁用 session 生命周期与检查点、agent-loop、模型调用、界面、configEditor/pluginManager、DeepSeek account、目标、计划、压缩、子代理和后台任务等耦合能力。新增基础 bundle 行也按容器边界审定，不能依靠一份按旧包名保存的用户禁用表维持该边界。
 
-**不采用**：session-query、schedule、subagent 等引擎能力包。它们依赖 dsh 的引擎层语义，按 ellamaka 数据模型复刻。
+用户补丁保留工具配置，宿主能力约束负责保证无会话执行和可用后端。两种平台 shell 行均关闭后台执行，schema 不宣告 run_in_background，强制传入由工具拒绝。tools presentation 固定为 native，进程级 PTC 环境选择不改变采用表。
 
-## 工具容器装配
+挂载验收检查本平台的采用集合及其 provider。macOS/Linux 检查七个工具；Windows 检查文件工具与 pwsh 后端。DSH 的 API 定义包可以在闭包中存在，相关会话 provider 的激活由该 profile 的边界决定。
 
-容器装配 `fs-sandbox` 与 `bash-sandbox` 沙箱后端，使文件与命令的沙箱模式有值，沙箱策略参与执行链。容器内不创建任何 dsh 会话。
+## Tool Projection
 
-补丁层禁用 agent-loop 相关插件：会话、agent-loop、模型调用、子代理、后台任务、目标、计划模式、压缩、Web 插件等。保留的是工具注册表与执行链：工具、系统提示、子进程、文件系统、沙箱、溢出存储、文件工具、文件搜索等。
+ontology 的 dsh-adapter 通过 tool.provider 在每次模型请求读取容器的 live schemas，确定性投影、排序并覆盖采用的同名工具。schema 随实际插件状态变化，参数转换与工具结果映射由 adapter 拥有。
 
-**两条容器语义**：
+| 消费面         | 契约                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| schema         | 动态读取 registry，保留所需参数与描述；Bash 的 description 随 schema 投影 |
+| 参数           | 固定的参数名转换，执行时反向转换；其余参数保持原名                        |
+| Shell 平台映射 | Windows 将 pwsh 的实际 schema/dispatch 映射到现有逻辑 shell 工具名        |
+| 结果           | content 为模型输出，value 为完整文件结果，meta 为补充差异与执行信息       |
+| 权限           | 执行前复用 Ellamaka 读写与外部目录门禁；平台映射使用逻辑工具权限          |
+| 生命周期       | 实际执行交由 registry，取消、超时与清理由 provider 拥有                   |
 
-1. **工具容器不做请求边界持久化**。dsh 的检查点插件监听工具执行，对活动会话执行账本刷新。adapter 不传活动 agent 时它短路放行。容器在 profile 层禁用该插件，因为容器不创建、不持有任何会话，缺少账本持久化不产生功能影响。
+文件能力整套采用，读取观测与后续编辑共享同一后端。容器未发布时 adapter 不投影工具，Ellamaka 原生工具按照其既有权限运行。Bun 的标准 API 兼容、模块路由与激活状态由宿主基座保证。
 
-2. **后台任务能力禁用**。后台任务插件未装配，工具容器隐藏 `run_in_background` 参数，schema 中不出现该字段，强制传入时由 dsh 拒绝。
+## Session Facade
 
-### 工具对会话的依赖面
+adapter 按 Ellamaka session 复用最小内存外观：header.cwd、header.id、seq、eventAt、snapshotEvents、append。事件序号连续，快照范围冻结，审计事件与策略覆盖保存在外观的内存日志中。
 
-工具插件的会话依赖是浅层的，没有一个需要完整的 agent-loop。分三类：
+每次 registry 执行包裹引用计数的 turn/start 与 turn/end。并发和嵌套共享最外层活动 turn，finally 保证闭合。容器持久会话与检查点由 Web profile 的独立执行面拥有。
 
-| 类别 | 特征 | 工具 |
-|------|------|------|
-| **只读形状** | 只读工作目录与归属标识两个标量 | 文件搜索、溢出策略 |
-| **读事件** | 折叠会话事件以读取沙箱模式覆盖 | 文件工具、字符串替换编辑、命令执行 |
-| **写事件** | 写入持久事件或依赖事件瀑布 | 文件工具、字符串替换编辑、文件观察策略 |
+## Sandbox and Approval
 
-**最小可行的会话形状** = 工作目录 + 归属标识 + 空事件数组。
+启用沙箱时采用表使用 DSH enforcing provider。默认模式来自空间 pluginConfig，显式消息模式通过 ToolContext.extra.sandboxMode 传入，每次选择均追加 sandbox/mode 事件。
 
-两条容易搞错的事实：
+事件折叠采用 LAST-wins。恢复默认值也需要显式追加该值；字段缺失是沿用当前折叠值的唯一信号。
 
-1. 事件数组缺失不会导致类型错误。真实 dsh 会话的事件字段恒为数组，adapter 提供空数组是防御性做法，不是必需。
-2. 会话标识不是临时目录的隔离键。隔离键是工作目录，标识只用于溢出存储与日志，缺失无害。
+沙箱提权由原生 approval 服务处理。adapter 监听 approval/request，按 session id 取得当前执行的 ctx.ask 闭包，映射为 Ellamaka 的 sandbox_escalation 权限卡片。
 
-### 容器对服务的依赖
+| 决策          | DSH 结果                                           |
+| ------------- | -------------------------------------------------- |
+| 仅本次允许    | allowed-once                                       |
+| 总是允许      | Ellamaka 权限池承接；DSH 当前调用返回 allowed-once |
+| 拒绝          | rejected                                           |
+| 缺失 answerer | 下游 unavailable，提权关闭                         |
+| 中止          | 原生取消                                           |
 
-| 服务 | 必需性 |
-|------|--------|
-| 工具注册表 | 全部工具必需 |
-| 文件系统 | 文件工具、字符串替换编辑必需 |
-| Shell | 命令执行必需 |
-| Shell 环境 | 命令执行的唯一硬依赖 |
-| 系统提示 | 文件工具、文件搜索、命令执行必需；沙箱策略可选 |
-| 子进程 | 文件搜索必需 |
-| 沙箱策略 | 工具在沙箱内运行的决策组件 |
-| 审批 | 没有任何工具无条件需要；文件工具与命令执行按需使用 |
-| 后台任务 | 只在启用后台执行时需要；命令执行按需使用 |
-| 溢出存储 | 处处按需获取并降级；文件搜索与溢出策略按需使用 |
+escalation=never 为外观写入 approval/policy，审批服务在询问前拒绝。一次提权仅影响该调用，程序或工具副作用不自动重放。
 
-## 工具投影
+## Configuration and UI
 
-`.wopal/plugins/dsh-adapter` 把工具容器中的工具投影进 ellamaka 的 ToolRegistry。
+进程级容器与空间级投影分离。用户级、空间公共、空间私有的 pluginConfig 经引擎合并，adapter 校验 dsh-adapter 条目。
 
-- **整套替换**：没有逐个工具的映射表。开启沙箱即整套替换文件搜索、文件操作、字符串替换编辑与命令执行七类工具，同名覆盖 ellamaka 内置工具。dsh 工具不能部分替换：dsh 的编辑工具依赖自身读取工具维护的已读记录，内置读取工具无法提供，混用即错乱，因此采用全有或全无。容器缺失时 adapter 挂零个工具，内置工具原样可用。
-- **schema 投影**：把 dsh 的 JSON Schema 解包为 ellamaka 插件 SDK 的类型描述。不支持的类型降级为未知类型，dsh schema 的扩展不破坏投影。
-- **参数映射**：dsh 的下划线命名参数重命名为 ellamaka 的驼峰命名，投影时重命名，执行时转回。
-- **结果映射**：dsh 的差异元数据映射为 ellamaka 的文件差异结构（文件、补丁、新增行数、删除行数），差异算法在 adapter 内自持，不引用 dsh 包。前端无需改动。
-- **调用日志**：adapter 经容器日志记录每次调用，携带工具名、会话标识与调用标识，落入该 profile 的 `dsh-plugins-ellamaka-tools.log`。
-- **权限门禁复用**：adapter 在执行前复用 ellamaka 的读写权限与外部目录权限门禁。
+sandbox.enabled=true 时采用完整工具集，mode 的空间默认为 read-only 或 workspace-write；缺失或 false 时使用 Ellamaka 原生工具。消息级选择可以表达 read-only、workspace-write 和 full-access，并转换为 provider 的模式词汇。
 
-**动态装配**：adapter 注册为工具提供者，每次调用实时读取容器的工具 schema，不在启动时冻结。dsh 插件动态加载或卸载后，工具集合在下一轮模型请求中自动更新；同名 dsh 工具卸载后内置工具自动恢复。工具集合未变化时，通过确定性投影加名字排序保证结果字节一致，缓存命中。
+Workbench 的选择器依据实际 ready、已装 adapter 与有效 sandbox 配置显示。选择随消息保存与继承，权限、外观事件和工具执行使用相同输入事实。
 
-## 沙箱语义
+## Platform Enforcement
 
-工具调用经 adapter 投影时，按 ellamaka 会话复用一份最小外观：工作目录（作为子进程启动目录）、会话标识（作为归属标签）、会话事件（用于折叠沙箱模式）。其他一切省略。
+| 平台    | 后端                          | 边界                                             |
+| ------- | ----------------------------- | ------------------------------------------------ |
+| macOS   | sandbox-exec                  | 后端可用时执行所选策略                           |
+| Linux   | bubblewrap 或 Landlock        | provider 报告完整或部分 enforcement              |
+| Windows | ACL / restricted-token runner | 实际 shell 为 pwsh，enforcement 按 provider 报告 |
 
-沙箱模式在运行时决议：
+enforcing backend 不可用时返回 sandbox-unavailable，不能把受限请求转为无沙箱执行。运行结果区分执行结果、拒绝与实际 enforcement。
 
-- **启用沙箱**：adapter 挂载工具提供者，投影整套 dsh 工具，并向每个会话外观注入沙箱模式事件，模式在只读与工作区写入之间选择。
-- **关闭沙箱**：adapter 空转工具投影，不注册工具提供者、不建会话外观、不注入任何事件。ellamaka 内置工具原样运行，行为与未加载 adapter 完全一致。空转只作用于工具投影，adapter 未来新增的非工具职责照常挂载。
-
-### 提权审批
-
-沙箱拒绝后，dsh 模型可以回填沙箱权限与理由，申请一次性更宽模式。这个申请经 dsh 原生审批服务处理。工具容器原生启用审批插件，由 adapter 补齐其运行时前置条件，审批决策经桥显示在 Workbench 的权限卡片。
-
-**会话外观扩展**（在基础外观之上增加两项）：
-
-| 扩展 | 语义 |
-|------|------|
-| 事件追加 | 往自持的事件数组写入。审批审计对落内存，不落盘 |
-| 轮次包裹 | 每次工具执行外层包裹轮次开始与结束，引用计数，保证闭合；并发或嵌套时只有最外层闭合 |
-
-两者合起来满足审批插件对活动轮次的前置要求。工具容器仍然不创建持久会话。
-
-**审批应答桥**：adapter 在容器上注册审批请求的监听，按会话标识取出执行时注册的询问闭包，构造提权权限询问（模式取目标模式，元数据携带工具名、调用标识与理由）。决策映射：
-
-| 用户决策 | dsh 结果 |
-|---------|---------|
-| 仅本次 | 允许一次，仅本次调用以更宽模式执行 |
-| 总是允许 | ellamaka 权限规则池承接，会话内同模式免再询问；dsh 侧返回允许一次 |
-| 拒绝 | 拒绝 |
-| 无询问闭包（如无界面的入口） | 委托下游兜底为不可用，失败即关闭 |
-| 中止 | dsh 原生取消 |
-
-**提权策略**：空间配置项 `wopal.pluginConfig["dsh-adapter"].escalation` 取值 `ask` 或 `never`，默认询问。取 `never` 时 adapter 向每个会话外观预置审批策略事件，审批服务在事件瀑布之前确定性拒绝，应答桥零调用。沙箱关闭时 adapter 空转，该字段不生效。
-
-### 会话级沙箱模式切换
-
-Workbench 聊天输入框底栏提供三态下拉：只读、工作区写入、完全访问。选择按会话存浏览器本地存储，不改写任何配置文件。
-
-选择随消息携带：提交时进入消息载荷，随用户消息持久化（派生与排队继承），经会话工具解析透传进工具上下文；adapter 在每次工具执行时读取，有值即追加沙箱模式事件，立即生效。无选择时回落空间默认。
-
-显示条件是运行时事实：输入框存在、dsh 运行时状态为就绪（未禁用、未降级）、实例级生效配置包含 dsh-adapter 插件且该插件声明启用沙箱。任一不满足即隐藏。
-
-**事件折叠的不变量**：显式选择必须总是追加事件，即使该值等于空间默认。事件日志按最后者生效折叠，「恢复默认」只能靠显式写入默认值。把「等于默认」优化成「不追加」会让会话滞留在上一次的覆盖值上。上下文中模式缺失才是「沿用当前折叠值」的唯一信号。
-
-## 配置与隔离
-
-### 进程级共享，空间级隔离
-
-**容器装配是进程级共享能力池**。serve、TUI、Desktop 各挂一个工具容器，进程内所有空间共用。容器载入完整工具链，禁用清单只管 agent-loop 相关插件，不管工具。装配一次，所有空间共用。
-
-**工具投影是空间级隔离点**。每个空间的 `.wopal/config/settings.jsonc` 声明自己的沙箱策略。adapter 按空间加载，各带各的配置：开沙箱的空间整套替换为 dsh 工具，关沙箱的空间用 ellamaka 内置工具，互不影响。
-
-**配置层级走 ellamaka 原生合并**：用户级、空间级、空间本地，逐层覆盖。
-
-### 沙箱配置
-
-空间级 `.wopal/config/settings.jsonc` 与 `settings.local.jsonc` 拥有工具容器的沙箱策略，配置形态为 `wopal.pluginConfig["dsh-adapter"].sandbox: { enabled, mode }`：
-
-| 配置 | 含义 |
-|------|------|
-| `enabled: true` | 启用沙箱，模式在只读与工作区写入之间选择 |
-| `enabled: false` 或缺失 | 关闭沙箱，adapter 空转工具投影，ellamaka 内置工具原样运行 |
-
-进程级默认值只在尚未解析空间配置时兜底。沙箱策略由空间配置拥有，不使用环境变量表达。
-
-### 平台支持
-
-dsh 沙箱后端支持三个平台：
-
-| 平台 | 机制 | 依赖 | 完整度 |
-|------|------|------|--------|
-| macOS | 系统自带的沙箱执行工具 | 无 | 完整 |
-| Linux | 优先 bubblewrap，回退 Landlock | bubblewrap 需安装 | 完整；老内核自报部分 |
-| Windows | 受限令牌运行器 | 自带运行器 | 部分，有两个已知缺口 |
-
-探测失败即拒绝执行并报沙箱不可用，不降级到无沙箱运行。
-
-## Related Documents
-
-| 文档 | 引用目的 |
-|------|---------|
-| `./DESIGN-dsh-web.md` | Web profile 的插件供应链与界面承载 |
+PTC 的独立执行 provider 不属于当前 native 工具投影所需的运行时；`ellamaka-tools` 仍以 native presentation 服务现有 read/edit/bash 等采用面。Web/Bun 宿主已经具备可用的 PTC 执行底座，后续 Session Assembly 可在同一 DSH 能力池上通过 scope + `tools.restrict()` + `presentAs("ptc")` 投影 `run_code`，SDK 注入和 Session grant 仍由独立装配契约拥有。

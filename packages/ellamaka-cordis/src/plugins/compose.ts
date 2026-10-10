@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url"
 import { readProfileManifest } from "./profile-manifest.js"
 import { parseDocument, Schema } from "yaml"
 import { homeProfilesDirOf } from "../runtime/status.js"
-import { resolveRowSpecifier } from "./resolve-specifiers.js"
+import { resolveProfileModule } from "./profile-resolution.js"
 
 /**
  * Plugin composition on the OFFICIAL bundle semantics (Plan 223 alignment).
@@ -59,6 +59,8 @@ export interface DshPluginStackContext {
   extraPatches: unknown[]
   /** The home config injection rows (official home semantics). */
   homePatches: unknown[]
+  /** Constraints recomputed above all mutable user layers. */
+  hostPatches?: (patches: readonly unknown[]) => unknown[]
 }
 
 /**
@@ -78,8 +80,6 @@ export function profileDirOf(dshRoot: string, profile: string): string {
   return join(homeProfilesDirOf(dshRoot), profile)
 }
 
-
-
 /**
  * Resolve bare package names inside OFFICIAL bundle layers to absolute
  * `file://` URLs (B1 拆雷, kept): the official `loader.internal` resolution
@@ -93,6 +93,7 @@ export function resolveUserBundleNames(
   options?: ComposeLayersOptions & { dshRoot?: string; profile?: string },
 ): { packageName?: string; patches: unknown[] }[] {
   const dshRoot = options?.dshRoot
+  const profile = options?.profile
   return layers.map((layer) => {
     const patches = structuredClone(layer.patches)
     const packageName = layer.packageName ?? ""
@@ -100,29 +101,32 @@ export function resolveUserBundleNames(
     // natively inside the closure under both runtimes. Only USER plugin
     // layers need the file:// rewrite (Bun's native import cannot reach
     // home/profiles packages).
-    if (!dshRoot || !options?.profile || packageName.startsWith("@deepseek-ai/")) {
+    if (!dshRoot || !profile || packageName.startsWith("@deepseek-ai/")) {
       return { packageName: layer.packageName, patches }
     }
     // Anchor the parent-walk at the plugin's own directory (its siblings and
     // own subtree resolve natively).
-    const packageDir = join(profileDirOf(dshRoot, options.profile), "node_modules", ...packageName.split("/"))
+    const packageDir = join(profileDirOf(dshRoot, profile), "node_modules", ...packageName.split("/"))
     const visit = (row: unknown) => {
       if (row === null || typeof row !== "object") return
       const record = row as Record<string, unknown>
       const name = record.name
-      if (typeof name === "string" && !name.startsWith("file://") && !name.startsWith(".") && !name.startsWith("cordis:") && !name.startsWith("@deepseek-ai/")) {
-        // Best effort: rewrite to the entity's entry URL; on failure KEEP the
-        // bare name — the Loader falls back to native import() (official
-        // embedder semantics) and the standing patch warning surfaces it.
-        try {
-          record.name = pathToFileURL(createRequire(join(packageDir, "package.json")).resolve(name)).href
-        } catch {
-          try {
-            record.name = resolveRowSpecifier(name, { dshRoot, installAnchor: options?.installAnchor })
-          } catch {
-            // keep the bare name
-          }
-        }
+      if (
+        typeof name === "string" &&
+        !name.startsWith("file://") &&
+        !name.startsWith(".") &&
+        !name.startsWith("cordis:") &&
+        !name.startsWith("@deepseek-ai/")
+      ) {
+        record.name = resolveProfileModule(
+          name,
+          {
+            installAnchor:
+              options.installAnchor ?? createRequire(import.meta.url).resolve("@deepseek-ai/dsh/package.json"),
+            dir: profileDirOf(dshRoot, profile),
+          },
+          pathToFileURL(join(packageDir, "package.json")).href,
+        )
       }
       if (Array.isArray(record.config)) record.config.forEach(visit)
       if (Array.isArray(record.insert)) record.insert.forEach(visit)
@@ -145,16 +149,18 @@ export function composeFullPatchStack(layers: {
   userPatches: unknown[]
   extraPatches: unknown[]
   homePatches: unknown[]
+  hostPatches?: (patches: readonly unknown[]) => unknown[]
 }): unknown[] {
   // Pure transport: the official layers arrive with bare names ALREADY
   // resolved (the boot closure owns the anchors — {@link resolveUserBundleNames}).
   const official = typeof layers.profileLayers === "function" ? layers.profileLayers() : layers.profileLayers
-  return [
+  const patches = [
     ...official.flatMap((layer) => layer.patches),
     ...layers.userPatches,
     ...layers.extraPatches,
     ...layers.homePatches,
   ]
+  return [...patches, ...(layers.hostPatches?.(patches) ?? [])]
 }
 
 /**
@@ -189,7 +195,9 @@ export function readUserPatchLayer(dshRoot: string, profile: string): unknown[] 
   }
   const document = parseDocument(content, { schema: entryListSchema })
   if (document.errors.length > 0) {
-    throw new Error(`dsh plugin compose: failed to parse user patch layer ${file}: ${document.errors.map((error) => error.message).join("; ")}`)
+    throw new Error(
+      `dsh plugin compose: failed to parse user patch layer ${file}: ${document.errors.map((error) => error.message).join("; ")}`,
+    )
   }
   const body = document.contents
   if (body === null || body === undefined) return []

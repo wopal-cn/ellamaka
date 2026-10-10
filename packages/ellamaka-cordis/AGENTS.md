@@ -17,30 +17,30 @@ description: DSH fusion bridge package — cordis container boundary, runtime cl
 
 This package is the bridge between ellamaka and the dsh runtime, compiled into the CLI binary and the Desktop sidecar. It owns three responsibilities at once: the single in-process cordis container entry, the materialization and dynamic loading of the dsh runtime closure, and the plugin supply chain.
 
-| Directory | Responsibility |
-|------|---------------|
-| `src/hub.ts` | `CordisHub` — the repository's single cordis boundary, holding `Context` lifecycle |
-| `src/dsh-web.ts` | Replays the dsh boot sequence per profile: `mountDshWeb` / `bootDshWeb` (web), `mountDshTools` / `bootDshTools` (ellamaka-tools) |
-| `src/dsh-virtual-webserver.ts` | `VirtualWebServer` — implements the official WebServer contract, holding route and upgrade dispatch |
-| `src/runtime/` | Runtime Manager: runtime manifest, embedded lock, closure materialization, installAnchor resolution and state machine |
-| `src/plugins/` | Plugin supply chain: profile declaration, resolver, installer, composition, patch layer, HMR adapter, market install worker |
-| `src/log-bridge.ts` | `createCordisLogExporter` — bridges plugin `ctx.logger` into the ellamaka `Log` system |
-| `script/` | Build-time manifest and lock generators, with a `--check` drift gate |
-| `generated/` | Committed build products: `dsh-runtime-manifest.json`, `dsh-runtime-lock.json` |
-| `test/` | Package-level tests; `probe-*.ts` are manual mount probes, not unit tests |
+| Directory                      | Responsibility                                                                                                                   |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `src/hub.ts`                   | `CordisHub` — the repository's single cordis boundary, holding `Context` lifecycle                                               |
+| `src/dsh-web.ts`               | Replays the dsh boot sequence per profile: `mountDshWeb` / `bootDshWeb` (web), `mountDshTools` / `bootDshTools` (ellamaka-tools) |
+| `src/dsh-virtual-webserver.ts` | `VirtualWebServer` — implements the official WebServer contract, holding route and upgrade dispatch                              |
+| `src/runtime/`                 | Runtime Manager: runtime manifest, embedded lock, closure materialization, installAnchor resolution and state machine            |
+| `src/plugins/`                 | Plugin supply chain: profile declaration, resolver, installer, composition, patch layer, HMR adapter, market install worker      |
+| `src/log-bridge.ts`            | `createCordisLogExporter` — bridges plugin `ctx.logger` into the ellamaka `Log` system                                           |
+| `script/`                      | Build-time manifest and lock generators, with a `--check` drift gate                                                             |
+| `generated/`                   | Committed build products: `dsh-runtime-manifest.json`, `dsh-runtime-lock.json`                                                   |
+| `test/`                        | Package-level tests; `probe-*.ts` are manual mount probes, not unit tests                                                        |
 
 ## Development Commands
 
 All commands run from `packages/ellamaka-cordis/`.
 
-| Scenario | Command |
-|----------|---------|
-| Full test suite | `bun test` |
-| Unit tests | `bun run test:unit` |
-| Integration tests | `bun run test:integration` |
-| Typecheck | `bun run typecheck` |
-| Regenerate runtime manifest | `bun script/generate-dsh-runtime-manifest.ts` |
-| Regenerate runtime lock | `bun script/generate-dsh-runtime-lock.ts` |
+| Scenario                       | Command                                               |
+| ------------------------------ | ----------------------------------------------------- |
+| Full test suite                | `bun test`                                            |
+| Unit tests                     | `bun run test:unit`                                   |
+| Integration tests              | `bun run test:integration`                            |
+| Typecheck                      | `bun run typecheck`                                   |
+| Regenerate runtime manifest    | `bun script/generate-dsh-runtime-manifest.ts`         |
+| Regenerate runtime lock        | `bun script/generate-dsh-runtime-lock.ts`             |
 | Check generated-artifact drift | `bun script/generate-dsh-runtime-manifest.ts --check` |
 
 ## Implementation Rules
@@ -52,6 +52,9 @@ All commands run from `packages/ellamaka-cordis/`.
 - **Test isolation**: any test, dump, or diagnostic that would touch `$WOPAL_HOME/dsh/home/profiles/` runs against a temp home by injecting `dshHome` / `installAnchor`.
 - **No listening socket**: `VirtualWebServer` provides route registration and upgrade dispatch only; the listening port belongs to the ellamaka main server.
 - **Bridges stay additive**: new bridges arrive as new files or wrappers, so deleting one is a complete rollback; upstream files are never restructured to make room.
+
+- **Profile mutation gate**: boot, config editing, plugin management and file watches use one complete patch generator and one serialized mutation queue. Reconcile failures require explicit runtime restoration before returning a failure result.
+- **Versioned home imports**: keep source settings and user presets recoverable, validate raw config against the new schemas, and record partial/rejected fields without secret values. Runtime signals never become persisted JSON configuration.
 
 ## Testing
 

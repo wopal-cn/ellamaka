@@ -17,9 +17,18 @@ function installPlugin(root: string, name: string): void {
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, "package.json"),
-    JSON.stringify({ name, version: "1.0.0", type: "module", main: "index.js", dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+    JSON.stringify({
+      name,
+      version: "1.0.0",
+      type: "module",
+      main: "index.js",
+      dsh: { bundle: { patch: "./cordis.patch.yml" } },
+    }),
   )
-  writeFileSync(join(dir, "index.js"), `export function apply(ctx) { ctx.provide(${JSON.stringify(name + ".marker")}, "mounted") }\n`)
+  writeFileSync(
+    join(dir, "index.js"),
+    `export function apply(ctx) { ctx.provide(${JSON.stringify(name + ".marker")}, "mounted") }\n`,
+  )
   writeFileSync(join(dir, "cordis.patch.yml"), `- insert:\n    - id: ${name}\n      name: ${name}\n`)
 }
 
@@ -164,9 +173,11 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
 
       // The container's include config was replaced with the recomposed
       // stack (the plugin rows from the profile manifest bundle remain).
-      const config = (host.includeEntry as unknown as {
-        options?: { config?: { patches?: { insert?: { id?: string }[] }[] } }
-      }).options?.config
+      const config = (
+        host.includeEntry as unknown as {
+          options?: { config?: { patches?: { insert?: { id?: string }[] }[] } }
+        }
+      ).options?.config
       const insertRows = (config?.patches ?? []).flatMap((row) => row?.insert ?? [])
       expect(Array.isArray(config?.patches)).toBe(true)
     } finally {
@@ -182,6 +193,7 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
     const name = "bun-hmr-fixture"
     installPlugin(root, name)
     await withProfileManifestWrite(profileDirOf(root, "ellamaka-tools"), (manifest) => {
+      appendBundle(manifest, "@deepseek-ai/dsh-base")
       appendBundle(manifest, name)
     })
     const ctx = new Context()

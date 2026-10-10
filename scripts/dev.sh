@@ -21,27 +21,35 @@ find_space_root() {
     # space root on the next run and split the shared ledger in two. Only a
     # real space (REGULATIONS.md present) may anchor the logs.
     if [ -f "$curr/.wopal-space/REGULATIONS.md" ]; then
-      echo "$curr"
+      (cd "$curr" && pwd -P)
       return 0
     fi
     if [[ "$curr" == *"/.worktrees/"* ]] || [[ "$curr" == *"/.worktrees"* ]]; then
       local base="${curr%%/.worktrees*}"
       if [ -n "$base" ] && [ -f "$base/.wopal-space/REGULATIONS.md" ]; then
-        echo "$base"
+        (cd "$base" && pwd -P)
         return 0
       fi
     fi
     curr="$(dirname "$curr")"
   done
-  echo "$(cd "$1/../.." 2>/dev/null && pwd || echo "$1")"
+  echo "$(cd "$1/../.." 2>/dev/null && pwd -P || echo "$1")"
 }
 
-root="$(cd "$(dirname "$(resolve "$0")")/.." && pwd)"
+# Canonical (physical) paths throughout: /Users/sam/coding is a symlink to
+# /Volumes/U500G/coding, so a logical $PWD yields a different scope hash, a
+# different registry entry, and an $root that matches no process argv — the
+# same worktree becomes two buckets and live instances go unrecognized.
+root="$(cd "$(dirname "$(resolve "$0")")/.." && pwd -P)"
 source "$root/scripts/lib/version.sh"
 space="$(find_space_root "$root")"
 opencode_entry="$root/packages/opencode/src/index.ts"
 opencode_dir="$root/packages/opencode"
 opencode_preload="$opencode_dir/node_modules/@opentui/solid/scripts/preload.ts"
+if [ ! -f "$opencode_preload" ]; then
+  opencode_preload="$root/node_modules/@opentui/solid/scripts/preload.ts"
+fi
+dsh_diagnostic_preload="$root/packages/ellamaka-cordis/src/runtime/preload.ts"
 ellamaka_app_dir="$root/packages/ellamaka-app"
 DESKTOP_DIR_ABS="$root/packages/ellamaka-desktop"
 
@@ -286,13 +294,11 @@ is_service_process() {
   command="$(ps -o command= -p "$pid" 2>/dev/null)"
   case "$label" in
     backend)
-      if [ "$root_" = "-" ]; then
-        # Unknown root: fall back to a suffix match so a foreign worktree's
-        # backend still answers without a hardcoded absolute path.
-        [[ "$command" == *"packages/opencode/src/index.ts"* ]] || return 1
-      else
-        [[ "$command" == *"$opencode_entry_"* ]] || return 1
-      fi
+      # Suffix match, not absolute-prefix match: the argv records the path form
+      # the STARTING shell had — /Users/... or /Volumes/... for the same
+      # worktree — so an exact "$opencode_entry_" prefix can never match across
+      # forms. Uniqueness within this worktree is the cwd check's job.
+      [[ "$command" == *"packages/opencode/src/index.ts"* ]] || return 1
       expected="$opencode_dir_"
       ;;
     frontend)
@@ -302,12 +308,9 @@ is_service_process() {
     tui)
       # The interactive tui/attach client execs from the caller's cwd, so
       # unlike backend/frontend there is no expected cwd — the engine entry
-      # path in the command line is the identity.
-      if [ "$root_" = "-" ]; then
-        [[ "$command" == *"packages/opencode/src/index.ts"* ]] || return 1
-      else
-        [[ "$command" == *"$opencode_entry_"* ]] || return 1
-      fi
+      # path in the command line is the identity. Suffix match for the same
+      # reason as backend: argv may carry either path form.
+      [[ "$command" == *"packages/opencode/src/index.ts"* ]] || return 1
       ;;
     desktop) [[ "$command" == *"electron-vite"* ]] || return 1 ;;
     desktop-sidecar)
@@ -336,14 +339,12 @@ is_service_process() {
 }
 
 resolve_path() {
-  local rest="" base="$1" dir
-  while [ -L "$base" ]; do
-    dir="$(cd "$(dirname "$base")" 2>/dev/null && pwd)" || return 0
-    base="$(readlink "$base")"
-    [[ "$base" != /* ]] && base="$dir/$base"
-  done
-  dir="$(cd "$(dirname "$base")" 2>/dev/null && pwd)" || return 0
-  printf '%s/%s\n' "$dir" "$(basename "$base")"
+  # pwd -P resolves EVERY symlinked component (not just the final one): with
+  # /Users/sam/coding -> /Volumes/U500G/coding, lsof reports a physical cwd
+  # while $root stays in logical form, and a final-segment-only loop left both
+  # sides unnormalized so every live instance was misjudged as foreign and
+  # swept (pidfile + logs deleted) on the next status run.
+  (cd "$1" 2>/dev/null && pwd -P)
 }
 
 record_is_current() {
@@ -665,7 +666,7 @@ start_backend() {
   fi
   args+=("$@")
   [ -f "$preload" ] || { echo "missing OpenTUI preload: $preload"; return 1; }
-  start_process backend "$port" "$BACKEND_LOG" "$opencode_dir" env "${env_args[@]}" bun --preload "$preload" "$opencode_entry" "${args[@]}"
+  start_process backend "$port" "$BACKEND_LOG" "$opencode_dir" env "${env_args[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$preload" "$opencode_entry" "${args[@]}"
 }
 
 start_frontend() {
@@ -891,7 +892,7 @@ cmd_tui() {
       fi
       cd "$opencode_dir"
       write_record tui - "$$" "$(pgid_of "$$")"
-      exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$RECORD_PORT" --dir "$caller_pwd"
+      exec env "${attach_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$RECORD_PORT" --dir "$caller_pwd"
     fi
 
     if ! require_own_instance_stopped backend "$PORT" || ! require_own_instance_stopped frontend "$APP_PORT"; then
@@ -916,7 +917,7 @@ cmd_tui() {
     echo "  → $(workbench_entry_url "$APP_PORT")"
     cd "$opencode_dir"
     write_record tui - "$$" "$(pgid_of "$$")"
-    exec env "${attach_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
+    exec env "${attach_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
   fi
 
   mkdir -p "$DEV_DIR"
@@ -931,7 +932,7 @@ cmd_tui() {
   fi
   cd "$caller_pwd"
   write_record tui - "$$" "$(pgid_of "$$")"
-  exec env "${tui_env[@]}" bun --preload "$opencode_preload" "$opencode_entry" "${tui_args[@]}" "${ns_arg[@]}" "${passthrough[@]}"
+  exec env "${tui_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${tui_args[@]}" "${ns_arg[@]}" "${passthrough[@]}"
 }
 
 cmd_serve() {

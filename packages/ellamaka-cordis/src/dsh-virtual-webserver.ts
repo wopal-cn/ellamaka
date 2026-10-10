@@ -259,6 +259,8 @@ export class VirtualWebServer {
       return adaptAbsolute(url);
     }
     if (hasMountPrefix(url)) return url;
+    // Document-relative routes already resolve through the rewritten /dsh/ base.
+    if (!url.startsWith("/")) return url;
     return prefix + url;
   };
   const origFetch = globalThis.fetch;

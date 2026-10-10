@@ -1,3 +1,4 @@
+import { initializeNodeDiagnostics } from "./node-diagnostics.js"
 import { createRequire } from "node:module"
 import { realpathSync } from "node:fs"
 import type * as Cordis from "@deepseek-ai/cordis"
@@ -12,13 +13,7 @@ import type * as DshHostWebserver from "@deepseek-ai/dsh-host-webserver"
  * materialised closure via `installAnchor`. The value side is never statically
  * imported by the Bridge source — only build-time `import type` types survive.
  */
-export type DshModuleName =
-  | "cordis"
-  | "pluginLoader"
-  | "appBoot"
-  | "cmdline"
-  | "launchEnv"
-  | "hostWebserver"
+export type DshModuleName = "cordis" | "pluginLoader" | "appBoot" | "cmdline" | "launchEnv" | "hostWebserver"
 
 /**
  * Runtime handle to the six official DSH modules, resolved from the closure
@@ -103,10 +98,8 @@ export function createClosureRequire(installAnchor: string): NodeRequire {
   return createRequire(realpathSync(installAnchor))
 }
 
-function loadFromRequire(
-  requireModule: ReturnType<typeof createRequire>,
-  installAnchor?: string,
-): DshRuntimeApi {
+function loadFromRequire(requireModule: ReturnType<typeof createRequire>, installAnchor?: string): DshRuntimeApi {
+  initializeNodeDiagnostics()
   const api = {} as DshRuntimeApi
   for (const key of Object.keys(MODULE_SPECIFIERS) as DshModuleName[]) {
     const spec = MODULE_SPECIFIERS[key]

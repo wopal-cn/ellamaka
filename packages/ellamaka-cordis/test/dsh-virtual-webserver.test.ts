@@ -62,9 +62,33 @@ describe("VirtualWebServer route matching", () => {
     vws.attach(server)
 
     const seen: string[] = []
-    vws.register({ kind: "exact", path: "/api/x", handler: (req, res) => { seen.push("exact"); res.writeHead(200); res.end("exact") } })
-    vws.register({ kind: "prefix", path: "/api", handler: (req, res) => { seen.push("prefix-api"); res.writeHead(200); res.end("prefix-api") } })
-    vws.register({ kind: "prefix", path: "/api/x", handler: (req, res) => { seen.push("prefix-x"); res.writeHead(200); res.end("prefix-x") } })
+    vws.register({
+      kind: "exact",
+      path: "/api/x",
+      handler: (req, res) => {
+        seen.push("exact")
+        res.writeHead(200)
+        res.end("exact")
+      },
+    })
+    vws.register({
+      kind: "prefix",
+      path: "/api",
+      handler: (req, res) => {
+        seen.push("prefix-api")
+        res.writeHead(200)
+        res.end("prefix-api")
+      },
+    })
+    vws.register({
+      kind: "prefix",
+      path: "/api/x",
+      handler: (req, res) => {
+        seen.push("prefix-x")
+        res.writeHead(200)
+        res.end("prefix-x")
+      },
+    })
 
     expect((await get(baseUrl, "/api/x")).body).toBe("exact")
     expect((await get(baseUrl, "/api/y")).body).toBe("prefix-api")
@@ -82,7 +106,10 @@ describe("VirtualWebServer route matching", () => {
 
     expect((await get(baseUrl, "/nope")).status).toBe(404)
 
-    vws.registerFallback((req, res) => { res.writeHead(200); res.end("fallback") })
+    vws.registerFallback((req, res) => {
+      res.writeHead(200)
+      res.end("fallback")
+    })
     expect((await get(baseUrl, "/nope")).body).toBe("fallback")
 
     server.close()
@@ -154,8 +181,7 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
     runInIsolatedVm(script, calls)
     // The adapter installs wrappers; drive them by evaluating the wrapped calls.
     const sandbox = runInIsolatedVm(
-      script +
-        `;fetch("/api/x"); new WebSocket("/api/events.mux"); new EventSource("/plugins/events");`,
+      script + `;fetch("/api/x"); new WebSocket("/api/events.mux"); new EventSource("/plugins/events");`,
       calls,
     )
     expect(calls.fetch[0][0]).toBe("/dsh/api/x")
@@ -185,8 +211,7 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
     const calls = { fetch: [], ws: [], es: [] }
     const script = vws.iframeAdapterScript()
     runInIsolatedVm(
-      script +
-        `;fetch("/dsh-market/registry"); fetch("/dshm-webdav"); fetch("/dsh"); fetch("/dsh/exact");`,
+      script + `;fetch("/dsh-market/registry"); fetch("/dshm-webdav"); fetch("/dsh"); fetch("/dsh/exact");`,
       calls,
     )
     // Sibling paths sharing the "/dsh" character prefix must be prefixed too —
@@ -206,9 +231,20 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
     const sandbox = {
       location: { origin: "http://localhost:4097" },
       URL,
-      fetch: (...args: unknown[]) => { calls.fetch.push(args); return Promise.resolve({ ok: true }) },
-      WebSocket: class { constructor(...args: unknown[]) { calls.ws.push(args) } },
-      EventSource: class { constructor(...args: unknown[]) { calls.es.push(args) } },
+      fetch: (...args: unknown[]) => {
+        calls.fetch.push(args)
+        return Promise.resolve({ ok: true })
+      },
+      WebSocket: class {
+        constructor(...args: unknown[]) {
+          calls.ws.push(args)
+        }
+      },
+      EventSource: class {
+        constructor(...args: unknown[]) {
+          calls.es.push(args)
+        }
+      },
       console,
     }
     const vm = require("node:vm")
@@ -231,8 +267,12 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
     // Model an HTMLScriptElement prototype carrying a native src accessor.
     const scriptProto = {}
     Object.defineProperty(scriptProto, "src", {
-      get() { return this.__src },
-      set(v) { this.__src = v },
+      get() {
+        return this.__src
+      },
+      set(v) {
+        this.__src = v
+      },
       configurable: true,
     })
     function makeEl() {
@@ -253,7 +293,12 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
         prototype: scriptProto,
       },
       console,
-      Request: class Request { url: string; constructor(url: string, _init?: unknown) { this.url = url } },
+      Request: class Request {
+        url: string
+        constructor(url: string, _init?: unknown) {
+          this.url = url
+        }
+      },
       WebSocket: class {},
       EventSource: class {},
     }
@@ -273,8 +318,12 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
     const script = vws.iframeAdapterScript()
     const scriptProto = {}
     Object.defineProperty(scriptProto, "src", {
-      get() { return this.__src },
-      set(v) { this.__src = v },
+      get() {
+        return this.__src
+      },
+      set(v) {
+        this.__src = v
+      },
       configurable: true,
     })
     const el = { addEventListener: () => {}, remove: () => {}, async: false } as Record<string, unknown>
@@ -287,7 +336,12 @@ describe("VirtualWebServer iframe prefix adaptation", () => {
       document: documentStub,
       HTMLScriptElement: { prototype: scriptProto },
       console,
-      Request: class Request { url: string; constructor(url: string, _init?: unknown) { this.url = url } },
+      Request: class Request {
+        url: string
+        constructor(url: string, _init?: unknown) {
+          this.url = url
+        }
+      },
       WebSocket: class {},
       EventSource: class {},
     }
@@ -309,11 +363,46 @@ describe("VirtualWebServer outbound redirect rewriting", () => {
     const { baseUrl } = await listen(server)
     vws.attach(server)
 
-    vws.register({ kind: "exact", path: "/login", handler: (req, res) => { res.writeHead(303, { location: "/" }); res.end() } })
-    vws.register({ kind: "exact", path: "/clean", handler: (req, res) => { res.writeHead(303, { location: "/assets/x" }); res.end() } })
-    vws.register({ kind: "exact", path: "/prefixed", handler: (req, res) => { res.writeHead(303, { location: "/dsh/y" }); res.end() } })
-    vws.register({ kind: "exact", path: "/external", handler: (req, res) => { res.writeHead(303, { location: "http://example.com/" }); res.end() } })
-    vws.register({ kind: "exact", path: "/ok", handler: (req, res) => { res.writeHead(200, { "x-hint": "/" }); res.end("ok") } })
+    vws.register({
+      kind: "exact",
+      path: "/login",
+      handler: (req, res) => {
+        res.writeHead(303, { location: "/" })
+        res.end()
+      },
+    })
+    vws.register({
+      kind: "exact",
+      path: "/clean",
+      handler: (req, res) => {
+        res.writeHead(303, { location: "/assets/x" })
+        res.end()
+      },
+    })
+    vws.register({
+      kind: "exact",
+      path: "/prefixed",
+      handler: (req, res) => {
+        res.writeHead(303, { location: "/dsh/y" })
+        res.end()
+      },
+    })
+    vws.register({
+      kind: "exact",
+      path: "/external",
+      handler: (req, res) => {
+        res.writeHead(303, { location: "http://example.com/" })
+        res.end()
+      },
+    })
+    vws.register({
+      kind: "exact",
+      path: "/ok",
+      handler: (req, res) => {
+        res.writeHead(200, { "x-hint": "/" })
+        res.end("ok")
+      },
+    })
 
     const login = await fetch(baseUrl + "/login", { redirect: "manual" })
     expect(login.status).toBe(303)
@@ -337,7 +426,10 @@ describe("VirtualWebServer outbound redirect rewriting", () => {
     const server = makeServer()
     const { baseUrl } = await listen(server)
     vws.attach(server)
-    vws.registerFallback((req, res) => { res.writeHead(302, { Location: "/welcome" }); res.end() })
+    vws.registerFallback((req, res) => {
+      res.writeHead(302, { Location: "/welcome" })
+      res.end()
+    })
 
     const res = await fetch(baseUrl + "/deep/path", { redirect: "manual" })
     expect(res.status).toBe(302)
@@ -359,7 +451,9 @@ describe("VirtualWebServer upgrade socket cleanup", () => {
     vws.registerUpgrade({
       path: "/api/events.mux",
       handler: (req, socket) => {
-        socket.once("close", () => { socketClosed = true })
+        socket.once("close", () => {
+          socketClosed = true
+        })
       },
     })
 
@@ -381,4 +475,49 @@ describe("VirtualWebServer upgrade socket cleanup", () => {
 
     server.close()
   })
+})
+
+test("rc.2 document-relative scripts resolve under the iframe base without corrupting combo queries", () => {
+  const vws = new VirtualWebServer(makeCtx(), { host: "127.0.0.1", port: 0 })
+  const base = "http://localhost:3018/dsh/"
+  const paths: string[] = []
+  const scriptProto = {}
+  Object.defineProperty(scriptProto, "src", {
+    get() {
+      return this.resolved
+    },
+    set(value) {
+      this.resolved = new URL(value, base).href
+      paths.push(this.resolved)
+    },
+  })
+  const sandbox = {
+    URL,
+    location: { origin: "http://localhost:3018" },
+    document: {
+      baseURI: base,
+      createElement() {
+        return Object.create(scriptProto)
+      },
+    },
+    HTMLScriptElement: { prototype: scriptProto },
+    WebSocket: class {},
+    EventSource: class {},
+    fetch: () => {},
+  }
+  require("node:vm").runInNewContext(
+    vws.iframeAdapterScript() +
+      `
+    const script=document.createElement("script");
+    script.src="plugins/??@deepseek-ai/dsh-typert-registry/client.js&rev=abc";
+    script.src="./plugins/??first/client.js,second/client.js&rev=def";
+    script.src="/plugins/??first/client.js&rev=ghi";
+  `,
+    sandbox,
+  )
+  expect(paths).toEqual([
+    base + "plugins/??@deepseek-ai/dsh-typert-registry/client.js&rev=abc",
+    base + "plugins/??first/client.js,second/client.js&rev=def",
+    base + "plugins/??first/client.js&rev=ghi",
+  ])
 })
