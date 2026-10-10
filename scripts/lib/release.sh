@@ -76,6 +76,28 @@ confirm_dirty_release() {
   esac
 }
 
+# confirm_release_gate — --confirm 发布的最后人工门禁。调用点约定：发布计划
+# 已打印、尚未做任何写入（对齐 wopal-cli bump-release：--confirm 后仍 y/N）。
+#   --yes/-y       : 跳过征询（自动化场景必须显式给出）
+#   非交互（无 TTY）: 阻断 —— CI/自动化不允许静默发布
+confirm_release_gate() {
+  : "${ASSUME_YES:=false}"
+  if $ASSUME_YES; then
+    echo "→ --yes 已指定：跳过发布确认"
+    return 0
+  fi
+  if [ ! -t 0 ]; then
+    die "非交互终端：--confirm 需配合 -y/--yes 才能执行发布（CI/自动化必须显式确认）。"
+  fi
+  local reply=""
+  printf '确认执行发布 %s %s？[y/N] ' "$PRODUCT" "$VERSION"
+  read -r reply || true
+  case "$reply" in
+    y|Y|yes|YES) echo "→ 已确认，开始发布" ;;
+    *) die "已取消发布" ;;
+  esac
+}
+
 check_remote_branch() {
   local branch remote_branch unpushed
   branch=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
@@ -365,6 +387,55 @@ check_dep_floor_synced() {
   " "$config_floor" "$dep_floor" || die "依赖下界未同步：@wopal/cli-capability-schema (^$dep_floor) 低于 .ci/versions.json minWopalCli ($config_floor)。请先运行 ./scripts/build.sh cli 或 dev.sh 完成同步并提交。"
 }
 
+# ── npm base 预检（2026-10-10 教训）────────────────────────
+# 依赖包（@wopal/ellamaka-sdk / @wopal/ellamaka-plugin）跟随产品 base 版本发布
+# （docs/DESIGN-distribution.md §npm），npm 版本不可覆盖。若 base 已在 registry
+# 且内容与本次构建不一致（contract 包在 rc 发布后继续演化），该 base 的所有后续
+# 发布必然死在 workflow 的 npm step —— 且 R2 manifest 未提交，版本推断会把同一
+# base 再次算出来，形成反复失败循环。此预检在打 tag 前发现该状态。
+#
+# 边界（fail-open，纯预检不阻断无 npm 发布路径的产品）：
+#   - 仅当目标 base == 当前 workspace 包 base 时才跑完整内容比对（publish CLI
+#     的 plan 校验要求两者一致；目标 base 更新时 registry 上不可能存在，直接判
+#     publishable）。
+#   - publish CLI 缺失 / bun 不可用：跳过预检（advisory hardening，不构成发布
+#     门禁的一部分）。
+check_npm_base_burned() {
+  local base="$1"
+  command -v bun >/dev/null 2>&1 || { echo "ℹ️  bun 不可用，跳过 npm base 预检"; return 0; }
+  local publish_cli="${ELLAMAKA_NPM_PUBLISH_CLI:-$REPO_ROOT/packages/ellamaka-release/src/cli/publish-npm.ts}"
+  [ -f "$publish_cli" ] || { echo "ℹ️  publish CLI 缺失，跳过 npm base 预检"; return 0; }
+
+  # 版本线规则决定产物形态：目标 base 不等于 workspace 包 base 时（新版本线），
+  # registry 上不可能存在该版本（immutable），无需构建比对。
+  local workspace_base=""
+  workspace_base="$(node -p "require('$REPO_ROOT/packages/ellamaka-cli/package.json').version.split('-')[0]" 2>/dev/null || echo "")"
+  if [ "$workspace_base" != "$base" ]; then
+    echo "→ npm base 预检: base $base 不在 registry（新版本线），publishable，跳过内容比对"
+    return 0
+  fi
+
+  echo "→ npm base 预检: base $base 已随此前发布进入 registry，比对内容一致性（约 1-2 分钟）..."
+  local output
+  if output=$(bun "$publish_cli" --check --version "$base" 2>&1); then
+    echo "$output" | grep -E "npm check" || true
+    return 0
+  fi
+
+  # 烧毁：同 base 的 --rc/--patch 转正都必然复发（包版本跟随 base 且不可覆盖），
+  # 唯一出路是 minor/major 开新线 —— 建议版本复用 version-line 推断，不另写规则。
+  echo "$output" >&2
+  local suggested=""
+  suggested="$(product_released_stable)"
+  suggested="$(bun "$REPO_ROOT/packages/ellamaka-release/src/cli/version-line.ts" minor "$suggested" "" "" "[]" 2>/dev/null || true)"
+  if [ -n "$suggested" ]; then
+    # ${suggested} 花括号定界是必须的：macOS bash 在 set -u 下，$var 紧贴多字节
+    # 字符（如中文括号）会把该字符首字节吞进变量名，报 unbound variable。
+    die "npm base $base 已烧毁（registry 内容与本次构建不一致，npm 版本不可覆盖）。同 base 的 --rc/--patch 都会复发此错误；请改用 --minor 开新版本线（下一个版本 ${suggested}）。"
+  fi
+  die "npm base $base 已烧毁（registry 内容与本次构建不一致，npm 版本不可覆盖）。请用 --minor/--major 开新版本线。"
+}
+
 # ── dispatch / 监控 ───────────────────────────────────────
 
 HAVE_GH=false
@@ -487,7 +558,8 @@ process.stdout.write(JSON.stringify((w.products && w.products['$PRODUCT']) || []
 #   CHANNEL (desktop: beta|stable)  CHANNEL_LABEL  PRERELEASE_KIND (rc|beta|"")
 #   ALLOWED_BUMPS (空格分隔的合法 bump 开关)
 run_release() {
-  # dry-run 不做任何写入，永不检查工作区状态
+  # 默认 dry-run（只打印计划）；--confirm 才真正发布。--dry-run 是显式预览的
+  # 兼容写法（CONFIRM 与 DRY_RUN 互斥，薄壳解析时已保证）。
   WORKSPACE_DIRTY=false
   if ! $DRY_RUN; then
     echo "→ 检查工作区..."
@@ -542,9 +614,34 @@ run_release() {
   check_withdrawn
   check_migration_floor
 
+  # npm base 预检（烧毁检测）：打 tag 前确认依赖包 base 在 registry 上仍然
+  # 可发布（immutable 冲突会在 workflow 的 npm step 才爆炸，且 R2 manifest
+  # 未提交导致同版本反复失败）。dry-run 与 confirm 两路都过。
+  check_npm_base_burned "$BASE"
+
   # ── 工作区变更：征询而非阻断（版本号已确定，提示更有信息量）──
   if [ "$WORKSPACE_DIRTY" = true ]; then
     confirm_dirty_release
+  fi
+
+  # ── confirm 门禁（默认 dry-run 模型，对齐 wopal-cli bump-release）────
+  # 走到这里的要么是显式 dry-run（下面打计划后退出），要么是 --confirm 执行。
+  # -y/--yes 是显式确认（自动化路径）；交互终端再补一道 y/N；非交互且无 -y
+  # 直接拒绝 —— CI/自动化不允许静默发布。
+  if ! $DRY_RUN; then
+    if ! $ASSUME_YES; then
+      if [ ! -t 0 ]; then
+        die "--confirm 需配合 -y/--yes 才能在非交互终端执行发布（禁止静默发布）。预览请去掉 --confirm（默认 dry-run）。"
+      fi
+      echo ""
+      echo "── 发布计划 ──"
+      echo "  product:   $PRODUCT ($CHANNEL_LABEL)"
+      echo "  version:   $VERSION"
+      echo "  tag:       $TAG (打在 bump commit 上)"
+      echo "  push:      $REMOTE 分支 + ${TAG}（tag 触发 ${WORKFLOW}）"
+      echo ""
+      confirm_release_gate
+    fi
   fi
 
   # ── re-release 判定（幂等）────────────────────────────

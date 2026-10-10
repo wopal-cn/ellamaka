@@ -21,6 +21,7 @@ PRERELEASE_KIND="rc"
 ALLOWED_BUMPS="--patch --minor --major --rc"
 
 AUTO_BUMP=""
+CONFIRM=false
 DRY_RUN=false
 NO_PUSH=false
 NO_WATCH=false
@@ -40,6 +41,9 @@ package.json 发布时写目标版本，根 + 依赖包统一镜像两产品较�
 用法:
   $SCRIPT [选项] [--] [version]
 
+默认 dry-run：只打印发布计划（含 npm base 预检），不做任何写入。加
+--confirm 才真正执行（执行前仍会 y/N 确认；自动化用 --confirm -y）。
+
 Bump 类型:
   --patch     正式版发布：无已发正式版时转正现行 rc 候选，否则已发正式版 +1
               直接发新正式版（2.0.4 → 2.0.5）
@@ -50,11 +54,13 @@ Bump 类型:
   （默认 --patch）
 
 选项:
-  --dry-run    只打印发布计划，不写入、不 tag、不 push、不 dispatch
+  --confirm    执行发布（默认只打印计划；执行前交互终端还会 y/N 确认）
+  --dry-run    显式预览（默认行为，兼容写法；与 --confirm 互斥）
   --no-push    bump 并提交 + 本地 tag，但不 push（留待人工检查）
   --no-watch   不 watch workflow 运行结果
   --no-cleanup（已废弃：清理由 publish workflow 的 cleanup job 负责）
-  -y, --yes    工作区有未提交变更时不征询，直接继续（非交互场景需显式给出）
+  -y, --yes    跳过交互确认（--confirm 的非交互场景必须显式给出；工作区有
+               未提交变更时也直接继续）
   -h, --help   显示本帮助
 
 分支渠道约束（branch-channel policy）：
@@ -66,11 +72,10 @@ re-release（幂等）：目标 tag 已在远端存在时——
   tag 无 manifest（failed attempt）→ 以该 tag 重新 dispatch workflow，不重复 bump。
 
 示例:
-  $SCRIPT --rc            # 2.0.4 已发 → 2.0.5-rc.1；已有 2.0.5-rc.1 → 2.0.5-rc.2
-  $SCRIPT --patch         # 无 stable 时转正 rc（2.0.5-rc.1 → 2.0.5）；
-                          # 已发 2.0.4 → 2.0.5（semver patch+1 直接发正式版）
-  $SCRIPT --minor         # 现行 base 2.0.5 → 2.1.0
-  $SCRIPT --dry-run       # 预览
+  $SCRIPT --rc            # 预览：2.0.4 已发 → 2.0.5-rc.1；已有 2.0.5-rc.1 → 2.0.5-rc.2
+  $SCRIPT --rc --confirm  # 执行上述发布
+  $SCRIPT --patch --confirm -y   # 自动化执行（跳过 y/N，工作区脏也继续）
+  $SCRIPT --dry-run       # 显式预览（同默认）
 EOF
   exit 0
 }
@@ -79,6 +84,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage ;;
     --) shift; continue ;;
+    --confirm) CONFIRM=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     --no-push) NO_PUSH=true; shift ;;
     --no-watch) NO_WATCH=true; shift ;;
@@ -99,6 +105,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [ -n "$AUTO_BUMP" ] || AUTO_BUMP="stable"
+$CONFIRM && $DRY_RUN && die "--confirm 与 --dry-run 互斥：去掉 --dry-run 即为执行模式"
+# 语义映射：confirm 模型下 DRY_RUN=非 confirm（lib 的所有 $DRY_RUN 判定沿用）
+$CONFIRM || DRY_RUN=true
 
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

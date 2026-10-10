@@ -4,7 +4,7 @@
 // `@wopal/ellamaka-plugin`) to npm as part of a CLI release.
 //
 // Usage:
-//   bun packages/ellamaka-release/src/cli/publish-npm.ts [--dry-run] [--version <v>] [--registry <url>]
+//   bun packages/ellamaka-release/src/cli/publish-npm.ts [--dry-run] [--check] [--version <v>] [--registry <url>]
 //
 // The publish is idempotent (a version already on the registry is skipped), so
 // the release workflow can re-run after a failed attempt. A skip is not blind:
@@ -15,6 +15,12 @@
 // carry a prerelease (`2.0.5-rc.7`); it is stripped to the base version
 // (`2.0.5`) — the packages follow the product base version — and must match
 // both packages exactly, else the run fails before any registry access.
+//
+// `--check` is the release preflight: same plan, full skip verification for
+// every version already on the registry, zero publishes. The release scripts
+// run it before cutting a tag so a burned base (contents diverged from the
+// registry copy — npm versions are immutable) fails in seconds/minutes at
+// planning time instead of after the workflow's build matrix.
 //
 // Environment:
 //   NODE_AUTH_TOKEN — npm publish token (optional; OIDC trusted publishing is
@@ -45,6 +51,13 @@ const DEFAULT_REGISTRY = "https://registry.npmjs.org/"
 
 export interface PublishCliOptions {
   dryRun: boolean
+  /**
+   * Release preflight: run the full plan, then the skip verification (registry
+   * tarball vs local build) for every version already on the registry, and
+   * publish nothing. Answers "is the base version still publishable" before a
+   * tag is cut; a burned base fails here with the registry/local digests.
+   */
+  check: boolean
   registry: string
   /** Raw release version; defaults to the CLI version anchor. */
   version?: string
@@ -66,11 +79,15 @@ export interface PublishCliDeps {
 }
 
 export function parsePublishArgs(argv: string[]): { options: PublishCliOptions } | { error: string; exitCode: number } {
-  const options: PublishCliOptions = { dryRun: false, registry: DEFAULT_REGISTRY, version: undefined }
+  const options: PublishCliOptions = { dryRun: false, check: false, registry: DEFAULT_REGISTRY, version: undefined }
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
     if (arg === "--dry-run") {
       options.dryRun = true
+      continue
+    }
+    if (arg === "--check") {
+      options.check = true
       continue
     }
     if (arg === "--version" || arg === "--registry") {
@@ -82,6 +99,7 @@ export function parsePublishArgs(argv: string[]): { options: PublishCliOptions }
     }
     return { error: `unknown argument: ${arg}`, exitCode: 2 }
   }
+  if (options.dryRun && options.check) return { error: "--dry-run and --check are mutually exclusive", exitCode: 2 }
   return { options }
 }
 
@@ -91,7 +109,7 @@ export function runPublishCli(argv: string[], deps: PublishCliDeps): number {
     deps.logError(`Error: ${parsed.error}`)
     return parsed.exitCode
   }
-  const { dryRun, registry } = parsed.options
+  const { dryRun, check, registry } = parsed.options
   const productVersion = parsed.options.version ?? deps.readProductVersion()
 
   let plan
@@ -124,6 +142,24 @@ export function runPublishCli(argv: string[], deps: PublishCliDeps): number {
         ? "npm publish: nothing to do — every version is already on the registry."
         : `npm publish: dry run — ${toPublish.length} package(s) would be published; ` +
             `no build, no package.json rewrite, no publish.`,
+    )
+    return 0
+  }
+
+  if (check) {
+    // Preflight: verify every skip (the expensive registry-vs-build comparison)
+    // and stop there — no auth check, no publish. A clean base is reported so
+    // the operator can cut the tag; a burned base fails with the digests.
+    try {
+      for (const entry of toSkip) deps.verifySkipped(entry, registry)
+    } catch (err) {
+      deps.logError(`Error: ${errorMessage(err)}`)
+      return 1
+    }
+    deps.log(
+      toPublish.length === 0
+        ? `npm check: base ${plan.version} is fully published and verified against this build.`
+        : `npm check: base ${plan.version} is publishable — ${toPublish.length} package(s) not yet on the registry.`,
     )
     return 0
   }

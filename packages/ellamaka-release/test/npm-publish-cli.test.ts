@@ -65,13 +65,13 @@ function withStalePlugin(): NpmPublishTarget[] {
 describe("argument parsing", () => {
   test("defaults to a real publish against the public registry", () => {
     expect(parsePublishArgs([])).toEqual({
-      options: { dryRun: false, registry: "https://registry.npmjs.org/", version: undefined },
+      options: { dryRun: false, check: false, registry: "https://registry.npmjs.org/", version: undefined },
     })
   })
 
   test("parses --dry-run, --version and --registry", () => {
     expect(parsePublishArgs(["--dry-run", "--version", "2.0.5-rc.7", "--registry", "https://r.example/"])).toEqual({
-      options: { dryRun: true, version: "2.0.5-rc.7", registry: "https://r.example/" },
+      options: { dryRun: true, check: false, version: "2.0.5-rc.7", registry: "https://r.example/" },
     })
   })
 
@@ -236,6 +236,8 @@ describe("publish", () => {
     // The probe runs before the build/pack, so another release can publish the
     // same immutable version in between; the resulting conflict is not a
     // failure — the version is on the registry and this run still succeeds.
+    // Versions derive from the real anchor (which moves with release bumps).
+    const base = readProductVersion(repoRoot).split("-")[0]
     const probes: string[] = []
     const record = recorder({
       probe: (name, version) => {
@@ -248,10 +250,10 @@ describe("publish", () => {
 
     expect(runPublishCli([], record.deps)).toBe(0)
     expect(probes).toEqual([
-      "@wopal/ellamaka-sdk@2.0.5",
-      "@wopal/ellamaka-plugin@2.0.5",
-      "@wopal/ellamaka-sdk@2.0.5",
-      "@wopal/ellamaka-plugin@2.0.5",
+      `@wopal/ellamaka-sdk@${base}`,
+      `@wopal/ellamaka-plugin@${base}`,
+      `@wopal/ellamaka-sdk@${base}`,
+      `@wopal/ellamaka-plugin@${base}`,
     ])
     expect(record.err).toEqual([])
     expect(record.out.join("\n")).toMatch(/published concurrently/i)
@@ -263,6 +265,56 @@ describe("publish", () => {
     const record = recorder({ publishError: new Error("npm publish failed with exit code 1: npm error code E403") })
     expect(runPublishCli([], record.deps)).toBe(1)
     expect(record.err.join("\n")).toMatch(/failed to publish @wopal\/ellamaka-sdk@/)
+  })
+})
+
+describe("check mode", () => {
+  // --check answers one release-planning question: is the base version this
+  // release would ship to npm still publishable? Unlike --dry-run it runs the
+  // full skip verification (registry tarball vs local build) for every version
+  // already on the registry, so a burned base is discovered before the tag is
+  // cut, not after the workflow dies at the npm step.
+  test("parses --check and rejects combining it with --dry-run", () => {
+    expect(parsePublishArgs(["--check"])).toEqual({
+      options: { dryRun: false, check: true, registry: "https://registry.npmjs.org/", version: undefined },
+    })
+    expect(parsePublishArgs(["--dry-run", "--check"])).toMatchObject({ exitCode: 2 })
+  })
+
+  test("verifies skipped versions and publishes nothing", () => {
+    const record = recorder({ published: ["@wopal/ellamaka-sdk"] })
+    expect(runPublishCli(["--check"], record.deps)).toBe(0)
+    expect(record.verified.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk"])
+    expect(record.published).toEqual([])
+    expect(record.authChecks).toEqual([])
+  })
+
+  test("fails closed on a burned base before anything would be published", () => {
+    // The 2026-10-10 release failure: 2.0.8 shipped with plugin changes after
+    // rc.1, so the plugin tarball diverged from the registry copy and every
+    // 2.0.8-base release died at the npm step. --check must surface this
+    // while only a plan exists.
+    const record = recorder({
+      published: ["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"],
+      verifyError: new Error(
+        "@wopal/ellamaka-plugin@2.0.8 is already on the registry, but its contents differ from this build " +
+          "(registry bd058b97, local cfcff584). npm versions are immutable and this version number is " +
+          "permanently burned: bump the version and re-release.",
+      ),
+    })
+    expect(runPublishCli(["--check"], record.deps)).toBe(1)
+    expect(record.published).toEqual([])
+    expect(record.err.join("\n")).toMatch(/permanently burned/)
+  })
+
+  test("reports a clean base and exits 0", () => {
+    // Base never published: the plan is pure [publish], nothing to verify.
+    const record = recorder()
+    expect(runPublishCli(["--check"], record.deps)).toBe(0)
+    expect(record.verified).toEqual([])
+    expect(record.published).toEqual([])
+    expect(record.authChecks).toEqual([])
+    expect(record.out.join("\n")).toMatch(/publishable/i)
   })
 })
 

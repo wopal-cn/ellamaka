@@ -224,7 +224,9 @@ CLI 的发布注入据此实现为 `build.ts` 的 `Script.release ? CHANNEL_RELE
 
 升级参与判定是通道契约表的一行：CLI 以 `isUpdateChannel(channel)` 表达"该通道是否参与升级检查"，其唯一真值为 `stable`；Desktop 以 `UPDATER_ENABLED` 表达同一语义。两者都是契约表的直接投影，修改通道行为只改契约表。
 
-发布是一步制（脚本 `scripts/release-cli.sh` / `scripts/release-desktop.sh`）：版本准备与发布触发在同一脚本内完成，`--dry-run` 承担预演职责。
+发布是一步制（脚本 `scripts/release-cli.sh` / `scripts/release-desktop.sh`）：版本准备与发布触发在同一脚本内完成。默认 dry-run 只打印发布计划；`--confirm` 才执行发布（执行前交互终端再补一道 y/N 确认；非交互场景必须显式给 `-y`/`--yes`，否则拒绝执行——CI/自动化不允许静默发布）。`--dry-run` 是显式预览的兼容写法，与 `--confirm` 互斥（对齐 wopal-cli `bump-release.sh` 的 confirm 模型）。
+
+npm base 预检（`check_npm_base_burned`）：依赖包（`@wopal/ellamaka-sdk` / `@wopal/ellamaka-plugin`）跟随产品 base 版本发布且 npm 版本不可覆盖——若某 base 已在 registry 而内容与本次构建不一致（contract 包在上一个 rc 发布后继续演化），该 base 的所有后续发布必然死在 workflow 的 npm step，且 R2 manifest 未提交使版本推断反复算出同一 base，形成失败循环（2026-10-10 `2.0.8` 实际发生）。脚本在版本推断后、bump 写入前调用 publish CLI 的 `--check`（`packages/ellamaka-release/src/cli/publish-npm.ts`）做 registry tarball 与本地构建的内容摘要比对：目标 base 不等于 workspace 包 base（新版本线）时 registry 上不可能存在该版本，跳过比对；publish CLI 缺失或 bun 不可用时跳过预检（fail-open，advisory hardening）。检测到烧毁时终止发布并给出 `--minor` 建议版本（同 base 的 `--rc`/`--patch` 都必然复发，唯一出路是 minor/major 开新线；建议版本复用 version-line 推断）。dry-run 与 confirm 两路都执行预检。
 
 版本推断（`packages/ellamaka-release/src/version-line.ts`）以**已成功发布的 tag 记录**为版本推进唯一依据，两个产品独立计数。package.json 不承载"候选锚点"状态——发布的版本在发布动作内才写入，发布成功即成为记录：
 
@@ -234,7 +236,7 @@ CLI 的发布注入据此实现为 `build.ts` 的 `Script.release ? CHANNEL_RELE
    - minor/major：从该产品现行 base 升位开新线（`2.0.5 → 2.1.0` / `3.0.0`），通道重置。
 2. 写入：把确认的目标版本写入该产品 package.json（带 `-rc.N`/`-beta.N` 或纯 `X.Y.Z`），其余依赖包模块统一镜像纯 base `X.Y.Z` = **两个产品现行 base 的较高者**；cli 先发 `2.0.6-rc.1` 时依赖包升 `2.0.6`，随后 desktop 仍可发 `2.0.5-beta.2`（只写 desktop，依赖包不动）。
 3. 提交 bump、创建 namespaced tag（`ellamaka-cli-vX.Y.Z[-rc.N]` / `ellamaka-desktop-vX.Y.Z[-beta.N]`）、推送当前分支与 tag。tag push 触发目标 workflow（`push: tags`），不再手工 dispatch。
-4. 监听 workflow 至完成，成功后自动触发历史清理。
+4. 监听 workflow 至完成，成功后自动触发历史清理。npm base 预检在 bump 写入前执行（见上）。
 
 Desktop 渠道为单开关模型：`--beta` 即 beta 通道（版本必然为 `X.Y.Z-beta.N`，发布到 `ellamaka-desktop/beta/`），缺席即 stable（版本必然为纯 `X.Y.Z`）；不存在独立 `--channel` 参数。
 
