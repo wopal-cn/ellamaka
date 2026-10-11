@@ -452,7 +452,7 @@ require_stopped() {
     fi
     if service_has_records "$service"; then
       remove_service_records "$service"
-      cleanup_service_logs "$service"
+      confirm_log_cleanup "clean up $service logs ($DEV_DIR)?" && cleanup_service_logs "$service"
     fi
   done
   return 0
@@ -470,7 +470,7 @@ require_own_instance_stopped() {
   fi
   if service_has_records "$service"; then
     remove_service_records "$service"
-    cleanup_service_logs "$service"
+    confirm_log_cleanup "clean up $service logs ($DEV_DIR)?" && cleanup_service_logs "$service"
   fi
   if is_running "$port"; then
     echo "port :$port is held by a process outside dev.sh; picking another port"
@@ -542,7 +542,55 @@ append_unique() {
   esac
 }
 
+# Startup-failure switch: when a start path tears a just-failed service down
+# with stop_service, the service log is the only diagnostic evidence and the
+# caller has just told the user to read it. With KEEP_LOGS=true, stop_service
+# still kills stragglers and removes records, but keeps the logs and the
+# bucket directory holding them. Set only via stop_keep_logs on failure paths.
+KEEP_LOGS=false
+
+# Ask before destroying a bucket's logs. Empty answer / EOF (= non-interactive)
+# means clean; only an explicit "n" keeps them. The decision is cached for the
+# whole command run: `stop all` walks four services and must ask once, not
+# once per service.
+LOG_CLEANUP=""
+
+confirm_log_cleanup() {
+  if [ -z "$LOG_CLEANUP" ]; then
+    local answer=""
+    printf '%s (Y/n) ' "$1"
+    read -r answer || true
+    case "$answer" in
+      n|N|no|No|NO) LOG_CLEANUP=no ;;
+      *) LOG_CLEANUP=yes ;;
+    esac
+  fi
+  [ "$LOG_CLEANUP" = yes ]
+}
+
+has_logs() {
+  [ -n "$(find "$1" -maxdepth 1 -name '*.log' -print -quit 2>/dev/null)" ]
+}
+
+# Failure-path teardown: same as stop_service, but always keeps the service
+# logs (the caller has just told the user to read them) and leaves no
+# registration behind — a service that never started successfully must not
+# stay in the pidfile or the registry.
+stop_keep_logs() {
+  KEEP_LOGS=true
+  stop_service "$1" || true
+  KEEP_LOGS=false
+  # A service that failed to start must not keep its registry entry: when the
+  # teardown left no pidfile behind, this bucket has no live instance and the
+  # registry line for it is a stale registration — drop it without asking.
+  if [ ! -f "$PIDFILE" ]; then
+    registry_remove "$DEV_SCOPE"
+  fi
+}
+
 cleanup_service_logs() {
+  # Startup-failure path: keep every log so the failure can be diagnosed.
+  [ "$KEEP_LOGS" = true ] && return 0
   case "$1" in
     backend)
       rm -f "$BACKEND_LOG"
@@ -585,7 +633,20 @@ stop_service() {
 
   if [ -z "$PROCESS_GROUPS" ]; then
     if service_has_records "$service"; then remove_service_records "$service"; fi
-    cleanup_service_logs "$service"
+    if [ "$KEEP_LOGS" = true ]; then
+      # Startup-failure path: nothing to kill — leave the log the caller just
+      # pointed the user at, and do not print a misleading "no X running".
+      return 0
+    fi
+    # Print "logs kept" only when THIS call is the one that asked the user;
+    # with the batch-cached answer the stop-all preamble already printed it.
+    local asked_new=""
+    [ -z "$LOG_CLEANUP" ] && asked_new=1
+    if confirm_log_cleanup "clean up $service logs ($DEV_DIR)?"; then
+      cleanup_service_logs "$service"
+    else
+      [ -n "$asked_new" ] && echo "logs kept: $DEV_DIR"
+    fi
     echo "stop: no $service running"
     return 0
   fi
@@ -608,7 +669,27 @@ stop_service() {
   fi
 
   remove_service_records "$service"
-  cleanup_service_logs "$service"
+  local keep=false
+  if [ "$KEEP_LOGS" = true ]; then
+    # Startup-failure path: keep the logs unconditionally and silently —
+    # the caller has just told the user where they are.
+    keep=true
+  else
+    # Print "logs kept" only when THIS call is the one that asked the user;
+    # with the batch-cached answer the stop-all preamble already printed it.
+    local asked_new=""
+    [ -z "$LOG_CLEANUP" ] && asked_new=1
+    if confirm_log_cleanup "clean up $service logs ($DEV_DIR)?"; then
+      cleanup_service_logs "$service"
+    else
+      [ -n "$asked_new" ] && echo "logs kept: $DEV_DIR"
+      keep=true
+    fi
+  fi
+  if $keep; then
+    # Logs survive in the bucket dir: do not let sweep_bucket rm -rf it.
+    return 0
+  fi
   # The stop may have taken the bucket's last live record: drop an empty
   # pidfile, its log leftovers, the bucket dir, and the registry entry too,
   # instead of waiting for some future status to sweep them.
@@ -770,6 +851,14 @@ EOF
   case "$target" in
     backend|frontend|desktop|tui) stop_service "$target" ;;
     all)
+      # Ask once up front for the whole batch: per-service prompts inside
+      # stop_service would fire four times (frontend/desktop/backend/tui).
+      LOG_CLEANUP=""
+      if has_logs "$DEV_DIR"; then
+        confirm_log_cleanup "clean up dev logs ($DEV_DIR)?" || echo "logs kept: $DEV_DIR"
+      else
+        LOG_CLEANUP=yes
+      fi
       stop_service frontend || failed=true
       stop_service desktop || failed=true
       stop_service backend || failed=true
@@ -908,11 +997,11 @@ cmd_tui() {
     start_backend "$PORT" "$debug" "$debug_modules" "$opencode_preload" "${passthrough[@]}" || return 1
     if ! wait_backend "$PORT"; then
       echo "backend failed to start; see $BACKEND_LOG"
-      stop_service backend || true
+      stop_keep_logs backend
       return 1
     fi
     warmup_config "$PORT"
-    start_frontend "$APP_PORT" "$PORT" || { stop_service backend || true; return 1; }
+    start_frontend "$APP_PORT" "$PORT" || { stop_keep_logs backend; return 1; }
     echo "  backend :$PORT, workbench :$APP_PORT"
     echo "  → $(workbench_entry_url "$APP_PORT")"
     cd "$opencode_dir"
@@ -983,7 +1072,7 @@ cmd_serve() {
   start_backend "$PORT" "$debug" "$debug_modules" "$opencode_preload" "${passthrough[@]}" || return 1
   if ! wait_backend "$PORT"; then
     echo "backend failed to start; see $BACKEND_LOG"
-    stop_service backend || true
+    stop_keep_logs backend
     return 1
   fi
   warmup_config "$PORT"
@@ -995,7 +1084,7 @@ cmd_serve() {
     return 0
   fi
 
-  start_frontend "$APP_PORT" "$PORT" || { stop_service backend || true; return 1; }
+  start_frontend "$APP_PORT" "$PORT" || { stop_keep_logs backend; return 1; }
   echo "  backend :$PORT, workbench :$APP_PORT"
   echo "  pidfile $(space_rel_path "$PIDFILE")"
   echo "  logs    $(space_rel_path "$BACKEND_LOG") / $(space_rel_path "$FRONTEND_LOG")"
@@ -1271,8 +1360,15 @@ sweep_bucket() {
   [ -n "$SCOPE_ROOT" ] || SCOPE_ROOT="-"
   pidfile="$dir/ellamaka-dev.pid"
   if [ ! -f "$pidfile" ]; then
-    # No ledger: the bucket can hold nothing but leftover dev logs.
-    if [ -d "$dir" ]; then
+    # No ledger: the bucket holds nothing but leftover logs — often from a
+    # failed startup the user may still need to read. Ask before destroying
+    # them; an empty answer (or EOF in a non-interactive run) cleans.
+    if [ -d "$dir" ] && has_logs "$dir"; then
+      if confirm_log_cleanup "leftover logs in $dir; clean up?"; then
+        rm -rf "$dir"
+        registry_remove "$scope"
+      fi
+    elif [ -d "$dir" ]; then
       rm -rf "$dir"
       registry_remove "$scope"
     fi
@@ -1321,7 +1417,18 @@ show_all_buckets() {
     dir="$LOGDIR/dev/$scope"
     sweep_bucket "$dir" "$scope"
     pidfile="$dir/ellamaka-dev.pid"
-    [ -f "$pidfile" ] || continue
+    if [ ! -f "$pidfile" ]; then
+      # sweep_bucket left a no-ledger bucket behind only when the user chose
+      # to keep its logs — show it so "logs kept" is not invisible.
+      if [ -d "$dir" ]; then
+        shown_root="$(registry_lookup "$scope" 2>/dev/null)" || shown_root="(kept logs)"
+        case "$shown_root" in "$space/"*) shown_root="${shown_root#"$space"/}" ;; esac
+        echo "  ○  $shown_root (no running instances; kept logs)"
+        echo "          logs: ${dir#"$space"/}"
+        any=true
+      fi
+      continue
+    fi
     marker="○"
     shown_root="(unknown directory)"
     bucket_scope_root="-"
