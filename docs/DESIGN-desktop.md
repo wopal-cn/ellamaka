@@ -140,7 +140,7 @@ Desktop 与外部 Ellamaka CLI 同时安装时，当前阶段要求 `major.minor
 
 - Desktop 正常启动在 sidecar 进入 DSH Core preparation 前执行一次轻量 preflight；不一致时进入修复提示，不让 sidecar 获得 DSH Home 写权限。
 - electron-updater 可以独立完成 Desktop 更新；更新后重启立即再次执行 preflight。磁盘上允许短暂出现版本不一致，但不能进入 DSH runtime。
-- 若检测到 Wopal CLI，可提供 Quick Fix 调用既有 `wopal ellamaka update` 拉齐完整产品；Wopal CLI 缺失时给出明确的手动拉齐指引。Quick Fix 是可选管理便利，不构成 Desktop 的运行依赖。
+- mismatch 时 Quick Fix 直接调用 Ellamaka-owned local product management 拉齐完整产品；不探测、不调用 Wopal CLI。修复失败保留诊断并继续阻断 DSH activation。
 - fast preflight 不新增持久兼容数据库；已有安装 receipt 可用于显示，但 hard gate 以实际产品 identity 为准。
 
 ## 状态所有权
@@ -468,6 +468,6 @@ Onboarding 完成只更新增强能力与旅程状态，不需要启动/重启 s
 
 Desktop 在 sidecar 前校验自身 resources/release-identity.json 的 product/version/channel 与 app/内嵌组件一致。基础 HTTP 与向导使用本产品内嵌 runtime，不因外部 Ellamaka CLI 或 Wopal CLI 缺失而停止。
 
-若系统同时安装外部 Ellamaka CLI，当前产品策略要求它与 Desktop `major.minor` 一致。Desktop auto-update 可以先独立完成；更新后重启立即执行轻量 product preflight，mismatch 时在 sidecar 获得 DSH Home 写权限前进入修复提示。Wopal CLI 可用时 Quick Fix 复用 `wopal ellamaka update`，否则显示手动拉齐指引。该版本门禁与 WopalSpace Onboarding 无关，也不把 Wopal CLI 变成 sidecar 运行依赖。
+若系统同时安装外部 Ellamaka CLI，当前产品策略要求它与 Desktop `major.minor` 一致。Desktop auto-update 可以先独立完成；更新后重启立即执行轻量 product preflight，mismatch 时在 sidecar 获得 DSH Home 写权限前进入修复提示。Quick Fix 由 Desktop 直接调用 Ellamaka local product management，复用`product.ensure`；Wopal CLI 不参与。该版本门禁与 WopalSpace Onboarding 无关。
 
 自动更新继续校验目标 ReleaseIdentity、平台、渠道和标准 SemVer；产品组合一致性在 post-update fast doctor / startup preflight 收口。首次启动按自身 closure 准备 Core，但必须先通过 product alignment gate。

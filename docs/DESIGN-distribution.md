@@ -14,7 +14,7 @@
 
 ## Scope
 
-Ellamaka CLI 与 Desktop 分别发布为独立制品，使用各自的 SemVer、namespaced tag、workflow、R2 latest 和回滚边界。Desktop manifest 声明兼容约束，Wopal CLI 读取并校验 CLI latest，把两个制品组合为一个可安装产品。默认 `wopal ellamaka install` 安装完整产品，`wopal setup` 复用该能力并启动 Desktop onboarding。
+Ellamaka CLI 与 Desktop 分别发布为独立制品，使用各自的 SemVer、namespaced tag、workflow、R2 latest 和回滚边界。两个制品的本机组合、安装收据、实际身份探测、兼容判断与修复事务由 Ellamaka 自己的本地 product management 能力拥有。CLI、Desktop updater 与 `@wopal/ellamaka-sdk/local` 共用这套能力；Wopal CLI 可以作为可选前端调用它，但不是 Ellamaka 安装或修复的运行时依赖。
 
 Release identity 必须回答四个互不混淆的问题：
 
@@ -364,7 +364,7 @@ manifest 只能证明远端 release，不能单独证明本机正在运行的 bi
 
 - CLI 内嵌 ReleaseIdentity，通过 `ellamaka debug release-info --json --api-version 1` 输出 `{ releaseIdentity }`。命令不访问网络、不读取安装收据；`ellamaka --version` 继续只输出产品 SemVer。
 - Desktop package 在 resources 中内嵌 `release-identity.json`。Main 启动时验证其 product/version 与当前 app package version、channel/appId 一致，再用于 updater、兼容门禁和诊断。
-- `$WOPAL_HOME/ellamaka/state/ellamaka-install.json` 只缓存安装来源、artifact hash 和上次探测 identity。Wopal status/repair 必须以 binary machine identity + 实际 artifact/文件探测为准，不能仅信任收据。
+- `$WOPAL_HOME/ellamaka/state/ellamaka-install.json` 是 Ellamaka-owned 的统一产品安装收据，缓存 CLI/Desktop 的安装来源、artifact hash 和上次探测 identity。任何入口的健康判断都必须以 binary machine identity + Desktop embedded identity + 实际 artifact/文件探测为准，不能仅信任收据；Wopal 等外部消费者只通过 Ellamaka local contract 读取/触发产品管理。
 
 ReleaseIdentity 是显式判别联合：
 
@@ -391,7 +391,7 @@ Ellamaka CLI 与 Desktop 的组合身份和兼容要求由本节 Runtime Version
 
 Ellamaka 校验自身产品 identity、平台、渠道和固定 runtime。Desktop 与外部 Ellamaka CLI 同时安装时，`major.minor` 不一致属于 hard mismatch。单组件更新允许先落盘，随后立即执行 fast doctor；若仍不一致，产品保留可修复状态，但任何本地 DSH activation 必须 fail closed，直到组合被拉齐。这个规则只防止两个明显不同的产品代际依次写同一 DSH Home，不用于判断 Home 数据格式。
 
-检查必须保持轻量：优先使用实际 ReleaseIdentity/本地安装状态，不运行完整 setup/ontology/space `doctor`。Wopal 的完整 doctor 仍是异常诊断工具，不进入每次启动热路径。
+检查必须保持轻量：优先使用实际 ReleaseIdentity/本地安装状态，不运行完整 setup/ontology/space `doctor`。Ellamaka-owned fast doctor 是 CLI/Desktop updater 与 runtime preflight 的公共只读判断；Wopal 的完整 doctor 只是可选消费者侧的广义诊断，不进入 Ellamaka 启动热路径。
 
 Wopal CLI 的最低版本不进入这些判断。Ellamaka 不探测、不安装 Wopal CLI，不读取 minWopalCli 或依赖 MIN_WOPAL_CLI_VERSION。
 
@@ -548,9 +548,9 @@ P1 使用 ad-hoc 签名。该签名保证 macOS app bundle 结构完整并通过
 
 ### 分发渠道与安装契约
 
-ellamaka CLI 的分发渠道：主路径 `wopal ellamaka install` 完整安装或 Desktop onboarding 的 `install-engine` machine operation；CLI-only 路径 `wopal ellamaka install --cli`；手动下载（Release 页面点击 R2 链接）。
+ellamaka 的安装/更新有多个入口：CLI 自身 `ellamaka upgrade`、Desktop updater、Desktop onboarding，以及可选的 `wopal ellamaka install/update`。这些入口不各自定义产品事务；完整产品安装、修复与状态收据统一由 Ellamaka local product management 实现，CLI-only 与 Desktop 单组件 updater 保留各自的平台更新执行器。
 
-consumer（wopal-cli 或 Desktop）安装 ellamaka 时遵循以下契约：
+Ellamaka product management 遵循以下契约：
 
 - 只从 R2 读取机器契约：cli-only 读取 CLI `latest/manifest.json`；完整产品读取 Desktop channel latest 与 CLI latest。
 - CLI-only 安装默认使用 Engine latest；完整产品安装和 onboarding 校验同一个 CLI latest。
@@ -558,7 +558,7 @@ consumer（wopal-cli 或 Desktop）安装 ellamaka 时遵循以下契约：
 - 根据平台和稳定 artifact naming 计算目标文件名，不依赖 GitHub API 解析 release 页面。
 - 安装目标固定为上述 binary path；放置前必须校验 SHA-256；安装后执行 `ellamaka --version` 作为健康验证。
 - `$WOPAL_HOME/bin/` 只保存 executable。artifact 收据写入 `$WOPAL_HOME/ellamaka/state/ellamaka-install.json`；旧 `.ellamaka.meta.json` 在成功安装时迁移并删除。
-- consumer 负责下载、校验、放置和状态报告；ellamaka 的运行目录（`$WOPAL_HOME/ellamaka/`）由 ellamaka 自身管理。
+- 完整产品的 Resolve → Stage → Commit → Verify、失败恢复与 receipt 提交由 Ellamaka product management 拥有；Wopal CLI 等外部入口只调用该本地能力，不复制下载、兼容判断或 repair 语义。
 
 ### DSH Runtime Binding
 
@@ -597,11 +597,11 @@ ellamaka 安装完成后，运行时加载链路按 WopalSpace mode 工作：
 2. 按兼容契约校验目标 latest manifest。
 3. 使用标准 SemVer 比较同一产品、同一 channel 的 `releaseIdentity.version`。CLI rc 与 stable 同 channel，直接按 SemVer precedence 比较（`2.0.3` < `2.0.4-rc.1` < `2.0.4`），无需特判。
 4. 校验预期 version、source identity 和 artifact SHA-256。
-5. 安装/更新完成后运行轻量 product fast doctor：校验 Ellamaka 自身 identity、平台、渠道，并在 CLI/Desktop 同时存在时比较实际 `major.minor`。该检查不运行完整环境 inspect；Wopal CLI 不参与版本 floor。
-6. 在修改本机前先形成包含 Desktop 与外部 Ellamaka CLI 的完整安装计划，并确认所有 manifest 和下载均可验证。
-7. 才允许按"外部 CLI → Desktop → 最终健康检查与收据"的顺序落盘；失败不得把未验证的部分安装状态报告为成功。
+5. 安装/更新完成后运行 Ellamaka-owned 的轻量 product fast doctor：校验实际 CLI/Desktop identity、平台、渠道，并在二者同时存在时比较 `major.minor`。该检查不运行完整环境 inspect；Wopal CLI 不参与版本 floor。
+6. 完整安装或 Quick Fix 在修改本机前形成包含 Desktop 与外部 Ellamaka CLI 的完整安装计划，并确认所有 manifest 和下载均可验证。
+7. 完整产品事务按“Stage all → Commit CLI → Commit Desktop → Verify actual identities → commit `ellamaka-install.json` last”执行；失败恢复旧组件和旧收据，不得把未验证的部分安装状态报告为成功。
 
-Desktop 保留自己的 manifest policy gate。electron-updater 负责平台 feed、下载、签名检查和安装；它可以独立完成已授权更新，不因当前外部 CLI 位于旧 minor 而预先拒绝。更新后重启立即执行 fast doctor；若 CLI/Desktop `major.minor` 不一致，状态可暂存于磁盘但不得进入 DSH activation，直到 Quick Fix 或手动操作拉齐。CLI 的 `ellamaka upgrade` 对称处理。
+Desktop 保留自己的 manifest policy gate；electron-updater 继续负责平台 feed、下载、签名检查和安装。CLI 的 `ellamaka upgrade` 继续负责 CLI 单组件更新。二者都允许独立完成已授权更新，不因另一组件位于旧 minor 而预先拒绝；更新后立即/重启后运行同一个 fast doctor。若形成 `major.minor` mismatch，Ellamaka 自身提供 Quick Fix，复用同一完整 product management 事务把另一组件拉到当前 latest 的同 minor 组合；修复前任何 DSH activation fail closed。Wopal CLI 不参与这条修复链。
 
 ---
 
