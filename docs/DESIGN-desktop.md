@@ -1,7 +1,7 @@
 # ellamaka-desktop 设计
 
 > **Status**: Draft
-> **Updated**: 2026-09-14
+> **Updated**: 2026-10-11
 > **Parent**: `./DESIGN.md`
 
 本文档描述 `packages/ellamaka-desktop` 的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
@@ -30,20 +30,20 @@
 
 `packages/ellamaka-desktop` 与 `ellamaka-app` 采用相同的品牌包模式，集中承载 Ellamaka 桌面定制。
 
-| 维度     | 上游 `packages/desktop`                             | `packages/ellamaka-desktop`     |
-| -------- | --------------------------------------------------- | ------------------------------- |
-| 包路径   | 参考 `labs/ref-repos/opencode/packages/desktop`     | `packages/ellamaka-desktop`     |
-| 包名     | `@opencode-ai/desktop`                              | `@wopal/ellamaka-desktop`       |
-| 桌面框架 | Electron                                            | Electron，版本由本包依赖与测试决定 |
-| 渲染应用 | 参考 `labs/ref-repos/opencode/packages/app`         | `@wopal/ellamaka-app`           |
-| 本地服务 | OpenCode node sidecar                               | Ellamaka/WopalSpace node sidecar |
-| 默认界面 | OpenCode 主界面                                     | Ellamaka Workbench `/workbench` |
+| 维度     | 上游 `packages/desktop`                         | `packages/ellamaka-desktop`        |
+| -------- | ----------------------------------------------- | ---------------------------------- |
+| 包路径   | 参考 `labs/ref-repos/opencode/packages/desktop` | `packages/ellamaka-desktop`        |
+| 包名     | `@opencode-ai/desktop`                          | `@wopal/ellamaka-desktop`          |
+| 桌面框架 | Electron                                        | Electron，版本由本包依赖与测试决定 |
+| 渲染应用 | 参考 `labs/ref-repos/opencode/packages/app`     | `@wopal/ellamaka-app`              |
+| 本地服务 | OpenCode node sidecar                           | Ellamaka/WopalSpace node sidecar   |
+| 默认界面 | OpenCode 主界面                                 | Ellamaka Workbench `/workbench`    |
 
 ### Source 协同与产品版本
 
 `ellamaka-desktop`、`ellamaka-app`、`packages/opencode` 和 JS SDK 在一次 Desktop build 内使用同一 source commit 和 OpenCode upstream lock，避免跨源码快照组合。这个 source 一致性不等于产品版本锁步：`ellamaka-desktop` 与外部 `ellamaka-cli` 各自使用独立 SemVer 和 release tag。
 
-Electron 安全修复、生命周期修复和平台兼容修复可以只发布 Desktop patch。共享 Engine/API 变化或 OpenCode baseline 升级通常协调发布 CLI 与 Desktop，但两个产品版本无需相同。兼容性由 upstream baseline、engine API range 和 CLI latest promotion gate 决定，详见 `DESIGN-distribution.md`。
+Electron 安全修复、生命周期修复和平台兼容修复可以只发布 Desktop patch。共享 Engine/API 变化或 OpenCode baseline 升级通常协调发布 CLI 与 Desktop；两个产品的 patch/prerelease 可不同，但当前阶段同时安装时 `major.minor` 必须一致。兼容性与更新门禁详见 `DESIGN-distribution.md`。
 
 ## 系统架构
 
@@ -102,13 +102,46 @@ Renderer 通过 `PlatformProvider` 获得 `platform: "desktop"`，用于文件�
 
 Sidecar 由当前仓库的 `packages/opencode` node runtime 构建，提供 Ellamaka HTTP、SSE、WebSocket、Session、PTY 和 WopalSpace 能力。
 
-Sidecar 使用随机本地端口和临时认证凭据，仅监听 loopback。Main Process 保存连接信息并通过受控初始化接口交给 Renderer。
+Sidecar 使用随机本地端口和临时认证凭据，仅监听 loopback。Main Process 保存连接信息并通过受控初始化接口交给 Renderer。Sidecar 启动分为三个连续阶段：
+
+1. **Bootstrap**：先启动最小 HTTP 控制面，至少提供 health、Core progress、onboarding、认证与必要静态资源；不挂载 DSH Web/tools。
+2. **Core Preparation**：自动 `ensureCoreRuntimeReady()`。需要时下载 closure、创建固定 `$WOPAL_HOME/dsh/home`；若 closure fingerprint 变化，则在目标 closure 首次写 Home 前完成 backup；随后准备产品自有 profiles/plugins。全程发 `CoreProgressEvent`。`ELLAMAKA_DSH=0` 时整个 DSH 分支 skipped。
+3. **Runtime Activation**：Core READY 后在同一进程和同一 listener 原地 activation Ellamaka runtime；DSH 启用时挂 Web/tools，禁用时只启动原生 runtime。
+
+Renderer 在 Core Preparation 期间显示真实 phase、elapsed 和错误诊断，不能只显示无反馈 loading。WopalSpace Onboarding 与 Core Runtime 解耦；`NEEDS_INPUT` 只影响向导本身，不阻止 sidecar READY/RUNNING。详细流程归 [DSH 基础设计](./DESIGN-dsh-base.md#desktop-startup)。
 
 一个 sidecar 同时承载非 WopalSpace 与多个 WopalSpace directory instance。每个配置加载和插件创建按 directory 独立检测可选 `wopalSpaceRoot`。空间根与空间内任意子目录共享同一个值；非 WopalSpace instance 保持 OpenCode-compatible capability loading，并使用 WOPAL_HOME 配置迁移与全局能力层。
 
 PluginInput 使用 `wopalSpaceRoot` 接收当前 instance 的空间根。Instruction 使用 Config 的当前模式保持既有兼容行为。Sidecar 的 `process.env` 不表达当前空间，也不装载 `$WOPAL_HOME/.env` 或空间 `.env`；`.env` 由每次 plugin invocation 的 effective env loader 消费。Shell、PTY、MCP 与 LSP 保持官方的运行时行为。
 
 PTY Service 是 PTY 生命周期的权威所有者。最后一个 WebSocket subscriber 断开时，服务进入断连宽限期；同一 PTY 在宽限期内重新连接时继续运行，宽限期结束后仍未连接则自动终止。
+
+### Desktop Bootstrap / Core Preparation / Activation
+
+```text
+Electron Main
+  -> start sidecar(Bootstrap)
+  -> wait bootstrap health
+  -> Renderer subscribes CoreProgressEvent
+  -> ensureCoreRuntimeReady()
+       READY  -> sidecar.activateRuntime() -> RUNNING
+       FAILED -> Renderer diagnostics/retry; sidecar remains bootstrap-only
+```
+
+Core progress 是启动 UI 的事实源：closure 下载、closure-change Home backup、profiles、preflight、mount 都有 started/completed/failed，长阶段有 heartbeat。Renderer 显示当前步骤和 elapsed time；失败显示稳定错误 code 与可重试动作。DSH 内部原生 migration 若没有可观测进度，宿主不得伪造 migration 百分比。不能以空白页、无限 spinner 或 `onboarding.json` 推断 Core 是否卡住。
+
+Core RUNNING 后，Renderer 再根据独立 `OnboardingState` 决定是否优先展示 WopalSpace Onboarding；用户跳过/暂不完成 onboarding 不影响原生 Workbench 和免费模型使用。
+
+Desktop 内嵌的目标 closure fingerprint 决定是否触发 Home 安全备份，但不推断 Home 格式。正式核心 `DSH_HOME` 永远是 `$WOPAL_HOME/dsh/home`；fingerprint 变化时先等待活动 writer 退出并完成 backup，随后目标 DSH 直接打开固定 Home并自行执行其支持的原生迁移。
+
+### Product Alignment Preflight
+
+Desktop 与外部 Ellamaka CLI 同时安装时，当前阶段要求 `major.minor` 相同。检查只读取实际 ReleaseIdentity/轻量版本事实，不运行完整 setup/ontology/DSH inspect。
+
+- Desktop 正常启动在 sidecar 进入 DSH Core preparation 前执行一次轻量 preflight；不一致时进入修复提示，不让 sidecar 获得 DSH Home 写权限。
+- electron-updater 可以独立完成 Desktop 更新；更新后重启立即再次执行 preflight。磁盘上允许短暂出现版本不一致，但不能进入 DSH runtime。
+- 若检测到 Wopal CLI，可提供 Quick Fix 调用既有 `wopal ellamaka update` 拉齐完整产品；Wopal CLI 缺失时给出明确的手动拉齐指引。Quick Fix 是可选管理便利，不构成 Desktop 的运行依赖。
+- fast preflight 不新增持久兼容数据库；已有安装 receipt 可用于显示，但 hard gate 以实际产品 identity 为准。
 
 ## 状态所有权
 
@@ -413,84 +446,28 @@ PTY 清理后不自动创建 Session 或 PTY 伪装恢复。用户点击 TUI/Ter
 
 ## Onboarding 启动行为
 
-### 模式判定
+Desktop 的 Core Runtime 与 WopalSpace Onboarding 是两条独立生命周期。Main 不在 sidecar 前 bootstrap Wopal CLI，也不根据 `onboarding.json` 决定 sidecar 是否启动。
 
-Desktop Main Process 在 `app.whenReady()` 之后、创建窗口之前，完成 Wopal CLI bootstrap，并读取 `$WOPAL_HOME/ellamaka/state/onboarding.json` 决定进入 onboarding 还是 Workbench。`wopal setup` 不向 Desktop 添加 `--setup` 参数；它仅在用户确认后清除该状态文件，然后通过正常应用入口启动 Desktop。onboarding.json 是 Desktop-owned 状态文件，保存 UI 进度与完成标记；文件名与结构保持现状，不迁移、不改名。
-
-```
-bootstrap Wopal CLI → read onboarding.json
-  ├── 状态文件缺失 → onboarding（首次配置）
-  ├── 状态文件存在但未完成 → onboarding（恢复）
-  ├── completed === true → Workbench
-  └── bootstrap 失败 → onboarding 诊断（可重试）
-
-Onboarding（冷启动）
-  ├── 跳过 SidecarSupervisor 启动
-  ├── 跳过 migrate()
-  ├── 创建 onboarding 窗口
-  └── 完成健康门禁后在当前进程转换到 Workbench
-
-Workbench
-  ├── 执行版本兼容检查（[相关文档](#相关文档)）
-  ├── 启动 SidecarSupervisor
-  ├── 执行 migrate()
-  └── 加载 ellamaka-app Workbench
+```text
+Desktop cold start
+  -> start Bootstrap sidecar
+  -> show Core startup progress
+  -> Core READY -> activateRuntime -> Workbench runtime available
+  -> independently read OnboardingState
+       COMPLETED    -> normal Workbench
+       NOT_STARTED/IN_PROGRESS/NEEDS_INPUT -> optionally present Onboarding UI
 ```
 
-Desktop 已运行时，`wopal setup` 只会唤醒现有进程，不会导航到 onboarding。需要重新配置的用户先退出 Desktop，再运行 `wopal setup`：CLI 清除状态后，Desktop 下次冷启动自然重新进入 onboarding。
+`onboarding.json` 只保存向导导航/恢复与 completed 标记，不是机器健康或 runtime readiness 的真相源。Onboarding 期间 sidecar 保持 RUNNING；用户可以退出向导或暂不配置 ontology/Space/GitHub/外部 provider，原生 Ellamaka 能力和免费模型仍可使用。
 
-### 与正常启动的关键差异
+`WOPAL_DEV_SKIP_ONBOARDING=1` 只跳过开发环境的 Onboarding UI，不得跳过 Core Runtime Preparation、closure-change backup 或运行时机械校验。
 
-| 行为         | Workbench 模式             | Onboarding 模式                                               |
-| ------------ | -------------------------- | ------------------------------------------------------------- |
-| Sidecar 启动 | 立即启动                   | 不启动（onboarding 期间无 sidecar 依赖）                      |
-| migrate()    | 执行                       | 跳过                                                          |
-| 窗口类型     | Workbench 窗口             | onboarding 窗口                                               |
-| PTY 连接     | 建立 sidecar PTY           | 无 PTY                                                        |
-| 完成后       | —                          | 最终 inspect healthy，在当前进程启动 sidecar 并切换 Workbench |
-| 重启策略     | SidecarSupervisor 退避重试 | 不适用（无 sidecar）                                          |
+Onboarding 完成只更新增强能力与旅程状态，不需要启动/重启 sidecar，也不承担 `migrate()` Core 门禁。若 Onboarding 自身失败，保留其诊断并允许重试，不把已运行的 Core 降级为不可用。
 
-### 开发模式快速跳过
+### Startup Product Identity
 
-`WOPAL_DEV=1` + `WOPAL_DEV_SKIP_ONBOARDING=1` 时，开发环境可跳过 onboarding 入口判定直接进入 Workbench。该开关不进入 release build。
+Desktop 在 sidecar 前校验自身 resources/release-identity.json 的 product/version/channel 与 app/内嵌组件一致。基础 HTTP 与向导使用本产品内嵌 runtime，不因外部 Ellamaka CLI 或 Wopal CLI 缺失而停止。
 
-### Onboarding 完成后的转换
+若系统同时安装外部 Ellamaka CLI，当前产品策略要求它与 Desktop `major.minor` 一致。Desktop auto-update 可以先独立完成；更新后重启立即执行轻量 product preflight，mismatch 时在 sidecar 获得 DSH Home 写权限前进入修复提示。Wopal CLI 可用时 Quick Fix 复用 `wopal ellamaka update`，否则显示手动拉齐指引。该版本门禁与 WopalSpace Onboarding 无关，也不把 Wopal CLI 变成 sidecar 运行依赖。
 
-Onboarding 最后一步 `done` 的行为：
-
-1. Desktop Main 调用 CLI `inspect`。
-2. `verdict === "healthy"` 时保存 `$WOPAL_HOME/ellamaka/state/onboarding.json` 的 UI 完成状态（`completed: true`）。
-3. Desktop Main 确保 SidecarSupervisor ready：已有健康 sidecar 则复用，否则启动并等待 ready。
-4. 当前窗口从 onboarding 切换到 Workbench。
-
-转换失败时保留 onboarding 和诊断信息。用户修复后可再次执行完成动作。完成流程不依赖应用 relaunch。
-
-### 失败回退
-
-Onboarding 过程中若 Desktop 意外退出，下次启动从保存的 UI 状态恢复。已健康的幂等资源被复用。UI 状态用于恢复导航与展示，真实机器状态决定下一步。
-
-### 相关文档
-
-- 完整 onboarding 架构与步骤行为：`../../../docs/products/wopal-space/DESIGN-onboarding.md`
-- Machine capability 契约：`../../wopal-cli/docs/DESIGN-capability.md`
-
-### 启动时版本兼容检查
-
-Workbench 模式下，Desktop 在 sidecar 启动前执行版本兼容检查。检查基于 Desktop manifest 内嵌的 ReleaseIdentity 与本地实际组件 identity。
-
-Desktop 自身在 `resources/release-identity.json` 中内嵌相同的 ReleaseIdentity（由 `scripts/prebuild.ts` 生成，不进入版本控制）。Main 启动时通过 `validateEmbeddedIdentity` 校验其 product/version/channel 与当前 app package metadata 一致，再用于 updater、兼容门禁和诊断。
-
-**检查流程**：
-
-1. 执行 `ellamaka debug release-info --json --api-version 1` 读取 binary 内嵌 identity，并将 product/version/build identity 与安装收据、目标 manifest 交叉校验；`ellamaka --version` 只作轻量 SemVer 探测。
-2. 本机 wopal-cli 必须 `>= MIN_WOPAL_CLI_VERSION`（协议兼容域下界，构建注入）。
-3. 本机 ellamaka CLI 主版本 `vX.Y` 必须与 Desktop 一致（`major.minor` 相等即匹配，patch/prerelease 差异兼容）。
-
-**失败处理**：
-
-| 严重度                     | 行为                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 阻断（CLI 缺失或不兼容）   | 不启动 sidecar。进入 onboarding，并调用 `install-engine` 读取、校验并安装 CLI latest；仍不兼容则提示更新 Desktop 或稍后重试 |
-| 阻断（Wopal CLI 版本过低） | onboarding 调用第一方 installer 的 install-only 模式，完成后重新 inspect                                                            |
-
-**与自动更新的协作**：Desktop 先校验 manifest ReleaseIdentity 并使用标准 SemVer 授权同 channel 更新，electron-updater 负责下载和安装。新版本首次启动时，在 sidecar 前按运行时版本检查准备外部 CLI，然后进入 Workbench。
+自动更新继续校验目标 ReleaseIdentity、平台、渠道和标准 SemVer；产品组合一致性在 post-update fast doctor / startup preflight 收口。首次启动按自身 closure 准备 Core，但必须先通过 product alignment gate。

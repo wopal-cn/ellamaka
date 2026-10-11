@@ -1,11 +1,11 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-08
+> **Updated**: 2026-10-10
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
-> - `./DESIGN-config-engine.md` — 引擎配置消费面：三层读取、面板数据链经 CLI 唯一写入实现
+> - `./DESIGN-config-engine.md` — Draft，阶段 3 配置编辑设计，不属本轮实施范围
 > - `./DESIGN-desktop.md` — 官方桌面应用架构
 > - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
 > - `./DESIGN-dsh-base.md` — dsh 融合基础：文件领地、依赖闭包、热加载
@@ -13,7 +13,7 @@
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
 > - `./DESIGN-logging.md` — 日志架构：角色分域路由、文件生命周期、Trace 与脱敏策略
 > - `./DESIGN-onboarding.md` — Onboarding 目标实现：HTTP/SSE 编排服务与 Web/Desktop 共用页面
-> - `./DESIGN-plan-scheduler.md` — 空间级计划工作区、调度交互与运行接管
+> - `./DESIGN-plan-scheduler.md` — Draft，阶段 4 可选调度设计，不属本轮实施范围
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 >   **Companion Documents**:
 > - `./API-CONTRACT.md` — Runtime API 与 SDK 契约
@@ -22,36 +22,61 @@
 
 ellamaka 是 OpenCode fork，WopalSpace 的执行引擎。它同时承载非 WopalSpace 与 WopalSpace 两种运行模式，负责配置加载、capability composition、ontology 运行时物化、plugin 执行与权限系统。
 
-不负责：空间初始化、ontology 内容设计、空间运行态维护——这些归属 wopal-cli、Space Ontology 和 `.wopal-space/`。
+Ellamaka 的本地业务服务拥有确定性配置写入、ontology 准备与空间装配实现；ontology 拥有声明和内容，Wopal CLI 拥有命令交互及产品安装入口。当前空间运行态仍由 `.wopal-space/` 承载。
+
+## Unified Capability Architecture
+
+本轮落地初始化、固定 DSH Home/closure-change backup/内部 adapter、SDK 与 onboarding 解耦。Config Engine 属于阶段 3，Plan Scheduler 属于阶段 4；两者的详细设计、端点和 UI 不由本轮交付。当前 settings.jsonc/pluginConfig 与已实现 GET /config-v2 保持。
+
+初始化、已有配置消费、ontology 获取、空间装配和运行时能力由 Ellamaka 提供一份业务实现。公开入口统一使用 `@wopal/ellamaka-sdk`；SDK 的本地入口用于 Node/Bun，HTTP 客户端用于浏览器和远端调用。本轮业务操作均有 HTTP 端点，并进入同一 OpenAPI；阶段 3/4 的能力按各自计划交付，不在本轮提前实现。安装 Ellamaka 制品是启动服务前的步骤，不属于 setup HTTP 能力。
+
+```text
+Ellamaka onboarding / HTTP handler → 本地业务服务
+Wopal CLI → @wopal/ellamaka-sdk/local → 同一本地业务服务
+远端客户端 → @wopal/ellamaka-sdk/v2 → HTTP handler → 同一本地业务服务
+```
+
+`packages/ellamaka-setup/` 保存不依赖运行中引擎的安装后准备、setup 必需配置操作、已有配置读取、ontology 与空间服务。`ellamaka-cordis` 保存产品固定的 DSH、环境和内部 adapter。opencode 负责 HTTP、引擎服务与插件注册，不把本地业务服务再包成对自身的 HTTP 调用。内部业务包不反向导入 SDK、Wopal CLI 主程序或 AppRuntime。
+
+SDK/local 导出本地管理函数；需要 DSH 时调用已安装目标产品的 init 入口，不能以 SDK 自己的依赖版本选择 DSH。Ellamaka 内部直接调用自己的 Bridge。进程启动、监听和安装制品是客户端/宿主辅助动作，不伪造能在尚未存在的服务上执行的 HTTP 端点。
+
+HTTP 在 DSH、ontology、workspace 尚未准备时就能启动；setup、配置、状态、OpenAPI 和 onboarding 属于只依赖鉴权及固定 WOPAL_HOME 的系统级路由。会话和工具操作按需等待对应运行环境。基础能力不调用 Wopal CLI；可选的用户工具可以按其声明调用 CLI，不参加服务启动或 onboarding 的健康门禁。
+
+服务绑定一个 WOPAL_HOME。远程 API 操作的是服务所在机器，不接受请求体覆盖宿主 Home。切换宿主 Home 由显式重启完成；GUI 选择另一目录时由宿主执行重启，远程客户端得到明确的重启要求。
+
+业务参数、结果 schema、错误码和写入规则只有一份。HTTP handler 增加鉴权和传输映射，本地调用仍执行业务校验、写入门禁与取消处理。现有 HTTP SDK 的 data/error 返回形状保持；本地 SDK 返回业务数据，不伪造 HTTP Response。浏览器不加载本地文件系统入口。
+
+业务 schema 放在所属服务旁，HTTP API 树引用它们并生成 OpenAPI、SDK 类型及操作目录。复用现有 Effect HttpApi 与生成脚本，不手写另一份 OpenAPI，不建立能力注册框架。新增初始化、配置及 onboarding 操作均由此导出；公开契约归 [API-CONTRACT](./API-CONTRACT.md#single-source)。
 
 ## WopalSpace Adaptations
 
 ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool、plugin 能力。下表是 ellamaka 全部定制点的完整索引，每项指向其权威设计文档章节。
 
-| 适配点                       | 概要                                                                                                                                                         | 详见                                                                                              |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| WopalSpace 自动检测          | CLI 从 cwd 检测单一空间；sidecar 按 instance directory 解析独立空间根                                                                                        | [Space Detection Contract](#space-detection-contract)                                             |
-| 全局路径分离                 | `$WOPAL_HOME/config` + `$WOPAL_HOME/ellamaka/{data,cache,state}`                                                                                             | [State Ownership](#state-ownership)                                                               |
-| 日志路由                     | 角色分域：serve / sidecar 恒落 `$WOPAL_HOME/logs`，tui 在空间内落 `.wopal-space/logs`（与 CLI 空间路由同语义）                                               | [Logging Architecture](./DESIGN-logging.md)                                                       |
-| 非 WopalSpace 模式           | 配置入口由 WOPAL_HOME 所有；capability loading 保持 OpenCode-compatible 并叠加 WOPAL_HOME 全局能力                                                           | [Configuration Contract](#configuration-contract)                                                 |
-| WopalSpace 模式              | 从 instance space root 加载 `.wopal/` 配置和能力；空间根与任意子目录共享同一 context                                                                         | [Configuration Contract](#configuration-contract)                                                 |
-| Instance 运行模式            | 按 directory 检测空间根；server 不使用进程 env 表达当前空间                                                                                                  | [Sidecar Instance Context](#sidecar-instance-context)                                             |
-| Agent/Command/Plugin 加载    | 从 `.wopal/` 加载同名可覆盖内置                                                                                                                              | [Ontology Loading Contract](#ontology-loading-contract)                                           |
-| 权限合并                     | defaults → global → space settings → agent frontmatter                                                                                                       | [Configuration Contract](#configuration-contract)                                                 |
-| 插件去重                     | 全局与空间 ontology 同 runtime id 插件按后加载者保留                                                                                                         | [插件去重](#插件去重)                                                                             |
-| Skill 加载                   | base/user 并发解析，space overlay 按序覆盖                                                                                                                   | [Ontology Loading Contract](#ontology-loading-contract)                                           |
-| TUI 配置与 `/help`           | `settings.jsonc` 的 `tui` 字段；WopalSpace 模式 `/help` 由空间命令接管                                                                                       | [TUI 配置加载](#tui-配置加载)                                                                     |
-| 品牌身份                     | 品牌常量、CLI 身份、Logo、文件系统命名决策                                                                                                                   | [品牌身份](#品牌身份)                                                                             |
-| 构建与发布                   | 品牌注入、平台矩阵、构建接口                                                                                                                                 | [Release Backbone](./DESIGN-distribution.md#release-backbone)                                     |
-| Web UI 产品化                | `packages/ellamaka-app` 作为官方 Web 工作台形态                                                                                                              | [Web UI 与 ellamaka-app](#web-ui-与-ellamaka-app)、[DESIGN-workbench.md](./DESIGN-workbench.md)   |
-| Runtime API 与 SDK           | Effect HttpApi schema → OpenAPI → 生成 SDK；Wopal CLI adapter 将空间控制能力映射为 Runtime API                                                               | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约)                                               |
-| DSH 双引擎融合               | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                                                                                  | [DSH 双引擎融合](#dsh-双引擎融合)                                                                 |
-| 运行时重载                   | 单元化 ReloadController 与两级重载协议                                                                                                                       | [Unified Reload & Lifecycle](#unified-reload--lifecycle)                                          |
-| 引擎配置消费                 | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经 CLI 转发                                                                            | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
-| 能力发现层                   | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                                                                          | [Capability Discovery Layer](#capability-discovery-layer)                                         |
-| Session 能力边界             | 保留静态 config/agent 权限与持久 session permission；可选 plugin runtime rules 只在单次 permission ask 前临时叠加，不改 run loop/Permission Service 持久状态 | [Session Capability Contract](#session-capability-contract)                                       |
-| Runtime Context Contribution | 插件通过 messages.transform 在 retained history 尾部追加本次请求的临时上下文；动态 Skill catalog 等运行态信息不改 system/tool 前缀                           | [Runtime Context Contribution](#runtime-context-contribution)                                     |
-| 引擎安装识别                 | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                                                                             | [Install Contract](./DESIGN-distribution.md#install-contract)                                     |
+| 适配点                            | 概要                                                                                                                                                         | 详见                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| WopalSpace 自动检测               | CLI 从 cwd 检测单一空间；sidecar 按 instance directory 解析独立空间根                                                                                        | [Space Detection Contract](#space-detection-contract)                                             |
+| 全局路径分离                      | `$WOPAL_HOME/config` + `$WOPAL_HOME/ellamaka/{data,cache,state}`                                                                                             | [State Ownership](#state-ownership)                                                               |
+| 日志路由                          | 角色分域：serve / sidecar 恒落 `$WOPAL_HOME/logs`，tui 在空间内落 `.wopal-space/logs`（与 CLI 空间路由同语义）                                               | [Logging Architecture](./DESIGN-logging.md)                                                       |
+| 非 WopalSpace 模式                | 配置入口由 WOPAL_HOME 所有；capability loading 保持 OpenCode-compatible 并叠加 WOPAL_HOME 全局能力                                                           | [Configuration Contract](#configuration-contract)                                                 |
+| WopalSpace 模式                   | 从 instance space root 加载 `.wopal/` 配置和能力；空间根与任意子目录共享同一 context                                                                         | [Configuration Contract](#configuration-contract)                                                 |
+| Instance 运行模式                 | 按 directory 检测空间根；server 不使用进程 env 表达当前空间                                                                                                  | [Sidecar Instance Context](#sidecar-instance-context)                                             |
+| Agent/Command/Plugin 加载         | 从 `.wopal/` 加载同名可覆盖内置                                                                                                                              | [Ontology Loading Contract](#ontology-loading-contract)                                           |
+| 权限合并                          | defaults → global → space settings → agent frontmatter                                                                                                       | [Configuration Contract](#configuration-contract)                                                 |
+| 插件去重                          | 全局与空间 ontology 同 runtime id 插件按后加载者保留                                                                                                         | [插件去重](#插件去重)                                                                             |
+| Skill 加载                        | base/user 并发解析，space overlay 按序覆盖                                                                                                                   | [Ontology Loading Contract](#ontology-loading-contract)                                           |
+| TUI 配置与 `/help`                | `settings.jsonc` 的 `tui` 字段；WopalSpace 模式 `/help` 由空间命令接管                                                                                       | [TUI 配置加载](#tui-配置加载)                                                                     |
+| 品牌身份                          | 品牌常量、CLI 身份、Logo、文件系统命名决策                                                                                                                   | [品牌身份](#品牌身份)                                                                             |
+| 构建与发布                        | 品牌注入、平台矩阵、构建接口                                                                                                                                 | [Release Backbone](./DESIGN-distribution.md#release-backbone)                                     |
+| Web UI 产品化                     | `packages/ellamaka-app` 作为官方 Web 工作台形态                                                                                                              | [Web UI 与 ellamaka-app](#web-ui-与-ellamaka-app)、[DESIGN-workbench.md](./DESIGN-workbench.md)   |
+| Runtime API 与 SDK                | Effect HttpApi schema → OpenAPI → 生成 SDK；共享本地服务提供空间控制，统一 SDK 支持本地与 HTTP                                                               | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约)                                               |
+| DSH 双引擎融合                    | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                                                                                  | [DSH 双引擎融合](#dsh-双引擎融合)                                                                 |
+| DSH Home、closure 备份与启动生命周期 | `$WOPAL_HOME/dsh/home` 永久固定；closure fingerprint 变化时新 runtime 写 Home 前必须先备份；Core 自动准备、`ELLAMAKA_DSH=0` 时完全跳过；Onboarding 独立可选 | [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle) |
+| 运行时重载                        | 单元化 ReloadController 与两级重载协议                                                                                                                       | [Unified Reload & Lifecycle](#unified-reload--lifecycle)                                          |
+| 引擎配置消费                      | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经共享配置服务                                                                         | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
+| 能力发现层                        | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                                                                          | [Capability Discovery Layer](#capability-discovery-layer)                                         |
+| Session 能力边界                  | 保留静态 config/agent 权限与持久 session permission；可选 plugin runtime rules 只在单次 permission ask 前临时叠加，不改 run loop/Permission Service 持久状态 | [Session Capability Contract](#session-capability-contract)                                       |
+| Runtime Context Contribution      | 插件通过 messages.transform 在 retained history 尾部追加本次请求的临时上下文；动态 Skill catalog 等运行态信息不改 system/tool 前缀                           | [Runtime Context Contribution](#runtime-context-contribution)                                     |
+| 引擎安装识别                      | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                                                                             | [Install Contract](./DESIGN-distribution.md#install-contract)                                     |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
 
@@ -166,8 +191,8 @@ HttpApiEndpoint.get("configGet", "/config-v2", {
 
 - 端点挂实例作用域中间件（Instance Context + Workspace Routing + Authorization），两种运行模式通用；非 WopalSpace 实例返回空段，响应形状不变。
 - `effective.ellamaka` 与 `/config` 同源同值（`$VAR` 已在加载时代换）；`effective.wopal.pluginConfig` 为三层文件镜像，`$VAR` 不代换，引用解析发生在消费方插件内部。
-- 权限选择器：显示条件为 dock 变体 + DSH `ready`（状态自 `/global/health`）+ 装配条目含 dsh-adapter + `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true`；默认模式取 `sandbox.mode`。
-- 配置写入（`PATCH` / `reset-key` 经 CLI 转发）与设置面板的完整契约由 [DESIGN-config-engine.md](./DESIGN-config-engine.md) 承载。
+- 权限选择器：显示条件为 dock 变体 + DSH `ready`（状态自 `/global/health`）+ 内置 dsh-adapter 生效 + `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true`；默认模式取 `sandbox.mode`。
+- 配置写入（`PATCH` / `reset-key` 调用共享服务）与设置面板的完整契约由 [DESIGN-config-engine.md](./DESIGN-config-engine.md) 承载。
 
 ### External Capability Directories
 
@@ -289,7 +314,7 @@ ellamaka 与 OpenCode upstream 各自独立演进，不进行上游合并。`mai
 
 ## Distribution
 
-Ellamaka CLI 构建为多平台 standalone binary，Desktop 构建为原生安装包。两者分别使用标准 SemVer、namespaced tag、workflow 和 latest feed。Desktop 与 CLI 是同一产品的两种形态，运行时版本保证为 wopal-cli `>= MIN_WOPAL_CLI_VERSION` 与 CLI 主版本 `vX.Y` 与 Desktop 一致。`wopal ellamaka install` 默认安装完整产品，`--cli` 只安装外部 CLI。
+Ellamaka CLI 构建为多平台 standalone binary，Desktop 构建为原生安装包。两者分别使用标准 SemVer、namespaced tag、workflow 和 latest feed。Desktop 与 CLI 是同一产品的两种形态，运行时不以安装 Wopal CLI 为前提；独立 CLI 与 Desktop 的组合仍遵循产品兼容策略。`wopal ellamaka install` 默认安装完整产品，`--cli` 只安装外部 CLI。
 
 构建入口：CI 中 `publish-ellamaka-cli.yml` 调用 `scripts/build.sh cli`（内部走 `packages/ellamaka-release/src/cli/build.ts`）并注入 env；本地开发使用 `packages/ellamaka-release/src/cli/build.ts` 包装脚本。
 
@@ -310,7 +335,7 @@ fork 的 plugin 契约层相对上游基线（OpenCode `1.15.13`）新增六处�
 - `ToolContext.extra` —— 宿主向工具调用透传附加上下文（如沙箱模式）
 - `Hooks["experimental.permission.rules"]` —— permission ask 前的临时 rules overlay；输入 session/agent/permission/patterns，输出可追加的 `PermissionRule[]`，合并后仍由原 Permission evaluator 求值
 
-六处扩展均为可选字段或新增 hook，是上游类型的超集：上游/旧插件在新引擎上没有对应函数时由 dispatcher 直接跳过，行为保持不变。依赖 `experimental.permission.rules` 的新插件需要与提供该契约的 Ellamaka 版本配套分发；新插件运行在旧引擎上不会获得 runtime permission overlay，因此不属于受支持组合。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、systemMetadata、动态 Skill permission overlay）与 `../../../.wopal/docs/DESIGN-dsh-adapter.md`（tool.provider、ToolContext.extra 的动态工具投影与沙箱语义）。
+六处扩展均为可选字段或新增 hook，是上游类型的超集：上游/旧插件在新引擎上没有对应函数时由 dispatcher 直接跳过，行为保持不变。依赖 `experimental.permission.rules` 的新插件需要与提供该契约的 Ellamaka 版本配套分发；新插件运行在旧引擎上不会获得 runtime permission overlay，因此不属于受支持组合。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、systemMetadata、动态 Skill permission overlay）与 [工具容器设计](./DESIGN-ellamaka-tools.md)（内部 adapter、tool.provider 与沙箱语义）。
 
 插件消费这些扩展时直接声明 `@wopal/ellamaka-plugin` 依赖，运行时引擎以 `InstallationVersion` 剥离 rc/beta 后的纯主版本为兜底 pin，保证插件拿到的契约层类型与引擎一致。
 
@@ -324,7 +349,6 @@ fork 的 plugin 契约层相对上游基线（OpenCode `1.15.13`）新增六处�
 | Process state                    | `$WOPAL_HOME/ellamaka/state/`                         | ellamaka                                                                              |
 | Instance WopalSpace root         | 当前 directory 的检测结果                             | `undefined` 表示非 WopalSpace；绝对路径表示 WopalSpace                                |
 | CLI WopalSpace compatibility env | CLI 单进程运行期的 `WOPAL_SPACE` / `WOPAL_SPACE_ROOT` | CLI 入口；不作为 sidecar 当前空间状态                                                 |
-| Wopal CLI 健康                   | `$WOPAL_HOME/bin/wopal` 的短时探测结果                | `CliContract`，CLI 二进制保持版本事实来源                                             |
 | 空间 ontology                    | `<space>/.wopal/`                                     | Space Ontology，ellamaka 加载                                                         |
 | 空间运行态                       | `<space>/.wopal-space/`                               | space runtime；wopal-plugin 按 instance root 写日志，Ellamaka engine 不拥有其目录结构 |
 
@@ -346,9 +370,9 @@ Workbench Session Projection 是左侧会话列表的服务端只读模型，只
 
 Workbench 的被动读取不拥有会话运行环境：会话运行状态快照来自已初始化 instance 的规范状态，通知摘要直接读取 Session 数据库，空间文件树与预览使用注册 Space 范围内的 Root 文件读取。以上读取均不触发 directory bootstrap。只有 Panel 中的会话需要目录能力；恢复的非当前 Space 首次访问时才挂载，访问后保持后台会话与终端连接。
 
-Wopal CLI adapter 作为 Runtime 的领域服务使用 `wopal ... --api-version` capability。它维护非权威空间快照，并将稳定的 CLI 结果映射为 Ellamaka 领域资源和错误。adapter 位于 sidecar 内，直接 spawn wopal 进程；wopal 调用是无状态进程边界，不引入专门的常驻 worker。消费侧 schema 从 wopal 共享契约包导入，与 wopal 的 TypeBox 契约同源。浏览器只使用 Ellamaka API。
+空间控制、配置写入与会话目录准备直接调用共享本地业务服务，现有 HTTP 资源和错误形状保持兼容。核心路径不 spawn Wopal，不需要它的版本探测或自动修复；可选 CLI 工具诊断不参加启动门禁。
 
-`CliContract` 将 CLI 安装状态与能力调用分开处理。`/global/health` 公开最低版本、已检测版本与兼容状态。CLI 不可用时，Ellamaka 保持 Session Runtime，Workbench 将 Space Control 降级为可恢复状态。用户确认修复后，Runtime 使用已安装 CLI 的更新命令或第一方 installer 修复二进制，并重新探测状态；sidecar 与已有 Workbench 现场继续运行。
+宿主健康、空间服务和 onboarding 由 Ellamaka 自身报告，不探测 Wopal CLI 或要求其最低版本。共享业务服务替代反向 CLI 调用；用户显式配置的外部工具自行处理其可用性，不进入核心健康或安装修复流程。
 
 完整的路径语义、schema、错误、版本、SDK 生成和端点门禁见 [API-CONTRACT.md](./API-CONTRACT.md)。
 
@@ -390,7 +414,7 @@ DSH 容器装配与融合细则见 [DESIGN-dsh-base.md](./DESIGN-dsh-base.md)。
 
 ellamaka 在自己的进程内运行 dsh 引擎。融合的目的是获得沙箱执行、插件生态与动态装载能力，同时保持 ellamaka 的会话所有权与对外契约不变。
 
-DSH v0.2 的宿主契约由 Bridge 承接：profileContext 提供启动事实，公开模块路由保持闭包身份，配置修改由 ProfileRuntime 的统一队列求值、验收与恢复。运行时状态在所需容器通过挂载验收后发布。设置和用户 preset 的版本导入由宿主事务保护源数据。具体契约见 [基础设计](./DESIGN-dsh-base.md)。
+DSH v0.2 的宿主契约由 Bridge 承接：`$WOPAL_HOME/dsh/home` 是唯一固定 Active Home，runtime closure 按 fingerprint 独立版本化。Core 不推断 DSH 私有持久数据格式；fingerprint 变化时只负责在目标 closure 首次写 Home 前创建完整 backup，然后让 DSH 自己处理它支持的原生迁移。Runtime Activation 才挂载容器并发布运行能力。`ELLAMAKA_DSH=0` 时整个 DSH prepare/activate 分支跳过，而 Ellamaka Core 仍可 READY/RUNNING。WopalSpace Onboarding 是独立可选旅程，不作为 runtime 门禁。具体契约见 [基础设计](./DESIGN-dsh-base.md)。
 
 ### 双容器模型
 
@@ -419,12 +443,17 @@ ellamaka 进程（唯一监听端口）
 
 **两个容器必须分离**：Web 界面需要 dsh 的完整 agent-loop 语义（会话账本、检查点、完整插件集）；工具采用只需要工具本体与最小调用上下文。同一个容器无法同时满足两种装配——检查点插件会强制刷新调用方的活动会话。
 
-**入口分工**：
+**统一启动生命周期**：所有本地运行入口只共享 `ensureCoreRuntimeReady()`，它自动、幂等且无用户输入。WopalSpace Onboarding 不参加启动门禁。Core Preparation 与 Activation 通过统一 `CoreProgressEvent` 向终端/Renderer 展示当前阶段、耗时和失败原因，长任务不得静默。
 
-- CLI serve / web：挂载 Web 容器与工具容器
-- Desktop sidecar：挂载 Web 容器与工具容器
-- TUI：只挂工具容器（无 iframe 需求）
-- Workbench：由承载页面的 serve/web 后端或 Desktop sidecar 提供两个容器
+| 入口                    | Core 未 Ready                                                                                                                 | Core Ready 后                                                     |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| CLI `serve` / `web`     | 先启动 Bootstrap Control Plane，再自动准备 Core；终端与 Bootstrap progress 持续显示 closure/migration/profile/validate 等阶段 | 原地 activation；DSH 启用时挂 Web + tools，禁用时启动原生 runtime |
+| Desktop sidecar         | Bootstrap 后自动准备 Core；Renderer 显示同一 progress event                                                                   | sidecar 原地 activation，Workbench 可运行                         |
+| `ellamaka run`          | 自动准备 Core；progress 写 stderr，不污染业务 stdout                                                                          | 临时 activation 所需 runtime，执行后释放                          |
+| `ellamaka`（默认 TUI）  | TUI 正式进入前显示启动 progress                                                                                               | DSH 启用时挂 tools；禁用时直接启动原生 TUI                        |
+| `run --attach` / attach | 不准备本地 Core/DSH                                                                                                           | 使用远端宿主能力                                                  |
+
+`ELLAMAKA_DSH=0` 时不创建 DSH 目录、不下载 closure、不备份或改写 Home、不挂载 DSH 容器。Workbench/Onboarding 可以在 Core RUNNING 后独立展示 WopalSpace 配置旅程；详细状态机、progress、closure-change backup 与固定 Home 契约见 [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
 ### 采用范围
 
@@ -438,17 +467,17 @@ Ellamaka Agent 的工具采用路径复用 DSH 工具执行能力，持久 Sessi
 
 ### 组件清单
 
-| 组件                | 位置                             | 职责                                                                                                            |
-| ------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `VirtualWebServer`  | `@wopal/ellamaka-cordis`         | 实现 dsh 官方 WebServer 接口，提供路由与 upgrade 分发，不创建监听 socket                                        |
-| 受控路由挂载点      | `Listener.mountNodeRoute`        | 按前缀分发 HTTP 与 upgrade 到已注册 handler，保留 Effect listener 生命周期                                      |
-| Ellamaka DSH Bridge | `@wopal/ellamaka-cordis`         | 随 CLI 与 Desktop sidecar 编译发布，提供容器、虚拟 WebServer、运行时动态加载与 dsh boot 装配                    |
-| DSH Runtime Manager | `@wopal/ellamaka-cordis/runtime` | 所有入口共用的启动入口，负责禁用判断、闭包物化、完整性校验、动态加载与容器挂载                                  |
-| DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins` | 内置安装器、包解析、profile 声明与配置重放；原生 pluginManager 经 profileContext.packageManager 调用宿主 worker |
-| wopal 插件包        | `@wopal/dsh-wopal-pack`          | 配置单与自定义能力随包发布                                                                                      |
-| DSH 运行时清单      | ellamaka 构建产物                | 构建时从 `packages/ellamaka-cordis/package.json` 派生并锁定 dsh 官方依赖                                        |
-| dsh 引擎装配        | `@wopal/ellamaka-cordis/dsh-web` | 通过 installAnchor 和 profile facts 装配两个容器，验收服务、工具与默认 preset 后发布句柄                        |
-| dsh-adapter         | `.wopal/plugins/dsh-adapter`     | 把工具容器中的工具投影进 ellamaka ToolRegistry                                                                  |
+| 组件                | 位置                                                   | 职责                                                                                                            |
+| ------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `VirtualWebServer`  | `@wopal/ellamaka-cordis`                               | 实现 dsh 官方 WebServer 接口，提供路由与 upgrade 分发，不创建监听 socket                                        |
+| 受控路由挂载点      | `Listener.mountNodeRoute`                              | 按前缀分发 HTTP 与 upgrade 到已注册 handler，保留 Effect listener 生命周期                                      |
+| Ellamaka DSH Bridge | `@wopal/ellamaka-cordis`                               | 随产品编译发布，提供 DSH 调用协议适配、容器、虚拟 WebServer 与固定运行时装配                                    |
+| DSH Runtime Manager | `@wopal/ellamaka-cordis/runtime`                       | 所有入口共用的启动入口，负责禁用判断、闭包物化、完整性校验、动态加载与容器挂载                                  |
+| DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins`                       | 内置安装器、包解析、profile 声明与配置重放；原生 pluginManager 经 profileContext.packageManager 调用宿主 worker |
+| Wopal preset bundle | `@wopal/dsh-presets`（ontology `dsh/agents-presets/`） | 声明 wopal/fae/rook preset 并携带随包技能；通过标准 DSH bundle 装配                                             |
+| DSH 运行时清单      | ellamaka 构建产物                                      | 构建时从 `packages/ellamaka-cordis/package.json` 派生并锁定 dsh 官方依赖                                        |
+| dsh 引擎装配        | `@wopal/ellamaka-cordis/dsh-web`                       | 通过 installAnchor 和 profile facts 装配两个容器，验收服务、工具与默认 preset 后发布句柄                        |
+| dsh-adapter         | `@wopal/ellamaka-cordis/dsh-adapter`                   | 把工具容器中的工具投影进 ellamaka ToolRegistry                                                                  |
 
 依赖方向单一：ellamaka 依赖 Bridge，Bridge 依赖 dsh 运行时。dsh 不依赖 Bridge，Bridge 不发布为独立包。
 
@@ -552,15 +581,15 @@ Workbench 的具体界面、视图模型、目录架构、能力迁移规约以�
 
 ## Related Documents
 
-| 文档                              | 引用目的                            |
-| --------------------------------- | ----------------------------------- |
-| `../../wopal-cli/docs/DESIGN.md`  | wopal-cli 如何消费 ellamaka release |
-| `packages/opencode/AGENTS.md`     | engine package 内部规则             |
-| `packages/ellamaka-app/AGENTS.md` | ellamaka 官方 web UI 包级开发规则   |
+| 文档                                         | 引用目的                            |
+| -------------------------------------------- | ----------------------------------- |
+| `../../../projects/wopal-cli/docs/DESIGN.md` | wopal-cli 如何消费 ellamaka release |
+| `packages/opencode/AGENTS.md`                | engine package 内部规则             |
+| `packages/ellamaka-app/AGENTS.md`            | ellamaka 官方 web UI 包级开发规则   |
 
 ## Scheduled Plan Execution
 
-界面结构、空间级工作区切换、审批与排期交互由 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md) 定义；HTTP 路径、数据与错误契约由 [API-CONTRACT.md](./API-CONTRACT.md#plan-scheduler-api-proposal) 定义。Workbench 壳负责承载，调度领域状态由 CLI 提供。
+界面结构、空间级工作区切换、审批与排期交互由 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md) 定义；HTTP 路径、数据与错误契约由 [Scheduler API 草案](./DESIGN-plan-scheduler.md#api-proposal) 定义。Workbench 壳负责承载，调度领域状态由 CLI 提供。
 
 Ellamaka 实现 Wopal CLI 定义的 Runner Port：版本协商、幂等执行身份、非交互 Session、结构化事件/结果、查询、取消与完整工具进程树收尾。CLI 拥有可审阅的 DAG JSON、时间、运行态 JSON claim，ontology Provider 拥有审批和实际实施准备；runtime 承接已批准 revision 与验证过的环境。
 
