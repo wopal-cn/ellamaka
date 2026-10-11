@@ -22,6 +22,8 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - ellamaka-app package rules: `packages/ellamaka-app/AGENTS.md`
 - desktop package rules: `packages/ellamaka-desktop/AGENTS.md`
 
+- 根目录 `AGENTS.md` 与 `AGENTS.zh-CN.md` 是同一项目规范的双语镜像。任何架构、所有权或强制规则修改必须在同一提交中同步两份。
+
 ## Architecture and Directories
 
 执行链：OpenCode upstream → ellamaka fork → `--wopal-space` → `.wopal/` ontology → `.wopal-space/` runtime。
@@ -97,7 +99,7 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 
 ### CLI 发布契约
 
-- 发布构建入口（`packages/ellamaka-release/src/cli/build.ts`）是已发布 CLI 二进制（`scripts/build.sh cli`、CI `publish-ellamaka-cli.yml`）的唯一打包点。其 `define` 块必须保留 `"process.env.MIN_WOPAL_CLI_VERSION"` 条目——值由 `scripts/build.sh` 导出（经 `resolve_min_wopal_cli_version`），未设置时经 `readMinWopalCliVersion` 回退读取 `.ci/versions.json`。运行时（`packages/opencode/src/wopal/cli-contract.ts`）在模块加载期 fail-closed，且编译产物跳过源码树文件回退：丢失或拼错该 define 的构建在构建机上仍能通过自身烟测（checkout 存在使回退路径可解析），但在所有最终用户机器上启动即崩。移动或拆分构建入口时，必须同步迁移该 define。
+- 发布构建入口（`packages/ellamaka-release/src/cli/build.ts`）是正式 CLI 二进制的唯一打包点。Ellamaka 启动、更新、构建与发布不得要求 Wopal CLI 最低版本或等待其发布顺序；移除 core CLI import/gate 时必须同步清理 build define 与源码树 fallback。正式 CLI/sidecar 烟测必须在没有 Wopal、没有 `MIN_WOPAL_CLI_VERSION`、没有源码树 min-version 元数据的环境下通过，同时保留 Ellamaka 制品 identity、channel、platform 与固定 DSH 校验。
 
 ### Desktop 发布契约
 
@@ -127,9 +129,20 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - **安装共享、启用按 profile**：安装是进程级动作（安装/升级/卸载全局一次），激活按容器经 profile bundle 清单声明。禁止同一进程内运行同一包的两个版本。
 - **工具容器不创建会话**：工具调用走专用 `ellamaka-tools` profile。容器不创建、不持有任何 dsh 会话，adapter 只传递工具实测消费的最小 per-call context。web 容器保持完整 profile，禁止复用为工具后端。用户补丁内容保持原样。宿主能力约束独立保护无会话 profile 与可用后端，并在每次组合重放时生效。
 - **`ELLAMAKA_DSH` 是唯一启用开关**：默认开启。serve、web、TUI 与 Desktop sidecar 统一经 `ELLAMAKA_DSH=0` 禁用。禁止引入第二条启用分支。
-- **DSH 领地只有 `$WOPAL_HOME/dsh`**：依赖闭包、profile 定义与运行时数据都在这里。宿主在进程启动时设置 `DSH_HOME=$WOPAL_HOME/dsh/home`；集成代码不为自己的路径读取该环境变量。`~/.dsh` 归官方 dsh CLI，禁止在其中创建、修改或删除任何内容。
+- **DSH 领地只有 `$WOPAL_HOME/dsh`**：`$WOPAL_HOME/dsh/home` 是唯一固定 Active DSH Home。closure 按 fingerprint 不可变物化；fingerprint 变化时，新 closure 获得 Home 写权限之前必须先完成 Home backup。Ellamaka 不推断 Home 格式、不实现通用迁移、也不把 backup 当作 `DSH_HOME`；原生迁移归 DSH。`ELLAMAKA_DSH=0` 跳过全部 DSH prepare/activate。`~/.dsh` 归官方 dsh CLI，禁止在其中创建、修改或删除任何内容。
 - **多 profile 隔离**：核心容器（web 与 `ellamaka-tools`）保持同进程。实验性第三方 profile 以独立进程运行并带独立 DSH_HOME，不进入主 Web 容器、不与主引擎共享 home 或 profiles——运行中引擎的 `profiles/` 是引擎领地。闭包只读、可共享；home 必须隔离。
 - **壳单端口不变量**：renderer 只从唯一 http origin（server 端口）加载 UI。壳不承载引擎逻辑，不新开第二个监听端口。引擎产物只有一个形态——完整 CLI 二进制，禁止维护第二套分叉的引擎构建产物。`/dsh` 保持前缀挂载不升根，`/` 是设备协商前门（移动 UA → `/dsh/`，桌面 UA → `/workbench`）。
+
+### 用户可见启动进度
+
+- **禁止静默启动**：`ellamaka`、`ellamaka run`、`serve/web` 与 Desktop 只要启动工作不是瞬时完成，就必须显示 Core Preparation / activation 进度。
+- 统一使用结构化 progress 协议；至少报告当前阶段、耗时、完成/跳过/失败，失败提供稳定错误码；长阶段至少每 5 秒 heartbeat。
+- 提示必须短且必要，只说明“正在做什么”。例如：`Preparing DSH runtime…`、`Backing up DSH Home…`、`Validating profiles…`、`Ready (8.2s)`。禁止长篇解释和重复刷屏。
+- 禁止伪造百分比。只有真实 total 时才显示计数/字节；否则使用阶段 + spinner + elapsed。DSH 原生 migration 若不可观测，不得伪造迁移进度。
+- `ELLAMAKA_DSH=0` 只报告一次简短的 `DSH disabled; skipped`，并保持零 DSH 文件/网络/挂载行为。
+- progress 是用户通道，不是 debug 日志。`ellamaka run` 的启动进度写 stderr，保持模型/JSON stdout 纯净；非 TTY/CI 输出逐行事件，TTY/Desktop 可使用紧凑 spinner/status。
+- 文件日志可另记关键生命周期结果，但用户不能依赖 DEBUG/TRACE 才知道启动是否仍在进行或已经失败。
+- phase/event 细节见 `docs/DESIGN-dsh-base.md#core-preparation-progress-contract`；本节是强制实现规范。
 
 ### 日志规范
 

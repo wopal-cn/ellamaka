@@ -16,11 +16,16 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - ONBOARDING: `docs/DESIGN-onboarding.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
 - DISTRIBUTION: `docs/DESIGN-distribution.md`
+- LOGGING: `docs/DESIGN-logging.md`
+- CONFIG ENGINE: `docs/DESIGN-config-engine.md`
+- PLAN SCHEDULER: `docs/DESIGN-plan-scheduler.md`
 - Config Reference: `docs/references/ellamaka-config-mechanism.md`
 - opencode package rules: `packages/opencode/AGENTS.md`
 - ellamaka-cordis package rules: `packages/ellamaka-cordis/AGENTS.md`
 - ellamaka-app package rules: `packages/ellamaka-app/AGENTS.md`
 - desktop package rules: `packages/ellamaka-desktop/AGENTS.md`
+
+- Root `AGENTS.md` and `AGENTS.zh-CN.md` are normative bilingual mirrors. Any architecture, ownership, or mandatory-rule change must update both in the same commit.
 
 ## Architecture and Directories
 
@@ -132,6 +137,17 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - **DSH territory is `$WOPAL_HOME/dsh` only**: `$WOPAL_HOME/dsh/home` is the one fixed Active DSH Home. Closures are immutable and versioned by fingerprint; when the fingerprint changes, Core must complete a Home backup before the new closure gets write access. Ellamaka does not infer Home format, run generic migrations, or use backups as `DSH_HOME`; native migration belongs to DSH. `ELLAMAKA_DSH=0` skips all DSH prepare/activate work. `~/.dsh` belongs to the official dsh CLI — never create, modify, or delete anything inside it.
 - **Multi-profile isolation**: the core containers (web and `ellamaka-tools`) stay in one process. Experimental third-party profiles run in separate processes with their own DSH_HOME. They never enter the main web container and never share the main engine's home or profiles — a running engine's `profiles/` directory is engine territory. Closures are read-only and may be shared; home must be isolated.
 - **Shell single-port invariant**: the renderer loads UI from exactly one http origin (the server port). The shell carries no engine logic and opens no second listening port. The engine has one artifact form — the full CLI binary; never maintain a second forked engine build. `/dsh` stays a prefix mount rather than a root, and `/` is the device-negotiation front door (mobile UA → `/dsh/`, desktop UA → `/workbench`).
+
+### User-visible Startup Progress
+
+- **Never leave users staring at a silent startup**: `ellamaka`, `ellamaka run`, `serve/web`, and Desktop must expose Core Preparation / activation progress whenever work is not effectively instant.
+- Use one shared structured progress protocol. At minimum report the current phase, elapsed time, completion/skip/failure, and a stable error code on failure. Long phases emit a heartbeat at least every 5 seconds.
+- Keep messages short and necessary: say what is happening, not implementation narration. Good: `Preparing DSH runtime…`, `Backing up DSH Home…`, `Validating profiles…`, `Ready (8.2s)`. Avoid paragraph-length status text and repetitive logs.
+- Do not invent percentages. Show counts/bytes only when real totals exist; otherwise use phase + spinner + elapsed time. DSH-native migration may be opaque; do not fake migration progress.
+- `ELLAMAKA_DSH=0` reports one concise `DSH disabled; skipped` event and performs zero DSH file/network/mount work.
+- Progress is a user-facing channel, not debug logging. `ellamaka run` writes startup progress to stderr so model/JSON stdout stays clean; non-TTY/CI emits line-based events, while TTY/Desktop may render a compact spinner/status row.
+- File logs may record important lifecycle results separately, but users must not need DEBUG/TRACE logs to know whether startup is still working or has failed.
+- Detailed phase/event semantics live in `docs/DESIGN-dsh-base.md#core-preparation-progress-contract`; this section is the mandatory implementation rule.
 
 ### Logging Rules
 

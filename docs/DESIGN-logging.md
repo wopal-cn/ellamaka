@@ -1,12 +1,12 @@
 # Ellamaka — Logging Architecture
 
 > **Status**: Active
-> **Updated**: 2026-09-25
+> **Updated**: 2026-10-10
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`（产品架构；空间运行态 `logs/` 的归属）
 > **Sibling DESIGNs**:
 >
-> - `../../wopal-cli/docs/DESIGN.md` — CLI 侧日志架构：空间感知路由的参照模型，以及 CLI 与引擎的日志边界
+> - `../../../projects/wopal-cli/docs/DESIGN.md` — CLI 侧日志架构：空间感知路由的参照模型，以及 CLI 与引擎的日志边界
 > - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系：`wopal.logging.level` 与 `ELLAMAKA_LOG_LEVEL` 的统一定义
 >
 > **Scope**: 引擎日志的目录路由、文件生命周期、输出通道、级别与 Trace 策略、脱敏边界
@@ -22,7 +22,7 @@
 - **输出通道、级别与 Trace**：终端与文件各自承载什么；`DEBUG` 与 `TRACE` 的语义
 - **脱敏与边界**：什么内容允许进入日志
 
-归属边界：空间注册与 `.wopal-space/` 目录结构归 wopal-cli 与空间运行时，引擎按其既有结构写入；CLI 自身日志策略归 CLI 侧设计；空间运行态组件（如 wopal-plugin）的日志归其自身所有。
+归属边界：空间注册与 .wopal-space 目录物化归共享准备服务，运行数据归空间运行时，引擎按其既有结构写入；CLI 自身日志策略归 CLI 侧设计；空间运行态组件（如 wopal-plugin）的日志归其自身所有。
 
 ## Log Routing
 
@@ -30,17 +30,17 @@
 
 引擎进程按角色进入两个日志域：
 
-| 角色      | 进程                                                             | 日志目录                                                              |
-| --------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `serve`   | `ellamaka serve`、`ellamaka web`                                   | `$WOPAL_HOME/logs/`                                                   |
-| `sidecar` | Desktop 内嵌服务                                                   | `$WOPAL_HOME/logs/`                                                   |
-| `tui`     | 交互命令族（TUI 主进程与 worker、attach、run、机器子命令）           | 启动时位于空间内 → `<space>/.wopal-space/logs/`；否则 `$WOPAL_HOME/logs/` |
+| 角色      | 进程                                                       | 日志目录                                                                  |
+| --------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `serve`   | `ellamaka serve`、`ellamaka web`                           | `$WOPAL_HOME/logs/`                                                       |
+| `sidecar` | Desktop 内嵌服务                                           | `$WOPAL_HOME/logs/`                                                       |
+| `tui`     | 交互命令族（TUI 主进程与 worker、attach、run、机器子命令） | 启动时位于空间内 → `<space>/.wopal-space/logs/`；否则 `$WOPAL_HOME/logs/` |
 
 `serve` 与 `sidecar` 是机器级服务：一个进程按请求同时服务多个空间实例，日志归属全局域。`tui` 是空间感知角色：在空间内启动的交互进程，其日志归该空间，与 wopal-cli 的空间路由语义一致。
 
 ### 空间判定
 
-空间判定的唯一来源是 CLI 入口对进程启动 cwd 的检测：沿 cwd 向上查找带 `.wopal/.git` 标记的目录（`detectWopalSpace`，止于用户 home）。判定结果经 `WOPAL_SPACE_ROOT` 传给 logger 与 worker 进程，logger 自身不重复检测。
+空间判定的唯一来源是 Ellamaka CLI 入口对进程启动 cwd 的检测：沿 cwd 向上查找带 `.wopal/.git` 标记的目录（`detectWopalSpace`，止于用户 home）。判定结果经 `WOPAL_SPACE_ROOT` 传给 logger 与 worker 进程，logger 自身不重复检测。
 
 - `--disable-wopalspace` 关闭 WopalSpace 模式时不做空间路由，日志落全局域。
 - 日志目录在进程启动时确定；运行期的目录切换（TUI 的目录选择、attach 目标变化）不改变它。
@@ -70,11 +70,14 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 
 终端与文件是两个独立通道，不互为副本：
 
-- **终端**：面向用户的启动契约与即时反馈。serve 的终端输出是监听地址、Workbench 地址与可操作警告。
+- **终端 / UI progress**：面向用户的启动契约与即时反馈。Core Runtime Preparation 与 Activation 使用结构化 `CoreProgressEvent`；CLI/TUI 渲染到终端，serve/web 同时通过 Bootstrap 控制面暴露，Desktop Renderer 消费同一事件。这个通道不受日志级别过滤。
 - **文件**：面向事后排障的结构化记录。`INFO` 记录对应需要事后关注的状态变化——例如一次完成的数据迁移、VCS 分支切换或按需依赖安装。
 - **`--log-level DEBUG`**：实现级诊断，有界且仍脱敏；理解正常运行不依赖它。
 - **`--trace`**：第五级，见 Trace 节。
 - **`--print-logs`**：将记录镜像到 stderr，进程不落文件；dev 工具链用它接管进程输出。
+
+- **启动进度与 stdout 分离**：`ellamaka run` 等命令的 Core progress 写 stderr/专用 UI，不污染模型回答、JSON 或机器协议 stdout。TTY 可以用 spinner 覆写当前行；非 TTY/CI 必须输出可采集的逐行阶段事件。
+- **禁止静默长任务**：closure 下载、closure-change Home backup、profile 准备、preflight 和 activation 的 started/completed/failed 必须用户可见；长阶段至少每 5 秒产生 heartbeat，renderer 持续显示当前 phase 与 elapsed time。未知工作量不伪造百分比。
 
 日志记录状态变化与故障，不是活动流水：事件总线订阅抖动、SSE / WebSocket 连接抖动、会话与消息生命周期事件、权限求值、question 回复、文件搜索请求、PTY 客户端生命周期、配置 / 插件 / provider 枚举都不进入日志——它们已有权威状态或事件流，文本副本只制造噪声并可能暴露用户数据。
 
@@ -105,14 +108,14 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 - **只有级别不会输出任何记录**：`--log-level TRACE` 不带 `--trace` 被拒绝——“全部打开”正是该级别要消除的洪泛。`--trace` 不带值运行会列出全部类别。
 - 类别是封闭注册表（`Log.TraceCategory`），每个类别负责一块高容量诊断领域；新增类别必须同时有调用点与本设计中的一行记录。
 
-| 类别         | 覆盖范围                                  |
-| ------------ | ----------------------------------------- |
-| `bus`        | 事件总线发布                              |
-| `permission` | 权限决策与回复                            |
-| `session`    | 会话 prompt 循环与 processor turn         |
-| `llm`        | 每次请求的模型 / runtime 选择             |
-| `plugin`     | 插件加载、MCP 连接、OAuth 初始化          |
-| `io`         | 文件、formatter、语言服务器活动           |
+| 类别         | 覆盖范围                          |
+| ------------ | --------------------------------- |
+| `bus`        | 事件总线发布                      |
+| `permission` | 权限决策与回复                    |
+| `session`    | 会话 prompt 循环与 processor turn |
+| `llm`        | 每次请求的模型 / runtime 选择     |
+| `plugin`     | 插件加载、MCP 连接、OAuth 初始化  |
+| `io`         | 文件、formatter、语言服务器活动   |
 
 - `--trace session,llm` 只启用点名类别并把有效级别提升为 `TRACE`；显式 `--log-level` 优先，遗留的 `--trace` selector 不会静默升级一次 `INFO` 运行。
 - `--trace all`（或 `*`）是全类别的显式逃生口。
@@ -159,6 +162,6 @@ wopal-plugin 随宿主进程运行，其记录与引擎记录同目录同级别�
 
 ## Reference Documents
 
-| 文档              | 说明                                                             |
-| ----------------- | ---------------------------------------------------------------- |
-| `../AGENTS.md`    | 日志写入规则（必打 / 禁打 / 聚合 / 结构化）与调试命令入口的操作规范 |
+| 文档           | 说明                                                                |
+| -------------- | ------------------------------------------------------------------- |
+| `../AGENTS.md` | 日志写入规则（必打 / 禁打 / 聚合 / 结构化）与调试命令入口的操作规范 |

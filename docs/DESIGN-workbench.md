@@ -816,7 +816,7 @@ Workbench 在运行状况异常（网络抖动、CLI 版本变化、环境配置
 | 严重性等级 | 典型场景 | 前端渲染表现 | 自愈/应对机制 |
 | :--- | :--- | :--- | :--- |
 | **运行时完整性错误 (Fatal)** | 数据库损坏或无法恢复的应用根异常 | 全局 `ErrorPage`（独占式阻断） | 停止会破坏运行时事实的操作，并提供恢复与日志入口。 |
-| **空间控制不可用 (Degraded)** | `wopal-cli` 缺失、损坏或版本不兼容 | 状态栏诊断中心 | General Session、Chat、TUI 与 PTY 保持可用；Space Control 暂停，用户确认修复后自动恢复。 |
+| **共享管理不可用 (Degraded)** | 空间准备、共享配置服务或 DSH 能力出现可恢复错误 | 状态栏诊断中心 | 已可用的 Session、Chat、TUI 与 PTY 保持工作；受影响的管理动作暂停，并显示对应 setup/诊断入口。 |
 | **瞬态连接丢失 (Connection)** | WebSocket 断连 / 服务端 API 失去响应（抖动） | 模态遮罩层 (Modal Overlay) | 在视口覆盖半透明遮罩，阻断全部用户输入保护状态；启动指数退避自动重连，连接恢复后自动闭合。 |
 | **局部非阻塞错误 (Warning)** | 空面板选择受控目录时 `locations` 接口拉取失败 | 状态栏局部错误区 + 局部重试 | **严禁抛出至面板 ErrorBoundary**！保持面板可操作，在底部状态栏指示错误并提供"重试/清除"入口。 |
 
@@ -828,11 +828,8 @@ Workbench 在运行状况异常（网络抖动、CLI 版本变化、环境配置
 2. **输入隔离**：遮罩层拦截所有的鼠标、键盘和拖放操作，并将工作台表面设为 `inert`。
 3. **静默水合**：后台自动重连。连接成功后，自动关闭遮罩并恢复之前的操作现场，无需用户刷新页面。
 
-### CLI 健康握手与可恢复修复
+### Host Health and Shared Management
 
-系统确立 CLI 的健康与版本握手机制：
+Workbench 从宿主健康和共享管理服务判断可用性。服务端版本与 DSH 状态反映实际宿主；空间列表、目录准备和配置消费通过同源 SDK/服务完成，不检查 Wopal CLI 的安装或版本。
 
-1. **启动与健康握手**：`GET /global/health` 同时返回服务端版本与 Wopal CLI 状态。CLI 状态包含 `ok`、`missing`、`incompatible` 和 `broken`，并携带最低兼容版本与已检测版本。
-2. **运行时保持**：CLI 状态不改变服务端健康语义。CLI 不可用时，Session Runtime 继续服务 General Session、Chat、TUI 与 PTY。Session Projection 将无法归属 Space 的会话作为 General 返回。
-3. **受控降级**：Space 列表刷新、受控 Space location 和其他 CLI 控制能力在 CLI 不可用期间暂停。状态栏诊断中心保留修复入口，并说明最低兼容版本。
-4. **用户确认的修复**：用户点击修复后，`POST /global/cli/repair` 对不兼容 CLI 执行 `wopal update`，并在需要时调用第一方 installer。服务端重新探测 CLI；Workbench 在探测成功后自动恢复 Space Control，不重启 sidecar 或当前 Workbench。
+诊断中心显示真实的服务、DSH 或空间准备错误，并提供对应 setup 操作；没有自动安装/更新 Wopal CLI 的核心修复弹窗。用户显式使用的可选外部工具诊断由该工具入口承接，不阻断 Session、PTY、空间或向导。

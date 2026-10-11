@@ -1,15 +1,19 @@
 # Ellamaka — Plan Scheduler
 
 > **Status**: Proposed
-> **Updated**: 2026-09-17
+> **Updated**: 2026-10-10
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN-plan-orchestration.md`
 > **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Scope**: Workbench 空间级计划工作区、审批、依赖、排期、运行与人工接管
 
+## Dependency Scope
+
+本文属于阶段 4 的可选调度领域。其 CLI/Provider/Runner 版本协商只约束显式启用的调度功能，不构成 Ellamaka 基础 HTTP、初始化、空间服务、更新或发布的 Wopal CLI 最低版本前提；本轮 SDK/DSH Plan 不实施该领域。
+
 ## Scope and Ownership
 
-本文定义待评审的目标设计，不表示所述页面或 API 已实现。Workbench 壳遵循 [Workbench 设计](./DESIGN-workbench.md)，调度端点以 [API 契约](./API-CONTRACT.md#plan-scheduler-api-proposal) 为唯一真相源。产品交互边界遵循 [Scheduler UI](../../../docs/products/wopal-space/DESIGN-plan-scheduler-ui.md)。
+本文定义待评审的目标设计，不表示所述页面或 API 已实现。Workbench 壳遵循 [Workbench 设计](./DESIGN-workbench.md)，调度端点以 [本设计的 API 草案](#api-proposal) 为唯一真相源。产品交互边界遵循 [Scheduler UI](../../../docs/products/wopal-space/DESIGN-plan-scheduler-ui.md)。
 
 用户在同一个 Workbench、同一个 Space 内管理会话和计划。计划工作区拥有领域交互；壳拥有空间切换、布局、焦点和诊断。CLI 计算依赖、时间与运行资格，Provider 管审批，Runtime 管真实执行和 Session。
 
@@ -146,16 +150,16 @@
 
 ## Action and State Contract
 
-| 操作 | 前提与确认内容 | 成功后 | 失败/中断 |
-|---|---|---|---|
-| 批准 | reviewing、修订一致、展示范围/策略 | approved；不建树、不启动 | 保留评审内容，冲突重新评审 |
-| 撤回批准 | 显示影响的排期与活动 run | 阻止未来执行；活动 run 安全取消 | 展示 operation，直到真实收尾 |
-| 现在实施 | 批准有效、图/依赖/资源可用 | 准备环境后启动一次 run | 不补跑、不绕依赖、不启用 cron |
-| 启用/修改排期 | 新鲜预览、审批与图有效 | 显示未来 slot 与等待原因 | 保留输入，展示服务/冲突错误 |
-| 暂停/删除排期 | 明示“仅停止未来触发” | 保留运行历史与活动 run | 活动 run 单独提供取消 |
-| 恢复排期 | 重新检查审批、图、服务 | 从未来 slot 恢复 | 展示拒绝原因 |
-| 取消 run | 指定运行 ID | cancelling → cancelled 或已终结 | 长操作继续追踪，不能提前报终态 |
-| 停止服务 | 展示所管空间及活动运行总数 | 停止领取并收尾全部所管运行 | 保持 stopping，提供诊断 |
+| 操作          | 前提与确认内容                     | 成功后                          | 失败/中断                      |
+| ------------- | ---------------------------------- | ------------------------------- | ------------------------------ |
+| 批准          | reviewing、修订一致、展示范围/策略 | approved；不建树、不启动        | 保留评审内容，冲突重新评审     |
+| 撤回批准      | 显示影响的排期与活动 run           | 阻止未来执行；活动 run 安全取消 | 展示 operation，直到真实收尾   |
+| 现在实施      | 批准有效、图/依赖/资源可用         | 准备环境后启动一次 run          | 不补跑、不绕依赖、不启用 cron  |
+| 启用/修改排期 | 新鲜预览、审批与图有效             | 显示未来 slot 与等待原因        | 保留输入，展示服务/冲突错误    |
+| 暂停/删除排期 | 明示“仅停止未来触发”               | 保留运行历史与活动 run          | 活动 run 单独提供取消          |
+| 恢复排期      | 重新检查审批、图、服务             | 从未来 slot 恢复                | 展示拒绝原因                   |
+| 取消 run      | 指定运行 ID                        | cancelling → cancelled 或已终结 | 长操作继续追踪，不能提前报终态 |
+| 停止服务      | 展示所管空间及活动运行总数         | 停止领取并收尾全部所管运行      | 保持 stopping，提供诊断        |
 
 服务是 host 级资源，不是当前 Space 私有。服务卡展示“影响此主机所有受管空间”；全局操作要求 host-control 权限。没有该权限的用户只看到获授权空间的影响，不泄露其他空间名称，也不能停服务。
 
@@ -187,17 +191,120 @@ WorkbenchStore 只增加空间级工作区选择与布局。调度领域使用�
 
 ## Failure Recovery
 
-| 场景 | 界面响应 |
-|---|---|
-| 空 Space | 解释计划由规划流程产生；“在会话中规划”只打开会话，不自动创建文件 |
-| 无批准 | 显示评审入口，不能把状态按钮当审批凭据 |
-| 审批失效 / graph-stale | 显示变化范围和受影响节点，要求复核 |
-| revision 冲突 | 保留输入，展示差异，用户重新预览确认 |
-| 网络超时 | 查询原 operation / 幂等请求，禁止用新键盲目重试 |
-| needs-input | 显示缺失输入/权限，进入安全接管；不弹后台无限问询 |
-| 服务故障 / runtime 不兼容 | 显示版本、缺失能力和修复指引，历史仍可读 |
-| 运行身份不确定 | recovery-required，禁用再次启动与可写接管 |
+| 场景                      | 界面响应                                                         |
+| ------------------------- | ---------------------------------------------------------------- |
+| 空 Space                  | 解释计划由规划流程产生；“在会话中规划”只打开会话，不自动创建文件 |
+| 无批准                    | 显示评审入口，不能把状态按钮当审批凭据                           |
+| 审批失效 / graph-stale    | 显示变化范围和受影响节点，要求复核                               |
+| revision 冲突             | 保留输入，展示差异，用户重新预览确认                             |
+| 网络超时                  | 查询原 operation / 幂等请求，禁止用新键盲目重试                  |
+| needs-input               | 显示缺失输入/权限，进入安全接管；不弹后台无限问询                |
+| 服务故障 / runtime 不兼容 | 显示版本、缺失能力和修复指引，历史仍可读                         |
+| 运行身份不确定            | recovery-required，禁用再次启动与可写接管                        |
 
 ## Review Criteria
 
 设计验收覆盖：空会话 Space 进入计划；会话与终端在切换前后保持；跨空间慢响应不串数据；批准不启动；排期不提前建树；依赖图与列表解释一致；冲突不丢输入；重连不重复动作；取消确认真实收尾；服务停机解释全局影响；人工接管不与后台并行写入。Desktop 与 Web 使用同一 SDK 和交互规则。
+
+## API Proposal
+
+本节是与 [计划工作区设计](./DESIGN-plan-scheduler.md) 一起评审的新增契约，不宣称以下端点已提供。所有端点属于 Root 控制面，只有查看执行 Session 时才使用 Instance API。CLI 领域 schema 由 adapter 校验并映射到 Effect schema；OpenAPI 与 SDK 从服务端定义生成。
+
+### Resource Identity and Authorization
+
+空间级前缀 `B = /workbench/spaces/{spaceId}/scheduler`。spaceId 是 Runtime 从授权注册表提供的稳定不透明标识；planKey 是单路径段的不透明 API 标识，响应同时提供 Provider 的 `project/plan-stem` planId。二者的对应由服务端解析，浏览器不编码任意路径作为身份。
+
+每次请求校验登录、空间访问权限、资源归属和能力。外部未知资源和跨空间资源统一 404；已知资源上的操作权限不足返回 403。所有变更拒绝客户端 executionPath、shell、prompt、任意文件路径和自报审批者字段。复用环境使用服务端返回的 environmentId。
+
+### Endpoint Table
+
+下表路径相对 B；预览 POST 只读，无幂等键要求。所有领域写入使用下一节的 Mutation 结构。
+
+| 方法与路径                          | operationId               | 请求要点                                              | 成功结果                                   |
+| ----------------------------------- | ------------------------- | ----------------------------------------------------- | ------------------------------------------ |
+| GET /capabilities                   | scheduler.capabilities    | 无                                                    | 协议版本、功能、权限、缺失能力             |
+| GET /snapshot                       | scheduler.snapshot        | 无                                                    | 各状态数量、eventCursor、资源集合 revision |
+| GET /plans                          | scheduler.plans           | project、workflow、eligibility、search、cursor、limit | Page<PlanSummary>                          |
+| GET /plans/{planKey}                | scheduler.plan            | 无                                                    | PlanDetail                                 |
+| POST /plans/{planKey}/approvals     | scheduler.approve         | semanticRevision、executionPolicy                     | Operation                                  |
+| POST /plans/{planKey}/revocations   | scheduler.revoke          | approvalId、reason                                    | Operation                                  |
+| POST /plans/{planKey}/starts        | scheduler.start           | approvedRevision、graphId、graphRevision              | Operation，完成后关联 runId                |
+| GET /graphs                         | scheduler.graphs          | cursor、limit                                         | Page<GraphSummary>                         |
+| GET /graphs/{graphId}               | scheduler.graph           | 无                                                    | Graph                                      |
+| POST /graph-previews                | scheduler.previewGraph    | planKeys、候选 nodes/edges                            | 草稿、diff、问题、受影响节点               |
+| POST /graph-validations             | scheduler.validateGraph   | 完整候选图、sourceRevisions                           | Validation                                 |
+| POST /graphs                        | scheduler.createGraph     | name、nodes、edges、sourceRevisions                   | Operation                                  |
+| PATCH /graphs/{graphId}             | scheduler.updateGraph     | 完整候选图、sourceRevisions                           | Operation                                  |
+| POST /schedule-previews             | scheduler.previewSchedule | planKey、graphId、cron、timezone、timeoutMs           | Preview                                    |
+| GET /schedules                      | scheduler.schedules       | planKey、state、cursor、limit                         | Page<Schedule>                             |
+| POST /schedules                     | scheduler.createSchedule  | planKey、graphId、配置、previewToken                  | Operation                                  |
+| PATCH /schedules/{scheduleId}       | scheduler.updateSchedule  | 配置、previewToken                                    | Operation                                  |
+| POST /schedules/{scheduleId}/pause  | scheduler.pauseSchedule   | reason                                                | Operation                                  |
+| POST /schedules/{scheduleId}/resume | scheduler.resumeSchedule  | 无额外字段                                            | Operation                                  |
+| DELETE /schedules/{scheduleId}      | scheduler.deleteSchedule  | Mutation                                              | Operation；保留 run 历史                   |
+| GET /runs                           | scheduler.runs            | planKey、scheduleId、outcome、cursor、limit           | Page<Run>                                  |
+| GET /runs/{runId}                   | scheduler.run             | 无                                                    | RunDetail                                  |
+| GET /runs/{runId}/logs              | scheduler.logs            | cursor、limit                                         | LogPage                                    |
+| POST /runs/{runId}/cancellations    | scheduler.cancelRun       | reason                                                | Operation                                  |
+| POST /plans/{planKey}/takeovers     | scheduler.takeover        | activeRunPolicy: wait/cancel                          | Operation，安全收尾后返回接管上下文        |
+| GET /operations/{operationId}       | scheduler.operation       | 无                                                    | Operation                                  |
+| GET /requests/{idempotencyKey}      | scheduler.request         | 无                                                    | 与当前用户/Space 绑定的 Operation 或 404   |
+| GET /events                         | scheduler.events          | cursor                                                | SSE 事件流                                 |
+
+host 服务使用 `/workbench/scheduler/service`：GET 返回 Service；POST `/starts`、`/stops` 使用 Mutation 返回 Operation。其启动、停止和首次按需安装要求 host-control 权限。当前 Space 的排期界面通过 capabilities/readiness 获得服务可用性，无该权限时请求管理员准备服务。
+
+### Common Schemas
+
+时间均为 ISO 8601 UTC，时区为 IANA 名称。revision 是不透明字符串。分页 limit 默认 50、最大 100，返回 `{items,nextCursor,snapshotRevision}`；游标绑定筛选条件，失效后重新读第一页。
+
+| 类型            | 必需字段与语义                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Mutation<T>     | `{expectedRevision: string                                                                                                                                   | null, data:T}`；创建资源 revision 为 null，更新为目标资源 revision；HTTP `Idempotency-Key` 必填 |
+| Action          | `{name,enabled,reasonCode?,reason?}`，服务端计算；UI 不凭本地 workflow 推断权限                                                                              |
+| Blocker         | `{code,message,planKey?,requiredRevision?,evidenceIds:[]}`                                                                                                   |
+| PlanSummary     | `{planKey,planId,title,project,revision,semanticRevision,workflow,approval,scheduleSummary,lastRun,blockers,allowedActions}`                                 |
+| PlanDetail      | PlanSummary 加 `{goal,scope,acceptance,dependencies,permissionSummary,executionPolicy,availableEnvironments,sourceText}`                                     |
+| ExecutionPolicy | `{mode:new-worktree/direct/reuse,environmentId?}`；reuse 必填已登记 ID                                                                                       |
+| Approval        | null 或 `{approvalId,approvedRevision,valid,invalidReason?,approvedAt}`                                                                                      |
+| Graph           | `{graphId,name,revision,nodes:[{planKey,semanticRevision}],edges:[{id,producer,consumer,reason,gate}],sourceRevisions}`                                      |
+| Gate            | `{kind:verified-integrated-deliverable/artifact,producerRevision,requiredArtifacts:[],consumerBaseline?}`；artifact gate 需明确审批                          |
+| Validation      | `{valid,issues:[{code,message,nodeIds,edgeIds}],affectedPlanKeys,sourceRevisions}`                                                                           |
+| Preview         | `{previewToken,expiresAt,inputHash,sourceRevisions,triggers:[{instant,localTime,offset}],readiness,blockers}`；至少未来三次                                  |
+| Schedule        | `{scheduleId,planKey,graphId,revision,cron,timezone,timeoutMs,state,eligibility,nextTriggerAt,blockers,activeRunIds}`                                        |
+| Run             | `{runId,executionId,planKey,scheduleId?,revision,state,outcome?,createdAt,startedAt?,finishedAt?,approvedRevision,graphRevision,scheduleRevision?,blockers}` |
+| RunDetail       | Run 加 `{sessionRef?,environment?,timeline,validationSummary,artifacts,error?,logCursor}`；sessionRef 含服务端解析的 instance/session 身份                   |
+| LogPage         | `{entries:[{cursor,time,stream,text}],nextCursor,hasMore,truncated,redacted}`；limit 默认 200 最大 1000，单页另限 256KiB                                     |
+| Service         | `{revision,desiredState,actualState,heartbeatAt,version,targetVersion?,upgradeState,activeRunCount,readiness,allowedActions}`                                |
+
+workflow、schedule.state、eligibility、run.state/outcome 采用产品编排契约的独立枚举。run.state 额外允许控制过程 `cancelling`，仅真实进程树结束才进入终态。nextTriggerAt 是 cron 机会，blockers 决定届时资格；UI 不将它称为保证开工时间。
+
+Preview token 绑定用户、Space、输入 hash、审批/图/时程 revision 与有效期，提交时重新校验全部源状态。预览不占锁、不创建环境、不安装服务。图保存与审批存在并发时 CAS 失败，不能自动替换 sourceRevisions。
+
+### Mutation and Operation Protocol
+
+所有写操作成功接收返回 HTTP 202，`Location` 指向 operation URL。Operation 为 `{operationId,kind,state:pending/running/succeeded/failed,createdAt,updatedAt,resourceRefs,result?,error?}`。业务同步完成也返回同一结构，state 可直接为 succeeded。
+
+幂等记录按认证主体、Space（或 host）、键隔离，绑定 HTTP 方法、目标和完整 payload hash。相同键同请求返回原 operation；相同键不同请求返回 409。持久记录必须先于副作用建立；进程重启后查询仍有效。完整结果保留至少 30 天，之后保留键及请求 hash 的拒绝重放标记；旧键返回 IDEMPOTENCY_EXPIRED，客户端重新读取资源后要求用户确认新操作。
+
+expectedRevision 比较目标对象；data 内的 semanticRevision、graphRevision 和 preview token 比较依赖对象。部分成功必须通过 Operation.result 明示，例如撤回已生效而运行仍在收尾。operation succeeded 只表示该操作完成，不表示 Plan 验收完成。
+
+接管 operation 先暂停未来领取，再等待/取消活动运行；后端以资源锁串行校验并转移写入所有权，返回 `{planKey,pausedScheduleId?,sessionRef,executionId,evidenceRefs}`。接管期间恢复排期返回 RESOURCE_BUSY。只读查看 Session 不获取写权限；交互写权限由服务器确认接管状态后开放。
+
+### Errors and Events
+
+错误沿用 Effect TaggedError 响应：`{_tag:"SchedulerError",code,message,requestId,retryable,currentRevision?,diff?,operationId?,details?}`。diff 只含当前用户有权读取的内容。
+
+| HTTP      | code                                                           | 客户端行为                       |
+| --------- | -------------------------------------------------------------- | -------------------------------- |
+| 400       | INVALID_INPUT / GRAPH_CYCLE / INVALID_CRON                     | 标记字段或边，保留草稿           |
+| 401 / 403 | UNAUTHENTICATED / SPACE_FORBIDDEN / HOST_CONTROL_REQUIRED      | 登录或提示权限，不重试写入       |
+| 404       | RESOURCE_NOT_FOUND                                             | 关闭无效选择，保留返回列表入口   |
+| 409       | REVISION_MISMATCH / GRAPH_STALE / APPROVAL_STALE               | 展示最新 revision/diff，重新审阅 |
+| 409       | IDEMPOTENCY_CONFLICT / RESOURCE_BUSY / OPERATION_PENDING       | 定位原操作或忙碌资源             |
+| 410       | CURSOR_EXPIRED / IDEMPOTENCY_EXPIRED                           | 重读快照；变更操作要求重新确认   |
+| 422       | NEEDS_INPUT / DEPENDENCY_UNSATISFIED                           | 给出输入或依赖详情               |
+| 503       | RUNTIME_INCOMPATIBLE / SERVICE_UNAVAILABLE / RECOVERY_REQUIRED | 保留只读页面，显示修复指引       |
+
+SSE 每条包含 `{id,spaceId,type,resourceKind,resourceId,revision,time}`，类型为 resource.changed、operation.changed、resync-required；服务事件通过获授权 Space 的服务摘要失效通知分发，不暴露其他空间资源。每个 Space 流单调有序，允许重复投递；客户端按 id 去重。快照 eventCursor 与后续订阅必须覆盖读取期间变更；游标过期返回 410 并要求重读，服务端不得悄悄跳过事件。
+
+授权撤销立即终止相应流，客户端清除无权访问的缓存。断线重连从最后确认游标恢复；operation 继续在服务端执行。无法订阅时按设计采用有界轮询，使用 revision 合并，禁止把 HTTP 超时当作业务失败并重新启动。

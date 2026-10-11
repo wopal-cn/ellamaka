@@ -1,7 +1,7 @@
 # Web profile 设计
 
-> **Status**: Draft
-> **Updated**: 2026-10-09
+> **Status**: Active
+> **Updated**: 2026-10-11
 > **Parent**: `./DESIGN.md`
 
 `web` profile 承载 DSH 的完整界面与会话。宿主基座、home、包解析、数据导入和配置队列由 [DSH 基础设计](./DESIGN-dsh-base.md) 拥有，本文定义 Web 的插件供应链、声明式 preset 和界面承载。
@@ -47,12 +47,12 @@ CLI 的 host-wide 操作与原生管理服务的 current-profile 操作使用明
 
 用户命令由 Ellamaka 的 dsh 适配入口解析，安装结果与 Web 管理服务共用同一声明事实。
 
-| 命令面                            | 契约                                                  |
-| --------------------------------- | ----------------------------------------------------- |
-| plugin add / remove / install     | 精确声明、受控安装和明确作用域                        |
-| plugin enable / disable / list    | 用户补丁启停与已装清单                                |
-| dump-config / dump-default-config | 实际完整层或仅 bundle 层；显式 patch 缺失时报配置错误 |
-| init                              | 显式 home 的闭包和 profile 准备，容器由产品入口挂载   |
+| 命令面                            | 契约                                                    |
+| --------------------------------- | ------------------------------------------------------- |
+| plugin add / remove / install     | 精确声明、受控安装和明确作用域                          |
+| plugin enable / disable / list    | 用户补丁启停与已装清单                                  |
+| dump-config / dump-default-config | 实际完整层或仅 bundle 层；显式 patch 缺失时报配置错误   |
+| init                              | 共用初始化核心准备产品环境、验收 profile 后释放临时实例 |
 
 plugin 的 profile 选项归子命令；根级选项出现在 plugin 之前时遵循现有冲突语义。程序启动由 serve/web/TUI/Desktop 产品入口拥有，用户插件安装不转发到外部包管理工具。
 
@@ -96,55 +96,30 @@ Web 插件向 VirtualWebServer 注册 HTTP、动态模块和 upgrade 通道，�
 
 原生 pluginManager 的客户端和服务端位于同一 profile，数据、进度和结果经官方连接通道传输。Workbench 消费同源的认证入口与挂载状态，运行时挂载失败显示不可用状态。
 
-## wopal 插件包
+## Wopal Preset Bundle
 
-wopal 的灵魂与能力以标准 dsh 插件形态交付：一个可发布到 dsh 生态的完整插件包，内含配置单与自定义能力。用户安装即得 wopal、fae、rook 配置单。
-
-主战场是 dsh 界面本身。ellamaka 侧不再扩展，只通过工具容器继续提供小工具。
-
-### 概念映射
-
-| wopal 资产                      | dsh 机制                       | 插件包动作                 |
-| ------------------------------- | ------------------------------ | -------------------------- |
-| 灵魂（wopal / fae / rook 人格） | 配置单人格                     | 人工适配为配置单，随包发布 |
-| 工具可见性                      | 武器架能力与配置单允许名单     | 包内插件，配置单一行引用   |
-| 空间技能目录                    | 配置单的自定义技能目录         | 指向空间技能目录           |
-| 空间 `AGENTS.md` 与空间守则     | 引擎按会话工作目录向上逐层读取 | 无需打包，按目录自动生效   |
-| 灵魂间协作规则                  | 官方组队工具行与人格内协作纪律 | 配置单组队工具行加人格段落 |
-| 自定义能力                      | 包内插件                       | 与配置单同包发布           |
-
-**安装共享、可见性按配置单**：插件安装是进程级全局动作。某个配置单「有而别的配置单没有」的表达层是配置单的插件行与武器架允许名单，不是每个配置单一套安装区。这与「安装共享、启用按 profile」同构，可见性粒度从 profile 细化到配置单。
-
-### 包结构
+Wopal 的角色 preset 由 ontology 的 `dsh/agents-presets/` 提供，包名为 `@wopal/dsh-presets`。它是声明式 bundle，包含 wopal、fae、rook 三个 preset 与随包技能；不承载 Ellamaka 内部 adapter、工具安装器或另一套工具可见性插件。
 
 ```text
-@wopal/dsh-wopal-pack/
-├── package.json              # 入口声明，发布内容包含 lib/ 与 presets/
-├── lib/
-│   ├── index.js              # 插件入口，注册武器架能力
-│   └── weapon-rack.js        # 工具可见性控制逻辑
-├── presets/                  # 声明式配置单补丁
-│   ├── wopal.patch.yml
-│   ├── fae.patch.yml
-│   └── rook.patch.yml
-└── cordis.patch.yml          # 包的公共能力补丁
+dsh/agents-presets/
+├── package.json              # @wopal/dsh-presets；dsh.bundle.patch 数组
+├── generate-presets.mjs      # 使用目标 DSH 闭包的 YAML 方言生成/检查
+├── wopal/
+│   ├── preset.yml            # 展示元数据源
+│   ├── agent.cordis.yml      # preset 插件声明源
+│   ├── preset.patch.yml      # 运行时加载的声明补丁
+│   └── skills/               # 随包技能
+├── fae/                      # 同样的三份声明文件
+└── rook/                     # 同样的三份声明文件
 ```
 
-- **安装链路**：安装把包实体装入 profile 的 node_modules，声明写入 package.json。dsh.bundle.patch 按顺序列出公共能力与三个 preset 补丁；每个补丁插入 agent-preset 声明，registry 提供配置单目录。
-- **配置单声明**：每个配置单以稳定 id、展示元数据和 plugins 表达，作用域绑定由官方 registry 承接。包目录作为声明来源，不是 registry 扫描根。
-- **用户个性化**：用户按声明 entry id 在 profile 补丁覆盖 plugins 或配置，更新包保持用户层内容。
-- **规范符合性**：插件实体、bundle patch 数组、preset 声明与用户覆盖使用官方 profile 契约，能力以普通 DSH 插件注册。
+`dsh.bundle.patch` 有序加载三个角色的 preset.patch.yml。每个补丁插入官方 agent-preset 声明，包含稳定 id、展示元数据与 plugins；注册、绑定和 revision 由 DSH 原生 preset 服务管理。工具、技能与 persona 使用对应 preset 中的官方插件行配置。
 
-### 武器架能力
+安装通过标准插件供应链将包快照放入 web profile 的 node_modules，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，不以存在 package.json 作为已发布 npm 包的证明。生成与兼容检查使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 历史，不属于 Ellamaka Home 迁移模型，也不作为配置编辑目标。
 
-配置单引用的一个能力件，按需在配置单行挂载：
+自定义 DSH tools 与 MCP 按各自标准 DSH 插件/bundle 挂载；此 preset bundle 不承担所有动态能力的总包职责。Ellamaka 通过工具容器消费外部能力，其内部 adapter 契约归工具容器设计。
 
-- **行为**：挂载时读取自身的允许名单配置，对当前 agent 作用域收窄工具可见性。
-- **效果**：不在允许名单内的工具从该 agent 的模型视野中完全移除，工具定义不下发，对应的提示词开销一并消失。这同时解决两个问题：队员不必承接主 agent 的全部工具，以及上下文开销。
-- **作用域正确性**：配置单挂载层就是 agent 作用域（引擎拒绝无作用域的全局限制），配置单行插件调用收窄动作天然只影响加入该配置单的 agent。
-- **分发**：随 wopal 插件包发布，配置单以一行插件行加各自的允许名单引用。
-
-### 空间皮肤插件
+## 空间皮肤插件
 
 一个插件实现「界面按空间定制」，含服务端与客户端两半。
 
@@ -155,7 +130,7 @@ wopal 的灵魂与能力以标准 dsh 插件形态交付：一个可发布到 ds
 
 界面定制只走声明式插槽与主题变量，不整区替换，以保证未来架构演进时定制件可无损迁移。
 
-### 组队语义
+## 组队语义
 
 直接采用 dsh 官方组队能力，不新建机制。
 
@@ -164,15 +139,15 @@ wopal 的灵魂与能力以标准 dsh 插件形态交付：一个可发布到 ds
 - **协作纪律**：消息往来、任务分派、完成上报是引擎内建能力；协作规范写入主 agent 人格。
 - **按角色配置装备**：官方招人接口不含配置单字段，需要自定义招人提供者按角色挂载不同配置单。这是条件触发项：第一阶段的任务书与目录规则已覆盖角色分化的主要诉求，只有当「队员必须带不同工具」成为真实需求时才立项。
 
-### 配置单与 profile 的分发
+## Preset and Profile Distribution
 
 配置单与 profile 在 WopalSpace 体系下按分层分发与运行时装配：
 
 1. **分发源头**：配置单作为基础能力随本体仓库分发；profile 由本体统一维护 `web` 与 `ellamaka-tools` 的基准文件对（声明 bundles 与插件依赖的 package.json、写入配置规则与沙箱策略的补丁文件）。本体仓库不跟踪运行态生成的锚点文件与本地 node_modules。
 
-2. **物化生成**：配置单经 `wopal setup` 物化到 `$WOPAL_HOME/dsh/`，以声明式 bundle 注册到 profile，供 registry 绑定。profile 的声明文件物理复制到 `$WOPAL_HOME/dsh/home/profiles/<profile>/`，更新时采用声明合并策略（bundle 去重联合，保护本地自定义修改）。保持本地目录物理独立，规避跨目录软链带来的锁失效、模块寻址逃逸与热加载穿透问题。
+2. **物化生成**：Core Runtime Preparation 将运行必需的标准 profile 基线物化到固定核心 Home `$WOPAL_HOME/dsh/home`。WopalSpace Onboarding 只在用户选择相关增强时，通过同一受控写入服务追加 ontology 提供的 preset bundle。profile 的声明文件物理复制到 `$DSH_HOME/profiles/<profile>/`，更新时采用声明合并策略（bundle 去重联合，保护本地自定义修改）。保持本地目录物理独立，规避跨目录软链带来的锁失效、模块寻址逃逸与热加载穿透问题。
 
-3. **运行时初始化**：物化完成后由 `ellamaka dsh init` 或 Runtime Manager 承接环境闭包——校验并物化不可变运行时闭包、按 profile 声明还原缺失的插件依赖、维护共享层软链、引擎启动时动态重写锚点文件并完成组合挂载。
+3. **准备与激活**：serve、Desktop、run 与默认 TUI 共用 Core Runtime Preparation，但 preparation 与 runtime activation 分离。profile 物化、包实体和元数据检查都写固定核心 Home；closure fingerprint 变化时必须先完成固定 Home backup，之后目标 DSH 自己处理它支持的原生迁移。Core READY 后各入口才按需挂载 Web/tools；`ELLAMAKA_DSH=0` 时整个 DSH prepare/activate 分支跳过。固定 Home 与 closure-change backup 归 [基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
 ## 多 profile 解耦
 
@@ -209,11 +184,11 @@ dsh 相关配置采用两层模型：
 
 **核心容器保持同进程**。Web profile 与工具 profile 继续与 ellamaka serve 同进程，得到单端口、单进程、零延迟工具调用。
 
-**实验 profile 独立进程**。每个启用的实验 profile 由独立进程承载，收益有三：
+**实验 profile 独立进程**。每个启用的实验 profile 由独立进程承载；它属于显式隔离实验域，不是正式核心 Active Home 的另一个版本，也不得被主 runtime 当作 Home 回滚目标。收益有三：
 
 1. **闭包版本隔离**：实验进程可以绑定任意历史闭包，主进程继续跑当前闭包，避免单进程内双版本官方包冲突。
 2. **故障防扩散**：实验插件崩溃、死锁或内存失控不影响主进程与正式 DSH 空间。
-3. **home 隔离**：实验进程使用独立 DSH_HOME，不与主引擎共享 profile 目录。运行中引擎的 profile 目录是引擎领地，两个进程共享必然冲突。
+3. **home 隔离**：实验进程使用自己显式注册的隔离 DSH_HOME，不与核心 `$WOPAL_HOME/dsh/home` 共享 profile 目录。该例外只属于实验进程，不改变正式 Ellamaka runtime 的固定 Home invariant。
 
 **启动范式**：独立启动加 Workbench 注册（用户自起、自己连）。`ellamaka dsh up --profile <name> --closure <fingerprint> [--port 0]` 独立跑出认证入口；Workbench 通过服务器管理界面注册，复用现有的添加、健康探针与持久化机制。注册后成为空间标签。主进程对实验进程零感知、零生命周期看管职责，隔离最干净。
 

@@ -102,7 +102,7 @@ Every test process starts with git's repository-locator variables removed. `test
 
 Assertions must read the real source of truth instead of restating its current value:
 
-- Do not hardcode product version numbers or protocol-floor literals. The product base version is derived from the version anchor (`packages/ellamaka-cli/package.json`, `VERSION_ANCHOR`) through `stripPrerelease` (`@wopal/ellamaka-core/installation/version`), and the wopal-cli protocol floor is the `MIN_WOPAL_CLI_VERSION` constant (`src/wopal/cli-contract.ts`). Import or derive those values rather than writing their literals.
+- Do not hardcode product version numbers. The product base version is derived from the version anchor (`packages/ellamaka-cli/package.json`, `VERSION_ANCHOR`) through `stripPrerelease` (`@wopal/ellamaka-core/installation/version`). Wopal CLI is an optional external consumer and has no Ellamaka runtime protocol floor.
 - Do not assert on internal log text that carries no business meaning. When a test verifies that a log record was emitted, assert against the level the handler actually emits (e.g. `debug` vs `info`) and keep the logged event itself as the meaningful subject.
 
 ## Testing With Effects
