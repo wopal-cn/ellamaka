@@ -1,25 +1,30 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Draft
-> **Updated**: 2026-10-10
+> **Updated**: 2026-10-12
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
-> - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系总体设计：共享服务拥有写入与校验
+> - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — Phase 3 Config Plane 总体方向与 canonical settings
 > - `../../../projects/wopal-cli/docs/DESIGN-config-cli.md` — CLI 呈现与 SDK 消费
 > - `../../../.wopal/docs/DESIGN-assembly.md` — 本体装配：空间 `settings.jsonc` 的分发契约
 >
-> **Scope**: 引擎怎么读三层配置、怎么让面板与 CLI 复用共享服务、面板的状态标签怎么渲染
+> **Scope**: Phase 3 Draft；研究 Ellamaka/DSH 双引擎如何消费统一 canonical settings，并保留各自 native apply lifecycle。当前实现 Plan 不交付本设计。
 
 ---
 
 ## What This Owns
 
-配置的读取、schema 和写入校验由 Ellamaka 共享配置服务拥有。引擎 HTTP handler 直接调用服务，Wopal CLI 通过统一 SDK 消费它；业务规则只有一份。本文为阶段 3 Draft，编辑面、来源标签和完整写接口仍由该阶段交付，不进入当前升级 Plan。本设计回答引擎侧的三件事：
+> **Deferred**：本文整体仍是 Phase 3 Draft。当前 SDK / Runtime Foundation 实施不得新增 Config Plane、统一 DSH 配置投影或新的 config mutation API；现有读面只按当前已经批准的契约维护。
 
-1. 启动时怎么把"用户全局 + 空间"配置读成一个生效值
-2. Workbench 面板的写入请求怎么经引擎调用共享服务
-3. 面板的"继承自全局/空间覆写"标签数据从哪来
+Phase 3 计划把本机 trusted 配置服务放在 `@wopal/wopalspace-sdk/config`，把 Ellamaka HTTP/SDK config surface 作为该服务与 runtime effective state 的远程投影。`@wopal/ellamaka-sdk` 中出现 `config` 不表示存在第二套配置服务：local domain service 与 remote transport 是两个运行边界。
+
+本文研究引擎侧四件事：
+
+1. 如何把用户全局 + 空间 canonical settings 解析成 Ellamaka effective config；
+2. Ellamaka config mutation 后如何从当前“粗粒度 dispose”演进为明确的 apply lifecycle；
+3. 如何把 canonical DSH facts 交给 DSH native Settings/ConfigEditor/HMR/Loader，而不自行实现另一套 DSH reload；
+4. Workbench 如何通过 Ellamaka HTTP 观察同一个 Config Plane，而不是复制业务规则。
 
 ---
 
@@ -45,7 +50,7 @@ WopalSpace 模式下，引擎启动时按现有合并链读取配置（低 → �
 
 TUI 插件走同一契约的另一条装载链：TUI 配置链（`TuiConfig`）在 WopalSpace 模式读三层 settings 时合并 `wopal.pluginConfig`，TUI 运行时装配 TUI 插件时把同一张生效表经 `TuiPluginApi.pluginConfig`（类型与 `PluginInput.pluginConfig` 一致）整表交付，TUI 插件按自身配置键自取并校验，同样不读配置文件。内联 mount options 保持为兼容 fallback，`pluginConfig` 优先。
 
-运行中的重载：引擎监听配置文件变化，共享服务写完文件后热重载自动接住，当前实例即时生效（现有 ReloadController 链路）。
+Phase 3 的 Ellamaka Config Reconciler 对配置变化明确分类为 `live | reload | restart-required`。未声明 live capability 的字段采用 reload 语义；只有具有稳定运行时更新契约的字段使用 live apply。
 
 `pluginConfig` 是两个契约类型上的必选字段。空间探测失败（非 WopalSpace 实例）或三层文件都没有 `wopal` 段时，字段取空对象 `{}`——形状不变，插件按自身键取不到条目即是「未配置」。字段设为必选而非可选，是为了让每个构造点显式表态：漏传会立刻类型报错，而不是静默变成 `undefined` 让插件在运行时才发现。
 
@@ -53,9 +58,66 @@ TUI 插件走同一契约的另一条装载链：TUI 配置链（`TuiConfig`）�
 
 ---
 
+## Dual-Engine Config Plane — Phase 3 Draft
+
+### Canonical Facts vs Native Runtime Config
+
+Phase 3 的用户配置真相优先落在：
+
+```text
+$WOPAL_HOME/config/settings.jsonc
+<space>/.wopal/config/settings.jsonc        # distribution default, read-only to product writers
+<space>/.wopal/config/settings.local.jsonc  # user-local override
+```
+
+Ellamaka 可以直接消费这些文件的 `ellamaka` / `wopal` / `tui` 等事实；DSH 不应被迫改用 JSONC。未来 DSH 配置事实也先进入 canonical settings，再由 Ellamaka-owned integration adapter 转译为 DSH native mutation。
+
+```text
+canonical DSH fact
+  -> resolve scope/profile/entry/path
+  -> DshConfigProvider
+  -> ctx.settings / ConfigEditor
+  -> HMR.runExclusive + reconcileProfilePatches
+  -> Loader lifecycle
+```
+
+DSH native configuration lifecycle 提供的关键机制直接作为 provider 的 apply backend：
+
+- Settings descriptor 带 revision，stale write 会被拒绝；
+- schema 的 `.volatile()` 字段可在运行实例内更新引用并发出 `loader/volatile-update`；
+- ordinary config 由 Loader lifecycle 重新 mount；
+- ConfigEditor 在持久化前校验完整 candidate，使用 profile writer lock 与 atomic write，并在 reconcile 失败时恢复 prior document；
+- HMR `runExclusive()` 把配置写与自动 reload 串行化；
+- `app-boot/config-reload` 表示 reconciliation 已完成；`settings/document-updated` 是 revision/invalidation 通知。
+
+因此 WopalSpace 不复制这些机制，只定义统一的外层语义：`describe/read/mutate/observe`、opaque revision、source、schema、以及 apply outcome。DSH provider 把统一语义适配到 DSH native lifecycle。
+
+### Single Authored Truth Constraint
+
+目标模型不能长期允许 canonical settings 与 DSH profile patch 都作为普通用户配置的独立 authored truth，否则必然出现双写和优先级冲突。Phase 3 激活前必须明确 native direct edit 的政策：
+
+1. 产品设置 UI / Agent mutation 是否全部回写 canonical settings，再由 provider 投影；
+2. DSH native editor 是否仅作为高级 override，并在 `config explain` 中明确高优先级来源；或
+3. 对产品托管的字段禁用 native direct write。
+
+本文暂不选择其中一种；这也是配置设计继续保持 Draft 的主要原因。
+
+### Unified Change Semantics
+
+未来可对两个引擎统一“变化发生了什么”的语义，而不统一内部实现：
+
+```text
+durable mutation
+  -> config changed / revision advanced
+  -> engine-native reconcile
+  -> applied: live | reload | restart-required | failed
+```
+
+事件只承担 invalidation/notification，不成为配置真相源。多进程场景下任何进程都必须能从 canonical/native provider 重新读取并收敛；DSH 继续使用自己的 HMR/watch，Ellamaka 则在 Phase 3 设计自己的 Config Reconciler。事件 schema、跨进程 transport 和 revision 生成方式均暂不冻结。
+
 ## Forwarding: HTTP API
 
-Workbench 面板跑在浏览器里，浏览器只跟引擎 HTTP API 说话。引擎提供独立的 `config-v2` 路由组（实例作用域，Instance Context + Workspace Routing + Authorization 中间件，两种运行模式通用），读写两条链分工明确。此端点是配置的通用消费面——后续配置相关功能优先建立在它之上，`/config` 维持运行时视图、不扩展：
+Phase 3 中 Workbench 面板跑在浏览器里，只通过引擎 HTTP API 访问 Config Plane。设计候选继续使用独立的 `config-v2` 路由组（实例作用域，Instance Context + Workspace Routing + Authorization 中间件，两种运行模式通用），读写两条链分工明确。此端点是配置的通用消费面——后续配置相关功能优先建立在它之上，`/config` 维持运行时视图、不扩展：
 
 ```typescript
 // 读——引擎直接从自己的加载状态回答，不走 CLI
@@ -65,7 +127,7 @@ HttpApiEndpoint.get("configGet", "/config-v2", {
   success: described(ConfigV2TreeResponse, "Effective configuration with per-item source"),
 })
 
-// 写——HTTP handler 直接调用共享配置服务，与 SDK/local 的 CLI 消费同源
+// 写——HTTP handler 调用同一个 local Config Plane；CLI 则通过 @wopal/wopalspace-sdk/config 消费
 // payload 指定目标（global / space）+ 键值；目标是空间公共层（settings.jsonc）时返回只读错误码
 HttpApiEndpoint.patch("configUpdate", "/config-v2", {
   query: WorkspaceRoutingQuery,
@@ -113,13 +175,13 @@ HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
 写入链路使用同一业务实现：
 
 ```text
-Workbench → HTTP handler → 共享配置服务 → 校验与原子写入
-Wopal CLI → SDK/local → 同一共享配置服务
+Workbench → HTTP handler → WopalSpace Config Plane → 校验与 canonical mutation
+Wopal CLI → `@wopal/wopalspace-sdk/config` → 同一 local Config Plane
 ```
 
-### Shared Configuration Consumption
+### Config Plane Consumption — Phase 3 Draft
 
-引擎从已加载的实例状态回答运行时读面；持久配置的写入、来源计算与 schema 校验由共享服务执行。HTTP handler 校验传输和授权上下文，服务校验键、值和可写目标，CLI 仅解释命令输入并呈现结果。读取不启动 CLI，写入不 spawn Wopal。
+引擎从已加载的实例状态回答 runtime effective read surface；canonical 配置的 mutation、来源计算与 schema 校验由 WopalSpace Config Plane 执行。HTTP handler 只翻译 transport/authorization，CLI 只解释命令输入并呈现结果。读取不启动 CLI，写入不 spawn Wopal。
 
 阶段 3 的 PATCH/reset-key 使用同一服务。语义错误来自服务，传输错误由 HTTP 层表达；接口与 SDK 从 schema 生成，不复制校验或最低 CLI 版本门禁。
 
@@ -167,14 +229,18 @@ Wopal CLI → SDK/local → 同一共享配置服务
 
 ## When Settings Take Effect
 
-- `ellamaka` 段：共享服务写完文件 → 引擎文件监听热重载 → 当前实例即时生效。
-- `wopal.pluginConfig` 段：WopalSpace 模式下引擎与 TUI 配置链各自加载时合并三层结果，插件装载时消费（server 插件经 `PluginInput.pluginConfig`，TUI 插件经 `TuiPluginApi.pluginConfig`）。写入后插件重新装载时取得新值；面板在写入响应里提示这一点，并在面板关闭时触发空间插件重建，让新配置尽快就位。`tui` 段由 TUI 配置链消费。
+本节只记录 Phase 3 目标，不承诺当前实现已经具备统一热更新。
+
+- Ellamaka：Config Reconciler 根据字段能力返回 `live | reload | restart-required`；未明确证明可 live 的字段默认走现有 reload/dispose 安全路径。
+- DSH：provider 不自行判断如何重启 plugin，而是调用 DSH native Settings/ConfigEditor，让 HMR/Loader 根据 schema 与 lifecycle 完成 volatile update 或 remount；无法在线完成的变更向上返回 restart-required。
+- `wopal.pluginConfig` / `tui`：继续由各自真实 consumer 决定 apply 方式，Phase 3 再统一对外呈现的 apply outcome。
 
 ---
 
 ## Reference Documents
 
-| Document                                  | Purpose                                        |
-| ----------------------------------------- | ---------------------------------------------- |
-| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）     |
-| `./API-CONTRACT.md`                       | Runtime API 的 schema、OpenAPI 与 SDK 生成纪律 |
+| Document                                  | Purpose                                            |
+| ----------------------------------------- | -------------------------------------------------- |
+| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）         |
+| `./DESIGN-ellamaka-sdk.md`                | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律 |
+| `./DESIGN-wopalspace-sdk.md`              | Phase 3 将扩展的 trusted-local operation contract  |

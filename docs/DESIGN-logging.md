@@ -71,7 +71,7 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 终端与文件是两个独立通道，不互为副本：
 
 - **终端 / UI progress**：面向用户的启动契约与即时反馈。Core Runtime Preparation 与 Activation 使用结构化 `CoreProgressEvent`；CLI/TUI 渲染到终端，serve/web 同时通过 Bootstrap 控制面暴露，Desktop Renderer 消费同一事件。这个通道不受日志级别过滤。
-- **文件**：面向事后排障的结构化记录。`INFO` 记录对应需要事后关注的状态变化——例如一次完成的数据迁移、VCS 分支切换或按需依赖安装。
+- **文件**：面向事后排障的结构化记录。`INFO` 记录对应需要事后关注的状态变化——例如一次完成的数据整理、VCS 分支切换或按需依赖安装。
 - **`--log-level DEBUG`**：实现级诊断，有界且仍脱敏；理解正常运行不依赖它。
 - **`--trace`**：第五级，见 Trace 节。
 - **`--print-logs`**：将记录镜像到 stderr，进程不落文件；dev 工具链用它接管进程输出。
