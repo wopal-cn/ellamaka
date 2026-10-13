@@ -8,12 +8,13 @@ description: Ellamaka documentation directory asset map, authority hierarchy, an
 ## Canonical References
 
 - DESIGN: `./DESIGN.md`
-- API CONTRACT: `./API-CONTRACT.md`
+- ELLAMAKA SDK: `./DESIGN-ellamaka-sdk.md`
+- WOPALSPACE SDK: `./DESIGN-wopalspace-sdk.md`
 - Parent rules: `../AGENTS.md`
 
 ## Directory Assets
 
-This directory is ellamaka's design and documentation asset collection. Documents are organized into four categories by responsibility.
+This directory is ellamaka's design and documentation asset collection. Documents are organized into three categories by responsibility.
 
 ### Design Truth Sources
 
@@ -21,12 +22,14 @@ This directory is ellamaka's design and documentation asset collection. Document
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
 | `DESIGN.md`                | Architecture overview and customization index: runtime responsibilities, brand identity, space detection, configuration contract, ontology loading, state ownership, ellamaka and dsh dual-core architecture | Sync on architecture changes             |
 | `DESIGN-desktop.md`        | Official desktop application architecture: Electron main process, sidecar hosting, window and PTY lifecycle                                                                                                  | Sync on desktop implementation changes   |
-| `DESIGN-distribution.md`   | Single source of truth for distribution and version identity: product SemVer, upstream lock, build identity, manifest, workflows, R2 CDN                                                                     | Sync on release mechanism changes        |
-| `DESIGN-dsh-base.md`       | dsh fusion foundation shared by both profiles: fixed Active Home, closure materialization, closure-change backup, Core Preparation / Activation                                                                                        | Sync on fusion mechanism changes         |
+| `DESIGN-distribution.md`   | Single source of truth for distribution and version identity: product SemVer, build identity, manifest, workflows, R2 CDN, selective upstream reference policy                                               | Sync on release mechanism changes        |
+| `DESIGN-dsh-base.md`       | dsh fusion foundation: fixed Active Home, generation lease, Core Preparation in Onboarding/Setup, and fast Activation                                                                                        | Sync on fusion mechanism changes         |
 | `DESIGN-dsh-web.md`        | Web profile: plugin supply chain, plugin market, Wopal declarative preset bundle, multi-profile decoupling, Workbench integration                                                                            | Sync on Web profile changes              |
+| `DESIGN-ellamaka-sdk.md`   | Runtime HTTP SDK: PublicApi, OpenAPI 3.1, generated client, contract discovery and compatibility                                                                                                             | Sync on Runtime API/SDK changes          |
+| `DESIGN-wopalspace-sdk.md` | Trusted-local application SDK: operation registry, local contract, discovery artifacts and CLI projection                                                                                                    | Sync on local application SDK changes    |
 | `DESIGN-ellamaka-tools.md` | Tool container profile: capability adoption, tool projection, sandbox, per-space configuration                                                                                                               | Sync on tool container changes           |
 | `DESIGN-logging.md`        | Logging architecture: role-based directory routing, file lifecycle, output channels, trace categories, redaction                                                                                             | Sync on logging behavior changes         |
-| `DESIGN-onboarding.md`     | Web/Desktop onboarding: authenticated HTTP, shared local services, preparation state and progress                                                                                                            | Sync on onboarding flow changes          |
+| `DESIGN-onboarding.md`     | Ellamaka Server GUI Onboarding + Terminal Setup: shared initialization state/plan, authenticated HTTP/SSE, and Core Preparation orchestration                                                                | Sync on onboarding flow changes          |
 | `DESIGN-workbench.md`      | Workbench architecture choices, state model, and interaction flows                                                                                                                                           | Sync on Workbench product design changes |
 
 `DESIGN.md` is the document tree entry point and enumerates every sub-design in its header. Each sub-design points back with `Parent: ./DESIGN.md`. Adding or removing a sub-design updates both sides.
@@ -37,14 +40,6 @@ This directory is ellamaka's design and documentation asset collection. Document
 | -------------------------- | --------------------------------------------------------------- |
 | `DESIGN-config-engine.md`  | Phase 3 draft; not part of the current SDK/DSH implementation   |
 | `DESIGN-plan-scheduler.md` | Phase 4 optional scheduler draft; not a core startup dependency |
-
-### Companion Documents
-
-| Document          | Responsibility                                               | Maintenance                              |
-| ----------------- | ------------------------------------------------------------ | ---------------------------------------- |
-| `API-CONTRACT.md` | API/SDK rules; generated OpenAPI 3.1 owns endpoint contracts | Sync on cross-cutting API policy changes |
-
-Companion documents are independent truth sources. They do not belong to the `DESIGN-<topic>.md` naming scheme and are declared as `Companion Documents` in `DESIGN.md`.
 
 ### Research and Reference Material
 
@@ -65,7 +60,7 @@ Research material carries argumentation and analysis, providing the basis for de
 
 ### Single Source of Truth
 
-- Each kind of fact has exactly one authoritative document. Design truth lives in `DESIGN*.md`; endpoint contracts live in generated OpenAPI 3.1 and their source schemas; `API-CONTRACT.md` owns common rules. `DESIGN.md` keeps the customization index and points to the owning section instead of repeating details.
+- Each kind of fact has exactly one authoritative document. Design truth lives in `DESIGN*.md`; Runtime endpoint contracts live in generated OpenAPI 3.1 and `DESIGN-ellamaka-sdk.md`; trusted-local operation contracts live in the WopalSpace SDK registry and `DESIGN-wopalspace-sdk.md`. `DESIGN.md` keeps the customization index and points to the owning section instead of repeating details.
 - Companion documents are never renamed to `DESIGN-<topic>.md` and never enter the sub-design enumeration.
 - Before adding a top-level document, declare its responsibility and relationships in the `设计文档关系` table of `DESIGN.md`, then create the file.
 
