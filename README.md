@@ -41,52 +41,53 @@ The ontology travels with your projects. Memory stays local. Your expertise is r
 
 OpenCode is a powerful general-purpose AI coding agent. Ellamaka does one thing on top of it: **make agent configuration a first-class citizen.**
 
-| | OpenCode | Ellamaka |
-|---|---|---|
-| Config model | Per-project, independent | Ontology-level, reusable across projects |
-| Release cadence | Continuous, frequent API changes | Selective upstream merges, predictable behavior |
-| Runtime | CLI + Web UI + Desktop | CLI + Web UI dual-mode, focused core experience |
-| Data isolation | Shares paths with system config | Isolated data directory, no interference with OpenCode |
-| Extension system | In-project plugins | Ontology-level plugins + skills, carried by fork |
+|                  | OpenCode                         | Ellamaka                                                                                                  |
+| ---------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Config model     | Per-project, independent         | Ontology-level, reusable across projects                                                                  |
+| Release cadence  | Continuous, frequent API changes | Independent product releases; selected fixes/features are reviewed and ported from the OpenCode reference |
+| Runtime          | CLI + Web UI + Desktop           | CLI + Web + Desktop with one Ellamaka Server runtime model                                                |
+| Data isolation   | Shares paths with system config  | Isolated data directory, no interference with OpenCode                                                    |
+| Extension system | In-project plugins               | Ontology-level plugins + skills, carried by fork                                                          |
 
 ## Try It
 
 Ellamaka works standalone or as part of WopalSpace:
 
 ```bash
-# Install
-wopal ellamaka install
+# WopalSpace users can prepare the local environment from the terminal
+wopal setup (or wopal start)
 
-# Or download directly: https://github.com/wopal-cn/ellamaka/releases
+# Or download Ellamaka / Desktop directly from the public release page
+# https://github.com/wopal-cn/ellamaka/releases
 
-# Launch from any directory — it's your AI partner
+# Launch from any directory — WopalSpace mode is detected automatically
 ellamaka
 ```
 
 ## Development
 
-| Action | Command |
-|---|---|
-| Start TUI | `./scripts/dev.sh tui` |
-| Start Workbench | `./scripts/dev.sh serve` |
-| Start Desktop dev | `./scripts/dev.sh desktop` |
-| Build CLI binary | `./scripts/build.sh cli` |
-| Build Desktop app | `./scripts/build.sh desktop` |
-| Branded build | `bun packages/ellamaka-release/src/cli/build.ts` |
-| Type check | `bun typecheck` |
-| Clean up after upstream merge | `./scripts/check-cleanup.sh --clean` |
-| Browse API docs | `bun ./scripts/scalar-doc.ts` |
+| Action            | Command                                          |
+| ----------------- | ------------------------------------------------ |
+| Start TUI         | `./scripts/dev.sh tui`                           |
+| Start Workbench   | `./scripts/dev.sh serve`                         |
+| Start Desktop dev | `./scripts/dev.sh desktop`                       |
+| Build CLI binary  | `./scripts/build.sh cli`                         |
+| Build Desktop app | `./scripts/build.sh desktop`                     |
+| Branded build     | `bun packages/ellamaka-release/src/cli/build.ts` |
+| Type check        | `bun typecheck`                                  |
+| Browse API docs   | `bun ./scripts/scalar-doc.ts`                    |
 
 See `AGENTS.md` for details.
 
 ## Learn More
 
-| Doc | Contents |
-|---|---|
-| `docs/DESIGN.md` | Architecture design & WopalSpace adaptation |
-| `docs/DESIGN-distribution.md` | Release process & artifact specs |
-| `docs/DESIGN-workbench.md` | Workbench design |
-| `docs/API-CONTRACT.md` | Runtime API & SDK contract |
+| Doc                             | Contents                                     |
+| ------------------------------- | -------------------------------------------- |
+| `docs/DESIGN.md`                | Architecture design & WopalSpace adaptation  |
+| `docs/DESIGN-distribution.md`   | Release process & artifact specs             |
+| `docs/DESIGN-workbench.md`      | Workbench design                             |
+| `docs/DESIGN-ellamaka-sdk.md`   | Runtime HTTP/OpenAPI and remote SDK contract |
+| `docs/DESIGN-wopalspace-sdk.md` | Trusted-local application SDK contract       |
 
 ## License
 

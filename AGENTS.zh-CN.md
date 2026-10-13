@@ -11,7 +11,8 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - DSH FUSION: `docs/DESIGN-dsh-base.md`（融合基础：文件领地、依赖闭包、热加载）
 - DSH WEB PROFILE: `docs/DESIGN-dsh-web.md`（插件供应链、插件市场、Workbench 融合）
 - TOOL CONTAINER: `docs/DESIGN-ellamaka-tools.md`（能力采用、工具投影、沙箱）
-- API CONTRACT: `docs/API-CONTRACT.md`
+- ELLAMAKA SDK: `docs/DESIGN-ellamaka-sdk.md`
+- WOPALSPACE SDK: `docs/DESIGN-wopalspace-sdk.md`
 - WORKBENCH: `docs/DESIGN-workbench.md`
 - ONBOARDING: `docs/DESIGN-onboarding.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
@@ -26,7 +27,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 
 ## Architecture and Directories
 
-执行链：OpenCode upstream → ellamaka fork → `--wopal-space` → `.wopal/` ontology → `.wopal-space/` runtime。
+Ellamaka 从当前目录、已登记 Space 与 `.wopal/` 事实自动识别 WopalSpace 上下文；OpenCode 仅作为只读参考源。
 
 | 目录                         | 职责                                                                                                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -42,31 +43,33 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 
 ### Wopal 集成
 
-Wopal 能力经 `packages/opencode/src/` 下的两个模块组进入引擎：`wopal/`（CLI adapter、contract、schema、SpaceRegistry）与 `workbench/`（会话 provision、会话投影、目录健康）；其 HTTP 面由 `workbench` 与 `wopal-space` 两个 HttpApi 组承载。
+WopalSpace 本机业务由 `@wopal/wopalspace-sdk` 统一提供；Ellamaka HTTP/Onboarding 直接调用 SDK，不依赖 Wopal CLI command handler、shared schema package 或最低版本门禁。Runtime HTTP schema 与错误语义由 `PublicApi` / `@wopal/ellamaka-sdk` 拥有。
 
-- 会话 provision 只接受已登记 Space 和安全的相对目录（路径穿越与未知 Space 一律拒绝）；目录失效不删除 Session。
-- 端点行为与错误语义归 [API-CONTRACT](./docs/API-CONTRACT.md) 所有；集成测试位于 `packages/opencode/test/server/`（`wopal-cli-adapter`、`wopal-space-overview`、`workbench-session-api`）。
+- Space/Ontology/Evolution/setup/product 的业务判断和写入流程只在 `@wopal/wopalspace-sdk` 实现一次。GUI Onboarding 由 Ellamaka Server 提供，Desktop Renderer 与 Browser 使用同一 `/api/onboarding`；Terminal 使用共享 Setup。
+- Session、PTY、工具、DSH 与 Runtime health 仍由 Ellamaka Runtime 拥有。
+- 会话 provision 只接受已登记 Space 和安全相对目录；目录失效不能删除 Session。
+- 现有 `packages/opencode/src/wopal/` 与相关测试可保留到实施完成，但不得继续作为目标 ownership 扩展，也不得新增 Wopal CLI shared schema。
 
 ## Development Commands
 
-| 场景 | 命令 |
-|---|---|
-| Lint | `bun run lint` |
-| 全仓类型检查 | `bun run typecheck` |
-| opencode 包测试（unit） | `bun run test:unit`（from `packages/opencode`） |
-| opencode 包测试（integration） | `bun run test:integration`（from `packages/opencode`） |
-| opencode 包测试（e2e） | `bun run test:e2e`（from `packages/opencode`） |
-| opencode 包测试（全量回归） | `bun run test:all`（from `packages/opencode`） |
-| opencode 构建 | `bun run build`（from `packages/opencode`） |
-| ellamaka-brand 包测试 | `bun test`（from `packages/ellamaka-brand`） |
-| 构建 ellamaka 品牌 CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
-| 构建 CLI 二进制 | `./scripts/build.sh cli` |
-| 构建桌面应用 | `./scripts/build.sh desktop` |
-| 发布 CLI（一步制） | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]` |
-| 发布 Desktop（一步制） | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
-| 撤回已发布版本 | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
-| 开发服务（TUI/Workbench/桌面） | `./scripts/dev.sh` |
-| 桌面包测试 | `bun test --preload ./electron-mock.ts --force-exit src`（from `packages/ellamaka-desktop`） |
+| 场景                           | 命令                                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| Lint                           | `bun run lint`                                                                               |
+| 全仓类型检查                   | `bun run typecheck`                                                                          |
+| opencode 包测试（unit）        | `bun run test:unit`（from `packages/opencode`）                                              |
+| opencode 包测试（integration） | `bun run test:integration`（from `packages/opencode`）                                       |
+| opencode 包测试（e2e）         | `bun run test:e2e`（from `packages/opencode`）                                               |
+| opencode 包测试（全量回归）    | `bun run test:all`（from `packages/opencode`）                                               |
+| opencode 构建                  | `bun run build`（from `packages/opencode`）                                                  |
+| ellamaka-brand 包测试          | `bun test`（from `packages/ellamaka-brand`）                                                 |
+| 构建 ellamaka 品牌 CLI         | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app`                       |
+| 构建 CLI 二进制                | `./scripts/build.sh cli`                                                                     |
+| 构建桌面应用                   | `./scripts/build.sh desktop`                                                                 |
+| 发布 CLI（一步制）             | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]`                     |
+| 发布 Desktop（一步制）         | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]`               |
+| 撤回已发布版本                 | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]`            |
+| 开发服务（TUI/Workbench/桌面） | `./scripts/dev.sh`                                                                           |
+| 桌面包测试                     | `bun test --preload ./electron-mock.ts --force-exit src`（from `packages/ellamaka-desktop`） |
 
 测试不能从 repo root 运行。`./scripts/dev.sh help` 和 `./scripts/build.sh help` 查看完整参数说明。
 
@@ -85,10 +88,11 @@ opencode 测试走上表的分层入口（`test:unit` 用于日常循环，改�
 
 ### HTTP API 与 SDK 契约
 
-- 新端点遵循 `docs/API-CONTRACT.md`。先确认领域 Owner、Root/Instance 层级、既有 group 和资源语义，再定义 Effect Schema、请求、成功结果、领域错误与兼容性。
+- 新端点遵循 `docs/DESIGN-ellamaka-sdk.md`。先确认领域 Owner、Root/Instance 层级、既有 group 和资源语义，再定义 Effect Schema、请求、成功结果、领域错误与兼容性。
 - 端点归入 `HttpApiGroup`。全局 WopalSpace 控制能力归 Root API，Session、文件、项目、PTY 和工作目录能力归 Instance API。handler 只转换 HTTP 与领域服务。
 - 路径表达领域资源与自然从属关系。查询条件属于 query 参数。文件系统、Shell、CLI 执行和目录 provision 由所属领域服务拥有，不形成浏览器可直接调用的通用原语。
 - SDK 由 Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts` 自动生成。应用代码使用生成客户端；`packages/sdk/js/src/v2/gen/**` 由生成管线拥有。
+- 新 SDK 代码和文档使用 Ellamaka 品牌公开名称（`EllamakaClient`、`createEllamakaClient`、`createEllamakaServer`、`createEllamakaTui`、`createEllamaka`）。现有 `Opencode*` 名称作为同一实现的兼容 alias 保留；禁止为兼容名称生成第二套 client 或复制契约。
 - 新增或修改端点必须测试 schema、成功结果、领域错误和 middleware 边界，重新生成 SDK，并同步更新相关 DESIGN 文档。
 - **SDK 重新生成是全有或全无**：任何 payload schema 变更后，必须从 `packages/sdk/js` 运行 `bun script/build.ts`（禁止手改 gen 文件）。一个字段只有当 `types.gen.ts` 和 `sdk.gen.ts` 同时包含才算落地——仅类型层存在不是证据；陈旧的 `buildClientParams` 映射会在编码期静默丢弃字段且无报错（见 [ellamaka 设计](./docs/DESIGN.md) 的 SDK generation 一节）。用 `rg "<fieldName>" src/v2/gen/` 验证命中两个文件，或 diff 重新生成的输出。
 - **权限规则：显式仅靠位置胜过通配**：求值按合并规则集 LAST-wins，且一个 agent 的 frontmatter 可能来自多份副本（`~/.wopal` home + space `.wopal`）按加载顺序深度合并。frontmatter 不得声明 `"*": allow` 式通配（引擎默认已提供通配兜底），只允许显式收窄。修改权限 frontmatter 后，通过 `GET /agent` 在活实例上验证显式规则位于合并列表中任何通配之后（见 [ellamaka 设计](./docs/DESIGN.md) 的 permission merge 一节）。
@@ -100,6 +104,7 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 ### CLI 发布契约
 
 - 发布构建入口（`packages/ellamaka-release/src/cli/build.ts`）是正式 CLI 二进制的唯一打包点。Ellamaka 启动、更新、构建与发布不得要求 Wopal CLI 最低版本或等待其发布顺序；移除 core CLI import/gate 时必须同步清理 build define 与源码树 fallback。正式 CLI/sidecar 烟测必须在没有 Wopal、没有 `MIN_WOPAL_CLI_VERSION`、没有源码树 min-version 元数据的环境下通过，同时保留 Ellamaka 制品 identity、channel、platform 与固定 DSH 校验。
+- Ellamaka CLI 与 Desktop 独立更新；其他已安装组件的版本不参与 DSH 启动。每个本地入口只使用自己内嵌的 `closureGeneration + closureFingerprint` 进入 Home generation 协议。`closureGeneration` 是 Ellamaka 源码中唯一、受版本控制的单调值；fingerprint 不变不得改 generation，fingerprint 变化必须增加 generation。
 
 ### Desktop 发布契约
 
@@ -123,26 +128,25 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - **事件折叠为最后者生效**：dsh 会话事件（`sandbox/mode`、`approval/policy`）按最后一条折叠。「恢复默认」必须显式追加默认值；「等于默认」与「未选择」是两种语义，绝不共用代码路径（见 [工具容器设计](./docs/DESIGN-ellamaka-tools.md) 的审批桥接与折叠不变量）。断言「值相同则不追加」的测试锁死了错误语义，除非日志中本就没有任何覆盖。
 - **活家目录隔离（dsh in ellamaka）**：引擎运行期间，引擎进程之外的任何东西不得写入 `$WOPAL_HOME/dsh/home/profiles/` 之下——包括内容未变的"幂等"写入（loader 的常驻重建以组合文件的 mtime/size 为键而非内容，同内容写入会与引擎竞态，可能触发 tool-cordis 注册冲突错误风暴）。会触碰 profile 文件的测试、dump 与诊断一律经注入对临时 home 运行（`dumpDshConfig`/`mountDshWeb` 接受 `dshHome`/`installAnchor`）；CLI 测试只断言定义或使用注入的临时 home，绝不触碰真实 `Global.Path.wopalHome`。引擎重启是用户的动作；宿主不修理活 home。插件安装区就是 profile 自己的 `node_modules/` + profile `package.json` 声明（官方语义）——旧 `plugins/` 安装区与 `installed.json` 存储已退役（遗留 store 文件在下次 CLI 运行时一次性迁入 profile 清单）。
 - **工具链隔离——dsh profiles vs wopal root**：dsh profile 插件由 Bun installer 安装进各 profile 自己的 `node_modules/`。官方 `dsh` CLI 是 pnpm 壳；任何命令都不得指向 `$WOPAL_HOME/dsh/home`——wopal root 下的 `pnpm-workspace.yaml` 会让 pnpm 上爬把 `$WOPAL_HOME` 当作 workspace root，列出 root 依赖而非 profile 插件，并在 add/remove 时摧毁 Bun 管理的拓扑（2026-09-09 实测）。`$WOPAL_HOME` root 依赖只归 npm/arborist 工具链所有（`package.json` + `package-lock.json`）；禁止在 wopal root 运行 `pnpm install` 或 `bun install`——它会覆盖 node_modules 布局，产生三锁文件污染（同一依赖集上 npm/pnpm/bun 三锁并存，2026-09-09 实测）。
-- **宿主不修理运行中的 dsh home**：闭包物化归 Runtime Manager 在启动时完成，闭包缺失或损坏自动触发。禁止要求用户运行修复脚本，禁止手工编辑 `$WOPAL_HOME/dsh` 内容来修启动故障。
+- **Core Preparation 与启动分离**：closure 物化、Home generation/backup、profile/plugin 依赖准备只在 GUI Onboarding / Terminal Setup 的 Core Preparation 步骤执行。普通 serve/web/Desktop/TUI 启动只 inspect 已准备状态并 activation；不得在 Bootstrap 后台偷偷 prepare。禁止手工编辑 `$WOPAL_HOME/dsh` 修启动故障。
 - **Bun 宿主兼容门禁**：发布态 `ellamaka serve` 是单 Bun 进程。用户插件不得要求 Node 私有模块加载器或 `--expose-internals`。`plugin add` 必须在写入 profile 声明与触碰运行中容器之前完成静态依赖扫描与隔离挂载预检；不兼容插件拒绝安装并给出可操作诊断。禁止伪造 `loader.internal`、禁止切换到 Node、禁止降级整台宿主来绕过。Bridge 在各宿主拥有 v0.2 配置 HMR 接口（watchConfig 与 runExclusive）和公开 profile 模块路由；第三方插件经过相同兼容门禁。
 - **插件安装零外部工具链**：安装器禁止转发 pnpm 或 npm。它复用 Runtime Manager 的 pacote 下载与 registry 测速基建，用户插件的依赖树由内置最小解析器在运行时解析。
 - **安装共享、启用按 profile**：安装是进程级动作（安装/升级/卸载全局一次），激活按容器经 profile bundle 清单声明。禁止同一进程内运行同一包的两个版本。
 - **工具容器不创建会话**：工具调用走专用 `ellamaka-tools` profile。容器不创建、不持有任何 dsh 会话，adapter 只传递工具实测消费的最小 per-call context。web 容器保持完整 profile，禁止复用为工具后端。用户补丁内容保持原样。宿主能力约束独立保护无会话 profile 与可用后端，并在每次组合重放时生效。
 - **`ELLAMAKA_DSH` 是唯一启用开关**：默认开启。serve、web、TUI 与 Desktop sidecar 统一经 `ELLAMAKA_DSH=0` 禁用。禁止引入第二条启用分支。
-- **DSH 领地只有 `$WOPAL_HOME/dsh`**：`$WOPAL_HOME/dsh/home` 是唯一固定 Active DSH Home。closure 按 fingerprint 不可变物化；fingerprint 变化时，新 closure 获得 Home 写权限之前必须先完成 Home backup。Ellamaka 不推断 Home 格式、不实现通用迁移、也不把 backup 当作 `DSH_HOME`；原生迁移归 DSH。`ELLAMAKA_DSH=0` 跳过全部 DSH prepare/activate。`~/.dsh` 归官方 dsh CLI，禁止在其中创建、修改或删除任何内容。
+- **DSH 领地只有 `$WOPAL_HOME/dsh`**：`$WOPAL_HOME/dsh/home` 是唯一 Active Home。每个使用 Home 的进程在整个生命周期持有本 generation 的 kernel shared lease；切换 generation 必须先取得 current generation exclusive lease并完成 backup。Generation lock file 永不删除/rename；异常退出后的锁释放交给 OS，不使用 PID/heartbeat 清理。Windows lock handle 禁止 delete sharing。Home 已存在但没有 generation state 时，启动流程在写 Home 前检查已知 Ellamaka/Desktop 进程；发现任何实例就只降级 DSH并提示用户退出后重试，不自动 kill。成功建立 state 后不再依赖进程扫描。Ellamaka 不推断 DSH 私有数据格式，也不把 backup 当运行目录。`ELLAMAKA_DSH=0` 跳过全部 DSH 工作。`~/.dsh` 归官方 dsh CLI。
+- **同 generation 多实例**：多个启用 DSH 的 Ellamaka 实例可以并发使用固定 Home。禁止为上游 plugin/backend 的局部并发限制增加 Ellamaka 全局写锁、单 owner host 或代理。Ellamaka 自己拥有的 profile 初始文件只在 generation 初始化/切换或明确修复窗口写入，正常同代 mount 只验证、不重写；写入必须幂等且原子。
 - **多 profile 隔离**：核心容器（web 与 `ellamaka-tools`）保持同进程。实验性第三方 profile 以独立进程运行并带独立 DSH_HOME，不进入主 Web 容器、不与主引擎共享 home 或 profiles——运行中引擎的 `profiles/` 是引擎领地。闭包只读、可共享；home 必须隔离。
 - **壳单端口不变量**：renderer 只从唯一 http origin（server 端口）加载 UI。壳不承载引擎逻辑，不新开第二个监听端口。引擎产物只有一个形态——完整 CLI 二进制，禁止维护第二套分叉的引擎构建产物。`/dsh` 保持前缀挂载不升根，`/` 是设备协商前门（移动 UA → `/dsh/`，桌面 UA → `/workbench`）。
 
-### 用户可见启动进度
+### 用户可见初始化与启动进度
 
-- **禁止静默启动**：`ellamaka`、`ellamaka run`、`serve/web` 与 Desktop 只要启动工作不是瞬时完成，就必须显示 Core Preparation / activation 进度。
-- 统一使用结构化 progress 协议；至少报告当前阶段、耗时、完成/跳过/失败，失败提供稳定错误码；长阶段至少每 5 秒 heartbeat。
-- 提示必须短且必要，只说明“正在做什么”。例如：`Preparing DSH runtime…`、`Backing up DSH Home…`、`Validating profiles…`、`Ready (8.2s)`。禁止长篇解释和重复刷屏。
-- 禁止伪造百分比。只有真实 total 时才显示计数/字节；否则使用阶段 + spinner + elapsed。DSH 原生 migration 若不可观测，不得伪造迁移进度。
-- `ELLAMAKA_DSH=0` 只报告一次简短的 `DSH disabled; skipped`，并保持零 DSH 文件/网络/挂载行为。
-- progress 是用户通道，不是 debug 日志。`ellamaka run` 的启动进度写 stderr，保持模型/JSON stdout 纯净；非 TTY/CI 输出逐行事件，TTY/Desktop 可使用紧凑 spinner/status。
-- 文件日志可另记关键生命周期结果，但用户不能依赖 DEBUG/TRACE 才知道启动是否仍在进行或已经失败。
-- phase/event 细节见 `docs/DESIGN-dsh-base.md#core-preparation-progress-contract`；本节是强制实现规范。
+- GUI Onboarding 与 Terminal Setup 承载 Core Preparation 进度；closure 下载、Home backup、profiles、依赖准备等耗时阶段必须可见。
+- `ellamaka serve/web` 与 Desktop sidecar 必须先提供 Bootstrap health/Onboarding，再执行用户已经进入的初始化步骤。
+- 普通 activation 只显示确实发生的快速启动阶段；`ellamaka run` 当前不接入 DSH Core Setup。
+- 统一使用结构化 progress；至少报告阶段、耗时、完成/跳过/失败和稳定错误码。只有真实 total 时显示计数/百分比，长阶段提供 heartbeat。
+- `ELLAMAKA_DSH=0` 只报告一次 skipped，并保持零 DSH 文件/网络/挂载行为。
+- progress 是用户通道，不是 debug 日志。
 
 ### 日志规范
 
@@ -184,7 +188,7 @@ Workbench 前端开发规则（状态所有权、身份作用域、依赖方向�
 - 修改任何 TypeScript 代码或新增文件后，必须运行 `bun run typecheck`（或对应 package 的 typecheck），确保零 TypeScript 类型错误。
 - 尽量避免 mocks；测试真实实现，不要把实现逻辑复制进测试。
 - 测试从对应 package 目录运行，不要从 repo root 运行。
-- 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明：`WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
+- 修改 CLI/runtime/config/plugin/agent/TUI 的 WopalSpace 自动检测后，验证当前目录/已登记 Space 识别、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
 - 选用 OpenCode 参考仓库代码时，区分参考实现的已知失败、环境问题和 ellamaka 特有问题。
 - 测试安全运行规则（防挂起与孤儿进程）见空间 `REGULATIONS.md`。
 

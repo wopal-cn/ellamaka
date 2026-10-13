@@ -40,52 +40,53 @@ Ellamaka 是 [WopalSpace](https://github.com/wopal-cn/wopal-space-ontology) 的�
 
 OpenCode 是一个强大的通用 AI coding agent。Ellamaka 在它的基础上，做了一件事：**让 Agent 的配置变成一等公民。**
 
-| | OpenCode | Ellamaka |
-|---|---|---|
-| 配置模型 | 项目级，每项目独立 | 本体级，跨项目可复用 |
-| 版本节奏 | 持续发布，API 频繁变动 | 选择性合并上游，版本行为可预期 |
-| 运行环境 | 命令行 + Web UI + 桌面端 | 命令行 + Web UI 双模，专注核心体验 |
-| 数据隔离 | 与系统配置共享路径 | 独立数据目录，与 OpenCode 互不干扰 |
-| 扩展体系 | 项目内插件 | 本体级插件 + 技能，Fork 即携带 |
+|          | OpenCode                 | Ellamaka                                                     |
+| -------- | ------------------------ | ------------------------------------------------------------ |
+| 配置模型 | 项目级，每项目独立       | 本体级，跨项目可复用                                         |
+| 版本节奏 | 持续发布，API 频繁变动   | 独立发布；需要的修复和功能从 OpenCode 参考源码逐项评审后移植 |
+| 运行环境 | 命令行 + Web UI + 桌面端 | CLI + Web + Desktop 共用一套 Ellamaka Server 运行模型        |
+| 数据隔离 | 与系统配置共享路径       | 独立数据目录，与 OpenCode 互不干扰                           |
+| 扩展体系 | 项目内插件               | 本体级插件 + 技能，Fork 即携带                               |
 
 ## 试试看
 
 Ellamaka 可以独立使用，也可以作为 WopalSpace 的一部分：
 
 ```bash
-# 安装
-wopal ellamaka install
+# WopalSpace 用户可从终端准备本机环境
+wopal setup (or wopal start)
 
-# 或直接下载：https://github.com/wopal-cn/ellamaka/releases
+# 也可以从公开 Release 页面直接下载 Ellamaka / Desktop
+# https://github.com/wopal-cn/ellamaka/releases
 
-# 在任意目录启动——它就是你的 AI 搭档
+# 在任意目录启动——WopalSpace 模式会自动识别
 ellamaka
 ```
 
 ## 参与开发
 
-| 做什么 | 命令 |
-|---|---|
-| 启动 TUI | `./scripts/dev.sh tui` |
-| 启动 Workbench | `./scripts/dev.sh serve` |
-| 启动桌面开发 | `./scripts/dev.sh desktop` |
-| 编译 CLI 二进制 | `./scripts/build.sh cli` |
-| 编译桌面应用 | `./scripts/build.sh desktop` |
-| 品牌化构建 | `bun packages/ellamaka-release/src/cli/build.ts` |
-| 类型检查 | `bun typecheck` |
-| 上游合并后清理 | `./scripts/check-cleanup.sh --clean` |
-| 浏览 API 文档 | `bun ./scripts/scalar-doc.ts` |
+| 做什么          | 命令                                             |
+| --------------- | ------------------------------------------------ |
+| 启动 TUI        | `./scripts/dev.sh tui`                           |
+| 启动 Workbench  | `./scripts/dev.sh serve`                         |
+| 启动桌面开发    | `./scripts/dev.sh desktop`                       |
+| 编译 CLI 二进制 | `./scripts/build.sh cli`                         |
+| 编译桌面应用    | `./scripts/build.sh desktop`                     |
+| 品牌化构建      | `bun packages/ellamaka-release/src/cli/build.ts` |
+| 类型检查        | `bun typecheck`                                  |
+| 浏览 API 文档   | `bun ./scripts/scalar-doc.ts`                    |
 
 详见 `AGENTS.md`。
 
 ## 了解更多
 
-| 文档 | 内容 |
-|---|---|
-| `docs/DESIGN.md` | 架构设计与 WopalSpace 适配 |
-| `docs/DESIGN-distribution.md` | 发布流程与产物规格 |
-| `docs/DESIGN-workbench.md` | Workbench 工作台设计 |
-| `docs/API-CONTRACT.md` | Runtime API 与 SDK 契约 |
+| 文档                            | 内容                                 |
+| ------------------------------- | ------------------------------------ |
+| `docs/DESIGN.md`                | 架构设计与 WopalSpace 适配           |
+| `docs/DESIGN-distribution.md`   | 发布流程与产物规格                   |
+| `docs/DESIGN-workbench.md`      | Workbench 工作台设计                 |
+| `docs/DESIGN-ellamaka-sdk.md`   | Runtime HTTP/OpenAPI 与远程 SDK 契约 |
+| `docs/DESIGN-wopalspace-sdk.md` | trusted-local application SDK 契约   |
 
 ## 许可证
 

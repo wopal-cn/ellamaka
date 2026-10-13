@@ -11,7 +11,8 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 - DSH FUSION: `docs/DESIGN-dsh-base.md` (foundation: file territory, closure, hot reload)
 - DSH WEB PROFILE: `docs/DESIGN-dsh-web.md` (plugin supply chain, plugin market, Workbench integration)
 - TOOL CONTAINER: `docs/DESIGN-ellamaka-tools.md` (capability adoption, tool projection, sandbox)
-- API CONTRACT: `docs/API-CONTRACT.md`
+- ELLAMAKA SDK: `docs/DESIGN-ellamaka-sdk.md`
+- WOPALSPACE SDK: `docs/DESIGN-wopalspace-sdk.md`
 - WORKBENCH: `docs/DESIGN-workbench.md`
 - ONBOARDING: `docs/DESIGN-onboarding.md`
 - DESKTOP: `docs/DESIGN-desktop.md`
@@ -29,7 +30,7 @@ description: WopalSpace engine fork of OpenCode for running space-aware agents, 
 
 ## Architecture and Directories
 
-Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.wopal/` ontology → `.wopal-space/` runtime.
+Ellamaka detects WopalSpace context automatically from the current directory, registered Space, and `.wopal/` facts; OpenCode is a read-only reference source.
 
 | Directory                    | Responsibility                                                                                                            |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -45,31 +46,33 @@ Execution chain: OpenCode upstream → ellamaka fork → `--wopal-space` → `.w
 
 ### Wopal Integration
 
-Wopal capabilities enter the engine through two module groups in `packages/opencode/src/`: `wopal/` (CLI adapter, contract, schema, SpaceRegistry) and `workbench/` (session provisioning, session projection, directory health); their HTTP surface lives in the `workbench` and `wopal-space` HttpApi groups.
+WopalSpace local business operations are owned by `@wopal/wopalspace-sdk`. Ellamaka HTTP and Onboarding call that SDK directly; they do not depend on Wopal CLI command handlers, a Wopal CLI shared-schema package, or a minimum Wopal CLI version. Runtime HTTP schemas and error semantics are owned by `PublicApi` / `@wopal/ellamaka-sdk`.
 
-- Session provisioning accepts only registered Spaces and safe relative directories (traversal and unknown Spaces are rejected); a failed directory never deletes the Session.
-- Endpoint behavior and error semantics are owned by [API-CONTRACT](./docs/API-CONTRACT.md); integration tests live in `packages/opencode/test/server/` (`wopal-cli-adapter`, `wopal-space-overview`, `workbench-session-api`).
+- Space/Ontology/Evolution/setup/product business decisions and writes exist once in `@wopal/wopalspace-sdk`. GUI Onboarding is served by Ellamaka Server; Desktop Renderer and Browser use the same `/api/onboarding`, while Terminal uses the shared Setup flow.
+- Session, PTY, tools, DSH, and Runtime health remain Ellamaka Runtime responsibilities.
+- Session provisioning accepts only registered Spaces and safe relative directories; a failed directory never deletes the Session.
+- Existing `packages/opencode/src/wopal/` modules and tests may remain until implementation converges, but they are not a target ownership boundary and must not gain new shared schemas.
 
 ## Development Commands
 
-| Scenario | Command |
-|---|---|
-| Lint | `bun run lint` |
-| Full-repo typecheck | `bun run typecheck` |
-| opencode package tests (unit) | `bun run test:unit` (from `packages/opencode`) |
-| opencode package tests (integration) | `bun run test:integration` (from `packages/opencode`) |
-| opencode package tests (e2e) | `bun run test:e2e` (from `packages/opencode`) |
-| opencode package tests (full regression) | `bun run test:all` (from `packages/opencode`) |
-| opencode build | `bun run build` (from `packages/opencode`) |
-| ellamaka-brand package tests | `bun test` (from `packages/ellamaka-brand`) |
-| Build ellamaka-branded CLI | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
-| Build CLI binary | `./scripts/build.sh cli` |
-| Build desktop app | `./scripts/build.sh desktop` |
-| Release CLI | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]` |
-| Release Desktop | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]` |
-| Withdraw a released version | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]` |
-| Dev server (TUI/Workbench/Desktop) | `./scripts/dev.sh` |
-| Desktop package tests | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
+| Scenario                                 | Command                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Lint                                     | `bun run lint`                                                                              |
+| Full-repo typecheck                      | `bun run typecheck`                                                                         |
+| opencode package tests (unit)            | `bun run test:unit` (from `packages/opencode`)                                              |
+| opencode package tests (integration)     | `bun run test:integration` (from `packages/opencode`)                                       |
+| opencode package tests (e2e)             | `bun run test:e2e` (from `packages/opencode`)                                               |
+| opencode package tests (full regression) | `bun run test:all` (from `packages/opencode`)                                               |
+| opencode build                           | `bun run build` (from `packages/opencode`)                                                  |
+| ellamaka-brand package tests             | `bun test` (from `packages/ellamaka-brand`)                                                 |
+| Build ellamaka-branded CLI               | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app`                      |
+| Build CLI binary                         | `./scripts/build.sh cli`                                                                    |
+| Build desktop app                        | `./scripts/build.sh desktop`                                                                |
+| Release CLI                              | `./scripts/release-cli.sh [--patch\|--minor\|--major\|--rc] [--dry-run]`                    |
+| Release Desktop                          | `./scripts/release-desktop.sh [--patch\|--minor\|--major\|--beta] [--dry-run]`              |
+| Withdraw a released version              | `./scripts/withdraw-release.sh <cli\|desktop> [--channel stable\|beta] [version]`           |
+| Dev server (TUI/Workbench/Desktop)       | `./scripts/dev.sh`                                                                          |
+| Desktop package tests                    | `bun test --preload ./electron-mock.ts --force-exit src` (from `packages/ellamaka-desktop`) |
 
 Tests cannot run from repo root. Run `./scripts/dev.sh help` and `./scripts/build.sh help` for full parameter documentation.
 
@@ -88,10 +91,11 @@ opencode tests run through the layered entries above (`test:unit` for the daily 
 
 ### HTTP API and SDK Contract
 
-- Follow `docs/API-CONTRACT.md` for every new endpoint. Establish the domain owner, Root/Instance scope, existing group, and resource semantics before defining Effect Schemas, requests, success results, domain errors, and compatibility.
+- Follow `docs/DESIGN-ellamaka-sdk.md` for every new endpoint. Establish the domain owner, Root/Instance scope, existing group, and resource semantics before defining Effect Schemas, requests, success results, domain errors, and compatibility.
 - Endpoints belong to `HttpApiGroup`. Global WopalSpace control capabilities belong to the Root API. Session, file, project, PTY, and working-directory capabilities belong to the Instance API. Handlers only translate between HTTP and domain services.
 - Paths express domain resources and their natural relationships. Query parameters express query conditions. Filesystem access, shell execution, CLI invocation, and directory provisioning are owned by their domain services rather than exposed as browser-callable primitives.
 - The SDK is generated through Effect HttpApi → OpenAPI → `packages/sdk/js/script/build.ts`. Application code uses the generated client; `packages/sdk/js/src/v2/gen/**` is owned by the generation pipeline.
+- New SDK code and documentation use the Ellamaka-branded public names (`EllamakaClient`, `createEllamakaClient`, `createEllamakaServer`, `createEllamakaTui`, `createEllamaka`). Existing `Opencode*` names remain compatibility aliases to the same implementation; never create a second generated client or duplicate contract for them.
 - Every endpoint addition or modification tests its schemas, success result, domain errors, and middleware boundary, regenerates the SDK, and updates the relevant DESIGN documents.
 - **SDK regeneration is all-or-nothing**: after any payload schema change, always run `bun script/build.ts` from `packages/sdk/js` (never hand-edit gen files). A field is shipped only when BOTH `types.gen.ts` and `sdk.gen.ts` contain it — the type layer alone is not proof; a stale `buildClientParams` mapping silently drops the field at encoding time with no error (see SDK generation section in [ellamaka design](./docs/DESIGN.md)). Verify with `rg "<fieldName>" src/v2/gen/` hitting both files, or diff the regenerated output.
 - **Permission rules: explicit beats wildcard only by position**: evaluation is LAST-wins over the merged ruleset, and one agent's frontmatter can come from multiple copies (`~/.wopal` home + space `.wopal`) deep-merged in load order. Frontmatter must not declare `"*": allow`-style wildcards (engine defaults already provide the wildcard fallback); only explicit narrowings. After changing permission frontmatter, verify on the live instance via `GET /agent` that the explicit rule sits after any wildcard in the merged list (see permission merge section in [ellamaka design](./docs/DESIGN.md)).
@@ -103,8 +107,8 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 ### CLI / Desktop Release Contract
 
 - The release build entry (`packages/ellamaka-release/src/cli/build.ts`) is the only bundling point for published CLI binaries. Ellamaka startup, update, build and release must not require a Wopal CLI version floor or its release order. Compiled CLI/sidecar smoke tests must pass without Wopal, `MIN_WOPAL_CLI_VERSION` or source-tree min-version metadata.
-- Ellamaka CLI and Desktop may update independently, but when both are installed the current product policy requires the same `major.minor` before either local entry activates DSH. A post-update mismatch is repairable disk state, never a valid DSH runtime state.
-- A breaking DSH closure upgrade requires at least an Ellamaka minor bump as release discipline. Runtime Home safety still keys only on the actual closure fingerprint; product SemVer never substitutes for closure identity.
+- Ellamaka CLI and Desktop update independently. Installed peer versions never gate DSH startup. Each local entry uses its embedded `closureGeneration + closureFingerprint` in the Home generation protocol. `closureGeneration` is one monotonic, version-controlled Ellamaka source value: unchanged fingerprint means unchanged generation; changed fingerprint requires a higher generation.
+- A closure change that materially affects DSH persistence requires at least an Ellamaka minor bump as release discipline. Runtime Home safety uses the actual `closureGeneration + closureFingerprint`; product SemVer never substitutes for closure identity.
 
 ### Desktop Release Contract
 
@@ -134,20 +138,19 @@ Workbench frontend development rules (state ownership, identity scope, dependenc
 - **Plugins install once, activate per profile**: installation is a process-level action (install, upgrade, uninstall happen once for the whole host); activation is declared per container through the profile bundle list. Never run two versions of the same package in one process.
 - **Tool container never creates a session**: tool calls go through the dedicated `ellamaka-tools` profile. The container creates and holds no dsh session, and the adapter passes only the minimal per-call context the tools consume. The web profile stays complete and is never reused as a tool backend. User patch content is preserved. Host capability guards separately enforce the session-free profile and available backends across every composition replay.
 - **`ELLAMAKA_DSH` is the only enable switch**: it defaults to on. serve, web, TUI, and the Desktop sidecar all disable through `ELLAMAKA_DSH=0`. Never introduce a second enable branch.
-- **DSH territory is `$WOPAL_HOME/dsh` only**: `$WOPAL_HOME/dsh/home` is the one fixed Active DSH Home. Closures are immutable and versioned by fingerprint; when the fingerprint changes, Core must complete a Home backup before the new closure gets write access. Ellamaka does not infer Home format, run generic migrations, or use backups as `DSH_HOME`; native migration belongs to DSH. `ELLAMAKA_DSH=0` skips all DSH prepare/activate work. `~/.dsh` belongs to the official dsh CLI — never create, modify, or delete anything inside it.
+- **DSH territory is `$WOPAL_HOME/dsh` only**: `$WOPAL_HOME/dsh/home` is the one Active Home. Every process using Home holds its generation kernel shared lease for the full lifetime; a generation switch requires the current generation exclusive lease and a completed backup. Generation lock files are never deleted or renamed; the OS releases locks on process death and no PID/heartbeat cleanup is used. Windows lock handles deny delete sharing. If Home exists without generation state, startup checks known Ellamaka/Desktop processes before writing Home; if any are running, only DSH degrades and the user is told to quit them and retry. No process scan is needed after state is established. Ellamaka does not infer DSH private data formats or use backups as runtime Home. `ELLAMAKA_DSH=0` skips all DSH work. `~/.dsh` belongs to the official dsh CLI.
+- **Same-generation multi-instance policy**: multiple DSH-enabled Ellamaka instances may use the fixed Home concurrently. Do not add an Ellamaka-wide writer lock, single-owner profile host, or proxy for upstream plugin/backend-specific limits. Ellamaka-owned profile seed/root files are written only during generation initialization/switch or an explicit safe repair window; normal same-generation mount validates but does not rewrite them, and all such host writes are idempotent and atomic.
 - **Multi-profile isolation**: the core containers (web and `ellamaka-tools`) stay in one process. Experimental third-party profiles run in separate processes with their own DSH_HOME. They never enter the main web container and never share the main engine's home or profiles — a running engine's `profiles/` directory is engine territory. Closures are read-only and may be shared; home must be isolated.
 - **Shell single-port invariant**: the renderer loads UI from exactly one http origin (the server port). The shell carries no engine logic and opens no second listening port. The engine has one artifact form — the full CLI binary; never maintain a second forked engine build. `/dsh` stays a prefix mount rather than a root, and `/` is the device-negotiation front door (mobile UA → `/dsh/`, desktop UA → `/workbench`).
 
-### User-visible Startup Progress
+### User-visible Initialization and Startup Progress
 
-- **Never leave users staring at a silent startup**: `ellamaka`, `ellamaka run`, `serve/web`, and Desktop must expose Core Preparation / activation progress whenever work is not effectively instant.
-- Use one shared structured progress protocol. At minimum report the current phase, elapsed time, completion/skip/failure, and a stable error code on failure. Long phases emit a heartbeat at least every 5 seconds.
-- Keep messages short and necessary: say what is happening, not implementation narration. Good: `Preparing DSH runtime…`, `Backing up DSH Home…`, `Validating profiles…`, `Ready (8.2s)`. Avoid paragraph-length status text and repetitive logs.
-- Do not invent percentages. Show counts/bytes only when real totals exist; otherwise use phase + spinner + elapsed time. DSH-native migration may be opaque; do not fake migration progress.
-- `ELLAMAKA_DSH=0` reports one concise `DSH disabled; skipped` event and performs zero DSH file/network/mount work.
-- Progress is a user-facing channel, not debug logging. `ellamaka run` writes startup progress to stderr so model/JSON stdout stays clean; non-TTY/CI emits line-based events, while TTY/Desktop may render a compact spinner/status row.
-- File logs may record important lifecycle results separately, but users must not need DEBUG/TRACE logs to know whether startup is still working or has failed.
-- Detailed phase/event semantics live in `docs/DESIGN-dsh-base.md#core-preparation-progress-contract`; this section is the mandatory implementation rule.
+- GUI Onboarding and Terminal Setup own Core Preparation progress; closure download, Home backup, profiles, and dependency preparation must stay visible.
+- `ellamaka serve/web` and Desktop sidecar expose Bootstrap health/Onboarding first, before any explicit initialization work.
+- Normal activation reports only work it actually performs; `ellamaka run` is currently outside the DSH Core Setup flow.
+- Structured progress reports phase, elapsed time, completion/skip/failure, and stable error codes. Show counts or percentages only when a real total exists; long phases emit heartbeat.
+- `ELLAMAKA_DSH=0` reports one skipped event and performs zero DSH file/network/mount work.
+- Progress is a user channel, not debug logging.
 
 ### Logging Rules
 
