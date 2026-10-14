@@ -8,6 +8,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 ## Canonical References
 
 - Project DESIGN: `../../docs/DESIGN.md`
+- Core Readiness contract: `../../docs/DESIGN.md#core-readiness-and-preparation`
 - Parent Rules: `../../AGENTS.md`
 - Test Rules: `test/AGENTS.md`
 - Server Test Rules: `test/server/AGENTS.md`
@@ -20,32 +21,32 @@ Execution chain: CLI entry → config/runtime services → server/session/tool/s
 
 This is ellamaka's main engine package. It carries the OpenCode inherited runtime and plugs into WopalSpace config, plugin, agent, command, permission, and TUI hooks; customization boundaries follow the parent `../../AGENTS.md`.
 
-| Directory | Responsibility |
-|---|---|
-| `src/cli/` | CLI commands, TUI command entry, and command-specific runtime glue |
-| `src/config/` | Config schema, loading, merge, command/agent/plugin config, and wopal-space config hooks |
-| `src/server/` | Effect HttpApi server, routes, middleware, and adapters |
-| `src/session/` | Session lifecycle, messages, events, retry/status session domain logic |
-| `src/tool/` | Tool definitions, permission-facing tool behavior, and runtime execution surfaces |
-| `src/storage/` | Database access, storage adapters, and persisted runtime data |
-| `src/effect/` | Shared Effect runtime helpers, InstanceState, and service runtime utilities |
-| `src/permission/` | Permission matching, merge, and tool authorization behavior |
-| `src/plugin/` | Plugin loading, plugin origin handling, and plugin runtime integration |
-| `test/` | Package-local tests and fixtures; detailed rules in `test/AGENTS.md` |
-| `migration/` | Drizzle migration output |
+| Directory               | Responsibility                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `src/cli/`              | CLI commands, TUI command entry, and command-specific runtime glue                                                          |
+| `src/config/`           | Config schema, loading, merge, command/agent/plugin config, and wopal-space config hooks                                    |
+| `src/server/`           | Effect HttpApi server, routes, middleware, and adapters                                                                     |
+| `src/session/`          | Session lifecycle, messages, events, retry/status session domain logic                                                      |
+| `src/tool/`             | Tool definitions, permission-facing tool behavior, and runtime execution surfaces                                           |
+| `src/storage/`          | Database access, storage adapters, and persisted runtime data                                                               |
+| `src/effect/`           | Shared Effect runtime helpers, InstanceState, and service runtime utilities                                                 |
+| `src/permission/`       | Permission matching, merge, and tool authorization behavior                                                                 |
+| `src/plugin/`           | Plugin loading, plugin origin handling, and plugin runtime integration                                                      |
+| `test/`                 | Package-local tests and fixtures; detailed rules in `test/AGENTS.md`                                                        |
+| `migration/`            | Drizzle migration output                                                                                                    |
 
 ## Development Commands (build format test)
 
-| Scenario | Command | When |
-|---|---|---|
-| Dev | `bun run dev` | Local package dev entry |
-| Typecheck | `bun typecheck` | After TypeScript changes; never run `tsc` directly |
-| Test (default subset) | `bun run test:unit` | After behavior changes (fast unit subset, ~25s) |
-| Test (heavy integration) | `bun run test:integration` | After behavior changes in integration-dir code (dir list in Testing below; `INTEGRATION_DIRS` is the source of truth) |
-| Test (e2e) | `bun run test:e2e` | After changes to real provider-chain / browser e2e tests |
-| Test (full regression) | `bun run test:all` | Full regression (equivalent to `bun test --timeout 30000 --force-exit --max-concurrency=4`) |
-| Build | `bun run build` | After runtime, CLI, or package build changes |
-| Database migration | `bun run db generate --name <slug>` | After schema changes |
+| Scenario                 | Command                             | When                                                                                                                  |
+| ------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Dev                      | `bun run dev`                       | Local package dev entry                                                                                               |
+| Typecheck                | `bun typecheck`                     | After TypeScript changes; never run `tsc` directly                                                                    |
+| Test (default subset)    | `bun run test:unit`                 | After behavior changes (fast unit subset, ~25s)                                                                       |
+| Test (heavy integration) | `bun run test:integration`          | After behavior changes in integration-dir code (dir list in Testing below; `INTEGRATION_DIRS` is the source of truth) |
+| Test (e2e)               | `bun run test:e2e`                  | After changes to real provider-chain / browser e2e tests                                                              |
+| Test (full regression)   | `bun run test:all`                  | Full regression (equivalent to `bun test --timeout 30000 --force-exit --max-concurrency=4`)                           |
+| Build                    | `bun run build`                     | After runtime, CLI, or package build changes                                                                          |
+| Database migration       | `bun run db generate --name <slug>` | After schema changes                                                                                                  |
 
 All commands run from `packages/opencode`.
 
@@ -56,7 +57,7 @@ All commands run from `packages/opencode`.
 - For `index.ts` single-file modules, self-reexport with `"."`, not `"./index"`.
 - In `src/config`, follow the existing self-export pattern when adding new modules: `export * as ConfigAgent from "./agent"`.
 - Drizzle schemas live in `src/**/*.sql.ts`.
-- Drizzle tables and columns use snake_case; join columns use `<entity>_id`; indexes use `<table>_<column>_idx`.
+- Drizzle tables and columns use snake*case; join columns use `<entity>_id`; indexes use `<table>*<column>\_idx`.
 - Migrations are generated by Drizzle Kit to `migration/<timestamp>_<slug>/migration.sql` and `snapshot.json`.
 - Migration tests read per-folder layout; do not depend on `_journal.json`.
 - Use `Effect.gen(function* () { ... })` for Effect composition.
