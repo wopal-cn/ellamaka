@@ -1,69 +1,70 @@
 ---
-name: ellamaka-cordis 规则
-description: DSH 融合桥接包 — cordis 容器边界、运行时闭包物化、插件供应链与双 profile 装配
+name: ellamaka-cordis rules
+description: ellamaka-cordis 长期有效的 DSH 桥接、运行时闭包、profile 与验证规则
 ---
 
-# Agent 开发规则
+# Agent Development Rules
 
-## 规范引用
+## Canonical References
 
-- 上级规则: `../../AGENTS.md`
-- 融合基础: `../../docs/DESIGN-dsh-base.md`
-- 工具容器: `../../docs/DESIGN-ellamaka-tools.md`
-- Web profile: `../../docs/DESIGN-dsh-web.md`
-- 主设计: `../../docs/DESIGN.md`
+- [项目规范](../../AGENTS.md)
+- [DSH 基础设计](../../docs/DESIGN-dsh-base.md)
+- [DSH Web profile 设计](../../docs/DESIGN-dsh-web.md)
+- [Ellamaka tools profile 设计](../../docs/DESIGN-ellamaka-tools.md)
 
-## 架构与目录
+## Architecture and Directories
 
-本包是 ellamaka 与 dsh 运行时之间的桥接层，编译进 CLI 二进制与 Desktop sidecar。它同时承担三个职责：进程内 cordis 容器的唯一入口、dsh 运行时闭包的物化与动态加载、插件供应链。
+ellamaka-cordis 是随 Ellamaka CLI 和 Desktop 分发的产品 DSH Bridge。它拥有 DSH import 边界，并负责适配 DSH 与宿主 Server/Runtime。
 
-| 目录                           | 职责                                                                                                                   |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `src/hub.ts`                   | `CordisHub` — 仓库内唯一的 cordis 边界，持有 `Context` 生命周期                                                        |
-| `src/dsh-web.ts`               | 按 profile 重放 dsh boot 序列：`mountDshWeb` / `bootDshWeb`（web）、`mountDshTools` / `bootDshTools`（ellamaka-tools） |
-| `src/dsh-virtual-webserver.ts` | `VirtualWebServer` — 实现官方 WebServer 接口，持有路由与 upgrade 分发                                                  |
-| `src/runtime/`                 | Runtime Manager：运行时清单、内嵌锁、闭包物化、installAnchor 解析与状态机                                              |
-| `src/plugins/`                 | 插件供应链：profile 声明、解析器、安装器、组合装配、补丁层、HMR 适配器、市场安装工                                     |
-| `src/log-bridge.ts`            | `createCordisLogExporter` — 把插件 `ctx.logger` 桥接进 ellamaka `Log` 体系                                             |
-| `script/`                      | 构建期清单与锁生成器，带 `--check` 漂移门禁                                                                            |
-| `generated/`                   | 入仓库的构建产物：`dsh-runtime-manifest.json`、`dsh-runtime-lock.json`                                                 |
-| `test/`                        | 包级测试；`probe-*.ts` 是手动挂载探针，不是单元测试                                                                    |
+| 路径 | 职责 |
+|---|---|
+| src/hub.ts | Cordis context 边界和生命周期 |
+| src/dsh-web.ts | 装配 web 与 ellamaka-tools 两个 profile |
+| src/dsh-virtual-webserver.ts | 在 Ellamaka Server listener 上注册和分发 DSH 路由/upgrade |
+| src/runtime/ | 解析并物化产品运行时闭包 |
+| src/plugins/ | profile 声明、插件组合、安装和运行时更新 |
+| src/log-bridge.ts | 将 Cordis 插件日志接入 Ellamaka 日志系统 |
+| generated/、script/ | 运行时 manifest/lock 生成物及生成器 |
 
-## 开发命令
+请遵守这些归属事实：
 
-所有命令从 `packages/ellamaka-cordis/` 运行。
+- 所有 @deepseek-ai/cordis 运行时 import 都留在本包内。产品闭包提供运行时实例，不能用宿主上无关的副本替代。
+- web 是 DSH UI/Session profile；ellamaka-tools 是无 Session 的工具 profile。不得把 DSH Session/agent loop provider 搬入 Ellamaka native tools。
+- 监听 socket 归 Ellamaka Server。VirtualWebServer 注册并分发路由，不另起 listener。
+- package.json dependencies 是直接版本输入；不得手改 generated runtime manifest/lock，通过 script/ 下生成器更新并检查。
+- Profile/插件变更走包内串行更新路径。失败时报告实际 Runtime 状态，不假定旧 profile 仍在运行。
+- 触及 DSH Home 的测试和诊断必须注入临时 Home 与 install anchor。
 
-| 场景           | 命令                                                  |
-| -------------- | ----------------------------------------------------- |
-| 全量测试       | `bun test`                                            |
-| 单元测试       | `bun run test:unit`                                   |
-| 集成测试       | `bun run test:integration`                            |
-| 类型检查       | `bun run typecheck`                                   |
-| 重建运行时清单 | `bun script/generate-dsh-runtime-manifest.ts`         |
-| 重建运行时锁   | `bun script/generate-dsh-runtime-lock.ts`             |
-| 校验生成物漂移 | `bun script/generate-dsh-runtime-manifest.ts --check` |
+## Development Commands
 
-## 实现规则
+从 packages/ellamaka-cordis/ 运行。
 
-- **单一 cordis 边界**：`@deepseek-ai/cordis` 的 import 全部收敛在本包内。值导入在构建期擦除，运行时经 installAnchor 解析。生产挂载点一律注入闭包解析出的 context，`hub.ts` 中的包内回退只服务源码开发态。
-- **契约自持**：契约形状借鉴 dsh，但不在本包 import dsh 契约包，也不跟随其 rc 版本演进。外部插件通过契约符合性冒烟测试后才允许挂载。
-- **Bridge 不进闭包**：本包是 ellamaka 发布物的一部分，不发布为独立 registry 包，也不作为 `$WOPAL_HOME/dsh/package.json` 的依赖。
-- **生成物禁止手改**：`generated/` 下的清单与锁由 `script/` 生成，`package.json` 的 dependencies 是 dsh 直接依赖版本的唯一编辑源。升级流程是改版本、`bun install`、重新生成。
-- **测试隔离**：任何会触碰 `$WOPAL_HOME/dsh/home/profiles/` 的测试、转储与诊断，都通过注入 `dshHome` / `installAnchor` 跑在临时 home 上。
-- **不开监听 socket**：`VirtualWebServer` 只提供路由注册与 upgrade 分发，监听端口归 ellamaka 主服务器。
-- **桥接只做加法**：新增桥接以新文件或包装层落地，删除即完整回滚；不为了腾位置改动上游文件。
+| Scenario | Command | When |
+|---|---|---|
+| 全量测试 | bun test | 全部 Cordis 测试 |
+| 单元测试 | bun run test:unit | 纯逻辑/模块测试 |
+| 集成测试 | bun run test:integration | 真实 Cordis 装配 |
+| 类型检查 | bun run typecheck | 修改 TypeScript 后 |
+| 重建 manifest | bun script/generate-dsh-runtime-manifest.ts | 闭包输入变化后 |
+| 重建 lock | bun script/generate-dsh-runtime-lock.ts | 闭包输入变化后 |
+| 检查 manifest 漂移 | bun script/generate-dsh-runtime-manifest.ts --check | 交付前 |
 
-- **Profile 修改门禁**：启动、配置编辑、插件管理与文件监听共用完整补丁生成器和串行修改队列。reconcile 失败后先明确恢复运行状态，再返回失败结果。
-- **Home 版本导入**：保持源设置和用户配置单可恢复，以新 schema 验证原始配置，记录部分成功与拒绝字段且不含 secret 值。运行时信号不得序列化为持久 JSON 配置。
+## Implementation Rules
 
-## 测试
+- DSH Bridge 边界留在本包；只适配已证实的宿主差异，不复制上游子系统或预判私有 API。
+- Server 是 listener owner；显式注入选定的产品运行时和 profile。
+- 串行化持久 profile 修改；取消或关闭时回收本包拥有的 worker/子进程。
+- 使用 ctx.logger 输出稳定结构化消息；脱敏用户/配置/凭证值，并限制上游诊断长度。
+- 通过真实产品闭包验证运行时解析和包宿主行为，仅源码解析测试不足以证明制品路径。
+- Bridge 保持 additive：新桥以新文件或 wrapper 引入，删除即完整回滚；不为容纳新桥而重构 upstream 文件。
+- Bridge 不进 closure：只随 Ellamaka 产品发布，不作为独立 registry 包、也不声明为 `$WOPAL_HOME/dsh` 的依赖。
 
-- 代码变更遵循 TDD：先写失败测试，再实现使其通过。
-- 必须自动化覆盖：闭包物化状态机、清单与锁的生成与漂移校验、插件解析与安装、profile 声明读写、补丁层组合、VirtualWebServer 路由分发。
-- 集成测试覆盖需要真实 cordis 容器装配的路径（`plugins-runtime.test.ts`、`dsh-web.test.ts`），它们单独归入 `test:integration`，不进默认单元集合。
-- 跨包行为由 opencode 侧测试承接：`packages/opencode/test/cli/serve/dsh-mount.test.ts`、`packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts`、`packages/opencode/test/server/dsh-single-port.test.ts` 及 `test/cli/cmd/dsh-*.test.ts` 一组。本包改动后这些测试必须保持通过。
-- 真实宿主边界（打包二进制中的 installAnchor 解析、Desktop utilityProcess 挂载）依赖手动冒烟，通过 `test/probe-*.ts` 在真实闭包上验证。
+## Testing
 
-## 用户规则
+- 对本次改动涉及的 metadata、installer、profile 或 container 边界遵循 TDD。
+- 纯 contract tests 保持确定性；真实 container/host 集成放入 integration suite。
+- 通过真实宿主路径检查打包闭包解析和 Electron utility-process 行为，源码测试不能证明这些边界。
+
+## User-Supplied Rules
 
 （无）

@@ -1,89 +1,66 @@
 ---
-name: ellamaka-desktop
-description: Ellamaka Electron 桌面应用 — 基于 OpenCode packages/desktop 的 v1.15.13 基线
+name: ellamaka-desktop rules
+description: Ellamaka Desktop 长期有效的 Electron 壳层、IPC、sidecar 归属与验证规则
 ---
 
-# Agent 开发规则
+# Agent Development Rules
 
-## 上游基线
+## Canonical References
 
-- **来源**：OpenCode `packages/desktop`，提交 `385cb694419f98103af0e8fc6187ddcbcbb6eecb`（v1.15.13）
-- **Electron**：41.2.1
-- **同步策略**：仅选择性回移安全/生命周期修复。不进行跨版本整体升级。所有变更通过 `git diff` 对照基线跟踪。
+- [项目规范](../../AGENTS.md)
+- [Desktop 设计](../../docs/DESIGN-desktop.md)
+- 修改 renderer/壳层边界时同时参考 [App 规范](../ellamaka-app/AGENTS.md)。
 
-## 架构
+## Architecture and Directories
 
-```
-Electron Main Process
-├── Window Manager（BrowserWindow 生命周期）
-├── Sidecar Manager（packages/opencode node 运行时）
-└── IPC Handler Registry
-          │ IPC
-Electron Preload（最小化、可验证的桌面 API）
-          │
-ellamaka-app Renderer（SolidJS SPA）
-          │ HTTP / WebSocket
-Ellamaka sidecar（packages/opencode/build-node.ts）
-├── PTY Session Registry
-├── 断连宽限回收器（10 秒）
-└── PTY / TUI 进程
-```
+ellamaka-desktop 是共用 ellamaka-app renderer 的 Electron 宿主。Main 拥有原生应用/窗口和 sidecar 进程生命周期；Server sidecar 拥有 Runtime API 与 PTY 进程。
 
-### 状态所有权
+| 路径 | 职责 |
+|---|---|
+| src/main/ | 应用/窗口生命周期、sidecar 监管、IPC 注册、原生凭证和更新 |
+| src/preload/ | 暴露给 renderer 的最小 allowlisted API |
+| src/renderer/ | Desktop 入口、路由、平台 adapter 和共用 App 加载 |
+| packages/ellamaka-app/ | Browser/Desktop 共用 UI 和 renderer 持有的布局状态 |
+| packages/opencode/ | Server sidecar 实现、Session 与 PTY 资源归属 |
 
-| 状态 | 所有者 | 生命周期 |
-|-------|-------|-----------|
-| Panel 布局、PTY ID 提示 | `ellamaka-app` / `localStorage` | 跨刷新、跨应用启动 |
-| PTY Session、subscriber、Grace 计时器 | Ellamaka sidecar | 当前 sidecar 运行期 |
-| PTY/TUI 操作系统进程 | Ellamaka sidecar | 当前 sidecar 运行期 |
-| Sidecar 连接凭据 | Electron Main Process | 当前应用进程 |
+请遵守这些归属事实：
 
-### PTY 生命周期规则
+- Renderer 使用与 Browser 相同的认证 Server/SDK 接口；原生系统能力经类型化 preload bridge。
+- Sidecar 凭证由 Main 进程保管，不写入 renderer 状态、localStorage、URL、日志或崩溃数据。
+- Renderer 刷新/socket 断开、显式关闭 Panel/Space、应用退出是不同生命周期事件。普通断连允许重连；显式资源关闭由 Server 处理；应用退出时停止 sidecar 和其子进程。
+- Workbench 布局和 PTY 重连引用归共用 App。PTY ID 只是提示，sidecar 才是进程事实来源。
+- OpenCode upstream 只作选择性修复参考；Ellamaka release identity 和打包宿主行为必须从 Ellamaka 制品验证。
+- 品牌/身份常量：productName `Ellamaka`；bundle id dev `ai.ellamaka.desktop.dev` / prod `ai.ellamaka.desktop`；protocol `ellamaka://`；settings store `ellamaka.settings`；service name `ellamaka server`。
+- upstream 基线：Electron 壳层以 OpenCode `packages/desktop`（v1.15.13 基线）为选择性 backport 参考，只回移安全/生命周期修复，不做整版本升级；改动以对基线的 git diff 追踪。
 
-- 最后一个 WebSocket subscriber 断开 → 10 秒 Grace → 自动终止
-- Grace 内重连 → 取消计时器，复用原 PTY
-- 显式 Panel/Space 关闭 → 立即终止（不等待 Grace）
-- 应用退出 → Main Process 停止 sidecar → sidecar finalizer 终止全部 PTY 及子进程
-- Renderer 崩溃 → sidecar 保持 PTY 在 Grace 期间存活；Renderer 可重连
+## Development Commands
 
-## 开发命令
+从 packages/ellamaka-desktop/ 运行。
 
-所有命令从 `packages/ellamaka-desktop/` 运行。
+| Scenario | Command | When |
+|---|---|---|
+| 测试 | bun test --preload ./electron-mock.ts --force-exit src | Main/preload/renderer 逻辑 |
+| 类型检查 | bun run typecheck | 修改 TypeScript 后 |
+| 构建 | bun run build | 修改 Desktop 后 |
+| macOS 开发包 | bun run package:mac | 检查打包和资源路径 |
+| 联调帮助 | ./scripts/dev.sh help | 跨包 GUI 验证 |
 
-| 命令 | 用途 |
-|---------|---------|
-| `bun test --preload ./electron-mock.ts --force-exit src` | 运行测试（需 electron mock） |
-| `bun run typecheck` | TypeScript 类型检查（`tsgo -b`） |
-| `bun run build` | Vite + electron-vite 构建 → `out/` |
-| `bun run package:mac` | macOS 未签名开发版 DMG/ZIP → `dist/` |
+修改 sidecar 代码后，Desktop 构建前先运行 bun script/build-node.ts 构建 opencode sidecar。
 
-构建前置步骤：
-```bash
-# 先构建 sidecar
-cd ../opencode && bun script/build-node.ts
-# 构建桌面应用
-cd ../ellamaka-desktop && bun run build
-```
+## Implementation Rules
 
-## 品牌
+- 校验 IPC 输入并保持 preload 方法 allowlisted。Renderer 不得取得任意 Node、filesystem 或 process 权限。
+- 区分进程退出、传输断开和 renderer 重载；普通 UI cleanup 不销毁后端资源。
+- 应用退出前等待 sidecar 和子进程清理完成；生命周期操作应幂等。
+- 凭证留在可信进程边界内，不进入日志或 renderer 持久状态。
+- 在构建应用中检查资源路径和更新 metadata；开发态路径不足以证明打包正确。
 
-- 应用名称：Ellamaka（productName）
-- Bundle ID：`ai.ellamaka.desktop.dev`（开发）、`ai.ellamaka.desktop`（生产）
-- 协议：`ellamaka://`
-- 设置存储：`ellamaka.settings`
-- 认证：Basic auth `ellamaka:<password>`
-- 服务名称：`ellamaka server`
+## Testing
 
-## 关键文件
+- 生命周期单元测试使用 Electron mock 并遵循 TDD。
+- 在目标操作系统验证平台生命周期和打包；其他系统构建不能替代目标系统退出/安装验证。
+- GUI/native 行为使用真实 CDP 或平台运行验证，不能由单元测试观察的结果单独报告。
 
-| 文件 | 角色 |
-|------|------|
-| `src/main/index.ts` | Main Process 入口 — 应用生命周期、窗口创建、sidecar 编排 |
-| `src/main/sidecar.ts` | Sidecar worker 线程 — 服务监听/停止 |
-| `src/main/server.ts` | Sidecar 启动、健康检查、环境配置 |
-| `src/main/ipc.ts` | IPC handler 注册 |
-| `src/main/constants.ts` | Channel、store key 常量 |
-| `src/preload/index.ts` | Context bridge — ElectronAPI → `window.api` |
-| `src/renderer/index.tsx` | Renderer 入口 — 平台设置、路由、sidecar 连接 |
-| `electron-builder.config.ts` | 打包配置（未签名 macOS 开发构建） |
-| `electron.vite.config.ts` | Vite 配置（main/preload/renderer 构建） |
+## User-Supplied Rules
+
+（无）
