@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Draft
-> **Updated**: 2026-10-12
+> **Updated**: 2026-10-13
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -17,7 +17,7 @@
 
 > **Deferred**：本文整体仍是 Phase 3 Draft。当前 SDK / Runtime Foundation 实施不得新增 Config Plane、统一 DSH 配置投影或新的 config mutation API；现有读面只按当前已经批准的契约维护。
 
-Phase 3 计划把本机 trusted 配置服务放在 `@wopal/wopalspace-sdk/config`，把 Ellamaka HTTP/SDK config surface 作为该服务与 runtime effective state 的远程投影。`@wopal/ellamaka-sdk` 中出现 `config` 不表示存在第二套配置服务：local domain service 与 remote transport 是两个运行边界。
+Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wopalspace` 的 `config` module，并通过统一公开 `@wopal/ellamaka-sdk` 提供消费面：Wopal CLI 使用 `/local` 的 `config.*` methods，Browser/Workbench 使用 `/http`。Config Plane 的业务 owner 仍是 private `@wopal/wopalspace/config`，SDK package 统一不代表领域 owner 合并。
 
 本文研究引擎侧四件事：
 
@@ -127,7 +127,8 @@ HttpApiEndpoint.get("configGet", "/config-v2", {
   success: described(ConfigV2TreeResponse, "Effective configuration with per-item source"),
 })
 
-// 写——HTTP handler 调用同一个 local Config Plane；CLI 则通过 @wopal/wopalspace-sdk/config 消费
+// 写——Server HTTP handler 直接调用 private @wopal/wopalspace Config Plane；
+// Wopal CLI 通过 @wopal/ellamaka-sdk/local 的 client.config.* 消费同一 implementation
 // payload 指定目标（global / space）+ 键值；目标是空间公共层（settings.jsonc）时返回只读错误码
 HttpApiEndpoint.patch("configUpdate", "/config-v2", {
   query: WorkspaceRoutingQuery,
@@ -172,12 +173,20 @@ HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
 - `sources` 是叶键级的点路径 → 来源层标注，值 ∈ `global` / `space` / `space-local`；缺省值不占键，数组类键按整键标注。面板的"继承自全局 / 本地覆写 / 恢复继承"标签以此渲染。
 - 分工：`/config` 维持运行时视图且不扩展；`/config-v2` 是配置的编辑视图，面板与后续配置功能统一消费它。权限选择器读 `effective.wopal.pluginConfig["dsh-adapter"].sandbox` 判断显示与默认模式，内部 adapter 的可用性由产品注册与真实 DSH ready 决定，不依赖外部装配路径。
 
-写入链路使用同一业务实现：
+写入链路使用同一 private 业务实现：
 
 ```text
-Workbench → HTTP handler → WopalSpace Config Plane → 校验与 canonical mutation
-Wopal CLI → `@wopal/wopalspace-sdk/config` → 同一 local Config Plane
+Workbench
+  → @wopal/ellamaka-sdk/http
+  → Server HTTP handler
+  → private @wopal/wopalspace Config Plane
+
+Wopal CLI
+  → @wopal/ellamaka-sdk/local client.config.*
+  → SDK tarball 内组装的同源 WopalSpace Config Plane
 ```
+
+这里的 `config` 是 client domain method，不为 Config domain 新增独立 npm subpath。
 
 ### Config Plane Consumption — Phase 3 Draft
 
@@ -239,8 +248,8 @@ Wopal CLI → `@wopal/wopalspace-sdk/config` → 同一 local Config Plane
 
 ## Reference Documents
 
-| Document                                  | Purpose                                            |
-| ----------------------------------------- | -------------------------------------------------- |
-| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）         |
-| `./DESIGN-ellamaka-sdk.md`                | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律 |
-| `./DESIGN-wopalspace-sdk.md`              | Phase 3 将扩展的 trusted-local operation contract  |
+| Document                                  | Purpose                                                    |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）                 |
+| `./DESIGN-ellamaka-sdk.md`                | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律         |
+| `./DESIGN-ellamaka-sdk.md`                | Phase 3 将扩展的统一 Runtime/WopalSpace public contract |
