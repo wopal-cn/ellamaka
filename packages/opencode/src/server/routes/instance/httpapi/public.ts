@@ -256,8 +256,8 @@ function normalizeComponentNames(spec: OpenApiSpec) {
 function componentTypeName(name: string) {
   if (!name.includes(".")) return name
   return name
-    .split(".")
-    .filter((part) => !/^\d+$/.test(part))
+    .split(/[.-]/)
+    .filter((part) => part && !/^\d+$/.test(part))
     .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
     .join("")
 }

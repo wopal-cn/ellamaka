@@ -615,6 +615,15 @@
         "vite-plugin-solid": "catalog:",
       },
     },
+    "packages/wopalspace": {
+      "name": "@wopal/wopalspace",
+      "version": "2.0.9",
+      "devDependencies": {
+        "@tsconfig/bun": "catalog:",
+        "@types/bun": "catalog:",
+        "@typescript/native-preview": "catalog:",
+      },
+    },
   },
   "trustedDependencies": [
     "electron",
@@ -2757,6 +2766,8 @@
     "@wopal/llm": ["@wopal/llm@workspace:packages/llm"],
 
     "@wopal/ui": ["@wopal/ui@workspace:packages/ui"],
+
+    "@wopal/wopalspace": ["@wopal/wopalspace@workspace:packages/wopalspace"],
 
     "@xmldom/xmldom": ["@xmldom/xmldom@0.8.13", "https://registry.npmmirror.com/@xmldom/xmldom/-/xmldom-0.8.13.tgz", {}, "sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw=="],
 

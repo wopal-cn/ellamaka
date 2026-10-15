@@ -121,9 +121,12 @@ const cli = yargs(args)
     }
 
     const command = typeof opts._?.[0] === "string" ? opts._[0] : ""
-    // Native plugin-management children consume stdout as machine data and
-    // only operate on their scoped profile; they do not initialize the engine.
-    if (command === "dsh") return
+    // Contract generation and native plugin-management children are pure/tooling
+    // paths. They do not initialize the runtime Home.
+    if (command === "generate" || command === "dsh") return
+
+    await Global.ensure()
+
     const role: "serve" | "tui" = SERVER_COMMANDS.has(command) ? "serve" : "tui"
     const detection = detectWopalSpace(process.cwd())
     // The logger routes by role and space itself (`WOPAL_SPACE_ROOT` below) —
@@ -292,12 +295,12 @@ const cli = yargs(args)
       // flag) errors pointing at `ellamaka serve` (Out of Scope here).
       const invocation = dshDumpResolve(
         {
-          profile: argv.profile as string | undefined,
-          patch: argv.patch as string[] | undefined,
+          profile: argv.profile,
+          patch: argv.patch,
           "dump-config": argv["dump-config"] === true,
           "dump-default-config": argv["dump-default-config"] === true,
         },
-        (argv.args ?? []) as string[],
+        argv.args ?? [],
       )
       await Effect.runPromise(
         runDshDump({
