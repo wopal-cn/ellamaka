@@ -81,13 +81,13 @@ See `AGENTS.md` for details.
 
 ## Learn More
 
-| Doc                             | Contents                                     |
-| ------------------------------- | -------------------------------------------- |
-| `docs/DESIGN.md`                | Architecture design & WopalSpace adaptation  |
-| `docs/DESIGN-distribution.md`   | Release process & artifact specs             |
-| `docs/DESIGN-workbench.md`      | Workbench design                             |
-| `docs/DESIGN-ellamaka-sdk.md`   | Runtime HTTP/OpenAPI and remote SDK contract |
-| `docs/DESIGN-wopalspace-sdk.md` | Trusted-local application SDK contract       |
+| Doc                             | Contents                                                   |
+| ------------------------------- | ---------------------------------------------------------- |
+| `docs/DESIGN.md`                | Architecture design & WopalSpace adaptation                |
+| `docs/DESIGN-distribution.md`   | Release process & artifact specs                           |
+| `docs/DESIGN-workbench.md`      | Workbench design                                           |
+| `docs/DESIGN-ellamaka-sdk.md`   | Runtime HTTP/OpenAPI and remote SDK contract               |
+| `docs/DESIGN-wopalspace-sdk.md` | WopalSpace application SDK: local + filtered HTTP contract |
 
 ## License
 

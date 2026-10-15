@@ -80,13 +80,13 @@ ellamaka
 
 ## 了解更多
 
-| 文档                            | 内容                                 |
-| ------------------------------- | ------------------------------------ |
-| `docs/DESIGN.md`                | 架构设计与 WopalSpace 适配           |
-| `docs/DESIGN-distribution.md`   | 发布流程与产物规格                   |
-| `docs/DESIGN-workbench.md`      | Workbench 工作台设计                 |
-| `docs/DESIGN-ellamaka-sdk.md`   | Runtime HTTP/OpenAPI 与远程 SDK 契约 |
-| `docs/DESIGN-wopalspace-sdk.md` | trusted-local application SDK 契约   |
+| 文档                            | 内容                                               |
+| ------------------------------- | -------------------------------------------------- |
+| `docs/DESIGN.md`                | 架构设计与 WopalSpace 适配                         |
+| `docs/DESIGN-distribution.md`   | 发布流程与产物规格                                 |
+| `docs/DESIGN-workbench.md`      | Workbench 工作台设计                               |
+| `docs/DESIGN-ellamaka-sdk.md`   | Runtime HTTP/OpenAPI 与远程 SDK 契约               |
+| `docs/DESIGN-wopalspace-sdk.md` | WopalSpace application SDK：local + 筛选 HTTP 契约 |
 
 ## 许可证
 
