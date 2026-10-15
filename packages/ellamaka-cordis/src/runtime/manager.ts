@@ -9,7 +9,7 @@ import {
   resolveDshLayout,
   type DshRuntimeStatus,
 } from "./status.js"
-import { acquireMaterializeLock, releaseMaterializeLock, type LockToken } from "./lock.js"
+import { acquireMaterializeLock, releaseMaterializeLock } from "./lock.js"
 import { checkClosureIntegrity, materializeClosure, validateClosureOnDisk, type ExtractLike } from "./materializer.js"
 import { createDshLogger, type DshLoggerOptions, type LogBridge } from "./log.js"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest.js"
@@ -18,6 +18,7 @@ import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest.js"
 // in one place: the default manifest, the install-anchor resolver, and the
 // runtime registry selector (Task 4 / §3.4.3).
 export { DEFAULT_DSH_RUNTIME_MANIFEST }
+export { DSH_CLOSURE_VERSION } from "./closure-version.js"
 export { resolveInstallAnchor } from "./status.js"
 export { pickFastestRegistry, CANDIDATE_REGISTRIES, DEFAULT_REGISTRY } from "./registry.js"
 export type { RegistryCandidate, RegistryProbeResult } from "./registry.js"
@@ -295,13 +296,12 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
  * itself wrapped in a degrade boundary.
  */
 function defaultLoaderCheck(installAnchor: string): void {
-  const raw = JSON.parse(readFileSync(installAnchor, "utf8")) as {
-    main?: unknown
-    module?: unknown
-    exports?: unknown
-    bin?: unknown
-  }
-  if (!raw.main && !raw.module && !raw.exports && !raw.bin) {
+  const raw: unknown = JSON.parse(readFileSync(installAnchor, "utf8"))
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    (!("main" in raw) && !("module" in raw) && !("exports" in raw) && !("bin" in raw))
+  ) {
     throw new Error("dsh runtime: @deepseek-ai/dsh has no resolvable entry point")
   }
 }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { DSH_CLOSURE_VERSION } from "./closure-version.js"
 
 // ---------------------------------------------------------------------------
 // Runtime manifest types & pure helpers for the DSH production materialisation
@@ -14,6 +15,7 @@ import { createHash } from "node:crypto"
 
 export interface DshRuntimeManifestV1 {
   schema: "ellamaka.dsh-runtime/v1"
+  closureVersion: number
   bridgeAbi: number
   dependencies: Record<string, string>
   fingerprint?: string
@@ -44,7 +46,7 @@ export function canonicalSerialize(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map((v) => canonicalSerialize(v)).join(",")}]`
   }
-  const entries = Object.entries(value as Record<string, unknown>)
+  const entries = Object.entries(value)
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalSerialize(v)}`).join(",")}}`
@@ -96,6 +98,9 @@ function assertManifestShape(raw: unknown): asserts raw is DshRuntimeManifestV1 
   if (m.schema !== DSH_RUNTIME_SCHEMA) {
     throw new Error(`dsh runtime manifest: unsupported schema "${String(m.schema)}" (expected "${DSH_RUNTIME_SCHEMA}")`)
   }
+  if (!Number.isInteger(m.closureVersion) || (m.closureVersion ?? 0) <= 0) {
+    throw new Error("dsh runtime manifest: `closureVersion` must be a positive integer")
+  }
   if (typeof m.bridgeAbi !== "number") {
     throw new Error("dsh runtime manifest: missing required numeric field `bridgeAbi`")
   }
@@ -123,8 +128,9 @@ export function parseDshRuntimeManifest(raw: string): DshRuntimeManifestV1 {
 /**
  * Build a complete runtime manifest from the package's DSH dependencies.
  * Deterministic for identical inputs: the emitted JSON and the fingerprint are
- * derived purely from the exact dependency versions (no lock file involved —
- * the closure lock is produced at runtime by npm during materialisation).
+ * derived purely from closureVersion and the exact direct dependency versions.
+ * The fixed transitive lock is generated separately and bound to the resulting
+ * manifest fingerprint.
  */
 export function buildDshRuntimeManifest(pkg: DshDependencies): DshRuntimeManifestV1 {
   const dependencies: Record<string, string> = {}
@@ -136,6 +142,7 @@ export function buildDshRuntimeManifest(pkg: DshDependencies): DshRuntimeManifes
 
   const manifest: DshRuntimeManifestV1 = {
     schema: DSH_RUNTIME_SCHEMA,
+    closureVersion: DSH_CLOSURE_VERSION,
     bridgeAbi: DSH_RUNTIME_ABI,
     dependencies,
   }

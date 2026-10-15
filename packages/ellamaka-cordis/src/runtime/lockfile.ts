@@ -70,7 +70,24 @@ function assertLockShape(raw: unknown): DshRuntimeLockV1 {
       throw new Error(`dsh runtime lock: malformed packages entry "${path}" — \`optional\` must be a boolean`)
     }
   }
-  return lock as DshRuntimeLockV1
+  return {
+    schema: DSH_RUNTIME_LOCK_SCHEMA,
+    manifestFingerprint: lock.manifestFingerprint,
+    packages: lock.packages,
+  }
+}
+
+/**
+ * Whether an already-committed package table still matches the manifest's
+ * exact direct dependency pins. The manifest fingerprint may differ because
+ * closureVersion or other product-owned closure metadata changed; in that
+ * case the fixed transitive package table is deliberately reusable and only
+ * the generation binding needs to be updated.
+ */
+export function lockPackagesMatchManifest(lock: DshRuntimeLockV1, manifest: DshRuntimeManifestV1): boolean {
+  return Object.entries(manifest.dependencies).every(([name, pinned]) => {
+    return lock.packages[`node_modules/${name}`]?.version === pinned
+  })
 }
 
 /**

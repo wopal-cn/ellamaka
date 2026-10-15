@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import { DSH_CLOSURE_VERSION } from "./closure-version"
+import { DEFAULT_DSH_RUNTIME_LOCK } from "./embed-lock"
+import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest"
 import { computeManifestFingerprint, type DshRuntimeManifestV1 } from "./manifest"
-import {
-  parseDshRuntimeLock,
-  validateEmbeddedLock,
-  type DshRuntimeLockEntryV1,
-  type DshRuntimeLockV1,
-} from "./lockfile"
-
-const dirs: string[] = []
+import { lockPackagesMatchManifest, parseDshRuntimeLock, validateEmbeddedLock, type DshRuntimeLockV1 } from "./lockfile"
 
 const MANIFEST: DshRuntimeManifestV1 = {
   schema: "ellamaka.dsh-runtime/v1",
@@ -46,12 +42,10 @@ describe("parseDshRuntimeLock", () => {
 
   test("rejects malformed JSON, wrong schema, or missing fields", () => {
     expect(() => parseDshRuntimeLock("not json")).toThrow()
-    expect(() =>
-      parseDshRuntimeLock(JSON.stringify({ schema: "other/v1", packages: {} })),
-    ).toThrow(/schema/i)
-    expect(() =>
-      parseDshRuntimeLock(JSON.stringify({ schema: "ellamaka.dsh-runtime-lock/v1" })),
-    ).toThrow(/packages|fingerprint/i)
+    expect(() => parseDshRuntimeLock(JSON.stringify({ schema: "other/v1", packages: {} }))).toThrow(/schema/i)
+    expect(() => parseDshRuntimeLock(JSON.stringify({ schema: "ellamaka.dsh-runtime-lock/v1" }))).toThrow(
+      /packages|fingerprint/i,
+    )
   })
 
   test("accepts and preserves the optional flag on entries", () => {
@@ -73,7 +67,41 @@ describe("parseDshRuntimeLock", () => {
   })
 })
 
+describe("lockPackagesMatchManifest", () => {
+  test("allows fingerprint rebinding when direct dependency pins are unchanged", () => {
+    const lock = lockWith(
+      {
+        "node_modules/@deepseek-ai/dsh": { version: "0.1.1-rc.2" },
+        "node_modules/@deepseek-ai/cordis": { version: "4.0.2" },
+        "node_modules/transitive-only": { version: "7.8.9" },
+      },
+      "sha256:previous-generation",
+    )
+    expect(lockPackagesMatchManifest(lock, MANIFEST)).toBe(true)
+  })
+
+  test("rejects rebinding when a direct dependency is missing or changed", () => {
+    expect(
+      lockPackagesMatchManifest(lockWith({ "node_modules/@deepseek-ai/dsh": { version: "0.1.1-rc.2" } }), MANIFEST),
+    ).toBe(false)
+    expect(
+      lockPackagesMatchManifest(
+        lockWith({
+          "node_modules/@deepseek-ai/dsh": { version: "9.9.9" },
+          "node_modules/@deepseek-ai/cordis": { version: "4.0.2" },
+        }),
+        MANIFEST,
+      ),
+    ).toBe(false)
+  })
+})
+
 describe("validateEmbeddedLock", () => {
+  test("binds the generated lock to the source closureVersion and embedded manifest", () => {
+    expect(DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion).toBe(DSH_CLOSURE_VERSION)
+    expect(() => validateEmbeddedLock(DEFAULT_DSH_RUNTIME_LOCK, DEFAULT_DSH_RUNTIME_MANIFEST)).not.toThrow()
+  })
+
   test("accepts a lock whose fingerprint matches the manifest", () => {
     const lock = lockWith({
       "node_modules/@deepseek-ai/dsh": { version: "0.1.1-rc.2" },

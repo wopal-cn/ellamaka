@@ -159,13 +159,14 @@ describe("publish-ellamaka workflow", () => {
     expect(workflow).not.toContain("cleanup-ellamaka-releases.mjs")
   })
 
-  test("gates on DSH runtime manifest freshness before packaging", () => {
+  test("gates on DSH runtime manifest and lock freshness before packaging", () => {
     // The bundled CLI inlines generated/dsh-runtime-manifest.json at bundle
     // time; the committed manifest must match the source before packaging.
     // The check is read-only (--check) and precedes the Build step.
     expect(workflow).toContain("Verify DSH runtime manifest freshness")
     expect(workflow).toContain("bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check")
-    const gateIdx = workflow.indexOf("generate-dsh-runtime-manifest.ts --check")
+    expect(workflow).toContain("bun packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts --check")
+    const gateIdx = workflow.indexOf("generate-dsh-runtime-lock.ts --check")
     const buildIdx = workflow.indexOf("- name: Build")
     expect(gateIdx).toBeGreaterThan(-1)
     expect(buildIdx).toBeGreaterThan(gateIdx)

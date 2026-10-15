@@ -1,6 +1,7 @@
 /**
- * Generate `generated/dsh-runtime-manifest.json` from the DSH official direct
- * dependencies declared in this package's package.json.
+ * Generate `generated/dsh-runtime-manifest.json` from the source-owned
+ * closureVersion and DSH official direct dependencies declared in this
+ * package's package.json.
  *
  *   bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts
  *   bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
@@ -9,9 +10,9 @@
  * `generated/dsh-runtime-manifest.json` against freshly computed output and
  * exit non-zero on mismatch (drift guard for CI/release gate), without writing.
  *
- * The manifest carries only the exact direct dependency versions. No lock file
- * is read or embedded: the closure lock is produced at runtime by npm during
- * materialisation (DESIGN-dsh-base.md).
+ * The manifest carries the source-owned closureVersion plus exact direct
+ * dependency versions. No lock file is read here; the fixed transitive lock is
+ * generated separately and bound to this manifest fingerprint.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
@@ -39,21 +40,37 @@ function fatal(message: string): never {
 
 function readJson(path: string): unknown {
   if (!existsSync(path)) {
-    fatal(`input file not found: ${path}`)
+    return fatal(`input file not found: ${path}`)
   }
   const raw = readFileSync(path, "utf8")
   try {
     return JSON.parse(raw)
   } catch (error) {
-    fatal(`failed to parse ${path}: ${(error as Error).message}`)
+    return fatal(`failed to parse ${path}: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 
-const pkg = readJson(join(pkgRoot, "package.json")) as {
-  dependencies?: Record<string, string>
+function readDependencies(path: string): Record<string, string> {
+  const pkg = readJson(path)
+  if (typeof pkg !== "object" || pkg === null || !("dependencies" in pkg)) {
+    return fatal(`${path} must contain an object field "dependencies"`)
+  }
+  const rawDependencies = pkg.dependencies
+  if (typeof rawDependencies !== "object" || rawDependencies === null) {
+    return fatal(`${path} field "dependencies" must be an object`)
+  }
+  const dependencies: Record<string, string> = {}
+  for (const [name, version] of Object.entries(rawDependencies)) {
+    if (typeof version !== "string") {
+      return fatal(`${path} dependency "${name}" must have a string version`)
+    }
+    dependencies[name] = version
+  }
+  return dependencies
 }
 
-const deps = pkg.dependencies ?? {}
+const deps = readDependencies(join(pkgRoot, "package.json"))
+
 if (!("@deepseek-ai/dsh" in deps)) {
   fatal('package.json dependencies must declare "@deepseek-ai/dsh" as the DSH official runtime direct dependency')
 }

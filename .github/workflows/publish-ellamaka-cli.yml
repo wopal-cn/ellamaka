@@ -138,6 +138,7 @@ jobs:
           # bundle time; the committed manifest must match the source before
           # packaging. Read-only check, fails on drift.
           bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
+          bun packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts --check
 
       - name: Build
         run: |
