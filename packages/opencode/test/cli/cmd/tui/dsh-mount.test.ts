@@ -15,6 +15,12 @@ type ToolContainer = {
   get(name: "sessions"): { list(): unknown[] } | undefined
 }
 
+function assertToolContainer(value: unknown): asserts value is ToolContainer {
+  if (typeof value !== "object" || value === null) throw new Error("missing dsh tool container")
+  const get = Reflect.get(value, "get")
+  if (typeof get !== "function") throw new Error("invalid dsh tool container")
+}
+
 const dshHomes: string[] = []
 
 function tmpWopalHome(): string {
@@ -35,8 +41,10 @@ afterEach(() => {
 describe("tui dsh mount", () => {
   test("returns undefined when ELLAMAKA_DSH is disabled (kill switch =0)", async () => {
     process.env.ELLAMAKA_DSH = "0"
-    const handle = await mountDshIfEnabled({ wopalHome: tmpWopalHome() })
+    const wopalHome = tmpWopalHome()
+    const handle = await mountDshIfEnabled({ wopalHome })
     expect(handle).toBeUndefined()
+    expect(process.env.DSH_HOME).toBeUndefined()
     expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
   })
 
@@ -54,6 +62,7 @@ describe("tui dsh mount", () => {
     // DSH home, never fall back to ~/.dsh.
     expect(process.env.DSH_HOME).toBe(join(wopalHome, "dsh", "home"))
     await handle!.dispose()
+    expect(process.env.DSH_HOME).toBeUndefined()
   })
 
   test("mounts the tool container and executes grep without a live session", async () => {
@@ -67,8 +76,10 @@ describe("tui dsh mount", () => {
     expect(handle).toBeDefined()
 
     try {
-      const container = (globalThis as Record<string, unknown>)[CONTAINER_KEY] as ToolContainer
-      expect(container).toBeDefined()
+      const candidate = Reflect.get(globalThis, CONTAINER_KEY)
+      expect(candidate).toBeDefined()
+      assertToolContainer(candidate)
+      const container = candidate
 
       const ws = mkdtempSync(join(tmpdir(), "dsh-tui-ws-"))
       for (let i = 0; i < 400; i++) {

@@ -117,3 +117,33 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
     })
   }
 })
+
+describe("Home runtime lease audit", () => {
+  const root = join(import.meta.dir, "..", "..", "..")
+
+  test("serve and TUI gate DSH_HOME mutation behind manager readiness and retain a shared lease", () => {
+    for (const relative of [
+      "packages/opencode/src/cli/cmd/dsh-mount.ts",
+      "packages/opencode/src/cli/cmd/tui/dsh-mount.ts",
+    ]) {
+      const source = readFileSync(join(root, relative), "utf-8")
+      const init = source.indexOf("const status = await initializeDshRuntime")
+      const envWrite = source.indexOf("process.env.DSH_HOME =")
+      expect(init).toBeGreaterThanOrEqual(0)
+      expect(envWrite).toBeGreaterThan(init)
+      expect(source).toMatch(/acquireDshHomeRuntimeAccess/)
+      expect(source).toMatch(/homeAccess\.lease\.release\(\)/)
+    }
+  })
+
+  test("Desktop sidecar and package worker hold their own shared Home qualification", () => {
+    const desktop = readFileSync(join(root, "packages/ellamaka-desktop/src/main/sidecar.ts"), "utf-8")
+    const worker = readFileSync(join(root, "packages/opencode/src/cli/cmd/dsh-package-worker.ts"), "utf-8")
+    expect(desktop).toMatch(/acquireDshHomeRuntimeAccess/)
+    expect(desktop).toMatch(/dshHomeAccess.*lease/s)
+    expect(desktop).toMatch(/dshHomeAccess\.lease\.release\(\)/)
+    expect(worker).toMatch(/acquireDshHomeRuntimeAccess/)
+    expect(worker).toMatch(/DSH_CLOSURE_VERSION/)
+    expect(worker).toMatch(/homeAccess\.lease\.release\(\)/)
+  })
+})

@@ -45,6 +45,7 @@ declare module "virtual:opencode-server" {
 
   export interface DshRuntimeManifest {
     schema: "ellamaka.dsh-runtime/v1"
+    closureVersion: number
     bridgeAbi: number
     dependencies: Record<string, string>
     fingerprint?: string
@@ -64,6 +65,19 @@ declare module "virtual:opencode-server" {
   }
 
   export const initializeDshRuntime: (options: DshInitializeOptions) => Promise<DshRuntimeStatus>
+  export interface DshHomeRuntimeLease {
+    readonly mode: "shared"
+    release(): Promise<void>
+  }
+  export type DshHomeRuntimeAccessResult =
+    | { ok: true; homeVersion: number; lease: DshHomeRuntimeLease }
+    | { ok: false; reason: string; homeVersion?: number }
+  export const acquireDshHomeRuntimeAccess: (options: {
+    wopalHome: string
+    closureVersion: number
+    lockTimeoutMs?: number
+  }) => Promise<DshHomeRuntimeAccessResult>
+
   /** The four levels DSH understands; the host TRACE maps down to DEBUG. */
   export type DshLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
   export const toDshLogLevel: (level: string | undefined) => DshLogLevel

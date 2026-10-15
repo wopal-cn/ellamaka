@@ -1,5 +1,7 @@
 import { Effect } from "effect"
 import { runPackageWorker } from "@wopal/ellamaka-cordis/plugins/package-worker"
+import { DSH_CLOSURE_VERSION, acquireDshHomeRuntimeAccess } from "@wopal/ellamaka-cordis/runtime"
+import { dirname } from "node:path"
 import { CliError, effectCmd } from "../effect-cmd"
 
 /** Internal executable adapter for profileContext.packageManager. */
@@ -22,7 +24,15 @@ export const DshPackageWorkerCommand = effectCmd({
         const cancel = () => controller.abort(new Error("package installation cancelled"))
         process.once("SIGTERM", cancel)
         process.once("SIGINT", cancel)
+        let homeAccess: Awaited<ReturnType<typeof acquireDshHomeRuntimeAccess>> | undefined
         try {
+          homeAccess = await acquireDshHomeRuntimeAccess({
+            wopalHome: dirname(args.home),
+            closureVersion: DSH_CLOSURE_VERSION,
+          })
+          if (!homeAccess.ok) {
+            throw new Error(`dsh Home access denied: ${homeAccess.reason}`)
+          }
           return await runPackageWorker(
             {
               installAnchor: args.installAnchor,
@@ -34,6 +44,7 @@ export const DshPackageWorkerCommand = effectCmd({
             raw,
           )
         } finally {
+          if (homeAccess?.ok) await homeAccess.lease.release()
           process.off("SIGTERM", cancel)
           process.off("SIGINT", cancel)
         }

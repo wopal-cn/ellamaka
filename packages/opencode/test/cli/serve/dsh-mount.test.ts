@@ -75,12 +75,15 @@ describe("server entry points wire the shared dsh assembly", () => {
     // B-class env-reading plugins (e.g. agent presets) must land in the DSH
     // home, never fall back to ~/.dsh when DSH_HOME is unset.
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
-    expect(source).toContain('process.env.DSH_HOME = join(home, "home")')
-    // The env write must precede the manager run (the call site, not the import).
+    expect(source).toContain('const activeDshHome = join(home, "home")')
+    expect(source).toContain("process.env.DSH_HOME = activeDshHome")
+    // Task 4 safety boundary: the manager kill-switch and Home preparation
+    // must complete before any DSH-specific environment mutation.
     const call = source.indexOf("initializeDshRuntime({")
-    const env = source.indexOf("process.env.DSH_HOME")
+    const env = source.indexOf("process.env.DSH_HOME =")
     expect(call).toBeGreaterThan(-1)
-    expect(env).toBeLessThan(call)
+    expect(env).toBeGreaterThan(call)
+    expect(source).toContain("acquireDshHomeRuntimeAccess")
   })
 
   test("web opens the browser before suspending on the dsh mount", () => {

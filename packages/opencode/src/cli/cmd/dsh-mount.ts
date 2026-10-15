@@ -5,6 +5,7 @@ import os from "node:os"
 import type { Listener } from "../../server/server"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
+  acquireDshHomeRuntimeAccess,
   initializeDshRuntime,
   resolveInstallAnchor,
   toDshLogLevel,
@@ -222,14 +223,6 @@ export async function mountDshEngine(
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
-  // B-class official-layout resolution (`resolveDshHome()` env reads) looks
-  // up `$DSH_HOME` and falls back to `~/.dsh` when it is unset. Point it at
-  // the DSH home so agent presets and every other env-reading plugin land in
-  // `$WOPAL_HOME/dsh/home`, matching the dev.sh / Desktop-sidecar host
-  // contract (constraint #10). The env write is process-local: the CLI host
-  // never mutates the caller's shell environment.
-  process.env.DSH_HOME = join(home, "home")
-
   const status = await initializeDshRuntime({
     wopalHome,
     logFile: runtimeLogFile,
@@ -243,6 +236,35 @@ export async function mountDshEngine(
   if (status !== "ready") {
     setDshStatus(status)
     return undefined
+  }
+
+  // Runtime admission is separate from preparation. Hold this shared lease
+  // for the whole lifetime of every in-process DSH Home consumer so a newer
+  // closure cannot switch Home underneath live containers.
+  const homeAccess = await acquireDshHomeRuntimeAccess({
+    wopalHome,
+    closureVersion: manifest.closureVersion,
+  })
+  if (!homeAccess.ok) {
+    setDshStatus("degraded")
+    Log.Default.error("dsh home access denied", {
+      reason: homeAccess.reason,
+      homeVersion: homeAccess.homeVersion,
+      closureVersion: manifest.closureVersion,
+    })
+    return undefined
+  }
+
+  // The environment mutation is deliberately after the manager kill-switch
+  // and Home admission. ELLAMAKA_DSH=0 therefore performs zero DSH-specific
+  // environment setup, filesystem access, network access or mounting.
+  const previousDshHome = process.env.DSH_HOME
+  const activeDshHome = join(home, "home")
+  process.env.DSH_HOME = activeDshHome
+  const restoreDshHome = () => {
+    if (process.env.DSH_HOME !== activeDshHome) return
+    if (previousDshHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousDshHome
   }
 
   const anchor = resolveInstallAnchor(wopalHome, manifest)
@@ -356,7 +378,7 @@ export async function mountDshEngine(
       dsh.pluginActivation?.bind(() => pluginService!.replay())
     } catch (error) {
       webHub.ctx.logger("dsh-plugins").warn("plugin runtime service failed to start", {
-        error: (error as Error).message,
+        error: error instanceof Error ? error.message : String(error),
       })
     }
 
@@ -364,17 +386,22 @@ export async function mountDshEngine(
     return {
       mountPath: dsh.mountPath,
       dispose: async () => {
-        // dsh.dispose() closes the VirtualWebServer's upgrade sockets first,
-        // then unmounts the dsh plugin tree from the web hub.
-        setDshUrlGetter(() => undefined)
-        setDshStatus("disabled")
-        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
-        unmountDsh?.()
-        await pluginService?.stop()
-        await dsh.dispose()
-        await toolsHost.dispose()
-        await webHub?.dispose()
-        await toolsHub?.dispose()
+        try {
+          // dsh.dispose() closes the VirtualWebServer's upgrade sockets first,
+          // then unmounts the dsh plugin tree from the web hub.
+          setDshUrlGetter(() => undefined)
+          setDshStatus("disabled")
+          delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+          unmountDsh?.()
+          await pluginService?.stop()
+          await dsh.dispose()
+          await toolsHost.dispose()
+          await webHub?.dispose()
+          await toolsHub?.dispose()
+        } finally {
+          restoreDshHome()
+          await homeAccess.lease.release()
+        }
       },
     }
   } catch (error) {
@@ -393,6 +420,8 @@ export async function mountDshEngine(
       // Best-effort partial disposal; the host continues regardless.
     }
     delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+    restoreDshHome()
+    await homeAccess.lease.release()
     return undefined
   }
 }

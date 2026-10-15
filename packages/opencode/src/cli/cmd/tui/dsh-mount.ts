@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { GlobalBus } from "@/bus/global"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
+  acquireDshHomeRuntimeAccess,
   initializeDshRuntime,
   resolveInstallAnchor,
   toDshLogLevel,
@@ -49,14 +50,6 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
-  // B-class official-layout resolution (`resolveDshHome()` env reads) looks
-  // up `$DSH_HOME` and falls back to `~/.dsh` when it is unset. Point it at
-  // the DSH home so agent presets and every other env-reading plugin land in
-  // `$WOPAL_HOME/dsh/home`, matching the dev.sh / Desktop-sidecar host
-  // contract (constraint #10). The env write is process-local: the TUI never
-  // mutates the caller's shell environment.
-  process.env.DSH_HOME = join(home, "home")
-
   const status = await initializeDshRuntime({
     wopalHome,
     logFile: runtimeLogFile,
@@ -70,6 +63,35 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
   if (status !== "ready") {
     setDshStatus(status)
     return undefined
+  }
+
+  // Runtime admission is separate from preparation. Hold this shared lease
+  // for the whole lifetime of every in-process DSH Home consumer so a newer
+  // closure cannot switch Home underneath live containers.
+  const homeAccess = await acquireDshHomeRuntimeAccess({
+    wopalHome,
+    closureVersion: manifest.closureVersion,
+  })
+  if (!homeAccess.ok) {
+    setDshStatus("degraded")
+    Log.Default.error("dsh home access denied", {
+      reason: homeAccess.reason,
+      homeVersion: homeAccess.homeVersion,
+      closureVersion: manifest.closureVersion,
+    })
+    return undefined
+  }
+
+  // The environment mutation is deliberately after the manager kill-switch
+  // and Home admission. ELLAMAKA_DSH=0 therefore performs zero DSH-specific
+  // environment setup, filesystem access, network access or mounting.
+  const previousDshHome = process.env.DSH_HOME
+  const activeDshHome = join(home, "home")
+  process.env.DSH_HOME = activeDshHome
+  const restoreDshHome = () => {
+    if (process.env.DSH_HOME !== activeDshHome) return
+    if (previousDshHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = previousDshHome
   }
 
   const anchor = resolveInstallAnchor(wopalHome, manifest)
@@ -128,7 +150,7 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
               type: "tui.toast.show",
               properties: {
                 title: "dsh plugin replay failed",
-                message: `Profile "${profile}" keeps its last good state: ${(error as Error).message}`,
+                message: `Profile "${profile}" keeps its last good state: ${error instanceof Error ? error.message : String(error)}`,
                 variant: "error",
                 duration: 8000,
               },
@@ -138,18 +160,23 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
       })
     } catch (error) {
       hub.ctx.logger("dsh-plugins").warn("plugin runtime service failed to start", {
-        error: (error as Error).message,
+        error: error instanceof Error ? error.message : String(error),
       })
     }
 
     setDshStatus("ready")
     return {
       dispose: async () => {
-        setDshStatus("disabled")
-        delete (globalThis as Record<string, unknown>)[CONTAINER_KEY]
-        await pluginService?.stop()
-        await host.dispose()
-        await hub?.dispose()
+        try {
+          setDshStatus("disabled")
+          delete (globalThis as Record<string, unknown>)[CONTAINER_KEY]
+          await pluginService?.stop()
+          await host.dispose()
+          await hub?.dispose()
+        } finally {
+          restoreDshHome()
+          await homeAccess.lease.release()
+        }
       },
     }
   } catch (error) {
@@ -166,7 +193,7 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
         type: "tui.toast.show",
         properties: {
           title: "dsh tool container failed",
-          message: `The dsh tool container did not mount; the TUI continues without dsh tools: ${(error as Error).message}`,
+          message: `The dsh tool container did not mount; the TUI continues without dsh tools: ${error instanceof Error ? error.message : String(error)}`,
           variant: "error",
           duration: 8000,
         },
@@ -178,6 +205,8 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
       // Best-effort partial disposal; the TUI continues regardless.
     }
     delete (globalThis as Record<string, unknown>)[CONTAINER_KEY]
+    restoreDshHome()
+    await homeAccess.lease.release()
     return undefined
   }
 }

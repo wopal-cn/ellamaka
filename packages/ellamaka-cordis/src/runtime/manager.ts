@@ -13,12 +13,15 @@ import { acquireMaterializeLock, releaseMaterializeLock } from "./lock.js"
 import { checkClosureIntegrity, materializeClosure, validateClosureOnDisk, type ExtractLike } from "./materializer.js"
 import { createDshLogger, type DshLoggerOptions, type LogBridge } from "./log.js"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest.js"
+import { acquireDshHomeRuntimeAccess, prepareDshHome } from "./home-guard.js"
 
 // Re-export the wiring surface entries consume from `@wopal/ellamaka-cordis/runtime`
 // in one place: the default manifest, the install-anchor resolver, and the
 // runtime registry selector (Task 4 / §3.4.3).
 export { DEFAULT_DSH_RUNTIME_MANIFEST }
 export { DSH_CLOSURE_VERSION } from "./closure-version.js"
+export { acquireDshHomeRuntimeAccess, prepareDshHome, readDshHomeState } from "./home-guard.js"
+export type { DshHomeFailureReason, DshHomeRuntimeAccessResult, DshHomeRuntimeLease } from "./home-guard.js"
 export { resolveInstallAnchor } from "./status.js"
 export { pickFastestRegistry, CANDIDATE_REGISTRIES, DEFAULT_REGISTRY } from "./registry.js"
 export type { RegistryCandidate, RegistryProbeResult } from "./registry.js"
@@ -236,7 +239,7 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
   }
   if (anchor) {
     log.debug("dsh.stage.inspect", { status: "hit", closureDir: ctx.closureDir })
-    return finishReady(ctx)
+    return finishReadyWithHomeGuard(ctx)
   }
 
   // 4. Lock — cross-process mutex; waiters re-inspect after the holder finishes.
@@ -253,7 +256,7 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
     if (anchor) {
       await checkClosureIntegrity({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
       log.debug("dsh.stage.inspect", { status: "waiter-hit", closureDir: ctx.closureDir })
-      return finishReady(ctx)
+      return finishReadyWithHomeGuard(ctx)
     }
 
     // 5+6+7 — Stage, Verify, Activate. The caller's hard timeout (raceTimeout)
@@ -273,7 +276,7 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
     ctx.anchor = result.anchor
 
     // 8+9 — Profile seeding and Load happen inside finishReady (idempotent).
-    return finishReady(ctx)
+    return finishReadyWithHomeGuard(ctx)
   } catch (error) {
     log.error("dsh.stage.materialise.failed", { error })
     return "degraded"
@@ -283,6 +286,34 @@ async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
     // `degraded` without releasing, so the in-flight materialisation stays single-writer
     // on staging until it completes (B-05).
     await releaseMaterializeLock(layout.lockFile, token)
+  }
+}
+
+/**
+ * Home safety is deliberately separated from closure materialisation. The
+ * closure is fully present and validated before this function can inspect or
+ * mutate Home metadata. Preparation owns any short exclusive transition; the
+ * actual Home consumer then reacquires a shared lease. The manager only holds
+ * that shared lease around its existing loader/profile ready work — product
+ * mounts acquire their own long-lived shared lease for activation lifetime.
+ */
+async function finishReadyWithHomeGuard(ctx: ManagerContext): Promise<DshRuntimeStatus> {
+  const closureVersion = ctx.options.manifest.closureVersion
+  const prepared = await prepareDshHome({ wopalHome: ctx.options.wopalHome, closureVersion })
+  if (!prepared.ok) {
+    ctx.log.error("dsh.home.prepare.failed", { reason: prepared.reason, homeVersion: prepared.homeVersion })
+    return "degraded"
+  }
+
+  const access = await acquireDshHomeRuntimeAccess({ wopalHome: ctx.options.wopalHome, closureVersion })
+  if (!access.ok) {
+    ctx.log.error("dsh.home.access.failed", { reason: access.reason, homeVersion: access.homeVersion })
+    return "degraded"
+  }
+  try {
+    return finishReady(ctx)
+  } finally {
+    await access.lease.release()
   }
 }
 

@@ -36,7 +36,11 @@ describe("resolveDshLayout", () => {
     expect(layout.stagingDir).toBe("/tmp/wh/dsh/staging")
     expect(layout.locksDir).toBe("/tmp/wh/dsh/locks")
     expect(layout.lockFile).toBe("/tmp/wh/dsh/locks/materialize.lock")
-    expect("stateDir" in layout).toBe(false)
+    expect(layout.backupsDir).toBe("/tmp/wh/dsh/backups")
+    expect(layout.stateDir).toBe("/tmp/wh/dsh/state")
+    expect(layout.homeStateFile).toBe("/tmp/wh/dsh/state/current.json")
+    expect(layout.managedMarkerFile).toBe("/tmp/wh/dsh/state/managed")
+    expect(layout.homeLockPath).toBe("/tmp/wh/dsh/state/home.lock")
   })
 })
 
@@ -72,23 +76,14 @@ describe("resolveInstallAnchor", () => {
   test("derives the closure anchor path and generation id from the layout and fingerprint", () => {
     const anchor = resolveInstallAnchor("/tmp/wh", MANIFEST)
     expect(anchor.genId).toBe("9e1ee84dfdd9")
-    expect(anchor.path).toBe(
-      "/tmp/wh/dsh/closures/9e1ee84dfdd9/node_modules/@deepseek-ai/dsh/package.json",
-    )
+    expect(anchor.path).toBe("/tmp/wh/dsh/closures/9e1ee84dfdd9/node_modules/@deepseek-ai/dsh/package.json")
   })
 
   test("matches the exact anchor layout the runtime manager materialises", () => {
     const anchor = resolveInstallAnchor("/tmp/wh", MANIFEST)
     const closureName = closureNameForFingerprint(MANIFEST.fingerprint!)
     expect(anchor.path).toBe(
-      join(
-        resolveDshLayout("/tmp/wh").closuresDir,
-        closureName,
-        "node_modules",
-        "@deepseek-ai",
-        "dsh",
-        "package.json",
-      ),
+      join(resolveDshLayout("/tmp/wh").closuresDir, closureName, "node_modules", "@deepseek-ai", "dsh", "package.json"),
     )
   })
 

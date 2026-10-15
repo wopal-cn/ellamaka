@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { initializeDshRuntime, type InitializeDshOptions, type ManagerDeps } from "./manager"
+import { prepareDshHome, readDshHomeState } from "./home-guard"
 import type { DshRuntimeManifestV1 } from "./manifest"
 import type { DshRuntimeLockV1 } from "./lockfile"
 import { closureNameForFingerprint, resolveDshLayout } from "./status"
@@ -23,6 +24,7 @@ afterEach(() => {
 
 const MANIFEST: DshRuntimeManifestV1 = {
   schema: "ellamaka.dsh-runtime/v1",
+  closureVersion: 1,
   bridgeAbi: 1,
   dependencies: {
     "@deepseek-ai/dsh": "0.1.1-rc.2",
@@ -148,10 +150,10 @@ describe("initializeDshRuntime state machine", () => {
     const home = tmpHome()
     const logFile = join(home, "logs", "dsh.log")
     // Stub stderr so the disabled path cannot write anything to it.
-    const origWrite = process.stderr.write
+    const origWrite = process.stderr.write.bind(process.stderr)
     const written: string[] = []
     ;(process.stderr as { write: (s: string) => boolean }).write = (chunk) => {
-      written.push(String(chunk))
+      written.push(chunk)
       return true
     }
     try {
@@ -188,6 +190,52 @@ describe("initializeDshRuntime state machine", () => {
     const closureDir = join(resolveDshLayout(home).closuresDir, closureNameForFingerprint(MANIFEST.fingerprint!))
     expect(existsSync(closureDir)).toBe(true)
     expect(existsSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"))).toBe(true)
+  })
+
+  test("closure failure happens before Home state is created", async () => {
+    const home = tmpHome()
+    const failing: ManagerDeps["extract"] = async () => {
+      throw new Error("download failed")
+    }
+    const status = await initializeDshRuntime(
+      makeBaseOptions(home, { ...testDeps(), deps: { ...testDeps().deps, extract: failing } }),
+    )
+    expect(status).toBe("degraded")
+    const layout = resolveDshLayout(home)
+    expect(existsSync(layout.homeDir)).toBe(false)
+    expect(existsSync(layout.stateDir)).toBe(false)
+  })
+
+  test("activation failure after version advance keeps the new Home version and backup", async () => {
+    const home = tmpHome()
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: 1 })).ok).toBe(true)
+    const layout = resolveDshLayout(home)
+    mkdirSync(layout.homeDir, { recursive: true })
+    writeFileSync(join(layout.homeDir, "user-data"), "preserve")
+
+    const nextManifest: DshRuntimeManifestV1 = {
+      ...MANIFEST,
+      closureVersion: 2,
+      fingerprint: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    }
+    seedClosureAt(home, nextManifest)
+    const status = await initializeDshRuntime(
+      makeBaseOptions(home, {
+        manifest: nextManifest,
+        deps: {
+          fetch: async () => {
+            throw new Error("must not fetch")
+          },
+          resolveLoader: () => {
+            throw new Error("loader broken")
+          },
+        },
+      }),
+    )
+    expect(status).toBe("degraded")
+    expect(await readDshHomeState(home)).toMatchObject({ kind: "managed", closureVersion: 2 })
+    expect(existsSync(layout.backupsDir)).toBe(true)
+    expect(readFileSync(join(layout.homeDir, "user-data"), "utf8")).toBe("preserve")
   })
 
   test("extract failure -> degraded and never overwrites a working closure", async () => {
@@ -461,6 +509,9 @@ describe("W-01: ready fast path seeds profiles idempotently", () => {
     const home = tmpHome()
     seedClosure(home)
     const layout = resolveDshLayout(home)
+    // Establish managed metadata first; an existing Home without state/marker
+    // is intentionally a legacy-adoption boundary under the Home guard.
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
     // Pre-create a user-edited patch layer.
     mkdirSync(join(layout.profileDir, "web"), { recursive: true })
     writeFileSync(join(layout.profileDir, "web", "cordis.patch.yml"), "- { id: user-tool, disabled: false }\n")

@@ -13,12 +13,13 @@ export { JsonMigration } from "@/storage/json-migration"
 // compiled inside the sidecar bundle while the `@deepseek-ai/*` runtime is
 // loaded at startup from the materialised closure.
 export {
+  acquireDshHomeRuntimeAccess,
   initializeDshRuntime,
   DEFAULT_DSH_RUNTIME_MANIFEST,
   resolveInstallAnchor,
   toDshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
-export type { DshLogLevel } from "@wopal/ellamaka-cordis/runtime"
+export type { DshHomeRuntimeAccessResult, DshHomeRuntimeLease, DshLogLevel } from "@wopal/ellamaka-cordis/runtime"
 export type { InstallAnchor } from "@wopal/ellamaka-cordis/runtime"
 export { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export type { DshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"

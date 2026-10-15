@@ -9,10 +9,6 @@ import { currentSidecarLogLevel, setSidecarLogLevel } from "./sidecar-log-level"
 
 register(new URL("./source-ts-loader.js", import.meta.url), import.meta.url)
 
-type NodeHttpWithEnvProxy = typeof http & {
-  setGlobalProxyFromEnv: () => void
-}
-
 type NodeTlsWithSystemCertificates = typeof tls & {
   getCACertificates: (type: "default" | "system") => string[]
   setDefaultCACertificates: (certificates: string[]) => void
@@ -117,6 +113,7 @@ let dshLaunchState:
       runtime?: import("virtual:opencode-server").DshRuntimeApi
     }
   | undefined
+let dshHomeAccess: { lease: import("virtual:opencode-server").DshHomeRuntimeLease; homeVersion: number } | undefined
 
 /**
  * The sidecar's message contract, exported so the wiring stays directly
@@ -238,6 +235,8 @@ async function start(command: StartCommand) {
         await Promise.allSettled([dshHost?.dispose(), dshToolsHost?.dispose()])
         dshHost = undefined
         dshToolsHost = undefined
+        if (dshHomeAccess) await dshHomeAccess.lease.release()
+        dshHomeAccess = undefined
       }
     }
     parentPort.postMessage({ type: "ready" })
@@ -446,6 +445,7 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
   const { wopalHome, runtimeLogFile } = dshLaunch(command)
   const {
     DEFAULT_DSH_RUNTIME_MANIFEST,
+    acquireDshHomeRuntimeAccess,
     initializeDshRuntime,
     resolveInstallAnchor,
     createDshRuntimeApi,
@@ -469,11 +469,37 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
     dshLaunchState = { status }
     return dshLaunchState
   }
-  const anchor = resolveInstallAnchor(wopalHome, manifest)
-  const runtime = createDshRuntimeApi(anchor.path)
-  sidecarLog.info("dsh.desktop.init.ready", { anchor: anchor.path, genId: anchor.genId })
-  dshLaunchState = { status, anchor, runtime }
-  return dshLaunchState
+  const homeAccess = await acquireDshHomeRuntimeAccess({
+    wopalHome,
+    closureVersion: manifest.closureVersion,
+  })
+  if (!homeAccess.ok) {
+    sidecarLog.error("dsh.desktop.home-access.failed", {
+      reason: homeAccess.reason,
+      homeVersion: homeAccess.homeVersion,
+      closureVersion: manifest.closureVersion,
+    })
+    setDshStatus("degraded")
+    dshLaunchState = { status: "degraded" }
+    return dshLaunchState
+  }
+  dshHomeAccess = { lease: homeAccess.lease, homeVersion: homeAccess.homeVersion }
+  try {
+    const anchor = resolveInstallAnchor(wopalHome, manifest)
+    const runtime = createDshRuntimeApi(anchor.path)
+    sidecarLog.info("dsh.desktop.init.ready", { anchor: anchor.path, genId: anchor.genId })
+    dshLaunchState = { status, anchor, runtime }
+    return dshLaunchState
+  } catch (error) {
+    await dshHomeAccess.lease.release()
+    dshHomeAccess = undefined
+    sidecarLog.error("dsh.desktop.init.load.failed", {
+      error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+    })
+    setDshStatus("degraded")
+    dshLaunchState = { status: "degraded" }
+    return dshLaunchState
+  }
 }
 
 /**
@@ -534,6 +560,8 @@ async function stop() {
     dshToolsHost = undefined
     await dshHost?.dispose()
     dshHost = undefined
+    if (dshHomeAccess) await dshHomeAccess.lease.release()
+    dshHomeAccess = undefined
     // Unregister the onboarding mount before the listener closes (Plan #230).
     disposeOnboarding?.()
     disposeOnboarding = undefined
@@ -589,7 +617,9 @@ function useSystemCertificates(log: WarningLogger) {
 
 function useEnvProxy(log: WarningLogger) {
   try {
-    ;(http as NodeHttpWithEnvProxy).setGlobalProxyFromEnv()
+    const setGlobalProxyFromEnv = Reflect.get(http, "setGlobalProxyFromEnv")
+    if (typeof setGlobalProxyFromEnv !== "function") throw new Error("setGlobalProxyFromEnv unavailable")
+    Reflect.apply(setGlobalProxyFromEnv, http, [])
   } catch (error) {
     log.warn("failed to load proxy environment", {
       error: error instanceof Error ? error.message : String(error),
@@ -603,17 +633,17 @@ function dshPluginLogger(ctx: unknown, fallback: DshPluginLogger): DshPluginLogg
   }
   try {
     const logger = ctx.logger("dsh-plugins")
-    if (
-      typeof logger === "object" &&
-      logger !== null &&
-      "info" in logger &&
-      typeof logger.info === "function" &&
-      "warn" in logger &&
-      typeof logger.warn === "function" &&
-      "error" in logger &&
-      typeof logger.error === "function"
-    ) {
-      return logger as DshPluginLogger
+    if (typeof logger === "object" && logger !== null) {
+      const info = Reflect.get(logger, "info")
+      const warn = Reflect.get(logger, "warn")
+      const error = Reflect.get(logger, "error")
+      if (typeof info === "function" && typeof warn === "function" && typeof error === "function") {
+        return {
+          info: (message, extra) => Reflect.apply(info, logger, [message, extra]),
+          warn: (message, extra) => Reflect.apply(warn, logger, [message, extra]),
+          error: (message, extra) => Reflect.apply(error, logger, [message, extra]),
+        }
+      }
     }
   } catch {
     // The sidecar still has its structured log as a safe fallback.
