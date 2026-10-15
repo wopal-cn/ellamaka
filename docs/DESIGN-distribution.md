@@ -1,33 +1,32 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-10-11
+> **Updated**: 2026-10-14
 > **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
 > - `../../../docs/products/wopal-space/DESIGN-onboarding.md`
 >   **Parent**: `./DESIGN.md`
 
-本文件是 Ellamaka 产品分发与版本身份的唯一真相源。它定义 Ellamaka CLI 与 Desktop 的 release backbone、产品 SemVer、OpenCode upstream lock、构建身份、manifest 契约、兼容规则、不可变发布与更新授权。产品级通用规则（WOPAL_HOME、R2 bucket/URL/缓存、归档格式、跨产品协调总则）见 `../../../docs/products/wopal-space/DESIGN-distribution.md`，本文只保留 ellamaka 特有语义。
+本文件是 Ellamaka 产品分发与版本身份的唯一真相源。它定义 Ellamaka CLI 与 Desktop 的 release backbone、产品 SemVer、构建身份、manifest 契约、兼容规则、不可变发布与更新授权。产品级通用规则（WOPAL_HOME、R2 bucket/URL/缓存、归档格式、跨产品协调总则）见 `../../../docs/products/wopal-space/DESIGN-distribution.md`，本文只保留 ellamaka 特有语义。
 
 ---
 
 ## Scope
 
-Ellamaka CLI 与 Desktop 分别发布为独立制品，使用各自的 SemVer、namespaced tag、workflow、R2 latest 和回滚边界。两个制品的本机组合、安装收据、实际身份探测、兼容判断与修复事务由 Ellamaka 自己的本地 product management 能力拥有。CLI、Desktop updater 与 `@wopal/ellamaka-sdk/local` 共用这套能力；Wopal CLI 可以作为可选前端调用它，但不是 Ellamaka 安装或修复的运行时依赖。
+Ellamaka CLI 与 Desktop 分别发布为独立制品，使用各自的 SemVer、namespaced tag、workflow、R2 latest 和回滚边界。产品安装、补齐、修复和跨产品 inventory 继续由 Wopal CLI Product 能力拥有；Ellamaka Runtime/WopalSpace Setup 不承担 product completion。
 
-Release identity 必须回答四个互不混淆的问题：
+Release identity 必须回答三个互不混淆的问题：
 
 1. 这是哪个 Ellamaka 产品的哪个版本？
-2. 它采用了哪个 OpenCode baseline？
-3. 它与哪些外部组件兼容？
-4. 它由哪个 Ellamaka commit、tag 和构建生成？
+2. 它属于哪个发布 channel？
+3. 它由哪个 Ellamaka commit、tag 和构建生成？
 
 ### Product Boundaries
 
 - **Ellamaka CLI**（`ellamaka-cli`）是可独立安装的 Engine/CLI 产品，支持 Wopal 完整安装、cli-only 安装和手动下载。其 SemVer 表达 CLI 与 Engine 公共契约的演进。
 - **Ellamaka Desktop**（`ellamaka-desktop`）是原生 Electron 产品，拥有独立的 UI、平台集成、签名、公证、自动更新、stable/beta channel 和回滚边界。其 SemVer 不随 CLI 的每次修复锁步递增。
-- **Embedded Sidecar** 是从当前 Ellamaka source commit 构建的 Node runtime，不是外部 CLI binary，也不是第三个面向用户的发布产品。Desktop manifest 记录 sidecar 的 source commit、OpenCode baseline 和 engine API，但不为它创建第三套 SemVer。
+- **Embedded Sidecar** 是从当前 Ellamaka source commit 构建的 Node runtime，不是外部 CLI binary，也不是第三个面向用户的发布产品。Desktop manifest 记录 sidecar 的 Ellamaka source commit 和 engine API，但不为它创建第三套 SemVer。
 
 共享 Engine 源码发生变化时，CLI 与 Desktop 可能需要协调发布；协调发布不要求二者版本相同。
 
@@ -38,11 +37,11 @@ Release identity 必须回答四个互不混淆的问题：
 ellamaka 是 OpenCode 的 fork，构建与发布体系由 `@wopal/ellamaka-release` 包集中承载：`packages/ellamaka-release/src/cli/build.ts` 注入品牌（`BINARY_NAME=ellamaka`，import 自 `@wopal/ellamaka-brand`）与裁剪，构建期版本/渠道解析由同包 `build-env` 模块提供。对上游的裁剪仅限于：
 
 - **平台裁剪**：`--arch primary` 构建 8 个平台（5 native + 3 baseline），排除 musl、Windows arm64 变体；baseline 兼容不支持 AVX2 的老 x64 CPU。
-- **发布位置**：binary 分发从 GitHub Release 迁移到 Cloudflare R2。
+- **发布位置**：binary 只存放在 Cloudflare R2；GitHub/Gitee Release 只保留下载索引。
 
 canonical release source：Cloudflare R2（`https://download.coursedao.com/ellamaka/`）是唯一 binary 分发源；`wopal-cn/ellamaka` 与 `wopal-cn/wopal-space-ontology` 的 GitHub/Gitee Releases 仅保留 markdown 索引页面，不携带 binary 附件。
 
-canonical consumer：`wopal ellamaka install`（完整产品 / `--cli`）、`wopal setup`（确保完整产品并拉起 Desktop onboarding）、Desktop-first（已安装 Desktop 直接完成自身 onboarding，Wopal CLI 为可选管理工具）、人工从 Release 页面点击 R2 链接下载。
+canonical consumers：Wopal CLI Product 读取本文定义的 manifest/ReleaseIdentity 完成显式产品安装与补齐；external CLI 的日常更新由 `ellamaka upgrade` 负责，Desktop 的日常更新由自身 auto-updater 负责；GUI Onboarding 不安装产品。人工下载从 Release 页面进入 R2。
 
 ### 平台矩阵
 
@@ -71,13 +70,13 @@ Contract：
 
 | 环境变量            | 作用             | 约束                                                                                                              |
 | ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ELLAMAKA_VERSION`  | 产品版本注入     | release build 必须等于 namespaced tag 中的产品版本；不能表达 OpenCode baseline                                    |
+| `ELLAMAKA_VERSION`  | 产品版本注入     | release build 必须等于 namespaced tag 中的产品版本                                                                |
 | `ELLAMAKA_RELEASE`  | release 模式开关 | wrapper 拦截上游 tag/GitHub Release 副作用，正式 tag 与 publication 只由 workflow 拥有                            |
 | `ELLAMAKA_CHANNEL`  | build channel    | 取值限于 `{stable, beta, main, local}`（[Build Channels](#build-channels)）；未设置时按 Build Channels 决策树推导 |
 | `ELLAMAKA_BUILD_ID` | 构建指纹         | 注入打包产物（Desktop build version），取 commit SHA                                                              |
 | `BINARY_NAME`       | 产物名前缀       | 构建时替换所有硬编码 `"opencode"`，控制输出目录名、binary 名、archive 名                                          |
 
-这些变量是 Ellamaka 构建接口，由 `build-env` 单点解析，不是 Ellamaka release identity 的权威存储。完整版本、上游、channel 和 build identity 由 [Version Identity](#version-identity)、[Release Workflow](#release-workflow) 与生成的 `release-context.json` 约束。
+这些变量是 Ellamaka 构建接口，由 `build-env` 单点解析，不是 Ellamaka release identity 的权威存储。完整版本、channel 和 build identity 由 [Version Identity](#version-identity)、[Release Workflow](#release-workflow) 与生成的 `release-context.json` 约束。
 
 ---
 
@@ -101,7 +100,7 @@ Desktop beta: X.Y.Z-beta.N
 Desktop stable: X.Y.Z
 ```
 
-CLI rc 与 stable 发布完全同构——同一 tag namespace、同一 R2 versioned path、同一 latest feed、同一 Release 页面，`-rc.N` 只是版本字符串上的候选标记。rc 不是 legacy `X.Y.Z-N.rcM` 迭代格式（见 [Legacy Migration](#legacy-migration)）；rc 发布一经提交即不可变，同样适用 [Immutability and Cleanup](#immutability-and-cleanup) 的 retry/withdraw 边界。
+CLI rc 与 stable 使用同一 tag namespace、R2 versioned path、latest feed 和 Release 页面；`-rc.N` 只是标准 SemVer prerelease。归档的 `X.Y.Z-N.rcM` 格式只由兼容 reader 识别，不进入当前发布序列。rc 一经提交同样不可变。
 
 发布版本禁止 `+build` metadata：build metadata 不参与 precedence，允许它会产生两个不同构建排序相等的问题。构建信息统一放入结构化 `build` 字段。
 
@@ -109,41 +108,24 @@ CLI rc 与 stable 发布完全同构——同一 tag namespace、同一 R2 versi
 
 1. **产品版本独立**：CLI 与 Desktop 是两个独立发布单元，各自使用标准 SemVer 2.0、tag、workflow、latest feed 和 changelog，版本序列互不牵制（cli 可发 `2.0.6-rc.1` 而 desktop 仍停在 `2.0.5-beta.N`）。
 2. **已成功发布的 tag 记录是版本推进依据**：每产品的下一个版本由该产品已发布的最高记录按 semver 推断，不读仓库 package.json 里"上次写了什么"。发布成功即打 tag 记录、不可变；失败/中断不构成记录，可同版本重发。cli/desktop 的 package.json 平时不承载 rc/beta"候选状态"，只在发布动作内写入本次版本。
-3. **依赖包统一镜像纯 base**：除 cli/desktop 两个产品外，全部 workspace 包 version 字段统一为纯 `X.Y.Z`，取两产品现行 base 的**较高者**（cli 发 `2.0.6-rc.1` 时依赖包为 `2.0.6`）。依赖包不发布、内部依赖走 `workspace:*`，其 version 只是版本演进的记录记号。
-4. **上游不是产品版本**：OpenCode version/commit 是 provenance 与 v1 兼容基线，不参与 Ellamaka 产品版本排序。
-5. **CLI/Desktop 当前以 `major.minor` 为硬兼容边界**：patch 与 prerelease 可不同；二者同时安装并准备进入本地 DSH runtime 时必须属于同一 `X.Y`。单组件 updater 可以独立更新并暂时留下磁盘 mismatch，但 post-update fast doctor 与下一次 runtime preflight 必须发现它；未拉齐前不得进入 DSH activation。未来若有充分证据可以通过新设计放宽为 warning。
-6. **一个排序真相源**：发布顺序只比较 `releaseIdentity.version`。upstream、build date、Git hash 和 artifact hash 都不参与排序。
+3. **一个公开 service SDK**：private `@wopal/wopalspace` 留在 workspace 内，不作为 consumer package 发布；`@wopal/ellamaka-sdk` 同时发布 Runtime 与 WopalSpace public contract，并在 `/local` 中组装 trusted-local Worker 所需 private implementation。发布 tarball 不保留对 private package 的 npm runtime dependency。
+4. **上游来源不进入产品身份**：OpenCode 只作为选择性 fix/功能来源；具体来源由 Git 变更记录追踪，不进入 release identity 或版本排序，也不定义 Ellamaka SDK 的公开兼容边界。
+5. **CLI/Desktop 没有机器全局版本门禁**：组件可独立安装/更新，stable/beta/development/dormant 版本可以共存。Host 可以一次选择多个 component 以提升用户便利性，但每个 artifact 独立验证和提交。DSH activation 安全只由实际 target closure Home version and backup check 决定。
+6. **一个排序真相源**：发布顺序只比较 `releaseIdentity.version`。build date、Git hash 和 artifact hash 都不参与排序。
 7. **提交后不可变**：有效 versioned manifest 是正式发布提交点；提交后同一个 `product + version` 只能对应一个 source tag、一个 Ellamaka commit 和一组固定 artifact hashes。
-8. **安全迁移**：新 manifest 在迁移期保留必要的顶层兼容字段；旧 `X.Y.Z-N` 只读不写。
-9. **破坏性 DSH 升级至少提升 Ellamaka MINOR**：这是发布纪律，不是运行时迁移判据。minor 提升不等于 DSH 一定 breaking；Core 仍只以实际 `closureFingerprint` 变化决定是否先备份 Home。
+8. **归档格式只读兼容**：reader 可以识别 `X.Y.Z-N` 等归档版本；当前 publisher 只生成标准 SemVer 与 Manifest Schema v2。
+9. **会改变 DSH 持久行为的重大 closure 变更至少提升 Ellamaka MINOR**：这是发布纪律，不是 Home 兼容判据。Core 只按实际 `closureVersion` 执行 Home generation 协议。
 
-### OpenCode Upstream Lock
+### OpenCode Reference Policy
 
-OpenCode baseline 不是每次 build/release 的人工输入。仓库维护受版本控制的单一真相源 `release/upstreams.lock.json`：
+ellamaka 不维护可升级的 OpenCode release baseline。`labs/ref-repos/opencode/` 是只读参考源；需要的安全修复、bug fix 或功能按变更逐项 review 后 cherry-pick 或手工移植。
 
-```json
-{
-  "schemaVersion": 1,
-  "sources": {
-    "opencode": {
-      "relationship": "baseline",
-      "repository": "https://github.com/anomalyco/opencode.git",
-      "version": "1.15.13",
-      "gitCommit": "385cb694419f98103af0e8fc6187ddcbcbb6eecb"
-    }
-  }
-}
-```
+选择性吸收遵循以下约束：
 
-lock 只记录 Engine baseline 一处来源。上游代码不按目录冻结复制：参考代码从 `labs/ref-repos/opencode/` 读取，不进入本仓库版本控制。
-
-只有"正式采用新的 OpenCode Engine baseline"时才更新 `sources.opencode`：专用命令接收目标 OpenCode version，解析上游 tag 对应的完整 commit，校验后写入 lock；baseline 更新与上游合并在同一变更中审查和提交。release workflow 禁止通过 input、环境变量或网络上的"最新 OpenCode tag"覆盖 lock。
-
-发布前必须验证：
-
-1. lock 通过 schema 校验，所有 version 均为稳定 SemVer，commit 均为完整 40 位 SHA。
-2. `sources.opencode.gitCommit` 存在，并且是 Ellamaka release commit 的祖先。
-3. release context 保存整个 lock snapshot；公开 manifest 的 `releaseIdentity.upstream` 与构建内嵌 Engine metadata 必须等于 `sources.opencode`。
+1. 只引入当前 Ellamaka 需要的行为及其必要依赖，不整体同步 OpenCode release。
+2. 每个引入变更都按 Ellamaka 当前 Engine、SDK、Desktop 与 Plugin contract 做影响检查。
+3. 来源信息由 Git commit、cherry-pick 元数据或提交说明保留；产品 manifest 不声明单一 OpenCode version/commit。
+4. Ellamaka 自身的 source commit 是发布构建的完整源码身份。
 
 ### Release Context
 
@@ -151,13 +133,12 @@ lock 只记录 Engine baseline 一处来源。上游代码不按目录冻结复�
 
 ```text
 product/version/channel  ← namespaced tag
-upstream                 ← release/upstreams.lock.json
 build.gitCommit          ← checked-out release commit
 build.builtAt            ← UTC release-context assembly time
 artifacts                ← build outputs + SHA-256
 ```
 
-workflow input 不能作为 version 或 upstream 的第二真相源。re-release 的 dispatch 输入只能被 anchor match gate 断言等于产品锚点文件（版本真相源），不能覆盖 tag 或锚点。CLI 与 Desktop 各自生成并在自身 matrix 内共享 context，不要求两个产品复用同一 context 文件。
+workflow input 不能作为 version 的第二真相源。re-release 的 dispatch 输入只能被 anchor match gate 断言等于产品锚点文件（版本真相源），不能覆盖 tag 或锚点。CLI 与 Desktop 各自生成并在自身 matrix 内共享 context，不要求两个产品复用同一 context 文件。
 
 ---
 
@@ -233,7 +214,7 @@ CLI 的发布注入据此实现为 `build.ts` 的 `Script.release ? CHANNEL_RELE
    - rc/beta：该 base 已有同 kind 序列 → 续 N+1。该 base 已发 stable → 升下一 patch 的 `.1`（如 2.0.4 已发布 → `--rc` 给 `2.0.5-rc.1`）。
    - `--patch`（stable）：该产品无 stable 记录 → 取现行 rc/beta base 转正（`2.0.5-rc.2 → 2.0.5`）；已有 stable R → semver patch+1 直接发新正式版（`2.0.4 → 2.0.5`）。
    - minor/major：从该产品现行 base 升位开新线（`2.0.5 → 2.1.0` / `3.0.0`），通道重置。
-2. 写入：把确认的目标版本写入该产品 package.json（带 `-rc.N`/`-beta.N` 或纯 `X.Y.Z`），其余依赖包模块统一镜像纯 base `X.Y.Z` = **两个产品现行 base 的较高者**；cli 先发 `2.0.6-rc.1` 时依赖包升 `2.0.6`，随后 desktop 仍可发 `2.0.5-beta.2`（只写 desktop，依赖包不动）。
+2. 写入：把确认的目标版本写入该产品 package.json（带 `-rc.N`/`-beta.N` 或纯 `X.Y.Z`），产品内部支持模块（不含公开 SDK）统一镜像纯 base `X.Y.Z` = **两个产品现行 base 的较高者**；cli 先发 `2.0.6-rc.1` 时依赖包升 `2.0.6`，随后 desktop 仍可发 `2.0.5-beta.2`（只写 desktop，依赖包不动）。
 3. 提交 bump、创建 namespaced tag（`ellamaka-cli-vX.Y.Z[-rc.N]` / `ellamaka-desktop-vX.Y.Z[-beta.N]`）、推送当前分支与 tag。tag push 触发目标 workflow（`push: tags`），不再手工 dispatch。
 4. 监听 workflow 至完成，成功后自动触发历史清理。
 
@@ -251,7 +232,7 @@ failed attempt 的 re-release（幂等）：目标 tag 在远端已存在时—�
 - prerelease 的 base `X.Y.Z` 必须高于该产品已发布 stable 的最高版本：已发布 `2.0.3` 时，prerelease 从 `2.0.4-rc.1` / `2.0.4-beta.1` 开始，`2.0.3-rc.1` / `2.0.3-beta.1` 被拒绝。
 - 版本单调：同类产品的全部发布（stable、rc、beta）处于同一单调递增序列。rc 占用 base slot 后，后续修复只能发更高版本（`2.0.5-rc.2`、`2.1.0`……），不能回退到已发 rc 的 base 之下。
 
-bump 写入前校验：版本符合 SemVer 子集、version/channel 一致、branch-channel policy 满足、目标版本未列入 `release/withdrawn-versions.json` 且高于该产品已发布的最高标准版本、第一批标准版本高于 [Update Authorization](#update-authorization) 的 migration floor。OpenCode baseline 始终由 upstream lock 随最终 source commit 确定，发布不接收 OpenCode baseline/revision 作为版本输入。
+bump 写入前校验：版本符合 SemVer 子集、version/channel 一致、branch-channel policy 满足、目标版本未列入 `release/withdrawn-versions.json` 且高于该产品已发布的最高标准版本、当前标准版本高于 [Archived Version Compatibility](#archived-version-compatibility) 规定的归档版本下限。OpenCode 来源不是发布版本输入；选择性吸收的 fix/功能已经体现在最终 Ellamaka source commit 中。
 
 ### 发布流程
 
@@ -261,11 +242,11 @@ CLI rc 与 stable 走完全相同的 release job：同一 versioned path（`ella
 
 CLI 发布流程（release job）：
 
-1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 `sources.opencode.gitCommit` 是当前 release commit 的祖先。
+1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 checkout commit、source tag 与本次 Ellamaka product/version/channel 一致。
 2. 构建 CLI（`BINARY_NAME=ellamaka ELLAMAKA_VERSION=<ver> ELLAMAKA_RELEASE=true bun packages/ellamaka-release/src/cli/build.ts --arch primary --web-ui ellamaka-app`），产出 8 平台产物。
 3. 运行 `bun packages/ellamaka-release/src/cli/manifest.ts manifest` 生成 `manifest.json`、`checksums.txt`、`release-notes.md`。
 4. 按 manifest-last 提交点协议发布：staging 上传 → 回读校验 → 禁止覆盖写入 versioned path → 最后写 `manifest.json` 作为提交点（契约细节见 [构建接口](./DESIGN-distribution.md#构建接口)）。
-5. CLI/desktop 仍独立发布、独立更新；但某产品第一次把 latest 推进到新的 `major.minor` 前，另一个产品必须已经存在同 `major.minor` 的可安装 versioned release，保证 post-update Quick Fix 有可用目标。patch/prerelease 可独立推进。写入 latest 后主动 purge CDN。
+5. CLI/Desktop immutable release 与 component latest/updater feed 独立提交和 promotion。每个 component 只校验自己的 immutable manifest、channel、平台与 ReleaseIdentity；stable/beta 可以跨 minor。多组件 UX 直接组合已经提交的 component manifests，release identity 与发布元数据继续按 component 独立。写入 mutable alias 后主动 purge CDN。
 6. 创建 4 个 markdown-only release 条目（GitHub/Gitee × `wopal-cn/ellamaka`/`wopal-cn/wopal-space-ontology`），不挂 binary；ontology 仓库使用独立索引 tag/body，不复用 Ellamaka 产品 tag namespace。
 
 Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest 产 NSIS、ubuntu-latest 产 AppImage+deb）。R2 上传、manifest 校验与 CDN purge 复用 CLI 的既有机制。
@@ -288,11 +269,6 @@ Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest
     "product": "ellamaka-cli",
     "version": "1.17.1",
     "channel": "stable",
-    "upstream": {
-      "name": "opencode",
-      "version": "1.15.13",
-      "gitCommit": "<40-char-upstream-commit>"
-    },
     "build": {
       "sourceTag": "ellamaka-cli-v1.17.1",
       "gitCommit": "<40-char-ellamaka-commit>",
@@ -326,11 +302,6 @@ Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest
     "product": "ellamaka-desktop",
     "version": "1.16.2",
     "channel": "stable",
-    "upstream": {
-      "name": "opencode",
-      "version": "1.15.13",
-      "gitCommit": "<40-char-upstream-commit>"
-    },
     "build": {
       "sourceTag": "ellamaka-desktop-v1.16.2",
       "gitCommit": "<40-char-ellamaka-commit>",
@@ -344,17 +315,16 @@ Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest
 
 ### Field Authority
 
-| 字段                         | 权威来源                  | 是否参与发布排序                  |
-| ---------------------------- | ------------------------- | --------------------------------- |
-| `releaseIdentity.product`    | 发布目标                  | 否，只用于隔离产品                |
-| `releaseIdentity.kind`       | build mode                | 否，只区分正式发布与开发构建      |
-| `releaseIdentity.version`    | namespaced product tag    | 是，标准 SemVer                   |
-| `releaseIdentity.channel`    | SemVer prerelease + feed  | 先过滤 channel，不跨 channel 排序 |
-| `upstream.version/gitCommit` | upstream lock             | 否                                |
-| `build.sourceTag`            | 触发发布的 namespaced tag | 否                                |
-| `build.gitCommit`            | workflow checkout commit  | 否                                |
-| `build.builtAt`              | release context 生成时间  | 否                                |
-| artifact `sha256`            | 实际构建产物              | 否，只用于完整性                  |
+| 字段                      | 权威来源                  | 是否参与发布排序                  |
+| ------------------------- | ------------------------- | --------------------------------- |
+| `releaseIdentity.product` | 发布目标                  | 否，只用于隔离产品                |
+| `releaseIdentity.kind`    | build mode                | 否，只区分正式发布与开发构建      |
+| `releaseIdentity.version` | namespaced product tag    | 是，标准 SemVer                   |
+| `releaseIdentity.channel` | SemVer prerelease + feed  | 先过滤 channel，不跨 channel 排序 |
+| `build.sourceTag`         | 触发发布的 namespaced tag | 否                                |
+| `build.gitCommit`         | workflow checkout commit  | 否                                |
+| `build.builtAt`           | release context 生成时间  | 否                                |
+| artifact `sha256`         | 实际构建产物              | 否，只用于完整性                  |
 
 顶层 `version` 是 `releaseIdentity.version` 的兼容别名，二者必须完全相等。`channel` 与 SemVer 必须一致：CLI stable channel 接受 `X.Y.Z` 与 `X.Y.Z-rc.N`；Desktop beta 只接受 `-beta.N`。electron-builder 的 publish feed 名 `prod` 映射为 identity channel `stable`（`FEED_TO_CHANNEL`，见 [Build Channels](#build-channels)）。
 
@@ -364,7 +334,7 @@ manifest 只能证明远端 release，不能单独证明本机正在运行的 bi
 
 - CLI 内嵌 ReleaseIdentity，通过 `ellamaka debug release-info --json --api-version 1` 输出 `{ releaseIdentity }`。命令不访问网络、不读取安装收据；`ellamaka --version` 继续只输出产品 SemVer。
 - Desktop package 在 resources 中内嵌 `release-identity.json`。Main 启动时验证其 product/version 与当前 app package version、channel/appId 一致，再用于 updater、兼容门禁和诊断。
-- `$WOPAL_HOME/ellamaka/state/ellamaka-install.json` 是 Ellamaka-owned 的统一产品安装收据，缓存 CLI/Desktop 的安装来源、artifact hash 和上次探测 identity。任何入口的健康判断都必须以 binary machine identity + Desktop embedded identity + 实际 artifact/文件探测为准，不能仅信任收据；Wopal 等外部消费者只通过 Ellamaka local contract 读取/触发产品管理。
+- `$WOPAL_HOME/ellamaka/state/ellamaka-install.json` 是 Ellamaka host product manager 的 managed provenance/cache，不是 machine inventory 真相源。它可以记录 CLI、stable Desktop、beta Desktop 的来源、artifact 与最后观察 identity；任何判断都必须重新探测实际 binary/app identity。缺失、损坏或过期 state 产生诊断，但不会覆盖健康的实际安装事实。
 
 ReleaseIdentity 是显式判别联合：
 
@@ -377,37 +347,50 @@ consumer 必须先按 `kind` 选择 schema，再校验对应 required/forbidden 
 
 ## Compatibility and Latest Consumption
 
-### 运行时版本保证
+### Independent Facts
 
-Ellamaka CLI 与 Desktop 的组合身份和兼容要求由本节 Runtime Version Guarantees 定义。Wopal CLI 是可选的 SDK 消费者，其安装、版本和发布顺序不构成 Ellamaka 的运行或发行前提。
+Ellamaka 明确区分四个互不替代的事实：
 
-### Current-Release Support Policy
+1. **channel policy**：CLI stable/rc、Desktop stable/beta；决定各 component 的 feed 和允许版本序列。
+2. **ReleaseIdentity**：证明某个实际 binary/App 是哪个不可变构建。
+3. **multi-component orchestration**：host 可以一次选择 external CLI + 一个 Desktop target；两个 target 各自遵守 component contract，不建立跨组件版本兼容关系。
+4. **closureVersion**：标识当前构建携带的固定 DSH 依赖闭包，并参与 Home 版本保护；它不证明 DSH 私有数据格式兼容。
 
-自动安装只支持当前公开推荐组合：Desktop stable latest、Desktop beta latest（若已发布）和 CLI latest。版本化 manifest/artifact 继续保留用于审计、手动回滚和显式恢复，不建立 release index，也不做“搜索一个猜测兼容的历史版本”。
+SemVer/channel 不推断 DSH Home compatibility，closure 也不建立机器级 CLI/Desktop compatibility。
 
-当前阶段，**任何完整产品目标必须满足 Desktop 与外部 Ellamaka CLI 的 `major.minor` 相同**。发布/安装流程允许 patch 与 prerelease 不同，但新 minor 的 latest promotion 必须能形成同 minor 组合；短暂 alias 不一致时 consumer fail closed 并提示重试/拉齐，不把不一致组合安装到机器。
+### Product Inventory and Operations
 
-### Runtime Version Guarantees
+Ellamaka distribution 只定义可被外部产品管理器读取的产品事实：实际 executable/App path、ReleaseIdentity、manifest、channel、artifact integrity 与 update feed。
 
-Ellamaka 校验自身产品 identity、平台、渠道和固定 runtime。Desktop 与外部 Ellamaka CLI 同时安装时，`major.minor` 不一致属于 hard mismatch。单组件更新允许先落盘，随后立即执行 fast doctor；若仍不一致，产品保留可修复状态，但任何本地 DSH activation 必须 fail closed，直到组合被拉齐。这个规则只防止两个明显不同的产品代际依次写同一 DSH Home，不用于判断 Home 数据格式。
+Wopal CLI Product 是跨产品 inventory/install/repair 的 owner。它可以同时管理 external CLI、Desktop stable/beta，但这些 mutation 不通过 WopalSpace Setup 或 Ellamaka Server API 执行。
 
-检查必须保持轻量：优先使用实际 ReleaseIdentity/本地安装状态，不运行完整 setup/ontology/space `doctor`。Ellamaka-owned fast doctor 是 CLI/Desktop updater 与 runtime preflight 的公共只读判断；Wopal 的完整 doctor 只是可选消费者侧的广义诊断，不进入 Ellamaka 启动热路径。
+Stable/Beta 是不同 appId/路径，可以跨 minor 共存。Actual ReleaseIdentity/文件探测是真相；任何 managed receipt 只能提供 provenance/cache。
 
-Wopal CLI 的最低版本不进入这些判断。Ellamaka 不探测、不安装 Wopal CLI，不读取 minWopalCli 或依赖 MIN_WOPAL_CLI_VERSION。
+### Component Update
+
+- `ellamaka upgrade` 只更新 external CLI；
+- Desktop updater 只更新当前 Desktop channel；
+- Wopal CLI Product 可以执行用户显式要求的跨产品安装/修复；
+- 一个 component 的失败不要求回滚另一个已经成功的 component；
+- 任何产品操作完成后都重新 probe 实际磁盘 identity。
+
+### Managed Product State
+
+`$WOPAL_HOME/ellamaka/state/ellamaka-install.json` 可以作为 Wopal CLI Product/安装器的 provenance/cache，但不是 Runtime readiness 或 machine inventory 的真相源。实际 binary/App identity 始终优先。
 
 ### DSH Closure Release Discipline
 
-DSH closure 是产品 runtime 的固定组成。发布时若研发确认新 DSH 带来破坏性变化，目标 Ellamaka 版本至少提升 MINOR；如果只是已验证的兼容修复，可以在既有 minor 内发布。运行时不根据 SemVer 猜 breaking 与否，只比较 closure fingerprint。
+DSH closure 是产品 Runtime 的固定组成。Ellamaka 源码维护一个递增 closureVersion，CLI 和 Desktop 使用同一值；锁文件固定实际 DSH 依赖。已知会影响 Home 的闭包变更提升 closureVersion，产品 SemVer/channel 不替代该值。
 
-只要 release 的目标 closure 与上一运行 closure 不同，Core 会在目标 closure 首次写固定 Home 前创建 backup，具体见 `DESIGN-dsh-base.md`。如果该次升级存在已知用户现场配置/第三方插件迁移事项，release notes 必须给出一个稳定的 `wopal-site` migration guide URL。指南不打包进 artifact、不进入 manifest schema、不由 Core 自动下载或执行；用户需要时可让 Ellamaka Agent 读取 URL 并按指南协助迁移。若 DSH 自身已能完整自动迁移，则可以没有额外指南。
+备份成功后才允许较新 closure 写 Home；备份或版本状态写入失败时拒绝 DSH 启动。
 
-### Schema Ownership and Release Order
+同一 closureVersion 的多进程使用沿用 DSH 自身的并发行为；Ellamaka 不预测 DSH 内部写入格式或建立额外的 single-writer hosting。
 
-空间/setup 的业务 schema 由 Ellamaka 共享服务定义，HTTP 与统一 SDK 从同一契约生成。Wopal CLI 消费已发布的精确 SDK，并保留自身机器协议 envelope；Ellamaka 核心不依赖 @wopal/cli-capability-schema。
+### SDK Ownership and Release Order
 
-Ellamaka 与 SDK 可以先于 Wopal CLI 发布。构建和发行不注入或同步 Wopal 最低版本，不查询其远端版本来决定是否允许发布。固定 DSH 依赖、产品制品验证与 SDK 干净消费验收保持。API 删除或字段移除按既有破坏性版本规则处理。
+Runtime 与 WopalSpace public contract 统一由 `@wopal/ellamaka-sdk` 发布。private `@wopal/wopalspace` 不进入 npm release train；`@wopal/ellamaka-sdk/local` 构建时组装 trusted-local application Worker 所需 private implementation。
 
----
+SDK npm release 与 Ellamaka CLI/Desktop product release 解耦。SDK workflow 必须完成 build、contract tests、`npm pack` 与 clean-install smoke；Wopal CLI 消费正式发布的 exact SDK versions。Ellamaka 不依赖 Wopal CLI 版本、tag 或 machine protocol 才能 build/start/update。
 
 ## Immutability and Cleanup
 
@@ -423,11 +406,11 @@ versioned manifest 已提交后，mutable latest promotion 可以独立重试，
 
 ### Cleanup Contract
 
-release cleanup 不得使用字符串比较、`sort -V`、文件修改时间或旧 `X.Y.Z-N` comparator 推断"更新版本"。它先构建 release reference graph：
+release cleanup 不得使用字符串比较、`sort -V`、文件修改时间或旧 `X.Y.Z-N` comparator 推断“更新版本”。它先构建各 component 自己的 release reference graph：
 
-1. 分别读取 CLI latest（含 rc）、Desktop stable latest、Desktop beta latest 和 updater feed。
-2. 校验引用的 product/channel/version 与目标 versioned manifest 一致。
-3. 只在同一 product/channel 内用标准 SemVer 评估明确的 retention 候选；legacy release 由 legacy reader 分类，但不与新 release 混排后自动删除。
+1. 读取 CLI component latest 与 Desktop stable/beta latest/updater feed。
+2. 校验 alias 引用的 product/channel/version 与目标 immutable manifest 一致；任一 live component alias 引用的 release 都是 protected root，不受普通 retention 数量删除。
+3. 对未被 live alias 保护的候选，只在同一 product/channel 内用标准 SemVer 评估 retention；归档格式 release 单独分类，不与当前版本混排或自动删除。
 4. 未知目录、schema 错误、悬空引用或 hash 不一致的对象全部保留并使 cleanup 失败。
 
 cleanup 输出待删除对象与保护原因的审计清单后才执行。任何 cleanup 失败都不能阻止客户端继续读取上一次有效 aliases。
@@ -441,7 +424,7 @@ cleanup 输出待删除对象与保护原因的审计清单后才执行。任何
 | `ellamaka-desktop` | stable | 3        | 保留最新 3 个正式版本                                                                                                       |
 | `ellamaka-desktop` | beta   | 2        | 保留最新 2 个 beta 候选版本                                                                                                 |
 
-保留数量按同一 product/channel 内标准 SemVer 降序计数，从最老的版本开始删除，直到只剩保留数量个。CLI rc 与 stable 处于同一路径空间、以稳定渠道语义对待，但在保留计数上与 bare stable 独立：rc 按 `-rc.N` 序列单独保留 2 个，stable 单独保留 3 个，二者互不蚕食名额。latest 别名通常指向最新版本，天然在保留名额内；作为防御，latest 指向的版本即使落在保留名额之外也永不删除。legacy 版本 fail-closed 保留。`cleanup-releases.yml` 的 `keep-stable`/`keep-beta`/`keep-rc` inputs 可覆盖这些默认值。
+保留数量按同一 product/channel 内标准 SemVer 降序计数，从最老的版本开始删除，直到只剩保留数量个。CLI rc 与 stable 处于同一路径空间、以稳定渠道语义对待，但在保留计数上与 bare stable 独立：rc 按 `-rc.N` 序列单独保留 2 个，stable 单独保留 3 个，二者互不蚕食名额。latest 别名通常指向最新版本，天然在保留名额内；作为防御，latest 指向的版本即使落在保留名额之外也永不删除。归档格式版本 fail-closed 保留。`cleanup-releases.yml` 的 `keep-stable`/`keep-beta`/`keep-rc` inputs 可覆盖这些默认值。
 
 ### Failed Attempt and Whole-Version Withdrawal
 
@@ -493,11 +476,11 @@ Contract：
 
 ### 安装入口
 
-Desktop 有两个安装入口：wopal-site 下载页和 `wopal ellamaka install`。两者消费相同 Desktop manifest 与原生安装包。
+Desktop 的直接安装入口是 wopal-site 下载页/公开 Release 索引；Wopal CLI Product 也可以消费同一 Desktop manifest 与原生安装包完成用户显式要求的安装。Onboarding/Setup 不负责补齐 Desktop。Desktop 已安装后的版本更新只由自身 auto-updater 负责。
 
 手动入口由用户下载对应平台安装包。CLI 入口优先发现已有系统安装。缺失时，macOS 从 ZIP 安装到 `~/Applications/Ellamaka.app`，Windows 通过 NSIS current-user 模式安装到 `%LOCALAPPDATA%\Programs\Ellamaka`，Linux 把 AppImage 安装到 `${XDG_DATA_HOME:-~/.local/share}/ellamaka/` 并创建 desktop entry。完成后重新探测应用版本。Sidecar 和 Ellamaka 配置仍写入 `WOPAL_HOME`。
 
-`wopal ellamaka install --beta` 安装 beta Desktop 到独立位置（不同 appId，不覆盖 stable 安装）：
+当 Wopal CLI Product 显式安装 beta Desktop target 时，将 beta Desktop 放到独立位置（不同 appId，不覆盖 stable 安装）：
 
 | 平台    | CLI-managed beta Desktop 位置                                           |
 | ------- | ----------------------------------------------------------------------- |
@@ -509,13 +492,15 @@ Beta Desktop 与 stable Desktop 可共存。CLI 通过 appId 区分，不混淆�
 
 ### 自动更新
 
-`electron-builder` 的 `publish` 配置使用 generic provider，feedURL 指向 R2 `ellamaka-desktop/latest/`，**不走 GitHub Release**（与 CLI canonical source 一致）。macOS 用 `latest-mac.yml`，Windows 用 `latest.yml`，Linux 用 `latest-linux.yml`。
+`electron-builder` 的 `publish` 配置使用 generic provider，feedURL 指向各自 R2 channel；macOS 用 `latest-mac.yml`，Windows 用 `latest.yml`，Linux 用 `latest-linux.yml`。stable 与 beta 独立 appId/feed，main 开发构建不启用 updater。
 
-beta 与 stable 启用 electron-updater。stable 使用稳定 latest feed；beta 使用独立 beta latest feed 并允许 prerelease。main 本地构建不启用 updater。macOS ZIP、Windows NSIS EXE、AppImage 及对应 blockmap 位于 updater latest 路径，普通下载表只展示用户安装产物。
+Desktop updater 只授权和更新**当前 Desktop component**：校验自身 product/channel、target ReleaseIdentity、标准 SemVer、平台 feed 与签名/完整性，不在下载前探测 Wopal CLI，也不把 external Ellamaka CLI 当前版本作为授权条件。electron-updater 继续拥有 Desktop self-replace/restart 的平台 executor 生命周期。
 
-增量更新机制：macOS ZIP、Windows NSIS、Linux AppImage 基于 blockmap 支持增量；macOS DMG 不支持（必须全量下载）。增量更新生效条件：feed 包含 `packages[].path` 和 `sha2` 字段、R2 上传包含对应 `.blockmap` 文件、客户端版本严格小于已通过 manifest policy gate 授权的 feed 版本。
+更新完成并重启后，Desktop Main 重新 probe 自身实际 identity。Desktop updater 不检查或修改 external CLI；embedded sidecar 的 Core/DSH runtime 只使用当前 Desktop 自身 closure。
 
-**Channel 隔离**：不同 build channel 是独立应用（`electron-builder.config.ts` 分配不同 appId）：
+增量更新机制保持：macOS ZIP、Windows NSIS、Linux AppImage 基于 blockmap；macOS DMG 只用于人工安装。增量生效要求 updater feed 与 blockmap 完整且目标版本通过 component policy gate。
+
+**Channel 隔离**：stable、beta、main 是独立应用：
 
 | build channel | appId                      |
 | ------------- | -------------------------- |
@@ -523,9 +508,9 @@ beta 与 stable 启用 electron-updater。stable 使用稳定 latest feed；beta
 | beta          | `ai.ellamaka.desktop.beta` |
 | stable        | `ai.ellamaka.desktop`      |
 
-不允许跨 channel 升级：stable 用户不能直接升到 beta，beta 用户不能直接切到 stable——macOS/Windows 视为不同应用，必须卸载后重装。`autoUpdater.allowDowngrade` 即使因兼容 electron-updater 的技术路径暂时保留，也不能授权更新；ReleaseIdentity policy gate 只允许同一 product/channel 的标准 SemVer 前进。切换 channel 是显式操作（卸载重装），不应该是自动行为。
+自动 updater 不跨 channel。Stable/Beta 可以同时安装，某一 channel 的 updater/启动不会把另一个 channel 当作 incompatibility。切换 channel 是显式安装/卸载行为。
 
-macOS 特殊处理：ad-hoc 签名的 app 升级时，`quitAndInstall` 可能因 quarantine 导致启动失败。安装前 `xattr -d com.apple.quarantine` 新版本（如果可能），并引导用户在新版本首次启动时执行"右键 → 打开"操作。
+macOS 特殊处理：ad-hoc 签名的 app 更新仍遵守 quarantine/Gatekeeper 约束；正式签名策略见下一节。
 
 ### 代码签名
 
@@ -548,128 +533,90 @@ P1 使用 ad-hoc 签名。该签名保证 macOS app bundle 结构完整并通过
 
 ### 分发渠道与安装契约
 
-ellamaka 的安装/更新有多个入口：CLI 自身 `ellamaka upgrade`、Desktop updater、Desktop onboarding，以及可选的 `wopal ellamaka install/update`。这些入口不各自定义产品事务；完整产品安装、修复与状态收据统一由 Ellamaka local product management 实现，CLI-only 与 Desktop 单组件 updater 保留各自的平台更新执行器。
+Wopal CLI Product 消费本文定义的 manifest、ReleaseIdentity、channel 与平台安装规则，拥有 inventory / install / repair 事务。WopalSpace Setup、GUI Onboarding 和 Ellamaka Runtime 不复制这套产品 mutation。
 
-Ellamaka product management 遵循以下契约：
-
-- 只从 R2 读取机器契约：cli-only 读取 CLI `latest/manifest.json`；完整产品读取 Desktop channel latest 与 CLI latest。
-- CLI-only 安装默认使用 Engine latest；完整产品安装和 onboarding 校验同一个 CLI latest。
-- 修改本机前解析并验证完整安装计划；CLI latest 不兼容时明确失败并建议刷新或重试，不搜索历史版本。
-- 根据平台和稳定 artifact naming 计算目标文件名，不依赖 GitHub API 解析 release 页面。
-- 安装目标固定为上述 binary path；放置前必须校验 SHA-256；安装后执行 `ellamaka --version` 作为健康验证。
-- `$WOPAL_HOME/bin/` 只保存 executable。artifact 收据写入 `$WOPAL_HOME/ellamaka/state/ellamaka-install.json`；旧 `.ellamaka.meta.json` 在成功安装时迁移并删除。
-- 完整产品的 Resolve → Stage → Commit → Verify、失败恢复与 receipt 提交由 Ellamaka product management 拥有；Wopal CLI 等外部入口只调用该本地能力，不复制下载、兼容判断或 repair 语义。
+产品可以独立安装/更新；不存在 CLI/Desktop machine-global major.minor gate。Stable/beta Desktop 使用不同 appId/路径。
 
 ### DSH Runtime Binding
 
-Ellamaka 制品捆绑固定的 DSH manifest/lock、Bridge 和内部 adapter。依赖求解或用户配置不能为同一制品选择另一版 DSH。所有正式本地入口共享固定 Home `$WOPAL_HOME/dsh/home`；`closureFingerprint` 是 Core 判断 DSH runtime 是否发生变化的唯一 Home-safety 信号。
+Ellamaka 制品捆绑固定的 DSH manifest/lock、Bridge 和内部 adapter。依赖求解或用户配置不能为同一制品选择另一版 DSH。所有正式本地入口共享固定 Home $WOPAL_HOME/dsh/home，并携带 closureVersion。
 
-产品安装、制品校验与安装失败恢复仍由产品安装控制面拥有。安装器不迁移 DSH 私有数据。Core 发现目标 closure fingerprint 与 `state/current.json` 不同时，只做一件强制安全动作：在目标 closure 首次写 Home 前完成 `$WOPAL_HOME/dsh/home` backup；备份失败则目标 DSH 不得启动。备份成功后由目标 DSH 自己处理它支持的原生迁移，Ellamaka 不维护 `homeFormat`、通用 migration graph、逆向 migration 或自动“兼容通过”判定。
+Product service 不处理 DSH 私有数据格式，也不通过 CLI/Desktop SemVer 判断 Home 是否可用。Home 版本、备份和旧版本拒绝规则由 DESIGN-dsh-base.md 拥有；不实现通用数据转换或自动恢复。
 
-Bridge ABI 可继续作为 closure loader 的内部机械校验，但不参与 Home 兼容判断。固定 Home、closure-change backup 和启动规则由 [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle) 拥有。
+Bridge ABI 可继续作为 closure loader 的内部机械校验，但不参与 Home 兼容判断。固定 Home、closure version、切换前备份和启动规则由 DESIGN-dsh-base.md 拥有。
 
 ### Channel Consumption
 
-`wopal ellamaka install --beta` 安装 beta Desktop 与 stable CLI。`--beta` 只影响 Desktop manifest 来源，不把 CLI 隐式切换到 prerelease channel。`--beta --cli` 是无意义的参数组合，必须返回 option conflict。
-
-CLI rc 与 stable 共用同一 feed：`ellamaka/latest` 指向最新 CLI 发布（含 rc）。`wopal ellamaka install --cli` 与 `ellamaka upgrade` 通过 latest 直接获得 rc 版本，无需任何额外参数。rc 一经进入 latest，即对所有 CLI 消费者可见——发布 rc 与发布 stable 承担相同的质量承诺。Desktop 消费侧不受 CLI rc 影响，其稳定 feed 只引用无 prerelease 的 Desktop 版本。
+CLI stable/rc 使用自己的 component feed；Desktop stable/beta 使用独立 feed/appId。每个 updater 只消费自己的 channel。Wopal CLI Product 在用户显式要求安装/修复时可以选择目标 channel，但不会因为运行 Setup 自动扩大产品集合。
 
 ### Runtime Handoff
 
 ellamaka 安装完成后，运行时加载链路按 WopalSpace mode 工作：
 
-1. 读取全局配置根 `~/.wopal/ellamaka/config/`
+1. 读取全局配置根 `$WOPAL_HOME/config/`
 2. 自动检测到 WopalSpace 后加载 `<space>/.wopal/`
 3. 合并 `<space>/.wopal/config/settings.jsonc` 中的 `ellamaka` 与 `tui` 配置
 4. 加载 `<space>/.wopal/agents/*.md`
 5. 加载 `<space>/.wopal/commands/*.md`
 6. 加载 `<space>/.wopal/plugins/`
 
-分发阶段只负责 binary 可达。space-local 配置与 plugin 依赖由 ontology 提供、ellamaka 加载；`.wopal-space/` runtime files 由 CLI materialize、ontology commands 维护；setup orchestration 由 wopal-cli 的 `wopal setup` 负责。
+分发阶段只负责产品制品。Space-local 声明与 plugin 引用由 ontology 提供、Ellamaka 加载；private `@wopal/wopalspace` 承载 ontology lifecycle 与 Space init/sync/capability 等共享 application implementation，外部消费者通过统一 `@wopal/ellamaka-sdk` 使用这些 operations。Evolution、Skill Lifecycle 与 Plan Scheduling 当前仍由 Wopal CLI 实现；Core runtime 不承担这些 WopalSpace 业务语义。
 
 ---
 
 ## Update Authorization
 
-更新决策按以下顺序执行：
+### Component updater
 
-1. 校验 manifest schema、product、channel 和不可变字段。
-2. 按兼容契约校验目标 latest manifest。
-3. 使用标准 SemVer 比较同一产品、同一 channel 的 `releaseIdentity.version`。CLI rc 与 stable 同 channel，直接按 SemVer precedence 比较（`2.0.3` < `2.0.4-rc.1` < `2.0.4`），无需特判。
-4. 校验预期 version、source identity 和 artifact SHA-256。
-5. 安装/更新完成后运行 Ellamaka-owned 的轻量 product fast doctor：校验实际 CLI/Desktop identity、平台、渠道，并在二者同时存在时比较 `major.minor`。该检查不运行完整环境 inspect；Wopal CLI 不参与版本 floor。
-6. 完整安装或 Quick Fix 在修改本机前形成包含 Desktop 与外部 Ellamaka CLI 的完整安装计划，并确认所有 manifest 和下载均可验证。
-7. 完整产品事务按“Stage all → Commit CLI → Commit Desktop → Verify actual identities → commit `ellamaka-install.json` last”执行；失败恢复旧组件和旧收据，不得把未验证的部分安装状态报告为成功。
+每个 component updater 只校验自身 target 的 product/channel、标准 SemVer precedence、manifest/hash/platform 与 ReleaseIdentity。另一个 component 的存在和版本不是授权条件。
 
-Desktop 保留自己的 manifest policy gate；electron-updater 继续负责平台 feed、下载、签名检查和安装。CLI 的 `ellamaka upgrade` 继续负责 CLI 单组件更新。二者都允许独立完成已授权更新，不因另一组件位于旧 minor 而预先拒绝；更新后立即/重启后运行同一个 fast doctor。若形成 `major.minor` mismatch，Ellamaka 自身提供 Quick Fix，复用同一完整 product management 事务把另一组件拉到当前 latest 的同 minor 组合；修复前任何 DSH activation fail closed。Wopal CLI 不参与这条修复链。
+### Multi-component Product Operation
 
----
+Wopal CLI Product 可以在一次用户明确请求中处理多个 targets；每个 component 独立校验和提交。该能力属于 Wopal CLI，不形成 WopalSpace/Server `product.ensure` API。
+
+### Runtime activation
+
+CLI/Desktop SemVer 不作为 DSH Home gate。实际启动的产品携带自己的 closureVersion；若 Home 记录更高版本则拒绝访问，若目标版本更高则先备份再切换。
 
 ## NPM 包发布机制
 
-ellamaka 的插件契约层与 SDK 作为独立 npm 包分发，供引擎运行期安装与第三方插件消费。两个包承载 fork 相对 OpenCode 上游的契约扩展，与产品二进制解耦发布。
+Ellamaka monorepo 把 SDK npm release 与 CLI/Desktop product release 分开。
 
 ### 包身份与归属
 
-| npm 包                   | 来源目录          | 包内容                                                                                                        |
-| ------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------- |
-| `@wopal/ellamaka-plugin` | `packages/plugin` | 插件契约层：`Plugin` / `Hooks` / `ToolDefinition` / `SystemPromptMetadata` / `tool.provider` 等 fork 扩展类型 |
-| `@wopal/ellamaka-sdk`    | `packages/sdk/js` | 引擎 SDK：client/server 类型、`/v2` 子路径（`ProviderV2` / `ModelV2` / `Auth`）                               |
+| Package | Source directory | Contract |
+| --- | --- | --- |
+| `@wopal/wopalspace` | `packages/wopalspace` | private/not published；Setup/Ontology/Space implementation |
+| `@wopal/ellamaka-sdk` | `packages/sdk/js` | 唯一公开 service SDK；Runtime + WopalSpace contract/client，`/http` 与 self-contained `/local` Worker |
+| `@wopal/ellamaka-plugin` | plugin contract workspace | plugin author contract；不是 service SDK |
 
-两者依赖方向固定：plugin 依赖 sdk（含 `/v2` 子路径），sdk 不依赖 plugin。发布顺序必须先 sdk 后 plugin。
+`@wopal/ellamaka-sdk/local` 构建时组装 WopalSpace local application 所需 private implementation，但 npm runtime dependency 不指向 unpublished private packages。完整 contract 通过 `@wopal/ellamaka-sdk/openapi.json` 发布。
 
-包名使用 `@wopal/` scope，`publishConfig.access` 为 `public`，免费账号即可发布 scoped public 包。npm 上的 `@opencode-ai/plugin` 与 `@opencode-ai/sdk` 归 OpenCode 上游所有，ellamaka 的 fork 扩展不发布到这两个包名下。
+### SDK 版本策略
 
-### 版本策略
+`@wopal/ellamaka-sdk` 只有一条独立 SemVer 版本线，表达整个公开 service contract；不镜像 CLI/Desktop Product SemVer。private `@wopal/wopalspace` 不拥有外部 compatibility SemVer。
 
-npm 包版本跟随产品主版本号，与 CLI/Desktop 渠道解耦：
+### SDK 发布流程
 
-- 版本号取两产品现行 base 的**较高者**，纯 `x.y.z`，不带 `-rc.N` / `-beta.N` 后缀
-- CLI 发布 `2.0.5-rc.7` 时，npm 包版本为 `2.0.5`；Desktop 发布 `2.0.5-beta.2` 时同样为 `2.0.5`
-- 主版本每次递增时同步 bump 并发布 npm 包（即使 plugin/sdk 源码未变更）——这是兜底 pin 的版本租金，保证任何产品主版本都有对应契约层可安装
-
-npm 包版本不参与产品发布排序，也不进 `releaseIdentity`。它只在运行期依赖安装与兼容性检查中作为消费方引用的版本。
-
-### 运行期兜底 pin
-
-引擎在插件依赖安装时对 `@wopal/ellamaka-plugin` 做一次兜底 pin，保证插件拿到的契约层类型与引擎一致。这是上游机制的延续：第三方插件声明的依赖版本无法与每次产品发布同步，引擎以运行期 pin 补齐对齐。
-
-pin 版本 = `InstallationVersion` 剥离 prerelease 段后的纯主版本。CLI 构建 `2.0.5-rc.7` → pin `@wopal/ellamaka-plugin@2.0.5`。剥离逻辑在 `packages/ellamaka-core/src/installation/version.ts` 单一实现，业务代码不重复书写版本解析。
-
-pin 与插件声明的依赖共存：插件 package.json 声明精确依赖（如 wopal-plugin 声明 `@wopal/ellamaka-plugin`），引擎在安装时以 pin 版本兜底对齐。pin 失败不阻断插件自身声明的依赖安装，插件声明的版本优先生效。
-
-### 发布时序
-
-每次 CLI 或 Desktop 主版本发布时：
-
-1. 主版本递增（`2.0.5` → `2.0.6`）写入产品 package.json，npm 包同步 bump 到同版本
-2. 先发布 `@wopal/ellamaka-sdk@x.y.z`，再发布 `@wopal/ellamaka-plugin@x.y.z`（依赖方向决定顺序）
-3. CLI/Desktop workflow 的 release job 追加 npm publish 步骤（幂等：已发布版本跳过），仿 `@wopal/cli-capability-schema` 的发布脚本模式
-
-npm 发布在 release job 内完成，与 R2 二进制发布同一次触发，不引入独立发布动作。
+独立 npm workflow 负责 side-effect-free Public Platform contract export、generated client/types、完整 public OpenAPI、`/http` helper、self-contained `/local` Worker、`npm pack` 与 source-tree 外 clean-install。Official App BFF contract/client 随 `ellamaka-app` 产品构建校验，不进入 SDK tarball。CLI/Desktop product workflow 不隐式发布 SDK。
 
 ### 消费者契约
 
-插件消费 fork 扩展时声明 `@wopal/ellamaka-plugin` 依赖，不再复制类型或依赖上游包。当前消费者：
+- Browser/Desktop/Workbench 的 Runtime/WopalSpace 平台能力消费 `@wopal/ellamaka-sdk/http`；官方 App BFF 由 `ellamaka-app` 私有 client 消费；
+- Wopal CLI 的 Ontology/Space 本机调用消费 `@wopal/ellamaka-sdk/local`；
+- Wopal CLI Product 继续使用自己拥有的产品管理实现，不通过 SDK WopalSpace API；
+- Ellamaka build/start/update 不依赖 Wopal CLI minimum version 或 machine protocol。
 
-- `wopal-plugin`（`.wopal/plugins/wopal-plugin`）：消费 `wopalSpaceRoot` 与 `systemMetadata`，契约见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`
-- 内部 `dsh-adapter`（`@wopal/ellamaka-cordis/dsh-adapter`）：随产品编译，消费同构建的 Plugin SDK；位置、配置与执行契约见 [工具容器设计](./DESIGN-ellamaka-tools.md#internal-adapter)。
+## Archived Version Compatibility
 
----
+当前 publisher 只生成标准 SemVer 与 Manifest Schema v2。分发 reader 仍能识别归档版本格式 `X.Y.Z-N` / `X.Y.Z-N.rcM`，用于读取已经存在的安装与发布记录；这些格式永远只读，不参与当前版本分配、latest 推进或自动 cleanup 排序。
 
-## Legacy Migration
+归档版本遵循以下固定规则：
 
-历史 `X.Y.Z-N` 和 `X.Y.Z-N.rcM` 保持不可变归档。迁移 reader 可以将它们解析为 legacy identity，供识别当前安装和迁移路径使用，但新 publisher 不再生成这些格式，也不把 legacy comparator 用于新 release。新 CLI rc 的标准 SemVer 形状 `X.Y.Z-rc.N` 与 legacy `X.Y.Z-N.rcM` 迭代格式无关，publisher 将其作为正式 release 处理，沿用 [Immutability and Cleanup](#immutability-and-cleanup) 的 immutability 边界。
-
-第一批标准 Ellamaka 产品版本必须在 SemVer precedence 上高于所有已发布 legacy 版本。legacy `X.Y.Z-N` 是 prerelease，同 base 的正式版 `X.Y.Z` 在 SemVer 2.0 中天然高于它，因此 migration floor 是最高 legacy 版本的同 base 正式版（如 `1.15.13-4` → floor `1.15.13`）。同 base 版本本身已被 tag/R2 占用检查拦截，后续 patch（`1.15.14`）可跟随 OpenCode baseline 发布。实际版本由迁移时的最高已发布版本决定。
-
-迁移期规则：
-
-1. 生成一次 legacy inventory（现存 tag、R2 versioned path、manifest、artifact SHA-256、channel alias 和可确认的 source commit）并从此冻结。若历史上同一个 legacy version 曾被覆盖，只能把切换时仍可验证的 R2 snapshot 归档为当前事实；无法重建的旧 build 不得伪造 identity。
-2. 检测到本机 legacy binary 与 inventory hash 不一致时，将其标记为 `legacy-unknown-build`，允许迁移到第一批标准版本，但不能据此覆盖或回写历史 release。
-3. 先发布支持新旧 manifest 的 reader，publisher 双写顶层兼容字段与结构化 ReleaseIdentity，再切换 tag、workflow、latest 和 cleanup 到新规则，最后迁移 Desktop 与 Wopal CLI 消费者。达到旧客户端淘汰门槛后再删除旧字段和 legacy parser；历史对象不重写。
-
----
+1. 无法按当前 ReleaseIdentity 证明的本机 binary 标记为 `archived-unknown-build`，不能据此改写任何远端发布记录。
+2. 当前标准版本必须在 SemVer 顺序上高于同产品归档发布线的最高可用版本。
+3. Cleanup 对归档格式 fail closed：保留对象，不与标准 SemVer 混排删除。
+4. 当前 manifest 可以保留 reader 仍需要的兼容字段，但这些字段不是第二份版本真相源。
 
 ## Related Documents
 

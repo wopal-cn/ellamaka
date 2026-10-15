@@ -1,7 +1,7 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-10
+> **Updated**: 2026-10-14
 > **Parent**: `./DESIGN.md`
 > **Scope**: DSH v0.2 的工具采用、内置 adapter、容器装配、审批与沙箱兼容。
 
@@ -18,7 +18,7 @@ Ellamaka 通过 `ellamaka-tools` profile 获得工具执行后端。容器装配
 | 字符串编辑 | str_replace_editor          | 明确的 tool-str-replace-editor 行与 fs-sandbox |
 | Shell      | bash；Windows 实际源为 pwsh | 平台 shell executor 与 sandbox                 |
 
-新 Session 外部能力经 PTC 消费的装配契约由独立设计定义。本文保持当前采用表与权限消费面的兼容。
+本文的 Active 实施范围是当前工具采用表、内部 adapter、权限消费与宿主 PTC provider/preflight。Session 外部工具 grant、SDK 注入和 run_code 的新装配方式仍由独立 Session Assembly 草案讨论，正式定稿前不作为本文的无条件实施目标；本文保持当前 native 采用面的兼容。
 
 ## Container Composition
 

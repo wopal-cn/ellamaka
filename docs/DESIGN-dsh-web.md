@@ -1,7 +1,7 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-11
+> **Updated**: 2026-10-14
 > **Parent**: `./DESIGN.md`
 
 `web` profile 承载 DSH 的完整界面与会话。宿主基座、home、包解析、数据导入和配置队列由 [DSH 基础设计](./DESIGN-dsh-base.md) 拥有，本文定义 Web 的插件供应链、声明式 preset 和界面承载。
@@ -52,7 +52,6 @@ CLI 的 host-wide 操作与原生管理服务的 current-profile 操作使用明
 | plugin add / remove / install     | 精确声明、受控安装和明确作用域                          |
 | plugin enable / disable / list    | 用户补丁启停与已装清单                                  |
 | dump-config / dump-default-config | 实际完整层或仅 bundle 层；显式 patch 缺失时报配置错误   |
-| init                              | 共用初始化核心准备产品环境、验收 profile 后释放临时实例 |
 
 plugin 的 profile 选项归子命令；根级选项出现在 plugin 之前时遵循现有冲突语义。程序启动由 serve/web/TUI/Desktop 产品入口拥有，用户插件安装不转发到外部包管理工具。
 
@@ -80,7 +79,7 @@ Web 的 preset 目录由 agent-preset 声明与 agent-preset-registry 服务组�
 
 声明更新产生新的 revision，已有 Agent 保留使用中的 revision，新绑定使用当前定义。无法导入、等待不可用服务或泄漏全局服务的定义按原生 broken-definition 语义提供诊断。默认定义通过可绑定验收后，宿主发布 Web 挂载成功。
 
-目录式用户 preset 的导入、settings 版本转换与源数据保留归属基础设计的导入事务。插件和 ontology 的分发产物使用标准声明 bundle。
+已有用户 preset/配置的适配遵循对应 DSH release guide，保留原始数据；Ellamaka 不建设通用格式转换事务。插件和 ontology 的分发产物使用标准声明 bundle。
 
 ### Runtime Capability Policy
 
@@ -115,20 +114,9 @@ dsh/agents-presets/
 
 `dsh.bundle.patch` 有序加载三个角色的 preset.patch.yml。每个补丁插入官方 agent-preset 声明，包含稳定 id、展示元数据与 plugins；注册、绑定和 revision 由 DSH 原生 preset 服务管理。工具、技能与 persona 使用对应 preset 中的官方插件行配置。
 
-安装通过标准插件供应链将包快照放入 web profile 的 node_modules，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，不以存在 package.json 作为已发布 npm 包的证明。生成与兼容检查使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 历史，不属于 Ellamaka Home 迁移模型，也不作为配置编辑目标。
+安装通过标准插件供应链将包快照放入 web profile 的 node_modules，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，不以存在 package.json 作为已发布 npm 包的证明。生成与兼容检查使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 自身版本，不参与 Ellamaka Home closureVersion 判断，也不作为配置编辑目标。
 
 自定义 DSH tools 与 MCP 按各自标准 DSH 插件/bundle 挂载；此 preset bundle 不承担所有动态能力的总包职责。Ellamaka 通过工具容器消费外部能力，其内部 adapter 契约归工具容器设计。
-
-## 空间皮肤插件
-
-一个插件实现「界面按空间定制」，含服务端与客户端两半。
-
-- **空间识别**：服务端从当前会话的工作目录反查所属空间。dsh 会话按空间目录建立，空间目录带 `.wopal-space/` 标记，纯文件系统判断，不依赖跨引擎调用。
-- **数据通道**：服务端在 `/dsh/*` 下暴露该空间的皮肤配置（主题变量覆盖、界面件开关、品牌资源）；客户端同源请求，在同源适配下天然可用。
-- **界面件**：客户端按配置应用主题变量与声明式插槽——品牌位、输入框上下常驻信息条、会话头部动作位、自定义工具的对话卡片。
-- **风格一致性**：主题变量对齐 workbench 设计语言，皮肤件与 workbench 共享同一套品牌资源。
-
-界面定制只走声明式插槽与主题变量，不整区替换，以保证未来架构演进时定制件可无损迁移。
 
 ## 组队语义
 
@@ -147,76 +135,25 @@ dsh/agents-presets/
 
 2. **物化生成**：Core Runtime Preparation 将运行必需的标准 profile 基线物化到固定核心 Home `$WOPAL_HOME/dsh/home`。WopalSpace Onboarding 只在用户选择相关增强时，通过同一受控写入服务追加 ontology 提供的 preset bundle。profile 的声明文件物理复制到 `$DSH_HOME/profiles/<profile>/`，更新时采用声明合并策略（bundle 去重联合，保护本地自定义修改）。保持本地目录物理独立，规避跨目录软链带来的锁失效、模块寻址逃逸与热加载穿透问题。
 
-3. **准备与激活**：serve、Desktop、run 与默认 TUI 共用 Core Runtime Preparation，但 preparation 与 runtime activation 分离。profile 物化、包实体和元数据检查都写固定核心 Home；closure fingerprint 变化时必须先完成固定 Home backup，之后目标 DSH 自己处理它支持的原生迁移。Core READY 后各入口才按需挂载 Web/tools；`ELLAMAKA_DSH=0` 时整个 DSH prepare/activate 分支跳过。固定 Home 与 closure-change backup 归 [基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
+3. **准备与激活**：serve、Desktop 与默认 TUI 共用 Core Runtime Preparation；ellamaka run 固定 DSH-disabled。Runtime 使用统一 closureVersion 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Core READY 后各入口才按需挂载 Web/tools；ELLAMAKA_DSH=0 时整个 DSH 分支跳过。细节归 [基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
-## 多 profile 解耦
+## Core Profile Hosting
 
-核心的两个容器（Web 与工具）保持同进程。实验性的第三方 profile 以独立进程运行，带独立的 DSH_HOME，不进入主 Web 容器，不与主引擎共享 profile 目录。
+核心 Web 与工具由同一产品 Runtime host 拥有；Web 冷重建遵循主设计的 Unified Reload，tools 默认在宿主进程内。两个 profile 使用各自 Cordis context，工具容器保持 session-free，不作为独立的用户空间。
 
-### 空间模型
+多个 `serve`、Desktop、TUI 与纯 native `run` 同时存在是 Core 产品要求；`run` 不参与 DSH profile 挂载或 Home 使用。同一 closureVersion 下，各入口按自身正常职责直接挂载所需的官方 profile；Ellamaka 不选举 Home owner、不建立 single-owner hosting、不通过 proxy 共享 Web profile，也不为 `web` / `ellamaka-tools` 增加宿主级 writer lock。部分 DSH plugin/backend 可能尚未提供完整的跨进程一致性保证，因此多个 DSH-enabled 实例共享同一 Home 仍存在上游并发风险；该风险与直接运行多个官方 DSH 实例相同，是当前接受的已知限制。用户希望避免该风险时，可自行只保留一个 DSH-enabled 实例，并对其他实例设置 `ELLAMAKA_DSH=0`。
 
-Workbench 顶栏的空间类型扩展为三类：
-
-| 空间类型         | 标识               | 内容                              | 进程归属            |
-| ---------------- | ------------------ | --------------------------------- | ------------------- |
-| **助理**         | `assistant`        | ellamaka 原生通用会话空间         | ellamaka serve 进程 |
-| **DSH**          | `dsh`              | dsh web profile，完整界面         | ellamaka serve 进程 |
-| **实验 profile** | `dsh-profile:<id>` | 指定闭包与指定 profile 的隔离实例 | 独立进程            |
-
-- 助理与 DSH 各自独立开关、独立持久化激活状态，互不遮蔽。
-- 实验 profile 是注册式实体：一个实验 profile 对应一个独立进程与一个空间标签，携带独立入口地址与健康状态。
-- 工具容器保持同进程，不作为独立空间呈现。它服务于工具投影，不是用户可见空间。
-
-### 配置模型
-
-dsh 相关配置采用两层模型：
-
-| 层         | 位置                           | 作用                                          |
-| ---------- | ------------------------------ | --------------------------------------------- |
-| 默认值     | 空间配置的 `ellamaka.dsh.*` 域 | 定义各空间的启停默认值与实验 profile 注册清单 |
-| 运行时覆盖 | 设置面板与持久化存储           | 用户界面内修改，立即生效并持久化              |
-
-合并逻辑：面板有值用面板值，未设置回落配置文件默认值。
-
-`ELLAMAKA_DSH=0` 仍然保留为硬禁用路径，环境变量显式设置时优先于配置。这保证配置损坏时仍有自愈手段。
-
-### 进程拓扑
-
-**核心容器保持同进程**。Web profile 与工具 profile 继续与 ellamaka serve 同进程，得到单端口、单进程、零延迟工具调用。
-
-**实验 profile 独立进程**。每个启用的实验 profile 由独立进程承载；它属于显式隔离实验域，不是正式核心 Active Home 的另一个版本，也不得被主 runtime 当作 Home 回滚目标。收益有三：
-
-1. **闭包版本隔离**：实验进程可以绑定任意历史闭包，主进程继续跑当前闭包，避免单进程内双版本官方包冲突。
-2. **故障防扩散**：实验插件崩溃、死锁或内存失控不影响主进程与正式 DSH 空间。
-3. **home 隔离**：实验进程使用自己显式注册的隔离 DSH_HOME，不与核心 `$WOPAL_HOME/dsh/home` 共享 profile 目录。该例外只属于实验进程，不改变正式 Ellamaka runtime 的固定 Home invariant。
-
-**启动范式**：独立启动加 Workbench 注册（用户自起、自己连）。`ellamaka dsh up --profile <name> --closure <fingerprint> [--port 0]` 独立跑出认证入口；Workbench 通过服务器管理界面注册，复用现有的添加、健康探针与持久化机制。注册后成为空间标签。主进程对实验进程零感知、零生命周期看管职责，隔离最干净。
-
-### 闭包版本物化扩展
-
-Runtime Manager 当前只物化宿主锁定的版本集。实验 profile 需要物化指定历史版本：
-
-- 物化指定版本到 `closures/<fingerprint>`，复用现有的锁、暂存、校验、激活管线，版本来源从内嵌清单改为显式参数。
-- 结果遵循闭包只增不减的约束，成功后永久保留，同指纹无限复用。
-
-### 前端机制
-
-- **标签模型**：助理、DSH、实验 profile 在顶栏并排；可见性从布尔派生改为按空间标识派生；激活空间决定呈现哪个表面。
-- **保活 iframe 池**：每个 dsh 类空间持有一个保活 iframe，切换标签只切显示不重载，会话状态保留。
-- **健康指示**：复用现有的按服务器健康探针机制，实验进程状态映射到空间标签指示。
-- **信号绑定**：从单一的引擎挂载状态扩展为「引擎挂载态加实验空间清单」两类信号。
+**核心容器由同一 Runtime host 拥有**。Web 与 tools 使用独立 Cordis context；Web 的冷重建可使用受管子进程，tools 保持 session-free backend。它们与用户独立启动的实验进程是不同生命周期边界，不通过共享 Web Home owner 解决上游并发问题。
 
 ## 与 Workbench 的界面融合
 
-### 多 profile 解耦前
+### 当前承载模型
 
-dsh iframe 以遮蔽方式占用 Workbench 的「助理」标签，可见性由「dsh 启用且激活标签是通用空间」派生。
+dsh iframe 在 Workbench 的助理标签中承载完整 DSH 界面。DSH 开启且当前激活通用空间时显示 iframe；关闭 DSH 时显示原生通用会话。
 
-- **keep-alive**：iframe 与原生工作区双层持久挂载，只切显示；切换标签不重载 iframe，dsh 会话状态保留。
-- **覆盖范围**：iframe 覆盖助理标签的内容区全部，dsh 界面自带侧栏。
-- **回落**：禁用 dsh 时助理标签显示原生通用会话空间，与引入 dsh 之前一致。
-
-这个遮蔽模型由多 profile 解耦演进替代——同一个标签在不同开关下代表两个不同的产品系统，心智模型分裂，也无法承载第二个 dsh 环境。
+- iframe 与原生工作区持久挂载，切换只改变可见性，不重载会话。
+- iframe 覆盖内容区，DSH 自带侧栏。
+- 独立 DSH 标签、实验 profile、空间皮肤与跨框架插件定制属于 Proposed 子设计，本轮不作为运行基础的交付目标。
 
 ### iframe 地址派生
 
@@ -224,39 +161,11 @@ iframe 的来源地址优先取认证入口，回落 `<server url>/dsh/` 派生�
 
 原因是开发模式下前端与后端分别监听不同端口，相对 `/dsh/` 在开发页面会解析到前端来源。开发下经代理指向页面来源的 `/dsh/`，Desktop 与生产指向后端来源，两侧都命中挂载点。
 
-### 前端插件互通
-
-dsh 前端插件体系与 Workbench 是两套框架，组件经 Web Component 跨框架互通。
-
-**启动前提**（两条同时满足才排期）：
-
-1. 插件生态在真实使用中：自建插件已日常在用，外部发现的插件中有被实际留存的案例。
-2. Workbench 侧完成插槽化：已建立三到五个挂载点与属性契约。
-
-**一个插件包的三个激活面**：profile 的 `package.json` 是唯一真相源，启用与禁用一个动作管三处。
-
-| 面             | 目标                            | 激活契约                                 |
-| -------------- | ------------------------------- | ---------------------------------------- |
-| 服务端补丁     | dsh 服务端容器                  | profile bundle 层激活                    |
-| 客户端         | dsh 界面                        | 官方客户端模块加载                       |
-| workbench 界面 | Workbench 的 Web Component 插槽 | 满足本节启动前提后按插槽与加载器契约激活 |
-
-新版面在插件声明中增加 workbench 界面段（入口文件与插槽清单）。插件作者用 React 写组件并包 Web Component 壳，或直接写轻量组件；Web Component 自包含运行时，Shadow DOM 提供样式隔离。
-
-**数据通道**：dsh 容器的 HTTP 面挂在主服务器的 `/dsh/*`，Workbench 页面与之同源（生产同服务器，开发经代理转发）。dsh 第三方插件「服务端注册路由加客户端同源请求」的标准数据模式在 Workbench 中原样成立，改造量集中在界面壳。
-
-容器未运行时，数据请求失败的降级语义由 Workbench 加载器承担：组件显示不可用态，不污染宿主。
-
-**执行顺序**：同源连通 → 加载器最小链路 → 数据面实证 → 真实插件实证 → 失败语义。每步独立可逆。
-
-**平台侧改造**：Bridge 提供 Web Component 文件的静态路由；Workbench 侧增加开发代理、插槽面（初始三到五个挂载点与属性契约）、组件加载器（读 profile 声明、过滤、动态导入、Shadow DOM 挂载、错误隔离、卸载）；供应链的启用面取值扩展加入 workbench。
-
-**信任面**：Web Component 与 Workbench 同页面上下文，可信度等同于 dsh 插件同进程执行。用户显式安装加安装时的风险提示，不新增权限体系。此面不触碰官方闭包，不进入 dsh 界面运行时。
-
 ## Related Documents
 
 | 文档                                                                 | 引用目的                      |
 | -------------------------------------------------------------------- | ----------------------------- |
 | `./DESIGN-ellamaka-tools.md`                                         | 工具容器 profile 的装配与投影 |
+| `./DESIGN-dsh-custumize.md` | Proposed 定制方向，非本轮实施合同 |
 | `./DESIGN-workbench.md`                                              | Workbench 工作台设计          |
 | `research/deepseek-harness-architecture-and-integration-research.md` | dsh 全景调研                  |

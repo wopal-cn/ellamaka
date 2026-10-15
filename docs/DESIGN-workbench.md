@@ -1,7 +1,7 @@
 # Ellamaka Workbench 设计规范
 
 > **Status**: Active
-> **Updated**: 2026-09-17
+> **Updated**: 2026-10-15
 > **Parent**: `./DESIGN.md`
 >
 > 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
@@ -10,7 +10,7 @@
 
 ## 方向与核心理念
 
-Ellamaka Workbench 是由 `packages/ellamaka-app` 承载的独立产品界面。该包从上游 `packages/app` 独立复制而来，是 Ellamaka 自有的应用副本。
+Ellamaka Workbench 是 `packages/ellamaka-app` 的运行阶段界面；同一个前端 package 还承载配置阶段 `/onboarding`。该包从上游 `packages/app` 独立复制而来，是 Ellamaka 自有的应用副本。
 
 **根本边界**：`packages/ellamaka-app` 独立演进，完整拥有 Workbench 与 Chat 的产品体验，可以根据目标体验重组页面、组件、状态与样式。需要参考上游 UI 实现时，从 `labs/ref-repos/opencode/packages/app` 读取。
 
@@ -48,6 +48,59 @@ Ellamaka App
 ```
 
 面板工作区是产品核心。每个激活的空间可包含 1 到 3 个水平面板，每个面板支持独立的 TUI 或 Chat 视图，可分别定位到 WopalSpace 内任意目录。每个面板可选在底部展开一个 Split Terminal 辅助终端区域。
+
+### Backend Composition Boundary
+
+Workbench 是 `@wopal/ellamaka-app` 的产品界面，不是 Runtime domain。官方 App 同时拥有一层 App BFF，用于把 Runtime 与 WopalSpace 的通用能力组合成 Workbench 正好需要的 projection/use case。
+
+```text
+Public Platform API
+├─ Runtime: Session / status / metadata / PTY / ...
+└─ WopalSpace: Space / projects / files / search / ...
+              │
+              └──────────────┐
+                             ▼
+                   Official App BFF
+                   ├─ sessionTree
+                   ├─ locations
+                   ├─ createSession
+                   └─ dshEntry
+                             │
+                             ▼
+                      Ellamaka Workbench
+```
+
+Space registry、projects、files、search、registered-root validation 等可复用事实由 `@wopal/wopalspace` 提供；Session/status/metadata 等可复用事实由 Runtime 提供。这些 contract 进入公开 `@wopal/ellamaka-sdk`。
+
+Session Tree、creation locations、跨 General/Space 的 Session provision 与 DSH iframe entry 带有官方产品结构，归 `@wopal/ellamaka-app` 的 App BFF。BFF 可以和 Public Platform API 挂在同一个 Ellamaka Server/端口，但拥有独立的私有 HttpApi/client，不进入公开 SDK、`GET /doc` 或 SDK SemVer。
+
+Server composition 可以直接组合 private WopalSpace service 与 Runtime service。`ellamaka-core`、Session、Agent、PTY、Tool 等底层 Runtime domain 保持对 WopalSpace 和 App BFF 无反向依赖。
+
+Workbench Renderer 同时消费公开 Platform client 与 app-private client：平台能力来自 `@wopal/ellamaka-sdk/http`，产品投影来自 `ellamaka-app` 内部 BFF client。UI 不检查 Wopal CLI 安装或版本。
+
+#### API Ownership
+
+| 能力 | Owner / contract | Workbench 用法 |
+| --- | --- | --- |
+| Session 状态与 metadata | Runtime public API | 构建会话投影、通知和运行状态 |
+| Space registry/projects/files/search | WopalSpace public API | 构建 Space 导航、文件树与创建候选 |
+| Session Tree | App BFF private API | 按 General/Space/location 聚合官方导航树 |
+| creation locations | App BFF private API | 返回官方“开始会话”选择器候选 |
+| General/Space Session provision | App BFF private API | 校验产品目标并创建 Runtime Session |
+| DSH iframe entry | App BFF private API | 返回官方 App 当前可用的受控嵌入入口 |
+
+App BFF 的私有 HTTP contract 固定为：
+
+| Operation | Method/path | Contract |
+| --- | --- | --- |
+| `app.workbench.createSession` | `POST /workbench/sessions` | 输入 General 或 registered Space target，完成产品级目标校验后创建 Runtime Session；同一 requestID 幂等 |
+| `app.workbench.sessionTree` | `GET /workbench/session-tree` | 聚合 General/Space、project/location 与 active root Session，供官方左侧导航树使用 |
+| `app.workbench.locations` | `GET /workbench/locations` | 输入 Space 与可选 query，返回 Space root、registered projects、recent/search 候选；不暴露任意文件系统浏览 |
+| `app.workbench.dshEntry` | `GET /workbench/dsh-url` | 返回当前宿主可用的受控 DSH iframe entry；未挂载时返回空值 |
+
+Session status/summary 直接消费 Runtime public operation；Space files/list/read 直接消费 WopalSpace public operation。
+
+App BFF 的 schema 可以生成 `ellamaka-app` 内部 client；它与公开 SDK 使用不同 publication boundary。平台领域 DTO 仍以 Runtime/WopalSpace contract 为唯一来源，BFF 只定义自己的 projection DTO。
 
 ---
 
@@ -422,7 +475,9 @@ Session 处于忙碌状态时，Chat 在实时尾部持续表达当前阶段，�
 
 未注册专用渲染器的工具使用统一通用块，任何工具都不会从时间线丢失。头部由工具图标、工具名与最具说明性的输入字段组成：按 `command → action → description → query → url → filePath → path → pattern → name` 的优先级提取第一个有值字段作为副标题（借鉴 Kilo Code 的 GenericTool 启发式，并将 `command`/`action` 提前以适配 WopalSpace 工具生态）；无描述字段时降级展示至多 3 个结构化参数（如 `limit=5`）。展开内容以 JSON/文本输出呈现，限制在约 240px 最大高度内内部滚动。通用块遵守相同的字体、间距、状态与折叠规则，保证新工具自然融入 Chat。
 
-##### TurnOutcome无法归属具体 Part 的 Assistant 错误由 `TurnOutcome` 在回复末尾展示。中断与上下文压缩使用带标签的水平分隔，重试状态紧邻当前活动显示。
+##### TurnOutcome：回复结果
+
+无法归属具体 Part 的 Assistant 错误由 `TurnOutcome` 在回复末尾展示。中断与上下文压缩使用带标签的水平分隔，重试状态紧邻当前活动显示。
 
 #### 默认展开策略
 
@@ -809,7 +864,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 ## 异常处理与健壮自愈机制
 
-Workbench 在运行状况异常（网络抖动、CLI 版本变化、环境配置损坏）下的异常防御与诊断设计。
+Workbench 在运行状况异常（网络抖动、服务或环境配置损坏）下的异常防御与诊断设计。
 
 ### 异常分类与应对原则
 
@@ -824,7 +879,7 @@ Workbench 在运行状况异常（网络抖动、CLI 版本变化、环境配置
 
 为防止用户在离线状态下发生错误输入导致本地状态与数据不一致：
 
-1. **自动挂载**：一旦系统检测到与后端的物理连接中断，即刻在 Workbench Shell 最上层挂载半透明的**连接保护遮罩**，显示"连接已断开，正在尝试重连…"。
+1. **自动挂载**：当 HTTP 健康检查确认后端不可用、运行状态为 offline 时，即刻在 Workbench Shell 最上层挂载半透明的**连接保护遮罩**，显示"连接已断开，正在尝试重连…"。
 2. **输入隔离**：遮罩层拦截所有的鼠标、键盘和拖放操作，并将工作台表面设为 `inert`。
 3. **静默水合**：后台自动重连。连接成功后，自动关闭遮罩并恢复之前的操作现场，无需用户刷新页面。
 

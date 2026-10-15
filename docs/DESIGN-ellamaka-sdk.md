@@ -1,240 +1,350 @@
-# Ellamaka SDK — Runtime HTTP Contract
+# Ellamaka SDK — Unified Public API and Client Transport
 
 > **Status**: Active
-> **Updated**: 2026-10-12
+> **Updated**: 2026-10-15
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
-> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
-> **Scope**: `@wopal/ellamaka-sdk` 的 Runtime HTTP 契约、OpenAPI 3.1 真相源、生成客户端、版本规则与完整契约发现方式
+> **Scope**: `@wopal/ellamaka-sdk` 的统一公开 API、OpenAPI 3.1、generated client、HTTP/local transport、契约发现与发布边界
 > **Sibling DESIGNs**:
 >
-> - `./DESIGN-wopalspace-sdk.md` — trusted-local application SDK 与 local contract
-> - `./DESIGN-onboarding.md` — Onboarding Journey 的 HTTP/local SDK 组合
-> - `./DESIGN-distribution.md` — SDK npm train 与 package publication
+> - `./DESIGN-wopalspace.md` — private `@wopal/wopalspace` application implementation
+> - `./DESIGN-onboarding.md` — Setup/Onboarding 如何消费统一 SDK
+> - `./DESIGN-distribution.md` — SDK npm 发布与产品分发
+> - `./DESIGN-auth.md` — Phase 3 统一认证方向（Draft）
 
 ## Purpose
 
-`@wopal/ellamaka-sdk` 是 Ellamaka Runtime 的公开网络 SDK。它让 Workbench、Desktop Renderer、Node 客户端、Agent 工具和远程调用方通过同一套 HTTP/SSE 契约访问 Runtime，而不是直接依赖 Ellamaka 内部模块。
+`@wopal/ellamaka-sdk` 是 Ellamaka 产品体系唯一公开的 service SDK。
 
-它只表达 **Runtime remote surface**。WopalSpace 的本机 Git、filesystem、setup、Space/Ontology application workflow 与产品安装事务属于 [`@wopal/wopalspace-sdk`](./DESIGN-wopalspace-sdk.md)。两套 SDK 可以在同一宿主中组合，但互不伪装成对方的 transport。
+它公开两类可复用平台能力：
 
-## OpenCode Lineage and Compatibility Policy
+- **Ellamaka Runtime**：health、Session、Agent、PTY、Tool、Provider、Runtime discovery、events 等运行时能力；
+- **WopalSpace**：Setup、Ontology、Space 及其通用查询/文件能力。
 
-`@wopal/ellamaka-sdk` 延续 OpenCode SDK 的 package 结构、生成方式和调用习惯，但公开兼容性由 **Ellamaka 自己已经发布的 SDK contract** 定义。OpenCode 只作为只读参考实现与选择性代码来源；具体 fix 或功能按需 cherry-pick 或手工移植，并由 Ellamaka 的 Git 变更记录保留来源。
+这两类能力共享一个 SDK，不代表内部业务 owner 合并。Runtime service 仍由 Ellamaka Runtime 拥有；WopalSpace implementation 仍只存在于 private `@wopal/wopalspace`。官方 `@wopal/ellamaka-app` 的 Workbench/Onboarding 产品投影属于 App BFF，不构成第三方平台 SDK。
 
-SDK 演进遵循以下原则：
+设计原则是：
 
-- Ellamaka SDK SemVer 对已经发布的 `@wopal/ellamaka-sdk` surface 负责；同一 major 内维持向后兼容。
-- Ellamaka 品牌名称是公开 SDK 的 canonical API；`createEllamakaClient`、`EllamakaClient`、`createEllamakaServer`、`createEllamakaTui`、`createEllamaka` 以及对应 config/type 名称用于文档、示例和新代码。现有 `createOpencodeClient`、`OpencodeClient`、`createOpencodeServer`、`createOpencodeTui`、`createOpencode` 保持为同一实现的兼容 alias，并按 Ellamaka SemVer 管理。
-- OpenCode 的目录布局、codegen 工具和 client conventions 在不妨碍 Ellamaka 架构时继续复用，以降低 fork 维护成本。
-- 从 OpenCode 选择 fix 或功能时，只评估该项变更对 Ellamaka contract、codegen 与消费者的影响；上游 surface 不自动成为 Ellamaka 的兼容承诺。
-
-`@wopal/wopalspace-sdk` 与本 SDK 属于同一个 Wopal SDK family。它遵循相同的 client 组织、错误处理、契约生成、测试与 npm 发布纪律，但不继承 OpenCode SDK 的公开 surface 或命名包袱。
+> **一个公开 Platform SDK、一套公开 API 定义来源、同一 public generated client model；Server 可以同时挂载 app-private API，但 app-private contract 不进入公开 SDK。**
 
 ## Ownership Boundary
 
 ```text
-Effect domain schemas + HttpApiGroup + OpenAPI metadata
-                    │
-                    ▼
-                 PublicApi
-                    │
-          ┌─────────┴──────────┐
-          ▼                    ▼
-    OpenAPI 3.1            HTTP Runtime
-          │                    │
-          ▼                    └── GET /doc
-@wopal/ellamaka-sdk
- generated client/types
+Ellamaka Runtime schemas/services        private @wopal/wopalspace
+              │                                  │
+              └──────────────┬───────────────────┘
+                             ▼
+                 Public Platform HttpApi
+                             │
+                       OpenAPI 3.1
+                             │
+                             ▼
+                  @wopal/ellamaka-sdk
+                  generated client/types
+
+Runtime + WopalSpace facts
+              │
+              ▼
+       Official App BFF HttpApi
+              │
+              ▼
+      ellamaka-app private client
 ```
 
-Runtime domain service 拥有业务状态和行为；HttpApi handler 只负责鉴权、transport 与 DTO 映射。WopalSpace HTTP handler 可以调用 `@wopal/wopalspace-sdk` 的 application operation，但 HTTP 层不重新实现 Space/Ontology/Evolution workflow。
+边界规则：
 
-Ellamaka build、start、HTTP、Onboarding、Desktop 与 release pipeline 的 SDK 契约均来自本仓库。它们不依赖 Wopal CLI binary、Wopal CLI protocol version 或 Wopal CLI 发布的 schema package。
+- Runtime domain service 不 import WopalSpace application service。
+- Server composition root 可以同时挂载 Public Platform HttpApi 与 Official App BFF HttpApi。
+- App BFF 可以同时读取 Runtime facts 和 WopalSpace facts，并只服务官方 `ellamaka-app`。
+- public SDK 不实现业务逻辑，也不包含官方 App 专用 projection/use-case contract。
+- private `@wopal/wopalspace` 不作为 npm consumer package 发布。
+
+## OpenCode Lineage
+
+SDK 延续 OpenCode 已成熟的生成客户端结构、调用习惯和可复用 codegen，但公开兼容性由 Ellamaka 自己已发布的 contract 定义。
+
+Ellamaka 品牌 API 是 canonical surface：`EllamakaClient`、`createEllamakaClient`、`createEllamakaServer`、`createEllamakaTui`、`createEllamaka`。已有 OpenCode 命名只作为同一实现的兼容 alias，不维护第二份 generated source。统一模型采用现有 v2 调用形状；保留名字不表示保留旧 root/v1 的嵌套参数协议。旧调用形状若改变，按 MAJOR 发布并提供升级说明，本仓 v2 调用的行为保持。
+
+## Plugin Client Compatibility
+
+公开SDK的root调用形状与引擎注入的 `PluginInput.client` 是两个兼容边界。SDK统一为canonical v2 model时，不能把现有插件接收的client一起改成另一种参数形状。
+
+`PluginInput.client` 保持当前Plugin SDK公开的原生操作调用合同：旧的 path/query/body封装、构造时的directory/认证、自定义选项、取消、data/error结果与事件流行为。引擎在这个既有入口提供薄调用适配，实际请求仍由唯一canonical generated client编码；不保留第二套generated DTO/业务client，不新建HTTP端点或历史SDK框架。Plugin SDK的client类型应描述这个注入合同，不再从可独立发生MAJOR变化的SDK root factory自动推导。
+
+例如 auth.set 的 `{path:{id},body}` 转成canonical `{providerID:id,auth:body}`；session.get/messages的path.id转sessionID，query/body按对应operation定义转换。转换依据实际公开operation，不能仅靠方法名或类名猜参数。数据schema仍从同一canonical contract取得。
+
+兼容范围以当前Plugin SDK公开且当前Runtime支持的原生操作为准，覆盖内置认证插件及现有ontology插件真实调用。原SDK中已无当前Runtime对应的陈旧声明应明确诊断/升级范围，不能悄悄制造成功。SDK/root的MAJOR升级说明不替代引擎插件兼容验收；引擎注入方式、类型与适配必须在同一Task验证后切换。ontology插件源码在本轮保持只读，不靠迁移它们来掩盖产品内断裂。
 
 ## Canonical Contract
 
-每个 Runtime operation 的权威定义由 Effect Schema、`HttpApiEndpoint` / `HttpApiGroup` 与 OpenAPI metadata 共同组成，合并进 `PublicApi`。以下事实都必须从同一个声明链生成：
+公开 operation 的权威定义来自 Effect Schema、`HttpApiEndpoint` / `HttpApiGroup` 与 OpenAPI metadata。它必须统一描述：
 
-- HTTP method 与 path；
-- Root / Instance scope；
-- path/query/header/body schema；
-- success response 与媒体类型；
-- domain error 与 HTTP status；
-- authentication / authorization metadata；
-- `operationId`、group、description；
-- SSE/event stream 的 wire schema。
+- operation identity；
+- HTTP method/path；
+- Root / Instance / WopalSpace resource scope；
+- input/output；
+- error 与 HTTP status；
+- authentication metadata；
+- SSE/event stream schema。
 
-生成的 **OpenAPI 3.1 document 是完整的公开网络契约清单**。Markdown 只解释长期设计规则和主要 API 家族，不维护完整端点表。
+Public Platform HttpApi 是公开 operation 的唯一 composition。运行中 Server 的 `GET /doc` 和发布 SDK 自带的 OpenAPI 都从这份 public composition 生成，不包含 Official App BFF route，也不维护第二份手写 YAML/JSON。
 
-`operationId` 是 SDK 生成与 Agent discovery 的稳定机器身份。已发布 operation 不通过改名来表达重构；真正 breaking 的语义变化遵循 SDK SemVer。
+Official App BFF 使用独立的私有 schema/HttpApi composition，并可为 `ellamaka-app` 生成内部 client。它不发布 npm SDK、不进入 public OpenAPI，也不参与 `@wopal/ellamaka-sdk` SemVer。
 
-## Major API Families
+内部可以用 domain metadata 区分 Runtime 与 WopalSpace operation，供文档、测试和代码组织使用；**domain metadata 不用于分裂公开 npm SDK。**
 
-下表只给出主要能力边界，**不是完整清单**：
+## API Families
 
-| API family                               | 主要职责                                                   | Scope           |
-| ---------------------------------------- | ---------------------------------------------------------- | --------------- |
-| global / control                         | Runtime 状态、全局控制、健康与生命周期控制面               | Root            |
-| instance / project / file / search / VCS | 当前工作目录相关资源与只读/受控操作                        | Instance        |
-| session / message                        | Session、消息、执行与历史资源                              | Instance        |
-| permission / question                    | 人机审批与问题交互                                         | Instance        |
-| PTY                                      | 终端创建、读写、关闭与状态                                 | Instance        |
-| provider / runtime discovery             | provider、模型与运行时可发现能力                           | Root / Instance |
-| tool / capability discovery              | 运行时实际可用的 skill/rule/tool 等 effective capability   | Instance        |
-| event                                    | Runtime event 与 SSE                                       | Root / Instance |
-| wopalspace                               | WopalSpace local application service 的远程管理投影        | Root            |
-| workbench                                | Workbench 专用的 Session projection、Space UI 资源与管理面 | Root / Instance |
-| onboarding                               | `state/probe/execute/cancel/complete/stream` Journey       | Root            |
+下表只说明 ownership。WopalSpace 的完整 endpoint catalog、输入输出语义和 operation business semantics 由 `DESIGN-wopalspace.md#public-operations` 定义；SDK 不复制第二份业务合同：
 
-真正的 method/path/input/output/error 列表始终从 OpenAPI 3.1 获取。
+| API family | Owner | 主要职责 |
+| --- | --- | --- |
+| global / health / control | Ellamaka Runtime | Server 与 Runtime 状态、诊断 |
+| session / message / agent | Ellamaka Runtime | Agent 会话与执行 |
+| PTY | Ellamaka Runtime | 终端生命周期与连接 |
+| provider / tool / capability discovery | Ellamaka Runtime | effective Runtime 能力 |
+| event | Ellamaka Runtime | Runtime events / SSE |
+| wopalSpace.setup | private `@wopal/wopalspace` | 初始化计划、执行、状态、进度 |
+| wopalSpace.ontology | private `@wopal/wopalspace` | Ontology lifecycle |
+| wopalSpace.space | private `@wopal/wopalspace` | Space lifecycle、registry、query、selection |
 
-`global.health` 是 Runtime 自身状态的公开只读事实。它保留 `dsh` 状态，并提供结构化 DSH detail（稳定 reason code、target/home generation 与安全缩写的 fingerprint）。Wopal 管理的 `serve` 还可在启动时注入随机 `managedInstanceId`，health 原样回显该值和当前 PID，供 `wopal status/stop` 证明“这个 endpoint 仍是我启动的实例”。读取 health 不触发 Core preparation、closure materialization 或 Home 写入。
+Product 安装/更新不进入 WopalSpace API；继续由 Wopal CLI 拥有。Evolution 全部在 Wopal CLI 本机执行，不消费 SDK 的 Ontology/Space operations，也不增加 Evolution 提交或恢复 API。
 
-## Client Contract
+## One Generated Client Model
 
-`@wopal/ellamaka-sdk` 保留现有生成客户端的 resource-grouped `data/error` 调用模型与 `throwOnError` 语义。调用者提供连接信息与鉴权；生成 method 接收 OpenAPI 定义的 serializable input，返回生成 DTO。SDK 不通过 shell 调用 `ellamaka` 或 `wopal` 来模拟网络 operation。
-
-### Public Branding
-
-公开 TypeScript API 以 Ellamaka 品牌名称为 canonical surface：
-
-| Canonical API          | Compatibility alias    | Contract                                                |
-| ---------------------- | ---------------------- | ------------------------------------------------------- |
-| `EllamakaClient`       | `OpencodeClient`       | 同一个 generated client class；alias 不生成第二个 class |
-| `EllamakaClientConfig` | `OpencodeClientConfig` | 同一个 client config type                               |
-| `createEllamakaClient` | `createOpencodeClient` | 同一个 client factory；连接已有 Runtime                 |
-| `createEllamakaServer` | `createOpencodeServer` | 同一个 local process launcher；启动 `ellamaka serve`    |
-| `createEllamakaTui`    | `createOpencodeTui`    | 同一个 local TUI launcher                               |
-| `createEllamaka`       | `createOpencode`       | 同一个 convenience helper；启动 Runtime 后创建 client   |
-
-codegen 的 canonical instance name 使用 `EllamakaClient`。兼容名称通过静态 export alias 或零逻辑 forwarding wrapper 暴露，不能维护第二份 generated source、schema 或 transport 行为。兼容 alias 与 canonical API 必须通过 identity/behavior contract tests 证明返回同一类型和相同行为。
-
-OpenAPI code sample、Developer Reference、README、新测试与新应用代码只展示 Ellamaka 品牌名称。已有 OpenCode 命名继续可编译运行，但不作为新示例的首选入口。SDK 自己产生的用户可见错误和诊断使用 Ellamaka 品牌，例如 `Ellamaka Server`；兼容函数名不改变 Runtime 品牌或错误文案。
-
-Browser 与 Node 使用同一生成 contract。只在 transport 适配层允许环境差异，例如 base URL、fetch implementation、credential injection；领域 DTO 与 operation identity 不因运行环境分叉。
-
-Runtime SDK 不直接执行本地 Git / filesystem application workflow、`$WOPAL_HOME` 产品安装事务、CLI/Desktop binary 替换、DSH closure materialization/Home backup 或 Wopal CLI machine capability；这些能力由各自 owner 提供。
-
-## Full Contract Discovery
-
-Agent 和工具必须有三条等价的完整契约发现路径。
-
-### Running Runtime
-
-运行中的 Ellamaka 提供：
+平台调用方使用统一的 `EllamakaClient`。公开业务按 namespace/resource group 组织，例如：
 
 ```text
-GET /doc
+client.global.*
+client.session.*
+client.pty.*
+client.wopalSpace.setup.*
+client.wopalSpace.ontology.*
+client.wopalSpace.space.*
 ```
 
-它返回该进程实际 `PublicApi` 生成的 OpenAPI 3.1，是判断“这个正在运行的实例真正支持什么”的首选来源。
+同一个 public operation 的 method、input、output、error 不因 transport 变化。
 
-### Published SDK Package
+HTTP client 访问 Server 的 **Public Platform surface**；它不承诺 Server 上的 app-private/internal route。本机 WopalSpace client 从同一 public generated source/type 中暴露 `wopalSpace` application subset，不复制一套 DTO 或业务方法定义。
 
-`@wopal/ellamaka-sdk` 的 npm artifact 必须包含与该 SDK 版本对应的不可手改 OpenAPI snapshot，并通过稳定 package export 暴露：
+`ellamaka-app` 可以从 Official App BFF contract 生成自己的 private client。该 client 的 projection DTO 只服务官方 App，不是 Runtime/WopalSpace domain DTO 的第二份来源。
+
+
+## Official App BFF Boundary
+
+`@wopal/ellamaka-app` 同时拥有前端体验和为该体验定制的 BFF contract。BFF 与 Public Platform API 挂载在同一个 Ellamaka Server，并共享统一认证/监听器，但 publication boundary 独立。
+
+App BFF 只承载需要跨领域组合或直接服务界面结构的 contract，例如：
+
+- Session Tree：把 General/Space/Project/Session facts 投影成官方 Workbench 导航树；
+- creation locations：把 registered Space、project、recent directory 等事实投影成官方创建会话候选；
+- Session provision use case：把 General/Space 目标校验与 Runtime Session 创建组合成一个官方 App 动作；
+- DSH embed entry：向官方 App 提供当前宿主的受控 iframe entry。
+
+可独立复用的领域能力不得只存在于 App BFF。Space 文件读取属于 WopalSpace public contract；Session 状态与 metadata 属于 Runtime public contract。App BFF 优先组合这些 public/domain service，而不是复制业务状态机。
+
+App-private HttpApi 可以拥有生成的内部 client 和 build-time contract 校验。它不导出到 `@wopal/ellamaka-sdk`、不出现在 `GET /doc`、不为第三方提供兼容承诺。
+
+## Public Entrypoints
+
+目标公开入口：
+
+| Entrypoint | 用途 |
+| --- | --- |
+| `@wopal/ellamaka-sdk` | generated client/types、无副作用 contract metadata、通用 client factory |
+| `@wopal/ellamaka-sdk/http` | 连接已经存在的 Ellamaka Server，使用 HTTP/SSE/WebSocket |
+| `@wopal/ellamaka-sdk/local` | trusted-local WopalSpace application transport，供 Wopal CLI 等本机 consumer 使用 |
+| `@wopal/ellamaka-sdk/openapi.json` | 当前 SDK 版本完整公开 OpenAPI contract |
+| `@wopal/ellamaka-sdk/openapi` | 程序化读取同一 OpenAPI document |
+
+root import 不能因为被 import 就启动 Worker、Server、DSH 或扫描用户目录。
+
+## HTTP Transport
+
+Browser、Desktop Renderer、远程 CLI/Agent 通过同一个 Ellamaka Server 使用公开 SDK 的 Platform surface：
 
 ```text
-@wopal/ellamaka-sdk/openapi.json
+EllamakaClient
+    │ HTTP / SSE / WebSocket
+    ▼
+Ellamaka Server
+    ├─ Public Runtime handlers
+    ├─ Public WopalSpace handlers
+    └─ Official App BFF handlers  <- ellamaka-app private client
 ```
 
-Agent 在没有运行 Runtime 时，从已安装 package 解析该文件即可获得完整 operation、schema、error 与 metadata。package 还提供 `@wopal/ellamaka-sdk/openapi` 的 JS export 方便程序直接读取 document；二者来自同一生成物。
+Server composition 内部直接调用 private `@wopal/wopalspace`，不绕 SDK loopback 调用自己。Official App BFF 也直接组合内部 domain services，不经 public HTTP 回调同一进程。
 
-### Source Tree
+HTTP 调用作用于 Server 所在机器。请求不能通过普通参数替换 Server 的 `WOPAL_HOME`、产品固定 runtime descriptor 或 DSH closure identity。
 
-SDK workspace 提供 side-effect-free 的 contract export entry。它只装配 schema / `PublicApi` 并输出 OpenAPI，不启动 HTTP server、DSH、Home preparation、模型或任何用户资源。`packages/sdk/js` 的 `contract:export` script 是源码树的稳定入口，可输出到 stdout 或指定文件。
+## Local WopalSpace Transport
 
-这三种来源必须 canonicalize 后具有相同 contract digest。发布与测试不接受“运行时 `/doc` 一份、SDK codegen 一份、仓库 snapshot 又一份”的漂移。
+Wopal CLI 需要复用 Ontology/Space 业务，但不应该为了本机调用启动 localhost Server，也不能依赖 unpublished private package。
 
-### Agent Discovery Procedure
-
-Agent 按环境选择最直接的真相源：
-
-| Environment           | Procedure                                                                  | Meaning                                              |
-| --------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------- |
-| running Runtime       | `GET /doc`                                                                 | 当前进程实际支持的完整 HTTP contract                 |
-| installed npm package | `node -p "require.resolve('@wopal/ellamaka-sdk/openapi.json')"` 后读取文件 | 该 exact SDK package 的完整发布 contract             |
-| Ellamaka source tree  | 在 `packages/sdk/js` 运行 `contract:export --stdout`                       | 当前 source `PublicApi` 的 side-effect-free contract |
-
-Agent 需要列 API、生成调用代码、判断字段或错误码时，必须先读取上述 OpenAPI。`DESIGN-ellamaka-sdk.md` 的 API family 表和 Wopal CLI 的 `capability spec` 都不能代替完整 Runtime contract。
-
-### Developer Reference Presentation
-
-Runtime OpenAPI 与 WopalSpace local SDK 的 discovery contract 保持两个独立文档。统一 Developer Reference Portal 可以同时展示两套契约，但 Runtime 页才提供真实 HTTP `Try it`；local SDK 页展示 method、schema、错误与 TypeScript 调用示例，不把 local operation 伪装成 HTTP endpoint。
-
-## OpenAPI Publication
-
-SDK generation 使用一次生成的 OpenAPI snapshot 作为唯一输入：
+`@wopal/ellamaka-sdk/local` 使用 Worker transport：
 
 ```text
-PublicApi
-  → side-effect-free OpenAPI export
-  → packages/sdk/openapi.json
-  ├─→ @hey-api generated client/types
-  ├─→ npm package openapi.json
-  ├─→ Scalar/docs tooling
-  └─→ contract digest / compatibility checks
+Wopal CLI / trusted local consumer
+        │
+        ▼
+Ellamaka generated WopalSpace methods
+        │ custom fetch
+        ▼
+      Worker RPC
+        │
+        ▼
+   app.fetch(Request)
+        │
+        ▼
+private @wopal/wopalspace handlers
 ```
 
-生成文件不可手改。发布包至少包含 generated JS client、generated TypeScript declarations、`openapi.json` 与可读取的 package version / contract digest metadata。
+本机 transport 仍使用标准 Request/Response contract，因此本机与 HTTP 不产生两套 WopalSpace API。
 
-`GET /doc` 同样从 `PublicApi` 生成，不维护第二份 YAML/JSON schema。
+Local Worker 可以注入 `$WOPAL_HOME`、cwd、Git/filesystem adapter 等可信本机能力，但这些只是 execution environment，不是另一套业务状态机。Setup 只通过运行中的 Server `/onboarding` 使用，不在 `/local` 建立第二种 presentation。
 
-## Authentication and Scope
+### Local Surface
 
-Root API 承载全局控制与 WopalSpace 管理能力；Instance API 绑定明确 directory/context。路径前缀不是安全边界，认证和资源授权由服务端 middleware / domain service 执行。
+`/local` 的目标是 WopalSpace trusted-local application 调用，不是替代完整 Ellamaka Runtime host。当前用于 Ontology、Space 等 CLI 需要的本机 operation；Setup 只通过 Server-hosted Web Onboarding 使用。
 
-远程请求始终作用于服务器机器。请求不得通过参数切换服务 `WOPAL_HOME`、可执行程序路径或产品固定的 DSH closure。秘密不得出现在 response、OpenAPI example、progress event 或 error detail 中。
+Session、PTY、Agent 等真正 Runtime operation 仍由运行中的 Ellamaka Runtime 提供；调用这些能力应连接现有 HTTP Runtime、TUI Worker Runtime 或显式启动 host。
 
-只读 operation 不因读取而物化资源。需要 Runtime Core 的 operation 在 Core 未 ready 时返回明确的领域状态/错误，不通过 Wopal CLI 做隐式修复。
+## Self-contained Local Artifact
+
+发布后的 `/local` 必须可以被 Wopal CLI 独立安装和使用。消费者不能被要求再安装 private：
+
+```text
+@wopal/wopalspace
+@wopal/ellamaka-core
+@wopal/ellamaka-cordis
+```
+
+构建时把 local Worker 真正需要的 private implementation 和 runtime primitives 组装进 publish artifact；npm runtime dependency graph 只出现公开可安装依赖。
+
+这条规则不意味着把整个 Ellamaka product binary 打进 SDK。Worker 只携带执行 WopalSpace local application contract 所需的代码。
+
+本机 `space.init` 在同一 Worker 内调用 Core 的 instance contributor，完成 `.wopal` path-plugin 依赖准备与 preflight；它不需要运行中的 Server、产品 descriptor 或 DSH。该路径只组合无启动副作用的原语，不能通过导入完整 AppRuntime/Global 启动链来初始化 Worker。
+
+Worker 生命周期覆盖 operation 及其受管子进程收尾。取消消息传到 operation signal；退出前等待安全提交和清理完成。HTTP 与 local 共用 operation schema/error，但 local 只注册 Ontology/Space handlers，Setup 与 Runtime 请求在进入业务前拒绝。Node SEA 消费者使用发布物携带的 Worker 资源，资源定位和启动方式必须通过真实 SEA clean-consumer 验证。
+
+## Setup Transport Boundary
+
+Setup 没有 trusted-local/Terminal presentation。`wopal setup` 不调用 `/local` Setup operation，也不存在跨产品 runtime prewarm helper。
+
+```text
+wopal setup
+  -> start/reuse ellamaka serve
+  -> open /onboarding
+  -> @wopal/ellamaka-sdk/http
+  -> private @wopal/wopalspace/setup
+```
+
+每个 Ellamaka product/build 的 CorePreparation 由该产品自己启动时完成。SDK 不接受“另一个产品的位置/descriptor”去替它离线准备 Runtime。
+
+## TUI Local Runtime Transport
+
+TUI 的现有 local Worker 模式继续使用同一 SDK contract：
+
+```text
+TUI UI thread
+  -> EllamakaClient
+       -> custom fetch / Worker RPC
+       -> Server app.fetch(Request)
+```
+
+默认本机模式不要求 TCP loopback；显式 network/attach 模式改用真实 HTTP/SSE。这里的 Worker 承载真正 Runtime，与 `/local` 的 WopalSpace application Worker用途不同，但两者复用同一 generated Request/Response contract 思想。
+
+## Host Lifecycle
+
+client、transport 和 host process lifecycle 是三件事：
+
+- `createEllamakaServer` / `createEllamakaTui` 等 helper 可以管理本机进程；
+- `/http` 只连接已经存在的 Server；
+- `/local` 为允许 trusted-local 的 WopalSpace Ontology/Space 等 operations 建立调用期 Worker；
+- Desktop Main 负责 packaged sidecar 生命周期；
+- 业务 API 不因为宿主方式不同而改变。
+
+## Contract Discovery
+
+同一个完整公开 contract 可以从三个地方取得：
+
+| Environment | Source |
+| --- | --- |
+| running Server | `GET /doc` |
+| installed npm package | `@wopal/ellamaka-sdk/openapi.json` |
+| source tree | side-effect-free contract export |
+
+三个来源 canonicalize 后必须表示同一 **Public Platform SDK contract**。Agent 判断公开 API 是否存在时读取 OpenAPI，不从 CLI/Desktop 产品版本或 Server 的内部 route 集合猜测。
+
+Developer Reference 可以按 Runtime、WopalSpace 等 domain 分组展示，但这些分组都来自同一份 public OpenAPI 和同一个 SDK package。Official App BFF 的 contract 只用于 App 自身开发与构建校验。
+
+## Authentication
+
+当前阶段使用 Ellamaka Server 的统一认证边界。WopalSpace HTTP operation 不再拥有独立 onboarding/auth 体系，也不增加细粒度 Space/Ontology IAM。
+
+`/local` 是 trusted-local transport。HTTP caller 获得 Server credential 后视为该 host 的受信管理者；各业务 operation 仍必须自己保证 path confinement、目标合法性和 secret redaction。
+
+Phase 3 将把 Browser 登录向 DSH 已采用的 launch-token + signed-cookie 思路收敛，见 `DESIGN-auth.md`。
 
 ## Errors and Streaming
 
-每个公开 endpoint 在 schema 中声明实际可能返回的 domain errors；生成 SDK 的 error union 必须与 HTTP response 保持一致。新增稳定错误语义时同步 schema、OpenAPI、generated SDK 与 contract tests。
+每个公开 endpoint 声明真实可能发生的稳定 domain error。generated client 的 error union 与 HTTP response 保持一致。
 
-SSE operation 明确声明 `text/event-stream` 与 event payload schema。Progress/event 流只承载可公开的状态；取消属于对应 domain operation 的生命周期，不用关闭进程或 CLI 子进程来模拟。
+Setup/CorePreparation 等长任务的 progress 使用明确的 stream/event schema；事件不包含 secret。取消属于 operation 生命周期，不通过杀 CLI subprocess 模拟。
 
-## Versioning and Compatibility
+## Versioning
 
-SDK npm SemVer 表达 **Runtime network contract**，独立于 Ellamaka CLI/Desktop Product SemVer：
+`@wopal/ellamaka-sdk` 只有一条 SemVer 版本线，覆盖 Runtime 与 WopalSpace 公开 contract。
 
 - PATCH：不改变公开 schema/语义的实现修复；
-- MINOR：向后兼容的新 operation、新可选字段、新 error variant 或能力；
-- MAJOR：删除/改名 operation，改变必填输入、已有字段类型/语义、鉴权要求或已发布错误语义。
+- MINOR：向后兼容的新 operation、可选字段或 error variant；
+- MAJOR：删除/改名 operation，改变已有必填输入、字段语义或认证要求。
 
-Wopal CLI、Workbench 和其他二进制消费者固定经过验证的 exact SDK version。SDK version 不等于 HTTP `operationId` version，也不参与 DSH closure fingerprint。`@wopal/ellamaka-sdk` 与 `@wopal/wopalspace-sdk` 各自拥有独立 SemVer；二者共享发布基础设施和质量门禁，但不要求同版本或同时 bump。SDK version 也不镜像 Ellamaka CLI/Desktop 产品版本。
+SDK SemVer 不镜像 Ellamaka CLI、Desktop 或 Wopal CLI 产品版本，也不决定 DSH Home closureVersion。
 
-已有兼容 route 可以继续存在，但 contract source 仍只有一份。未发布 operation 不为了内部改名保留 alias。
+private `@wopal/wopalspace` 不拥有独立外部 SemVer。
 
-### Selective Upstream Adoption
+## Publication
 
-OpenCode 只提供候选 fix 与功能来源。每次选择性 cherry-pick 或手工移植都以 Ellamaka 当前 contract 为边界，评估 package exports、client helpers、OpenAPI operations、request/response/error schema 与 codegen pipeline 的实际影响。Ellamaka 已发布 contract 优先；不相关的上游 surface 不进入本 SDK。
+SDK 发布物至少包含：
 
-## WopalSpace Remote Projection
+- generated JS client；
+- generated TypeScript declarations；
+- 完整 `openapi.json`；
+- package version / contract digest metadata；
+- `/http` helper；
+- self-contained `/local` WopalSpace Worker artifact。
 
-当某个 WopalSpace local application operation 需要被 Browser/远程调用方访问时，Ellamaka 定义对应 HTTP resource，handler 调用 `@wopal/wopalspace-sdk`：
+CLI/Desktop product release 与 SDK release 是不同概念。产品 workflow 不因为发产品就隐式改变 SDK contract version；SDK 也不决定产品版本。
+
+## Cross-Project Development
+
+Wopal CLI 与 Ellamaka 分属不同项目时，本地联调仍使用 **publish-shaped `@wopal/ellamaka-sdk` artifact**：
 
 ```text
-remote caller
-  → @wopal/ellamaka-sdk
-  → Ellamaka HttpApi handler
-  → @wopal/wopalspace-sdk operation
+Ellamaka source
+  -> build publish-shaped @wopal/ellamaka-sdk
+  -> local dev overlay points Wopal CLI at that artifact
+  -> Wopal CLI still imports only public SDK
 ```
 
-HTTP DTO 应与 local contract 在语义上等价；transport 特有字段只存在于 HTTP 层。契约测试用 `@wopal/wopalspace-sdk` 的 JSON Schema/operation fixtures 验证共享 DTO 的等价性，而不是手工维护两套业务规则。
+原则：
 
-产品安装/更新等 trusted-local mutation 不因为存在 local SDK 就自动进入 HTTP surface；是否暴露必须由 Runtime API 设计明确授权。
+- Wopal CLI 不直接 import `@wopal/wopalspace` 源码；
+- 联调 artifact 的目录结构和 exports 与 npm tarball 一致；
+- 临时 overlay 不成为 package.json/lockfile 中永久的 `file:`/`link:` 依赖；
+- 正常 install 后回到固定的已发布 SDK version。
 
-## Contract Gates
+## Invariants
 
-SDK 或 PublicApi 变更至少通过以下门禁：
-
-1. source schema → OpenAPI 3.1 export 成功；
-2. `operationId` 唯一且稳定；
-3. OpenAPI snapshot 与生成 SDK 同一轮生成，无 dirty drift；
-4. `/doc` 与发布 snapshot canonical digest 一致；
-5. required / nullable / media type / auth / error response 没有在 codegen 中丢失；
-6. generated client 对成功与拒绝路径做真实调用验证；
-7. `npm pack` 后在 source tree 外 clean-install，能解析 client、types 与 `openapi.json`；
-8. Ellamaka build/start/release 在没有 Wopal CLI 与任何 Wopal CLI schema package 时完成；
-9. Ellamaka 品牌 API 与 OpenCode 命名兼容 alias 指向同一 generated client/helper 实现；npm clean-install smoke 同时验证 canonical imports 与 compatibility imports。
+1. 对外只有 `@wopal/ellamaka-sdk` 一个 platform service SDK。
+2. Runtime 与 WopalSpace application 的内部 owner 保持分离。
+3. Public Platform API 只有一份 schema/OpenAPI 来源；Official App BFF 使用独立私有 contract。
+4. HTTP 与 local WopalSpace transport 复用同一 public generated operation/DTO/error 定义。
+5. `/local` 不启动 localhost Server，也不形成私有业务协议。
+6. `/local` 发布物不能要求消费者安装 unpublished private packages。
+7. Wopal CLI 不直接依赖 `@wopal/wopalspace`，也不通过 Ellamaka CLI subprocess 复用业务。
+8. Server composition 内部直接调用 private WopalSpace service，不通过 SDK/HTTP loopback。
+9. Official App BFF 不进入公开 SDK、`GET /doc` 或 SDK SemVer。
+10. Product 安装/update 不进入 WopalSpace SDK surface。
+11. SDK 不拥有 Desktop/Server/Wopal CLI 的产品生命周期。

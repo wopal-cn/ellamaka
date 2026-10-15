@@ -15,7 +15,7 @@ description: Long-lived SolidJS UI, state, async, and verification rules for Ell
 
 ## Architecture and Directories
 
-ellamaka-app is the shared Browser/Desktop renderer. It communicates with the Ellamaka Server through the generated SDK; the Electron shell, credentials, and sidecar process belong to ellamaka-desktop.
+ellamaka-app owns the shared Browser/Desktop renderer and the Official App BFF contract/client used by Onboarding/Workbench product projections. Platform capabilities use the published `@wopal/ellamaka-sdk`; app-specific BFF calls use the package's generated private client. Both reach the same Ellamaka Server. The Electron shell, credentials, and sidecar process belong to ellamaka-desktop.
 
 | Path | Responsibility |
 |---|---|
@@ -52,7 +52,7 @@ Unit tests must use the package script, which sets the browser condition and hap
 
 ## Implementation Rules
 
-- Use the generated SDK for Server communication; do not create handwritten fetch contracts.
+- Use generated clients for Server communication: the public SDK for Runtime/WopalSpace platform operations and the app-private generated client for Official App BFF operations. Do not create handwritten fetch contracts, and do not put app-only projection DTOs into the public SDK.
 - `packages/ui` is never modified for Workbench presentation. Adapt inside `ellamaka-app` through component wrappers, extension points (`FileComponentProvider`, `ThemeProvider.registerTheme`), and scoped CSS overrides.
 - Extend shared Session, command, Dialog, and navigation flows through adapters, callbacks, or small injection points; never copy an entire upstream flow into this package.
 - Keep canonical, derived, persisted, and transient UI state distinct. Do not persist live Server projections.

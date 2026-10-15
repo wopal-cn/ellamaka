@@ -15,7 +15,7 @@ description: Ellamaka 长期有效的架构边界、实施、日志与验证规�
 
 ## Architecture and Directories
 
-Ellamaka 由 Runtime、Server 组合宿主和 private WopalSpace 应用服务组成。Server 可在同一宿主组合 Runtime 与 WopalSpace；底层 Runtime 不依赖应用服务。Browser/Desktop 通过公开 SDK 连接 Server，Wopal CLI 拥有 Product 管理。WopalSpace 的目标 package 边界见 DESIGN；当前 filesystem map 只列已存在路径。
+Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和官方 App BFF 组成。Server 可在同一宿主挂载 Public Platform API 与 App-private BFF；底层 Runtime 不依赖 WopalSpace 或 App BFF。Browser/Desktop 的平台能力通过公开 SDK，官方 App 投影通过 app-private generated client；Wopal CLI 拥有 Product 管理。目标边界见 DESIGN；当前 filesystem map 只列已存在路径。
 
 | 路径 | 模块职责 |
 |---|---|
@@ -27,7 +27,7 @@ Ellamaka 由 Runtime、Server 组合宿主和 private WopalSpace 应用服务组
 | packages/opencode/src/workbench/ | Server 侧 Workbench 组合，连接 Runtime 与 Space 数据 |
 | packages/ellamaka-cordis/ | DSH 闭包加载、Cordis 生命周期与 profile Bridge |
 | packages/sdk/js/ | 公开 Runtime/WopalSpace contract 与生成 client |
-| packages/ellamaka-app/ | Browser/Desktop 共用的 Onboarding 与 Workbench 界面 |
+| packages/ellamaka-app/ | Browser/Desktop 共用的 Onboarding/Workbench 界面，以及 Official App BFF contract/client 的 owner |
 | packages/ellamaka-desktop/ | Electron 原生壳层与 Server sidecar 生命周期 |
 | packages/ellamaka-release/ | CLI/Desktop 产品构建、identity 与发布 |
 
@@ -56,14 +56,14 @@ Ellamaka 由 Runtime、Server 组合宿主和 private WopalSpace 应用服务组
 
 - Server handler 只负责传输适配和领域调用；跨域组合放在 Server composition，不能让 Runtime 向上依赖 WopalSpace。跨包实施同时遵循改动 package 最近的 AGENT 规则。
 - 遵循 directory instance 边界传递配置和插件上下文。变更配置或权限规则后核对实际合并结果，不用能力发现列表代替授权结果。
-- 所有 Browser/Desktop HTTP contract 由公开 SDK 提供；修改 contract 时一并生成类型和运行时参数映射，不手改 generated 文件。
+- Browser/Desktop 的平台 HTTP contract 由公开 SDK 提供；Official App BFF contract 由 app-private generated client 提供。任一 contract 变化时都必须成组生成对应类型与运行时参数映射，不手改 generated 文件。
 - 跨包动态加载、资源解析或打包行为必须验证真实产品制品，源码态检查不能替代宿主验证。
 - 明确异步任务与子进程的 owner；取消和退出必须等待 owner 所拥有资源完成清理。
 - 临时验证使用隔离 Home、profile、仓库和凭证；不得改写用户真实运行环境。
 - 定制边界（针对 upstream 文件）：新能力优先放新文件，upstream 文件只保留最少的 import 与调用注入点；定制分支用早返回 guard，避免与主线重叠；需要 upstream 内部能力时优先 callback/闭包注入，不暴露 upstream Service 类型；复用逻辑抽共享 helper，不复制大段 upstream 流程；不得对 upstream 文件做无关格式化、import 重排、依赖或对象键重排；`.gitattributes` 不添加 merge 策略驱动，冲突显式逐文件解决。
 - DSH 与 Bridge：`$WOPAL_HOME` 根目录禁止 `pnpm install` / `bun install`（pnpm 会爬到 workspace 根，摧毁 Bun 管理的依赖拓扑）；引擎运行期间，进程外的任何写操作都不得触碰 `$WOPAL_HOME/dsh/home/profiles/`（连"内容相同"的幂等写也会与引擎竞态）；`ELLAMAKA_DSH` 是唯一 enable switch；Bridge 只随 Ellamaka 产品发布，不单独发包、也不作为 `$WOPAL_HOME/dsh` 的依赖；tool container 不创建 dsh session，只传每次调用所需的最小上下文；插件"安装一次、按 profile 激活"，同一进程不并行两个版本。
-- WopalSpace 集成边界：Space/Ontology/Evolution/Setup/Product 业务只在 private WopalSpace 服务内实现一次；Ellamaka 通过公开 SDK 消费，不依赖 Wopal CLI 的命令处理、共享 schema 包或最低 CLI 版本。Session provisioning 只接受已注册 Space 与安全的相对目录，目录失败不删除 Session。
-- 接口与 SDK：新端点先定领域 owner 与 Root/Instance 归属，走 `HttpApiGroup`。SDK 重生成是"全有全无"——改了 payload 必须重跑生成，且 `types.gen.ts` 与 `sdk.gen.ts` 两处都要命中；只改类型层是假象，`buildClientParams` 映射陈旧会静默丢字段。生成物一律不手改。
+- WopalSpace 集成边界：Setup、Ontology 与基础 Space 业务只在 private WopalSpace 服务内实现一次，并通过 Public Platform SDK 暴露；Product 管理、Evolution、Skill 生命周期与调度继续由 Wopal CLI 拥有。Ellamaka 不依赖 Wopal CLI 的命令处理、共享 schema 包或最低 CLI 版本。Session provisioning 只接受已注册 Space 与安全的相对目录，目录失败不删除 Session。
+- 接口与 SDK：新端点先定领域 owner 与 Root/Instance 归属，走 `HttpApiGroup`。可复用 Runtime/WopalSpace operation 进入 Public Platform contract/公开 SDK；只服务官方 App 的 projection/use case 进入 App BFF 私有 contract，不得进入公开 `/doc` 或 SDK exports。每份 contract 的重生成都必须“全有全无”，同时核对类型和运行时参数映射；生成物一律不手改。
 - 权限规则：agent frontmatter 不声明 `"*": allow` 一类通配，只写显式收窄；合并求值是 LAST-wins，显式规则必须排在通配之后。改完用 `GET /agent` 复核合并后的实际规则顺序。能力发现列表不等于授权结果。
 - 发布纪律：release build 入口是 CLI 二进制的唯一打包点；不引入 Wopal CLI 版本下限或发布顺序依赖。CLI 与 Desktop 独立更新；Desktop UI 改动必须在原生 Windows 上验证（macOS 构建不算数）；release workflow 只用 Node 24-native 官方 action，新增/升级 action 前检查其 `runs.using` 为 `node24`；已提交发布不可变，整版撤回流程见 DESIGN-distribution。
 - 日志：由 ellamaka-core 的结构化 logger 统一路由和脱敏，插件只用内置 `ctx.logger`（不 `console.log`、不自建 logger）。必须记：生命周期变化、错误与异常（含降级路径）、关键决策。不得记：循环内逐条、成功路径例行、可从上下文推出的信息。循环要聚合成一条摘要；上下文放结构化字段而非拼进消息；`catch` 不得吞异常。默认 INFO，DEBUG 用于诊断，TRACE 按类别显式开启。任何日志都不得记录凭证、prompt/消息正文、工具参数、命令、路径或无界子进程输出。分级、路由与文件细则见 DESIGN-logging。

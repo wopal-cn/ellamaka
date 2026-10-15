@@ -70,13 +70,13 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 
 终端与文件是两个独立通道，不互为副本：
 
-- **终端 / UI progress**：面向用户的启动契约与即时反馈。Core Runtime Preparation 与 Activation 使用结构化 `CoreProgressEvent`；CLI/TUI 渲染到终端，serve/web 同时通过 Bootstrap 控制面暴露，Desktop Renderer 消费同一事件。这个通道不受日志级别过滤。
+- **终端 / UI progress**：面向用户的启动契约与即时反馈。Core Runtime Preparation 使用结构化 `CorePreparationEvent`；Activation 发布对应 capability 状态。CLI/TUI 渲染即时反馈，serve/web 经统一 Server 状态/事件面暴露，Desktop Renderer 消费同一来源。这个通道不受日志级别过滤。
 - **文件**：面向事后排障的结构化记录。`INFO` 记录对应需要事后关注的状态变化——例如一次完成的数据整理、VCS 分支切换或按需依赖安装。
 - **`--log-level DEBUG`**：实现级诊断，有界且仍脱敏；理解正常运行不依赖它。
 - **`--trace`**：第五级，见 Trace 节。
 - **`--print-logs`**：将记录镜像到 stderr，进程不落文件；dev 工具链用它接管进程输出。
 
-- **启动进度与 stdout 分离**：`ellamaka run` 等命令的 Core progress 写 stderr/专用 UI，不污染模型回答、JSON 或机器协议 stdout。TTY 可以用 spinner 覆写当前行；非 TTY/CI 必须输出可采集的逐行阶段事件。
+- **启动进度与 stdout 分离**：会执行 Core/DSH Preparation 的启动入口，其 preparation progress 写 stderr/专用 UI，不污染模型回答、JSON 或机器协议 stdout。`ellamaka run` 是固定 DSH-disabled 的纯 Core 执行入口，不产生 DSH Preparation progress。TTY 可以用 spinner 覆写当前行；非 TTY/CI 必须输出可采集的逐行阶段事件。
 - **禁止静默长任务**：closure 下载、closure-change Home backup、profile 准备、preflight 和 activation 的 started/completed/failed 必须用户可见；长阶段至少每 5 秒产生 heartbeat，renderer 持续显示当前 phase 与 elapsed time。未知工作量不伪造百分比。
 
 日志记录状态变化与故障，不是活动流水：事件总线订阅抖动、SSE / WebSocket 连接抖动、会话与消息生命周期事件、权限求值、question 回复、文件搜索请求、PTY 客户端生命周期、配置 / 插件 / provider 枚举都不进入日志——它们已有权威状态或事件流，文本副本只制造噪声并可能暴露用户数据。
