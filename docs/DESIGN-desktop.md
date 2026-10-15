@@ -1,6 +1,6 @@
 # ellamaka-desktop 设计
 
-> **Status**: Draft
+> **Status**: Active
 > **Updated**: 2026-10-15
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
