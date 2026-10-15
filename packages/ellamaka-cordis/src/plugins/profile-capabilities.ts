@@ -16,6 +16,7 @@ const toolProviders = new Set([
   "bash-sandbox",
   "pwsh-sandbox",
   "approval",
+  "ptc-runtime",
   "shell-env",
   "tool-bash",
   "tool-pwsh",

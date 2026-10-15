@@ -7,6 +7,7 @@ import { createBunHmr } from "../src/plugins/bun-hmr"
 import { mountDshTools, selectUserPatchHmr } from "../src/dsh-web"
 import { withProfileManifestWrite, appendBundle } from "../src/plugins/profile-manifest"
 import { profileDirOf } from "../src/plugins/compose"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 function tempRoot(): string {
   return mkdtempSync(join(tmpdir(), "bun-hmr-"))
@@ -158,6 +159,7 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
   test("editing the user patch layer replays the full stack into the container", async () => {
     const root = tempRoot()
     const ctx = new Context()
+    prepareDshProfiles(root)
     const host = await mountDshTools(ctx, { home: root, port: 0 })
     const containers = [
       { profile: "ellamaka-tools", ctx, includeEntry: host.includeEntry, stackContext: host.stackContext },
@@ -197,6 +199,7 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
       appendBundle(manifest, name)
     })
     const ctx = new Context()
+    prepareDshProfiles(root)
     const host = await mountDshTools(ctx, { home: root, port: 0 })
     try {
       expect(ctx.get(`${name}.marker`, false)).toBe("mounted")

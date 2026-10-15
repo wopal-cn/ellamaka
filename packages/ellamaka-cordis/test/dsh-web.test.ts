@@ -10,6 +10,7 @@ import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
 import { bootDshWeb, migrateToolsProfileApprovalPatch, mountDshWeb, mountDshTools } from "../src/dsh-web"
 import { createDshRuntimeApi } from "../src/runtime/loader"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 /** Attach a VirtualWebServer to a raw server and return its base URL. */
 async function attachAndListen(webServer: { attach(server: Server): void }) {
@@ -104,6 +105,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb activates the web profile without creating a listening socket", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, {
       home,
       port: 4097,
@@ -184,6 +186,7 @@ describe("dsh web engine", () => {
     const anchor = req.resolve("@deepseek-ai/dsh/package.json")
     const runtime = createDshRuntimeApi(anchor)
     const ctx = new runtime.cordis.Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 0, installAnchor: anchor, runtime })
 
     try {
@@ -199,6 +202,18 @@ describe("dsh web engine", () => {
     }
   }, 30_000)
 
+  test("PTC binding failure rejects activation and cleans the candidate loader tree", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-ptc-fail-"))
+    prepareDshProfiles(home)
+    writeFileSync(join(home, "home", "profiles", "web", "cordis.patch.yml"), "- { id: ptc-runtime, disabled: true }\n")
+    const ctx = new Context()
+
+    await expect(mountDshWeb(ctx, { home, port: 0 })).rejects.toThrow(/PTC runtime unavailable/)
+    expect(ctx.get("webServer", false)).toBeUndefined()
+    expect(ctx.get("loader", false)).toBeUndefined()
+    await ctx.fiber.dispose()
+  }, 30_000)
+
   test("mountDshWeb with an explicit installAnchor discovers presets from that closure", async () => {
     // Packaged-CLI scheme: the anchor lives in the materialised closure under
     // the dsh home, not in the module graph (DESIGN-dsh-base.md). The preset
@@ -209,6 +224,7 @@ describe("dsh web engine", () => {
     const req = createRequire(import.meta.url)
     const anchor = req.resolve("@deepseek-ai/dsh/package.json")
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, installAnchor: anchor, disablePtcRuntime: true })
 
     try {
@@ -227,6 +243,7 @@ describe("dsh web engine", () => {
 
   test("bootDshWeb owns a fresh context and disposes it", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
+    prepareDshProfiles(home)
     const host = await bootDshWeb({ home, port: 4097, disablePtcRuntime: true })
 
     try {
@@ -247,6 +264,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb injects the iframe adapter as a real <script> node that executes", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
     try {
@@ -286,6 +304,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb dispose closes upgrade sockets dispatched through the virtual webserver", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
     const { server, baseUrl } = await attachAndListen(host.webServer)
@@ -342,6 +361,7 @@ describe("dsh web engine", () => {
     const logFile = join(logDir, "dsh-plugins-web.log")
     const ctx = new Context()
     let logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, {
       home,
       port: 4097,
@@ -387,6 +407,7 @@ describe("dsh web engine", () => {
     const logDir = join(home, "logs")
     const webCtx = new Context()
     const toolsCtx = new Context()
+    prepareDshProfiles(home)
     const webHost = await mountDshWeb(webCtx, {
       home,
       port: 4098,
@@ -395,6 +416,7 @@ describe("dsh web engine", () => {
     })
 
     try {
+      prepareDshProfiles(home)
       const toolsHost = await mountDshTools(toolsCtx, { home, port: 0, logDir })
       try {
         webCtx.logger("web-probe").warn("web-only-probe")
@@ -490,9 +512,10 @@ describe("dsh tools profile", () => {
     )
   })
 
-  test("mountDshTools migrates a persisted legacy profile and composes approval", async () => {
+  test("prepared tools profile migrations compose approval during activation", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const seedCtx = new Context()
+    prepareDshProfiles(home)
     const seedHost = await mountDshTools(seedCtx, { home, port: 0 })
     await seedHost.dispose()
     await seedCtx.fiber.dispose()
@@ -502,6 +525,7 @@ describe("dsh tools profile", () => {
     writeFileSync(patchPath, `${current}\n- { id: approval, disabled: true }\n# user-tail\n`)
 
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
     try {
       expect(readFileSync(patchPath, "utf-8")).not.toContain("id: approval, disabled: true")
@@ -516,6 +540,7 @@ describe("dsh tools profile", () => {
   test("mountDshTools mounts the tool profile on a context and disposes cleanly", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -532,6 +557,7 @@ describe("dsh tools profile", () => {
   test("mountDshTools disables session-checkpoint-policy via the profile patch layer", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -568,6 +594,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -622,6 +649,7 @@ describe("dsh tools profile", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-readonly-ws-"))
     const target = join(workspace, "forbidden.txt")
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -655,6 +683,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-editor-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -732,6 +761,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-bash-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -832,6 +862,7 @@ describe("dsh tools profile", () => {
   test("mountDshTools composes the approval service into the tool container", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -848,6 +879,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-esc-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -891,6 +923,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-esc-ws2-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -918,6 +951,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-esc-ws3-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {

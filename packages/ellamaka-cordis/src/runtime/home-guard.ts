@@ -31,6 +31,10 @@ export type DshHomeRuntimeAccessResult =
   | { ok: true; homeVersion: number; lease: DshHomeRuntimeLease }
   | { ok: false; reason: DshHomeFailureReason; homeVersion?: number }
 
+export type DshHomeExclusiveAccessResult<T> =
+  | { ok: true; homeVersion: number; value: T }
+  | { ok: false; reason: DshHomeFailureReason; homeVersion?: number }
+
 export interface HomeGuardDeps {
   /** Test seam for deterministic backup failures. */
   copyHome?: (source: string, destination: string, defaultCopy: (source: string, destination: string) => void) => void
@@ -213,6 +217,50 @@ async function prepareUnderExclusive(
     homeVersion: options.closureVersion,
     changed: true,
     ...(backupDir ? { backupDir } : {}),
+  }
+}
+
+/**
+ * Run a repair/backfill operation while no runtime is using Home. This is the
+ * only write-ownership seam for same-version managed Home resources.
+ */
+export async function withDshHomeExclusiveAccess<T>(
+  options: { wopalHome: string; closureVersion: number; lockTimeoutMs?: number },
+  operation: () => Promise<T> | T,
+): Promise<DshHomeExclusiveAccessResult<T>> {
+  assertClosureVersion(options.closureVersion)
+  const layout = resolveDshLayout(options.wopalHome)
+  const token = await acquireHomeLock(
+    layout.homeLockPath,
+    "exclusive",
+    options.lockTimeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS,
+  )
+  if (!token) {
+    const state = await readDshHomeState(options.wopalHome)
+    return {
+      ok: false,
+      reason: "DSH_HOME_BUSY",
+      ...(versionOf(state) === undefined ? {} : { homeVersion: versionOf(state) }),
+    }
+  }
+  try {
+    const state = await readDshHomeState(options.wopalHome)
+    if (state.kind !== "managed") {
+      return {
+        ok: false,
+        reason: "DSH_HOME_VERSION_UNKNOWN",
+        ...(versionOf(state) === undefined ? {} : { homeVersion: versionOf(state) }),
+      }
+    }
+    if (state.closureVersion > options.closureVersion) {
+      return { ok: false, reason: "DSH_HOME_NEWER_THAN_RUNTIME", homeVersion: state.closureVersion }
+    }
+    if (state.closureVersion !== options.closureVersion) {
+      return { ok: false, reason: "DSH_HOME_VERSION_UNKNOWN", homeVersion: state.closureVersion }
+    }
+    return { ok: true, homeVersion: state.closureVersion, value: await operation() }
+  } finally {
+    await releaseHomeLock(layout.homeLockPath, token)
   }
 }
 

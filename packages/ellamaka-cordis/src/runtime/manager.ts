@@ -1,26 +1,34 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { DshRuntimeManifestV1 } from "./manifest.js"
 import type { DshRuntimeLockV1 } from "./lockfile.js"
+import type { DshRuntimeApi } from "./loader.js"
 import {
   MATERIALIZE_TIMEOUT_MS,
   closureNameForFingerprint,
   isDshEnabled,
   resolveDshLayout,
+  resolveInstallAnchor,
   type DshRuntimeStatus,
 } from "./status.js"
-import { acquireMaterializeLock, releaseMaterializeLock } from "./lock.js"
-import { checkClosureIntegrity, materializeClosure, validateClosureOnDisk, type ExtractLike } from "./materializer.js"
+import type { ExtractLike } from "./materializer.js"
 import { createDshLogger, type DshLoggerOptions, type LogBridge } from "./log.js"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest.js"
-import { acquireDshHomeRuntimeAccess, prepareDshHome } from "./home-guard.js"
+import { acquireDshHomeRuntimeAccess } from "./home-guard.js"
+import { createDshPreparationService } from "./preparation.js"
 
 // Re-export the wiring surface entries consume from `@wopal/ellamaka-cordis/runtime`
 // in one place: the default manifest, the install-anchor resolver, and the
 // runtime registry selector (Task 4 / §3.4.3).
 export { DEFAULT_DSH_RUNTIME_MANIFEST }
 export { DSH_CLOSURE_VERSION } from "./closure-version.js"
-export { acquireDshHomeRuntimeAccess, prepareDshHome, readDshHomeState } from "./home-guard.js"
+export {
+  acquireDshHomeRuntimeAccess,
+  prepareDshHome,
+  readDshHomeState,
+  withDshHomeExclusiveAccess,
+} from "./home-guard.js"
+export { createDshPreparationContributors, createDshPreparationService } from "./preparation.js"
 export type { DshHomeFailureReason, DshHomeRuntimeAccessResult, DshHomeRuntimeLease } from "./home-guard.js"
 export { resolveInstallAnchor } from "./status.js"
 export { pickFastestRegistry, CANDIDATE_REGISTRIES, DEFAULT_REGISTRY } from "./registry.js"
@@ -32,22 +40,13 @@ export { toDshLogLevel } from "./log.js"
 export type { DshLogLevel } from "./log.js"
 
 /**
- * Unified DSH Runtime Manager (DESIGN §3.4.5, 9-step state machine).
+ * Unified DSH Runtime Manager.
  *
  * Every entry (serve/web/TUI/Desktop sidecar) calls {@link initializeDshRuntime}
- * at startup. The manager:
- *   1. Gate    — `ELLAMAKA_DSH=0` → `disabled` with zero filesystem access.
- *   2. Resolve — compute the expected fingerprint and target closure directory.
- *   3. Inspect — verify an existing closure's CONTENT; complete → Load (no
- *                network). A tampered manifest/lock or a wrong dependency
- *                version is treated as damaged and re-materialised (B-03).
- *   4. Lock    — otherwise acquire the cross-process `materialize.lock`;
- *                waiters re-inspect after the holder finishes.
- *   5. Stage   — extract the embedded lock's packages into `staging/` (pacote).
- *   6. Verify  — validate the staged tree (anchor + every direct dependency).
- *   7. Activate— atomically rename staging → `closures/<fingerprint>/`.
- *   8. Profile — create missing profile templates (never overwrite user edits).
- *   9. Load    — validate the closure loader and report `ready`.
+ * at startup. After the kill switch and manifest gate, the manager runs the
+ * shared CorePreparation contributors (`dsh.closure`, `dsh.home`,
+ * `dsh.profiles`), acquires a shared Home runtime lease, validates the closure
+ * loader, and only then reports `ready`.
  *
  * Single-flight: concurrent calls in one process share one durable in-flight
  * promise, so only one materialisation runs. Multi-process coordination is the file lock.
@@ -91,6 +90,8 @@ export interface ManagerDeps {
    * loadability check on the closure's `@deepseek-ai/dsh` package.json.
    */
   resolveLoader?: LoaderResolver
+  /** Test/host seam for resolving the closure-bound runtime API used by preparation. */
+  resolveRuntime?: (installAnchor: string) => DshRuntimeApi
 }
 
 export interface InitializeDshOptions {
@@ -113,9 +114,6 @@ export interface InitializeDshOptions {
    */
   readonly timeoutMs?: number
 }
-
-/** How long to wait for a concurrently-materialising process to finish. */
-const LOCK_WAIT_MS = 10 * 60 * 1000
 
 interface ManagerContext {
   readonly options: InitializeDshOptions
@@ -218,96 +216,41 @@ function raceTimeout(work: Promise<DshRuntimeStatus>, timeoutMs: number, log: Lo
   )
 }
 
-/** The 9-step state machine body. */
+/** Run the Plan-owned preparation contributors before admitting a runtime. */
 async function run(ctx: ManagerContext): Promise<DshRuntimeStatus> {
-  const { log, options } = ctx
-
-  // 2. Resolve — the closure dir is derived from the fingerprint.
+  const { options, log } = ctx
   log.debug("dsh.stage.resolve", { fingerprint: ctx.fingerprint, closureDir: ctx.closureDir })
-  const layout = resolveDshLayout(options.wopalHome)
-
-  // 3. Inspect — fast path: an intact closure loads with zero network.
-  let anchor = validateClosureOnDisk({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
-  if (anchor) {
-    try {
-      await checkClosureIntegrity({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
-    } catch (error) {
-      // Damaged closure → treat as missing and re-materialise.
-      log.warn("dsh.inspect.integrity", { error })
-      anchor = null
-    }
-  }
-  if (anchor) {
-    log.debug("dsh.stage.inspect", { status: "hit", closureDir: ctx.closureDir })
-    return finishReadyWithHomeGuard(ctx)
-  }
-
-  // 4. Lock — cross-process mutex; waiters re-inspect after the holder finishes.
-  log.debug("dsh.stage.lock", { lockFile: layout.lockFile })
-  const token = await acquireMaterializeLock(layout.lockFile, LOCK_WAIT_MS)
-  if (!token) {
-    log.error("dsh.stage.lock.timeout", { lockFile: layout.lockFile })
+  const service = createDshPreparationService({
+    wopalHome: options.wopalHome,
+    logFile: options.logFile,
+    logLevel: options.logLevel,
+    print: options.print,
+    manifest: options.manifest,
+    lock: options.lock,
+    deps: options.deps,
+    env: options.env,
+    timeoutMs: options.timeoutMs,
+    closureVersion: options.manifest.closureVersion,
+  })
+  const result = await service.prepare(
+    { target: { kind: "host" }, reason: `dsh:${options.entry}` },
+    {
+      onProgress: (event) =>
+        log.debug("dsh.stage.preparation", { step: event.step, phase: event.phase, sequence: event.sequence }),
+    },
+  )
+  if (result.state !== "READY") {
+    log.error("dsh.init.degraded", { reason: result.reason, state: result.state })
     return "degraded"
   }
 
-  try {
-    // Another process may have materialised while we waited for the lock.
-    anchor = validateClosureOnDisk({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
-    if (anchor) {
-      await checkClosureIntegrity({ home: options.wopalHome, manifest: options.manifest, deps: options.deps })
-      log.debug("dsh.stage.inspect", { status: "waiter-hit", closureDir: ctx.closureDir })
-      return finishReadyWithHomeGuard(ctx)
-    }
-
-    // 5+6+7 — Stage, Verify, Activate. The caller's hard timeout (raceTimeout)
-    // never abandons this: on timeout the caller degrades while this promise
-    // keeps running and only releases the lock here, in its own completion
-    // handler, so no second process can clear the same staging/ (B-05).
-    log.debug("dsh.stage.stage", { stagingDir: layout.stagingDir })
-    const result = await materializeClosure({
-      home: options.wopalHome,
-      manifest: options.manifest,
-      lock: options.lock,
-      deps: options.deps,
-      log,
-    })
-    log.debug("dsh.stage.verify", { status: "ok", packages: Object.keys(options.manifest.dependencies).length })
-    log.debug("dsh.stage.activate", { closureDir: result.closureDir })
-    ctx.anchor = result.anchor
-
-    // 8+9 — Profile seeding and Load happen inside finishReady (idempotent).
-    return finishReadyWithHomeGuard(ctx)
-  } catch (error) {
-    log.error("dsh.stage.materialise.failed", { error })
-    return "degraded"
-  } finally {
-    // The lock is released only when the durable work settles (materialisation done,
-    // success or failure). A timed-out caller never reaches here — it returned
-    // `degraded` without releasing, so the in-flight materialisation stays single-writer
-    // on staging until it completes (B-05).
-    await releaseMaterializeLock(layout.lockFile, token)
-  }
-}
-
-/**
- * Home safety is deliberately separated from closure materialisation. The
- * closure is fully present and validated before this function can inspect or
- * mutate Home metadata. Preparation owns any short exclusive transition; the
- * actual Home consumer then reacquires a shared lease. The manager only holds
- * that shared lease around its existing loader/profile ready work — product
- * mounts acquire their own long-lived shared lease for activation lifetime.
- */
-async function finishReadyWithHomeGuard(ctx: ManagerContext): Promise<DshRuntimeStatus> {
-  const closureVersion = ctx.options.manifest.closureVersion
-  const prepared = await prepareDshHome({ wopalHome: ctx.options.wopalHome, closureVersion })
-  if (!prepared.ok) {
-    ctx.log.error("dsh.home.prepare.failed", { reason: prepared.reason, homeVersion: prepared.homeVersion })
-    return "degraded"
-  }
-
-  const access = await acquireDshHomeRuntimeAccess({ wopalHome: ctx.options.wopalHome, closureVersion })
+  ctx.anchor = resolveInstallAnchor(options.wopalHome, options.manifest).path
+  const access = await acquireDshHomeRuntimeAccess({
+    wopalHome: options.wopalHome,
+    closureVersion: options.manifest.closureVersion,
+  })
   if (!access.ok) {
-    ctx.log.error("dsh.home.access.failed", { reason: access.reason, homeVersion: access.homeVersion })
+    log.error("dsh.home.access.failed", { reason: access.reason, homeVersion: access.homeVersion })
     return "degraded"
   }
   try {
@@ -337,14 +280,8 @@ function defaultLoaderCheck(installAnchor: string): void {
   }
 }
 
-/**
- * Terminal transition to `ready`. Before reporting `ready` the manager
- * validates the loader (B-06) and idempotently seeds the profile templates on
- * the fast path (W-01) — the fresh-materialise path seeds them too, and
- * `seedProfiles` never overwrites existing files.
- */
+/** Terminal transition to `ready` after preparation and Home admission. */
 function finishReady(ctx: ManagerContext): DshRuntimeStatus {
-  const layout = resolveDshLayout(ctx.options.wopalHome)
   try {
     const loader = ctx.options.deps?.resolveLoader ?? defaultLoaderCheck
     loader(ctx.anchor)
@@ -353,47 +290,8 @@ function finishReady(ctx: ManagerContext): DshRuntimeStatus {
     return "degraded"
   }
   ctx.log.debug("dsh.stage.load", { anchor: ctx.anchor })
-  // Idempotent: creates missing profile templates (fast-path closure hit never
-  // seeded them before, DESIGN §3.4.5 step 8 / W-01).
-  seedProfiles(layout.profileDir, ctx.log)
   ctx.log.debug("dsh.init.ready", { entry: ctx.options.entry })
   return "ready"
-}
-
-/**
- * Create missing profile templates (`web` and `ellamaka-tools`) and the
- * profiles/node_modules shortcuts dir. Existing profiles and user patches are
- * never touched (DESIGN §3.4.8 / §3.5).
- */
-function seedProfiles(profileDir: string, log: LogBridge): void {
-  const bundlesByProfile: Record<string, string[]> = {
-    web: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"],
-    "ellamaka-tools": ["@deepseek-ai/dsh-base"],
-  }
-  for (const [name, bundles] of Object.entries(bundlesByProfile)) {
-    const dir = join(profileDir, name)
-    mkdirSync(dir, { recursive: true })
-    const manifestPath = join(dir, "package.json")
-    if (!existsSync(manifestPath)) {
-      writeFileSync(
-        manifestPath,
-        JSON.stringify(
-          { name: `dsh-profile-${name}`, private: true, dependencies: {}, dsh: { profile: { bundles } } },
-          null,
-          2,
-        ) + "\n",
-      )
-    }
-    const patchPath = join(dir, "cordis.patch.yml")
-    if (!existsSync(patchPath)) {
-      writeFileSync(
-        patchPath,
-        `# Your patch layer for this dsh profile, applied after every bundle layer:\n# a top-level YAML array of loader patch entries (id-targeted config\n# overrides, disables, and insert lists; \`!!js\` expressions allowed).\n[]\n`,
-      )
-    }
-  }
-  mkdirSync(join(profileDir, "node_modules"), { recursive: true })
-  log.debug("dsh.stage.profile", { profiles: Object.keys(bundlesByProfile).join(",") })
 }
 
 /** Reject a promise after `ms` with the given message (hard timeout). */

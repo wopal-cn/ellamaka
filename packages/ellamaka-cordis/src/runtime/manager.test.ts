@@ -7,6 +7,7 @@ import { prepareDshHome, readDshHomeState } from "./home-guard"
 import type { DshRuntimeManifestV1 } from "./manifest"
 import type { DshRuntimeLockV1 } from "./lockfile"
 import { closureNameForFingerprint, resolveDshLayout } from "./status"
+import { createPackageDshRuntimeApi } from "./loader"
 
 const dirs: string[] = []
 
@@ -97,6 +98,7 @@ function makeBaseOptions(home: string, overrides: Partial<InitializeDshOptions> 
     // deps (extract) are merged over this default fetch.
     deps: {
       fetch: async () => ({ status: 200, ok: true }),
+      resolveRuntime: () => createPackageDshRuntimeApi(),
       ...overrides.deps,
     },
   }
@@ -482,7 +484,7 @@ describe("B-06: loader failure degrades instead of crashing", () => {
   })
 })
 
-describe("W-01: ready fast path seeds profiles idempotently", () => {
+describe("unified preparation seeds profiles idempotently", () => {
   test("honors DEBUG for runtime stage diagnostics", async () => {
     const home = tmpHome()
     seedClosure(home)
@@ -498,14 +500,14 @@ describe("W-01: ready fast path seeds profiles idempotently", () => {
     const status = await initializeDshRuntime(makeBaseOptions(home))
     expect(status).toBe("ready")
     const layout = resolveDshLayout(home)
-    // The fast path (closure hit) must have seeded the profile templates.
+    // A closure cache hit still runs the profile preparation contributor.
     expect(existsSync(join(layout.profileDir, "web", "package.json"))).toBe(true)
     expect(existsSync(join(layout.profileDir, "web", "cordis.patch.yml"))).toBe(true)
     expect(existsSync(join(layout.profileDir, "ellamaka-tools", "package.json"))).toBe(true)
     expect(existsSync(join(layout.profileDir, "node_modules"))).toBe(true)
   })
 
-  test("profiles already exist are never overwritten on the ready fast path", async () => {
+  test("existing user profile files are never overwritten during preparation", async () => {
     const home = tmpHome()
     seedClosure(home)
     const layout = resolveDshLayout(home)

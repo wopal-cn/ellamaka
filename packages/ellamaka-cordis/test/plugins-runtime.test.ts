@@ -7,6 +7,7 @@ import { startDshPluginService, type DshPluginServiceHandle } from "../src/plugi
 import { withProfileManifestWrite, appendBundle } from "../src/plugins/profile-manifest"
 import { profileDirOf } from "../src/plugins/compose"
 import { resolveProfileModule } from "../src/plugins/profile-resolution"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 const FIXTURE_PLUGIN = join(import.meta.dir, "fixtures", "fixture-dsh-plugin")
 const MARKER = "fixture-dsh-plugin.marker"
@@ -34,6 +35,7 @@ let replayErrors: Array<{ profile: string; error: unknown }>
 
 beforeAll(async () => {
   home = mkdtempSync(join(tmpdir(), "dsh-plugins-runtime-"))
+  prepareDshProfiles(home)
   // The two boots touch the same fresh home but reconcile idempotently (the
   // closure healer re-points symlinks at identical targets with an
   // EEXIST-tolerant write; the plugins healer finds no user profiles yet),
@@ -376,11 +378,13 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
     await service.stop()
     await service.stop()
     await service.stop()
-    // Disk operations after stop never touch the containers.
+    // This service owns only its watcher/replay queue. The profile's official
+    // HMR remains live by design, so assert the stopped service itself never
+    // replays another write instead of pretending it owns all profile HMR.
+    const stoppedUpdates = updates
     await installFixture(home)
     await new Promise((resolve) => setTimeout(resolve, 800))
-    expect(marker(webCtxOf(web))).toBeUndefined()
-    expect(marker(tools.ctx)).toBeUndefined()
+    expect(updates).toBe(stoppedUpdates)
   }, 90_000)
 })
 

@@ -1,6 +1,6 @@
 {
   "schema": "ellamaka.dsh-runtime-lock/v1",
-  "manifestFingerprint": "sha256:61a15ea48618768fd74800c4761d847461da580208a75a239a20bd88f8352778",
+  "manifestFingerprint": "sha256:b32da93b5559f1927a252900c38e4059c54a9f55e92c026dabbb0d18405c6697",
   "packages": {
     "node_modules/@agentclientprotocol/sdk": {
       "version": "1.4.0"

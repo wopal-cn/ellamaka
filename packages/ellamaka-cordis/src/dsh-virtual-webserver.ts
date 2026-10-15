@@ -90,6 +90,8 @@ export class VirtualWebServer {
   private fallback: WebRoute["handler"] | undefined
   private server: Server | undefined
   private readonly config: VirtualWebServerOptions
+  private readonly unregister: () => void
+  private disposed = false
   /** The cordis context this service is registered on. */
   readonly ctx: Context
 
@@ -99,7 +101,7 @@ export class VirtualWebServer {
     // Register this instance as the `webServer` service without a runtime
     // `Service` base-class import: mirror the cordis `Service` registration
     // (name + instance) through the context's reflection layer.
-    ctx.reflect.provide("webServer", this)
+    this.unregister = ctx.reflect.provide("webServer", this)
   }
 
   /** The reported port (the Ellamaka public port). */
@@ -438,9 +440,12 @@ export class VirtualWebServer {
    * dispose so Node `closeAllConnections()` does not strand raw WebSockets.
    */
   dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
     for (const socket of this.upgradedSockets) {
       socket.destroy()
     }
     this.upgradedSockets.clear()
+    this.unregister()
   }
 }

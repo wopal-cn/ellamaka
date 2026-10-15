@@ -3,10 +3,12 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { bootDshTools, bootDshWeb } from "../src/dsh-web"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 describe("rc.2 profile assembly", () => {
   test("tools supplies every adopted provider without Session or model lifecycle", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-rc2-tools-"))
+    prepareDshProfiles(home)
     const host = await bootDshTools({ home, port: 0 })
     try {
       const tools = host.ctx.get("tools") as { schemas(): { name: string }[] }
@@ -26,6 +28,7 @@ describe("rc.2 profile assembly", () => {
   }, 30000)
   test("Bun web uses profileContext, config HMR and healthy native presets", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-rc2-web-"))
+    prepareDshProfiles(home)
     const host = await bootDshWeb({
       home,
       port: 0,
@@ -63,6 +66,7 @@ test("legacy settings stay intact and cannot start a partial Web import", async 
   writeFileSync(legacy, "fixture-section: preserved\n")
   await expect(bootDshWeb({ home, port: 0 })).rejects.toThrow(/Legacy DSH settings require migration/)
   expect(readFileSync(legacy, "utf8")).toBe("fixture-section: preserved\n")
+  prepareDshProfiles(home)
   const tools = await bootDshTools({ home, port: 0 })
   await tools.dispose()
 }, 30000)
