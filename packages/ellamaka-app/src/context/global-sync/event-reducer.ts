@@ -22,6 +22,19 @@ export function requiresGlobalReconciliation(eventType: string) {
   return eventType === "global.disposed"
 }
 
+/**
+ * Unit-reload events (DESIGN.md#unified-reload--lifecycle): a DSH unit
+ * reload (`dsh:web` / `dsh:tools`) only rebuilds the Workbench's DSH iframe
+ * — refresh the dsh-url entry, no full reconciliation, no sidecar restart.
+ * `global` and `instance:*` reloads carry no iframe action here; their
+ * effects flow through the regular disposed/reconciliation paths.
+ */
+export function isDshUnitReload(eventType: string, properties?: unknown) {
+  if (eventType !== "runtime.reloaded") return false
+  const unit = (properties as { unit?: unknown } | undefined)?.unit
+  return unit === "dsh:web" || unit === "dsh:tools"
+}
+
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
@@ -29,6 +42,11 @@ export function applyGlobalEvent(input: {
   refresh: () => void
 }) {
   if (requiresGlobalReconciliation(input.event.type)) {
+    input.refresh()
+    return
+  }
+
+  if (isDshUnitReload(input.event.type, input.event.properties)) {
     input.refresh()
     return
   }

@@ -32,6 +32,19 @@ export type {
   DshPluginServiceHandle,
   DshPluginServiceOptions,
 } from "@wopal/ellamaka-cordis/plugins/runtime"
+// Unit-reload wiring (DESIGN.md#unified-reload--lifecycle): the trigger
+// decision table and the `dsh:web` cold-rebuild lifecycle controller. The
+// sidecar shares them with the CLI mount so every host scopes reloads and
+// events identically.
+export { restartRequiredForTools } from "@wopal/ellamaka-cordis/plugins/unit-trigger"
+export type { UnitTriggerDecision } from "@wopal/ellamaka-cordis/plugins/unit-trigger"
+export { DshWebColdReload } from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
+export type {
+  ColdBuildCandidate,
+  ColdRebuildBuilder,
+  ColdRebuildContainer,
+  ColdRebuildHandle,
+} from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
 // The install-command decision table is shared with the CLI mount
 // (`dsh-mount.ts`), so the Desktop sidecar resolves its launcher through the
 // same rules instead of keeping a second, drifting copy. The sidecar is the

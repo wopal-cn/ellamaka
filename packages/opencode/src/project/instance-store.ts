@@ -4,6 +4,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
+import { emitRuntimeReloaded } from "@/server/runtime-reload"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -135,6 +136,11 @@ export const layer: Layer.Layer<Service, never, Project.Service | InstanceBootst
               yield* emitDisposed({ directory, project: input.project?.id })
             }
             yield* completeLoad(directory, input, entry)
+            // The new instance entry validated and published atomically
+            // (completeLoad settled the deferred); bump this unit's revision.
+            // Per-unit counters: an instance reload never moves global or any
+            // dsh unit's revision (DESIGN.md#unified-reload--lifecycle).
+            yield* Effect.sync(() => emitRuntimeReloaded(`instance:${directory}`))
           }).pipe(Effect.forkIn(scope, { startImmediately: true }))
           return yield* restore(Deferred.await(entry.deferred))
         }),

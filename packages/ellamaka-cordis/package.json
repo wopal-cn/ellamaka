@@ -26,6 +26,8 @@
     "./plugins/install-command": "./src/plugins/install-command.ts",
     "./plugins/resolver": "./src/plugins/resolver.ts",
     "./plugins/runtime": "./src/plugins/runtime.ts",
+    "./plugins/unit-trigger": "./src/plugins/unit-trigger.ts",
+    "./runtime/web-cold-reload": "./src/runtime/web-cold-reload.ts",
     "./plugins/preset-bundle": "./src/plugins/preset-bundle.ts",
     "./diagnostics/dump-config": "./src/diagnostics/dump-config.ts",
     "./plugins/migrate-store": "./src/plugins/migrate-store.ts",

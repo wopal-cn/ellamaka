@@ -80,6 +80,20 @@ export interface DshPluginServiceOptions {
 /** The result of one host-owned composition replay. */
 export type DshPluginReplayResult = { ok: true } | { ok: false; error: string }
 
+/**
+ * Per-unit observation state (DESIGN.md#unified-reload--lifecycle): each
+ * container is its own reload unit with its own content hash, last
+ * observation and failure record. A unit's files changing invalidates ONLY
+ * that unit; a failed unit keeps its last hash (no retry storm) while its
+ * siblings keep replaying on their own changes.
+ */
+interface UnitState {
+  container: DshPluginContainer
+  files: [string, string]
+  lastHash: string | undefined
+  lastObservation: { hash: string; result: DshPluginReplayResult } | undefined
+}
+
 /** A running service handle. */
 export interface DshPluginServiceHandle {
   /**
@@ -112,28 +126,33 @@ function defaultLogger(): DshPluginServiceLogger {
 /**
  * Start watching the profile composition files and hot-replaying include
  * patches. Event driven: no polling interval.
+ *
+ * Unit scoping (DESIGN.md#unified-reload--lifecycle): every container is an
+ * independent reload unit. The watched files are hashed PER PROFILE, and a
+ * replay recomposes only the units whose content actually changed — a web
+ * profile write never replays the tools container and vice versa. A failed
+ * unit keeps its last good hash (D-03 storm fix, per unit now); the other
+ * units' successes still adopt their new hashes in the same run.
  */
 export function startDshPluginService(options: DshPluginServiceOptions): DshPluginServiceHandle {
-  const containers = options.containers
   const logger = options.logger ?? defaultLogger()
-  let lastHash: string | undefined
-  let lastObservation: { hash: string; result: DshPluginReplayResult } | undefined
   let stopped = false
   /** Serialization: change events spotted mid-replay coalesce into one rerun. */
   let replaying = false
   let pendingReplay = false
   let activeReplay: Promise<DshPluginReplayResult> | undefined
 
-  /** The watched composition files, one pair per container profile. */
-  const watchedFiles = new Map<string, { manifest: string; patch: string }>()
-  for (const container of containers) {
+  /** One independent unit per container, observed through its own files. */
+  const units: UnitState[] = options.containers.map((container) => {
     const dir = profileDirOf(options.home, container.profile)
-    watchedFiles.set(container.profile, {
-      manifest: join(dir, "package.json"),
-      patch: join(dir, "cordis.patch.yml"),
-    })
-  }
-  const allWatched = [...watchedFiles.values()].flatMap((f) => [f.manifest, f.patch])
+    return {
+      container,
+      files: [join(dir, "package.json"), join(dir, "cordis.patch.yml")],
+      lastHash: undefined,
+      lastObservation: undefined,
+    }
+  })
+  const allWatched = units.flatMap((unit) => unit.files)
 
   /** Read one watched file's content (`undefined` when absent). */
   function readContent(file: string): string | undefined {
@@ -145,9 +164,9 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     }
   }
 
-  /** Hash the CURRENT content of every watched file (content, not mtime). */
-  function currentHash(): string {
-    return compositionHash(allWatched.map(readContent))
+  /** Hash the CURRENT content of one unit's watched files (content, not mtime). */
+  function currentHash(unit: UnitState): string {
+    return compositionHash(unit.files.map(readContent))
   }
 
   const replayContainer = async (container: DshPluginContainer): Promise<void> => {
@@ -200,47 +219,59 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     options.onReplay?.(container.profile)
   }
 
-  /** One observation: hash -> replay changed containers -> keep old hash on failure. */
+  /**
+   * Replay ONE unit into its container. Returns the unit's outcome; the
+   * caller decides hash adoption per unit (failure keeps the old hash).
+   */
+  const replayUnit = async (unit: UnitState, hash: string): Promise<DshPluginReplayResult> => {
+    if (unit.lastObservation?.hash === hash) return unit.lastObservation.result
+    try {
+      await replayContainer(unit.container)
+      unit.lastHash = hash
+      unit.lastObservation = { hash, result: { ok: true } }
+      return unit.lastObservation.result
+    } catch (error) {
+      // Keep the last good state for this unit; its siblings are unaffected
+      // (unit isolation, DESIGN.md#unified-reload--lifecycle). The failed
+      // hash is NOT adopted — a failure is not a state change (D-03). The
+      // failure IS cached on lastObservation so an unchanged re-observation
+      // answers the same verdict instead of re-running into the same wall.
+      const message = (error as Error).message
+      const failure: DshPluginReplayResult = { ok: false, error: message }
+      unit.lastObservation = { hash, result: failure }
+      logger.error("plugin include replay failed; keeping last good state", {
+        profile: unit.container.profile,
+        error: message,
+      })
+      options.onReplayError?.(unit.container.profile, error)
+      return failure
+    }
+  }
+
+  /**
+   * One observation: hash every unit independently, replay only the units
+   * whose composition changed, adopt successes per unit. A run with any
+   * failed unit answers `{ ok: false }` for that unit's error — but the
+   * OTHER units' successes are already published (they adopted their new
+   * hashes above), so a failed web unit never blocks a tools replay.
+   */
   const runReplay = (queueWhenBusy = false): Promise<DshPluginReplayResult> => {
     if (stopped) return Promise.resolve({ ok: false, error: "dsh plugin runtime is stopped" })
-    const hash = currentHash()
-    if (hash === lastHash) return Promise.resolve({ ok: true })
-    if (hash === lastObservation?.hash) return Promise.resolve(lastObservation.result)
+    const observations = units.map((unit) => ({ unit, hash: currentHash(unit) }))
+    const changed = observations.filter(({ unit, hash }) => hash !== unit.lastHash)
+    if (changed.length === 0) return Promise.resolve({ ok: true })
     if (replaying) {
       if (queueWhenBusy) pendingReplay = true
       return activeReplay ?? Promise.resolve({ ok: false, error: "dsh plugin replay lost its active task" })
     }
     replaying = true
     activeReplay = (async (): Promise<DshPluginReplayResult> => {
-      // Heal BEFORE composing: a newly installed plugin needs its
-      // profiles/node_modules symlink to exist for the loader's import.
-      let failed = false
       let firstError: string | undefined
-      for (const container of containers) {
-        try {
-          await replayContainer(container)
-        } catch (error) {
-          // Keep the last good state for this container; the service and
-          // the other containers are unaffected (DESIGN §9.6 #5).
-          failed = true
-          firstError ??= (error as Error).message
-          logger.error("plugin include replay failed; keeping last good state", {
-            profile: container.profile,
-            error: (error as Error).message,
-          })
-          options.onReplayError?.(container.profile, error)
-        }
+      for (const { unit, hash } of changed) {
+        const result = await replayUnit(unit, hash)
+        if (!result.ok) firstError ??= result.error
       }
-      // Storm fix (D-03): a failed replay does NOT update the hash — the
-      // failure is not a state change, so nothing retries until a real file
-      // change arrives. Only a fully successful run adopts the new hash.
-      if (!failed) {
-        lastHash = hash
-        lastObservation = { hash, result: { ok: true } }
-        return lastObservation.result
-      }
-      lastObservation = { hash, result: { ok: false, error: firstError ?? "dsh plugin composition replay failed" } }
-      return lastObservation.result
+      return firstError === undefined ? { ok: true } : { ok: false, error: firstError }
     })()
     return activeReplay.finally(() => {
       replaying = false
@@ -287,7 +318,8 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
     return runReplay()
   }
 
-  lastHash = currentHash() // adopt the state observed at startup
+  // Adopt each unit's startup state so an idempotent boot never replays.
+  for (const unit of units) unit.lastHash = currentHash(unit)
   const watcher = watch(allWatched, {
     ignoreInitial: true,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 25 },
