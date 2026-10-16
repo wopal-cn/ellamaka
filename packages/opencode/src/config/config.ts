@@ -9,14 +9,14 @@ import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
-import { InstallationLocal, InstallationVersionBase } from "@wopal/ellamaka-core/installation/version"
 import { existsSync } from "fs"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
 import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
+import { Npm } from "@wopal/ellamaka-core/npm"
 import { InstanceState } from "@/effect/instance-state"
-import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
+import { Context, Duration, Effect, Layer, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { EffectFlock } from "@wopal/ellamaka-core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
@@ -39,8 +39,9 @@ import { ConfigReference } from "./reference"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
-import { Npm } from "@wopal/ellamaka-core/npm"
-import { tryLoadWopalSpaceConfig, localPluginInstallDeps, collectPluginDeps, needsPluginDepInstall, writeDirDepFingerprint, writeInstallManifest, cleanPluginDepArtifacts, withPluginDepInstallLock, type InstallDependency } from "./wopal-space"
+import { tryLoadWopalSpaceConfig } from "./wopal-space"
+import { resolveWopalSpaceRoot } from "./wopal-space-settings"
+import { preparePluginDependencies } from "@/core/plugin-dependency-preparation"
 import type { PluginConfigSources, PluginConfigTable } from "./wopal-plugin-config"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ConfigExperimental } from "@wopal/ellamaka-core/config/experimental"
@@ -336,7 +337,7 @@ export type Info = DeepMutable<Schema.Schema.Type<typeof Info>> & {
 type State = {
   config: Info
   directories: string[]
-  deps: Fiber.Fiber<void>[]
+  dependencyPreparation: Effect.Effect<void>
   consoleState: ConsoleState
   isWopalSpace: boolean
   pluginConfig: PluginConfigTable
@@ -403,7 +404,6 @@ export const layer = Layer.effect(
     const authSvc = yield* Auth.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
-    const npmSvc = yield* Npm.Service
     const http = yield* HttpClient.HttpClient
 
     const readConfigFile = (filepath: string) => fs.readFileStringSafe(filepath).pipe(Effect.orDie)
@@ -490,22 +490,25 @@ export const layer = Layer.effect(
       return yield* cachedGlobal
     })
 
-    const ensureGitignore = Effect.fn("Config.ensureGitignore")(function* (dir: string) {
-      const gitignore = path.join(dir, ".gitignore")
-      const hasIgnore = yield* fs.existsSafe(gitignore)
-      if (!hasIgnore) {
-        yield* fs
-          .writeFileString(
-            gitignore,
-            ["node_modules", "package.json", "package-lock.json", "bun.lock", ".gitignore"].join("\n"),
-          )
-          .pipe(
-            Effect.catchIf(
-              (e) => e.reason._tag === "PermissionDenied",
-              () => Effect.void,
-            ),
-          )
-      }
+    const makeDependencyPreparation = Effect.fnUntraced(function* (input: {
+      directories: string[]
+      spaceRoot?: string
+    }) {
+      const prepare = Effect.promise(() =>
+        preparePluginDependencies({
+          wopalHome: Global.Path.wopalHome,
+          directories: input.directories.filter((dir) => dir !== Global.Path.config),
+          spaceRoot: input.spaceRoot,
+          reason: "plugin-activation",
+        }),
+      ).pipe(
+        Effect.flatMap((result) =>
+          result.state === "READY"
+            ? Effect.void
+            : Effect.die(new Error(`instance plugin dependency preparation failed: ${result.reason ?? result.state}`)),
+        ),
+      )
+      return yield* Effect.cached(prepare)
     })
 
     const loadInstanceState = Effect.fn("Config.loadInstanceState")(
@@ -591,67 +594,33 @@ export const layer = Layer.effect(
           }
         }
 
-        const wopalResult = yield* tryLoadWopalSpaceConfig({
-          installPluginDeps: (dir, add) =>
-            Effect.promise(() =>
-              withPluginDepInstallLock(dir, async () => {
-                const exit = await Effect.runPromiseExit(
-                  npmSvc.install(dir, {
-                    add: [
-                      {
-                        name: "@wopal/ellamaka-plugin",
-                        version: InstallationLocal ? undefined : InstallationVersionBase,
-                      },
-                      ...add,
-                    ],
-                  }),
-                )
-                if (Exit.isFailure(exit)) {
-                  log.warn("background dependency install failed", { dir, error: String(exit.cause) })
-                }
-              }),
-            ).pipe(Effect.forkDetach),
-          installPluginDepsWithFingerprint: (dir, add, fingerprint, plugins) =>
-            Effect.promise(() =>
-              withPluginDepInstallLock(dir, async () => {
-                const exit = await Effect.runPromiseExit(
-                  npmSvc.install(dir, {
-                    add: [
-                      {
-                        name: "@wopal/ellamaka-plugin",
-                        version: InstallationLocal ? undefined : InstallationVersionBase,
-                      },
-                      ...add,
-                    ],
-                  }),
-                )
-                if (Exit.isFailure(exit)) {
-                  log.warn("background dependency install failed", { dir, error: String(exit.cause) })
-                  return
-                }
-                await Promise.all([
-                  writeDirDepFingerprint(dir, fingerprint, plugins),
-                  writeInstallManifest(dir, add, [{ name: "@wopal/ellamaka-plugin", version: InstallationLocal ? undefined : InstallationVersionBase }]),
-                ])
-              }),
-            ).pipe(Effect.forkDetach),
-          readConfigFile,
-          loadConfig,
-          getGlobal,
-          merge,
-          mergePluginOrigins,
-          ensureGitignore: (dir) => ensureGitignore(dir).pipe(Effect.orDie),
-          applyPostMerge,
-          initContainers: () => {
-            result.agent = result.agent || {}
-            result.mode = result.mode || {}
-            result.plugin = result.plugin || []
+        const wopalResult = yield* tryLoadWopalSpaceConfig(
+          {
+            readConfigFile,
+            loadConfig,
+            getGlobal,
+            merge,
+            mergePluginOrigins,
+            applyPostMerge,
+            initContainers: () => {
+              result.agent = result.agent || {}
+              result.mode = result.mode || {}
+              result.plugin = result.plugin || []
+            },
+            getResult: () => result,
           },
-          getResult: () => result,
-        }, ctx)
+          ctx,
+        )
         if (wopalResult) {
+          const spaceRoot = resolveWopalSpaceRoot(ctx.directory)
+          if (!spaceRoot) return yield* Effect.die(new Error("wopal space root disappeared during config read"))
+          const dependencyPreparation = yield* makeDependencyPreparation({
+            directories: wopalResult.directories,
+            spaceRoot,
+          })
           return {
             ...wopalResult,
+            dependencyPreparation,
             isWopalSpace: true,
           }
         }
@@ -716,70 +685,8 @@ export const layer = Layer.effect(
           log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
         }
 
-        const deps: Fiber.Fiber<void>[] = []
-
         for (const dir of directories) {
           if (dir === Global.Path.config) continue
-
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
-
-          // $WOPAL_HOME 下的本地插件（如 wopal-plugin）声明了自身依赖（如 openai），
-          // 扁平化收集 dependencies 字段，通过 arborist 安装到该目录的 node_modules。
-          // 指纹检测：依赖未变则跳过安装。
-          let pluginDeps: InstallDependency[] = []
-          let depFingerprint: string | undefined
-          let depPlugins: Record<string, { path: string; deps: Record<string, string> }> | undefined
-          let skipInstall = false
-          if (dir === Global.Path.wopalHome) {
-            const collected = yield* Effect.promise(() => collectPluginDeps(dir))
-            if (collected.deps.length > 0) {
-              const needInstall = yield* Effect.promise(() => needsPluginDepInstall(dir, collected.fingerprint))
-              if (!needInstall) {
-                skipInstall = true
-              } else {
-                pluginDeps = collected.deps
-                depFingerprint = collected.fingerprint
-                depPlugins = collected.plugins
-                yield* Effect.promise(() => cleanPluginDepArtifacts(dir))
-              }
-            }
-          }
-
-          if (!skipInstall) {
-            // Wrap install + fingerprint write in a per-directory lock so
-            // concurrent instances loading the same WOPAL_HOME (or the same
-            // space's .wopal) coalesce into a single install. The lock
-            // guarantees install runs at most once per dir per process, and
-            // the fingerprint is only written on install success — a failed
-            // install leaves the old (or absent) fingerprint so the next
-            // startup retries, instead of silently marking deps installed.
-            const dep = yield* Effect.promise(() =>
-              withPluginDepInstallLock(dir, async () => {
-                const exit = await Effect.runPromiseExit(
-                  npmSvc.install(dir, {
-                    add: [
-                      {
-                        name: "@wopal/ellamaka-plugin",
-                        version: InstallationLocal ? undefined : InstallationVersionBase,
-                      },
-                      ...pluginDeps,
-                    ],
-                  }),
-                )
-                if (Exit.isFailure(exit)) {
-                  log.warn("background dependency install failed", { dir, error: String(exit.cause) })
-                  return
-                }
-                if (depFingerprint) {
-                  await Promise.all([
-                    writeDirDepFingerprint(dir, depFingerprint, depPlugins!),
-                    writeInstallManifest(dir, pluginDeps, [{ name: "@wopal/ellamaka-plugin", version: InstallationLocal ? undefined : InstallationVersionBase }]),
-                  ])
-                }
-              }),
-            ).pipe(Effect.forkDetach)
-            deps.push(dep)
-          }
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
@@ -909,10 +816,12 @@ export const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
+        const dependencyPreparation = yield* makeDependencyPreparation({ directories })
+
         return {
           config: result,
           directories,
-          deps,
+          dependencyPreparation,
           consoleState: {
             consoleManagedProviders: Array.from(consoleManagedProviders),
             activeOrgName,
@@ -949,9 +858,7 @@ export const layer = Layer.effect(
     })
 
     const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
-      yield* InstanceState.useEffect(state, (s) =>
-        Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
-      )
+      yield* InstanceState.useEffect(state, (s) => s.dependencyPreparation)
     })
 
     const update = Effect.fn("Config.update")(function* (config: Info) {

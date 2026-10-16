@@ -17,10 +17,7 @@ describe("WopalSpace config injection", () => {
   function createMockDeps(): WopalSpaceDeps {
     const result: Partial<Info> = {}
     return {
-      installPluginDeps: () => Effect.succeed(undefined as any),
-      installPluginDepsWithFingerprint: () => Effect.succeed(undefined as any),
-      readConfigFile: (filepath) =>
-        Effect.promise(() => fs.readFile(filepath, "utf8").catch(() => undefined)),
+      readConfigFile: (filepath) => Effect.promise(() => fs.readFile(filepath, "utf8").catch(() => undefined)),
       loadConfig: (text) => Effect.succeed(JSON.parse(text) as Info),
       getGlobal: () => Effect.succeed({} as Info),
       merge: (_source, next) => {
@@ -28,7 +25,6 @@ describe("WopalSpace config injection", () => {
         return Effect.succeed(undefined)
       },
       mergePluginOrigins: () => Effect.succeed(undefined),
-      ensureGitignore: () => Effect.succeed(undefined),
       applyPostMerge: () => {},
       initContainers: () => {},
       getResult: () => result as Info,
