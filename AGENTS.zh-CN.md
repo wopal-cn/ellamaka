@@ -59,7 +59,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - Browser/Desktop 的平台 HTTP contract 由公开 SDK 提供；Official App BFF contract 由 app-private generated client 提供。任一 contract 变化时都必须成组生成对应类型与运行时参数映射，不手改 generated 文件。
 - 跨包动态加载、资源解析或打包行为必须验证真实产品制品，源码态检查不能替代宿主验证。
 - 明确异步任务与子进程的 owner；取消和退出必须等待 owner 所拥有资源完成清理。
-- 临时验证使用隔离 Home、profile、仓库和凭证；不得改写用户真实运行环境。
+- 临时验证使用隔离 Home、profile、仓库和凭证；不得改写用户真实运行环境。隔离 Home 由 `WOPAL_HOME` 选择（如 `WOPAL_HOME=/path/to/tmp/home`），不是 `HOME`——只设 `HOME` 不会重定向产品路径；启动任何真实进程前，先从其早期输出核对所打印路径全部落在隔离 Home 内。
 - 定制边界（针对 upstream 文件）：新能力优先放新文件，upstream 文件只保留最少的 import 与调用注入点；定制分支用早返回 guard，避免与主线重叠；需要 upstream 内部能力时优先 callback/闭包注入，不暴露 upstream Service 类型；复用逻辑抽共享 helper，不复制大段 upstream 流程；不得对 upstream 文件做无关格式化、import 重排、依赖或对象键重排；`.gitattributes` 不添加 merge 策略驱动，冲突显式逐文件解决。
 - DSH 与 Bridge：`$WOPAL_HOME` 根目录禁止 `pnpm install` / `bun install`（pnpm 会爬到 workspace 根，摧毁 Bun 管理的依赖拓扑）；引擎运行期间，进程外的任何写操作都不得触碰 `$WOPAL_HOME/dsh/home/profiles/`（连"内容相同"的幂等写也会与引擎竞态）；`ELLAMAKA_DSH` 是唯一 enable switch；Bridge 只随 Ellamaka 产品发布，不单独发包、也不作为 `$WOPAL_HOME/dsh` 的依赖；tool container 不创建 dsh session，只传每次调用所需的最小上下文；插件"安装一次、按 profile 激活"，同一进程不并行两个版本。
 - WopalSpace 集成边界：Setup、Ontology 与基础 Space 业务只在 private WopalSpace 服务内实现一次，并通过 Public Platform SDK 暴露；Product 管理、Evolution、Skill 生命周期与调度继续由 Wopal CLI 拥有。Ellamaka 不依赖 Wopal CLI 的命令处理、共享 schema 包或最低 CLI 版本。Session provisioning 只接受已注册 Space 与安全的相对目录，目录失败不删除 Session。
