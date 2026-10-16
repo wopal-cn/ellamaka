@@ -159,9 +159,14 @@ export namespace PluginLoader {
 
     // Deprecated plugin packages are silently ignored because they are now built in.
     if (plan.deprecated) return { retry: false }
-    if (await isBuiltinDshAdapter(plan.spec)) return { retry: false }
 
+    // Emit start BEFORE any await so concurrent candidates report in list
+    // order (the builtin-identity check below awaits filesystem work, and a
+    // start after that await lets sibling candidates overtake the report
+    // order). The identity check itself stays before resolve: a built-in
+    // adapter is skipped without any resolve/install work.
     report?.start?.(candidate, retry)
+    if (await isBuiltinDshAdapter(plan.spec)) return { retry: false }
 
     const resolved = await resolve(plan, kind)
     if (!resolved.ok) {
