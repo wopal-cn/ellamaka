@@ -33,11 +33,15 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstallationChannel } from "@wopal/ellamaka-core/installation/version"
 import { resolveWopalSpaceRoot } from "@/config/wopal-space-settings"
+import { dshAdapter, DshAdapterError } from "@wopal/ellamaka-cordis/dsh-adapter"
+import { isBuiltinDshAdapter } from "@wopal/ellamaka-core/builtin-plugins"
+import { ConfigPlugin } from "@/config/plugin"
 
 const log = Log.create({ service: "plugin" })
 
 type State = {
   hooks: Hooks[]
+  requiredDsh: boolean
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -67,7 +71,9 @@ export function experimentalWebSocketsEnabled(input: { enabled: boolean; channel
 
 // Built-in plugins that are directly imported (not installed from npm)
 function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
+  if (flags.disableDefaultPlugins) return [dshAdapter]
   return [
+    dshAdapter,
     // Temporary rollout: pre-release builds use WebSockets by default; releases require explicit opt-in.
     (input) =>
       CodexAuthPlugin(input, {
@@ -160,6 +166,19 @@ export const layer = Layer.effect(
       Effect.fn("Plugin.state")(function* (ctx) {
         const hooks: Hooks[] = []
         const bridge = yield* EffectBridge.make()
+        yield* Effect.addFinalizer(() =>
+          Effect.forEach(
+            hooks,
+            (hook) =>
+              Effect.tryPromise({
+                try: () => Promise.resolve(hook.dispose?.()),
+                catch: (error) => {
+                  log.error("plugin dispose hook failed", { error })
+                },
+              }).pipe(Effect.ignore),
+            { discard: true },
+          ),
+        )
 
         function publishPluginError(message: string) {
           bridge.fork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
@@ -196,7 +215,37 @@ export const layer = Layer.effect(
           pluginConfig,
         }
 
-        for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
+        // Resolve reserved identity before dependency preparation or external imports.
+        const plugins: ConfigPlugin.Origin[] = []
+        let adapterOptions: ConfigPlugin.Options | undefined
+        for (const origin of flags.pure ? [] : (cfg.plugin_origins ?? [])) {
+          if (yield* Effect.promise(() => isBuiltinDshAdapter(ConfigPlugin.pluginSpecifier(origin.spec)))) {
+            adapterOptions = ConfigPlugin.pluginOptions(origin.spec)
+          } else plugins.push(origin)
+        }
+        let requiredDsh = false
+        for (const plugin of internalPlugins(flags)) {
+          if (plugin === dshAdapter) {
+            const init = yield* Effect.promise(async () => {
+              try {
+                return await plugin(input, adapterOptions)
+              } catch (cause) {
+                const failure =
+                  cause instanceof DshAdapterError ? cause : new DshAdapterError("initialization failed", { cause })
+                log.error("required internal plugin initialization failed", { name: "dsh-adapter" })
+                // Preserve passive discovery/config reads, but retain the failure
+                // as a provider so model requests cannot fall back to native.
+                return {
+                  "tool.provider": async () => {
+                    throw failure
+                  },
+                } satisfies Hooks
+              }
+            })
+            requiredDsh = !!init["tool.provider"]
+            if (Object.keys(init).length) hooks.push(init)
+            continue
+          }
           log.trace("plugin", "loading internal plugin", { name: plugin.name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
@@ -207,7 +256,6 @@ export const layer = Layer.effect(
           if (init._tag === "Some") hooks.push(init.value)
         }
 
-        const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
         if (flags.pure && cfg.plugin_origins?.length) {
           log.trace("plugin", "skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
         }
@@ -290,20 +338,6 @@ export const layer = Layer.effect(
           }).pipe(Effect.ignore)
         }
 
-        yield* Effect.addFinalizer(() =>
-          Effect.forEach(
-            hooks,
-            (hook) =>
-              Effect.tryPromise({
-                try: () => Promise.resolve(hook.dispose?.()),
-                catch: (error) => {
-                  log.error("plugin dispose hook failed", { error })
-                },
-              }).pipe(Effect.ignore),
-            { discard: true },
-          ),
-        )
-
         // Subscribe to bus events, fiber interrupted when scope closes
         yield* (yield* bus.subscribeAll()).pipe(
           Stream.runForEach((input) =>
@@ -316,7 +350,7 @@ export const layer = Layer.effect(
           Effect.forkScoped,
         )
 
-        return { hooks }
+        return { hooks, requiredDsh }
       }),
     )
 
@@ -330,7 +364,15 @@ export const layer = Layer.effect(
       for (const hook of s.hooks) {
         const fn = hook[name] as any
         if (!fn) continue
-        yield* Effect.promise(async () => fn(input, output))
+        yield* Effect.promise(async () => {
+          try {
+            await fn(input, output)
+          } catch (cause) {
+            if (name === "tool.provider" && s.requiredDsh)
+              throw new DshAdapterError("required tool provider failed", { cause })
+            throw cause
+          }
+        })
       }
       return output
     })

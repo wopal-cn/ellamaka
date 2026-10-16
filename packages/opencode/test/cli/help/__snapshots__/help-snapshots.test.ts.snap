@@ -21,7 +21,7 @@ start ACP (Agent Client Protocol) server
       --mdns-domain         custom domain name for mDNS service (default: ellamaka.local)
                                                                  [字符串] [默认值: "ellamaka.local"]
       --cors                additional domains to allow for CORS                 [数组] [默认值: []]
-      --cwd                 working directory        [字符串] [默认值: "<HOME>"]"
+      --cwd                 working directory [字符串] [默认值: "<HOME>"]"
 `;
 
 exports[`opencode CLI help-text snapshots every documented command emits stable help text: opencode mcp --help 1`] = `

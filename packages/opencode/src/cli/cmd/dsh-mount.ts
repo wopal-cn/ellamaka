@@ -1,4 +1,5 @@
 import { Global } from "@wopal/ellamaka-core/global"
+import { trackDshToolsInitialization } from "@wopal/ellamaka-cordis/dsh-adapter/host"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { join } from "node:path"
 import os from "node:os"
@@ -208,7 +209,14 @@ function resolveEllamakaCommand(): string[] {
  * 3. `disabled`/`degraded` → `undefined` is returned and the native host keeps
  *    running untouched; DSH failure never owns listener liveness.
  */
-export async function mountDshEngine(
+export function mountDshEngine(
+  server: Listener,
+  opts: DshEngineMountOptions = {},
+): Promise<DshEngineHandle | undefined> {
+  return trackDshToolsInitialization(mountDshEngineImpl(server, opts))
+}
+
+async function mountDshEngineImpl(
   server: Listener,
   opts: DshEngineMountOptions = {},
 ): Promise<DshEngineHandle | undefined> {

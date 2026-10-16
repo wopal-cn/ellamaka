@@ -140,9 +140,13 @@ parentPort.on("message", (event) => {
 })
 
 async function start(command: StartCommand) {
+  const initialized = Promise.withResolvers<void>()
   try {
     ensureLoopbackNoProxy()
-    const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
+    const { Database, JsonMigration, Log, Server, trackDshToolsInitialization } = await import(
+      "virtual:opencode-server"
+    )
+    void trackDshToolsInitialization(initialized.promise)
     // Desktop dev tooling controls the sidecar through the double-L
     // `ELLAMAKA_DESKTOP_*` variables (shared with the onboarding reader):
     //   ELLAMAKA_DESKTOP_DEV=1 → dev channel (honors WOPAL_DEBUG_LOG_DIR and
@@ -243,6 +247,8 @@ async function start(command: StartCommand) {
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
     setImmediate(() => process.exit(1))
+  } finally {
+    initialized.resolve()
   }
 }
 

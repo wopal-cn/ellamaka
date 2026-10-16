@@ -11,7 +11,7 @@
 // terminal sizes. The default opencode tui command is excluded —
 // `opencode --help` includes an ASCII banner that pulls in the install
 // version (changes per release), so we'd snapshot a moving target.
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
@@ -22,7 +22,7 @@ import { normalizeForSnapshot, PATH_SEP } from "../../lib/snapshot"
 //   1. The harness's `oc-cli-XXX` subdir under TMPDIR collapses to `<HOME>`.
 //      `PATH_SEP` matches `/` and `\\` so the rule works on POSIX + Windows.
 //
-//   2. yargs wraps the `[string] [default: "..."]` clause based on the
+//   2. yargs wraps the localized type/default clause based on the
 //      pre-normalized default's character length, so different random home
 //      path widths produce different leading-whitespace counts (or even
 //      line-wraps onto a fresh line on Windows). `\s+` matches both forms.
@@ -33,7 +33,7 @@ function normalize(text: string): string {
       // (the harness now uses FileSystem.makeTempDirectoryScoped under the
       // hood). A `[a-z0-9]+` regex would leave uppercase chars trailing.
       [new RegExp(`<TMPDIR>${PATH_SEP}oc-cli-[A-Za-z0-9]+`, "g"), "<HOME>"],
-      [/\s+\[string\] \[default: "<HOME>"\]/g, ' [string] [default: "<HOME>"]'],
+      [/\s+(\[[^\]\r\n]+\])\s+(\[[^\]\r\n]+: "<HOME>"\])/g, " $1 $2"],
     ],
   })
 }
@@ -89,6 +89,22 @@ const SUBCOMMANDS = [
 // yargs honors COLUMNS; CI runners typically default to 80 which produces
 // different wraps from a 200-col local terminal.
 const SNAPSHOT_ENV = { COLUMNS: "120" }
+
+describe("help snapshot normalization", () => {
+  test.each([
+    ["string", "default"],
+    ["字符串", "默认值"],
+    ["Zeichenkette", "Standard"],
+  ])("normalizes wrapped temporary defaults without erasing %s/%s labels", (type, label) => {
+    const clause = `[${type}] [${label}: "<TMPDIR>/oc-cli-AbC123"]`
+    const inline = `--cwd  working directory        ${clause}`
+    const wrapped = `--cwd  working directory\n          ${clause}`
+    expect(normalize(wrapped)).toBe(normalize(inline))
+    expect(normalize(wrapped)).toContain(`[${type}] [${label}: "<HOME>"]`)
+    expect(normalize(wrapped.replace("--cwd", "--directory"))).not.toBe(normalize(inline))
+    expect(normalize(wrapped.replace("oc-cli-AbC123", "oc-cli-AbC123/other"))).not.toBe(normalize(inline))
+  })
+})
 
 describe("opencode CLI help-text snapshots", () => {
   // Single test, parallel spawns. Each command's help fires under

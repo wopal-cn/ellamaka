@@ -10,6 +10,7 @@ import {
 } from "./shared"
 import { ConfigPlugin } from "@/config/plugin"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
+import { isBuiltinDshAdapter } from "@wopal/ellamaka-core/builtin-plugins"
 
 export namespace PluginLoader {
   // A normalized plugin declaration derived from config before any filesystem or npm work happens.
@@ -158,6 +159,7 @@ export namespace PluginLoader {
 
     // Deprecated plugin packages are silently ignored because they are now built in.
     if (plan.deprecated) return { retry: false }
+    if (await isBuiltinDshAdapter(plan.spec)) return { retry: false }
 
     report?.start?.(candidate, retry)
 

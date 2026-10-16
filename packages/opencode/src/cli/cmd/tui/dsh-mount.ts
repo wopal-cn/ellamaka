@@ -11,6 +11,7 @@ import {
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { setDshStatus } from "@/workbench/dsh-status"
 import { prepareDshHost } from "@/core/preparation"
+import { trackDshToolsInitialization } from "@wopal/ellamaka-cordis/dsh-adapter/host"
 
 const CONTAINER_KEY = "__ellamakaDshContainer"
 
@@ -41,7 +42,11 @@ export interface DshMountHandle {
  * runtime injected; `disabled`/`degraded` return `undefined` and the TUI runs
  * untouched.
  */
-export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<DshMountHandle | undefined> {
+export function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<DshMountHandle | undefined> {
+  return trackDshToolsInitialization(mountDshIfEnabledImpl(opts))
+}
+
+async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHandle | undefined> {
   const wopalHome = opts.wopalHome ?? Global.Path.wopalHome
   // The plugin-log directory (the tool profile derives its own file inside the
   // mount); the runtime manager keeps its single dedicated file.

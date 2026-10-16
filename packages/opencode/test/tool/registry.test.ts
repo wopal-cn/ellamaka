@@ -2,7 +2,8 @@ import { afterEach, describe, expect } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
-import { Effect, Layer, Result, Schema } from "effect"
+import { Effect, Layer, Result, Schema, Exit } from "effect"
+import { DshAdapterError } from "@wopal/ellamaka-cordis/dsh-adapter"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
@@ -122,19 +123,20 @@ function providerPluginLayer(supply: { current: Record<string, unknown> }) {
 // a throwing provider degrades to the static tool set instead of breaking the
 // model request. Mirrors the real `Plugin.trigger`, which wraps each hook call
 // in `Effect.promise`, so a throwing hook surfaces as a recoverable error.
-const throwingProviderLayer = Layer.succeed(
-  Plugin.Service,
-  Plugin.Service.of({
-    init: () => Effect.void,
-    trigger: ((name: unknown, _input: unknown, _output: unknown) =>
-      name === "tool.provider"
-        ? Effect.promise(async () => {
-            throw new Error("provider boom")
-          })
-        : Effect.succeed({})) as Plugin.Interface["trigger"],
-    list: () => Effect.succeed([]),
-  }),
-)
+const throwingProviderLayer = (error = new Error("provider boom")) =>
+  Layer.succeed(
+    Plugin.Service,
+    Plugin.Service.of({
+      init: () => Effect.void,
+      trigger: ((name: unknown, _input: unknown, _output: unknown) =>
+        name === "tool.provider"
+          ? Effect.promise(async () => {
+              throw error
+            })
+          : Effect.succeed({})) as Plugin.Interface["trigger"],
+      list: () => Effect.succeed([]),
+    }),
+  )
 
 const dynamicTool = (description: string) => ({
   description,
@@ -150,7 +152,7 @@ const withBrokenPlugin = testEffect(
   Layer.mergeAll(registryLayer({ plugin: brokenPluginLayer }), node, Agent.defaultLayer),
 )
 const withThrowingProvider = testEffect(
-  Layer.mergeAll(registryLayer({ plugin: throwingProviderLayer }), node, Agent.defaultLayer),
+  Layer.mergeAll(registryLayer({ plugin: throwingProviderLayer() }), node, Agent.defaultLayer),
 )
 
 afterEach(async () => {
@@ -608,13 +610,26 @@ describe("tool.registry", () => {
   )
 
   describe("dynamic tool provider", () => {
-    const supply: { current: Record<string, unknown> } = { current: {} }
-    const withProvider = testEffect(
+    const critical = testEffect(
       Layer.mergeAll(
-        registryLayer({ plugin: providerPluginLayer(supply) }),
+        registryLayer({ plugin: throwingProviderLayer(new DshAdapterError("required backend failed")) }),
         node,
         Agent.defaultLayer,
       ),
+    )
+    critical.instance("required DSH provider failure cannot fall back to native tools", () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const agent = yield* Agent.Service
+        const exit = yield* registry
+          .tools({ providerID: ProviderID.opencode, modelID: ModelID.make("test"), agent: yield* agent.defaultInfo() })
+          .pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+      }),
+    )
+    const supply: { current: Record<string, unknown> } = { current: {} }
+    const withProvider = testEffect(
+      Layer.mergeAll(registryLayer({ plugin: providerPluginLayer(supply) }), node, Agent.defaultLayer),
     )
 
     const toolsFor = (registry: ToolRegistry.Interface) =>
@@ -637,6 +652,29 @@ describe("tool.registry", () => {
         if (!probe) throw new Error("custom_probe tool was not returned")
         expect(probe.description).toBe("a dynamic probe tool")
       }),
+    )
+
+    withProvider.instance(
+      "GPT file-tool selection cannot bypass a complete sandbox projection with native apply_patch",
+      () =>
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistry.Service
+          const agent = yield* Agent.Service
+          supply.current = Object.fromEntries(
+            ["bash", "edit", "glob", "grep", "read", "str_replace_editor", "write"].map((name) => [
+              name,
+              dynamicTool(name),
+            ]),
+          )
+          const tools = yield* registry.tools({
+            providerID: ProviderID.opencode,
+            modelID: ModelID.make("gpt-5"),
+            agent: yield* agent.defaultInfo(),
+          })
+          expect(tools.map((item) => item.id)).not.toContain("apply_patch")
+          expect(tools.find((item) => item.id === "edit")?.description).toBe("edit")
+          expect(tools.find((item) => item.id === "write")?.description).toBe("write")
+        }),
     )
 
     withProvider.instance("dynamic provider wins over builtin on id collision", () =>

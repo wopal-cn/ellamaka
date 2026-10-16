@@ -120,6 +120,8 @@ const cli = yargs(args)
     }
 
     const command = typeof opts._?.[0] === "string" ? opts._[0] : ""
+    // `run` is permanently native, even if the Space requests the sandbox.
+    if (command === "run") process.env.ELLAMAKA_DSH = "0"
     // Contract generation and native plugin-management children are pure/tooling
     // paths. They do not initialize the runtime Home.
     if (command === "generate" || command === "dsh") return

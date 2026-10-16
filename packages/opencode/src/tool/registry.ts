@@ -53,6 +53,7 @@ import { Permission } from "@/permission"
 import { Reference } from "@/reference/reference"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { DshAdapterError } from "@wopal/ellamaka-cordis/dsh-adapter"
 
 const log = Log.create({ service: "tool.registry" })
 
@@ -356,6 +357,7 @@ export const layer: Layer.Layer<
         .trigger("tool.provider", { providerID: input.providerID, modelID: String(input.modelID) }, { tools: {} })
         .pipe(
           Effect.catchDefect((defect) => {
+            if (defect instanceof DshAdapterError) return Effect.die(defect)
             log.warn("tool.provider failed; falling back to static tool set", { error: defect })
             return Effect.succeed({ tools: {} })
           }),
@@ -376,13 +378,17 @@ export const layer: Layer.Layer<
         .sort((a, b) => a.id.localeCompare(b.id))
       merged.push(...additions)
 
+      const projectedFileTools = ["read", "write", "edit", "str_replace_editor"].every((id) => dynamic.has(id))
       const filtered = merged.filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
 
         const usePatch =
-          input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
+          !projectedFileTools &&
+          input.modelID.includes("gpt-") &&
+          !input.modelID.includes("oss") &&
+          !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 

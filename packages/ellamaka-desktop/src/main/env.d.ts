@@ -179,6 +179,7 @@ declare module "virtual:opencode-server" {
 
   export const bootDshWeb: (opts: DshWebHostOptions) => Promise<DshWebHost>
   export const bootDshTools: (opts: DshWebHostOptions) => Promise<DshToolsHost>
+  export const trackDshToolsInitialization: <T>(work: Promise<T>) => Promise<T>
   export const startDshPluginService: (options: DshPluginServiceOptions) => {
     replay(): Promise<{ ok: true } | { ok: false; error: string }>
     stop(): Promise<void>

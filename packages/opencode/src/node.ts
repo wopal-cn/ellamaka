@@ -24,6 +24,7 @@ export type { InstallAnchor } from "@wopal/ellamaka-cordis/runtime"
 export { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export type { DshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export { bootDshWeb, bootDshTools } from "@wopal/ellamaka-cordis/dsh-web"
+export { trackDshToolsInitialization } from "@wopal/ellamaka-cordis/dsh-adapter/host"
 export type { DshWebHost, DshToolsHost } from "@wopal/ellamaka-cordis/dsh-web"
 export { startDshPluginService } from "@wopal/ellamaka-cordis/plugins/runtime"
 export type {

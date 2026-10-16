@@ -13,6 +13,7 @@ import { Npm } from "./npm"
 import type { CorePreparationContributor, PreparationTarget } from "./preparation"
 import { EffectFlock } from "./util/effect-flock"
 import { Glob } from "./util/glob"
+import { isDshAdapterIdentity } from "./builtin-plugins"
 
 export type InstallDependency = {
   name: string
@@ -145,6 +146,12 @@ export async function collectPluginDependencies(dir: string): Promise<CollectedP
       if (!json) continue
       const name = typeof json.name === "string" ? json.name.trim() : undefined
       if (!name) continue
+      if (
+        isDshAdapterIdentity(name) ||
+        json.id === "dsh-adapter" ||
+        path.basename(path.dirname(packagePath)) === "dsh-adapter"
+      )
+        continue
       const deps =
         json.dependencies && typeof json.dependencies === "object" && !Array.isArray(json.dependencies)
           ? Object.fromEntries(
