@@ -6,7 +6,6 @@ import type { Listener } from "../../server/server"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   acquireDshHomeRuntimeAccess,
-  initializeDshRuntime,
   resolveInstallAnchor,
   toDshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
@@ -14,6 +13,7 @@ import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-command"
 import { setDshUrlGetter } from "@/workbench/dsh-url"
 import { setDshStatus } from "@/workbench/dsh-status"
+import { prepareDshHost, writeCorePreparationProgress } from "@/core/preparation"
 
 /**
  * The DSH connection-fence authorities derived from the user's CORS trust
@@ -200,16 +200,13 @@ function resolveEllamakaCommand(): string[] {
  * `tui/dsh-mount.ts`.
  *
  * Assembly (DESIGN-dsh-base.md):
- * 1. The unified Runtime Manager runs first — it gates on `ELLAMAKA_DSH`
- *    itself (`=0` → `disabled` with zero file access), so it is called
- *    unconditionally; no manual kill-switch check here.
- * 2. `ready` → resolve the install anchor for the manifest's fingerprint,
+ * 1. Product CorePreparation runs first and owns the `ELLAMAKA_DSH=0` zero-access gate.
+ * 2. `READY` → resolve the install anchor for the manifest's fingerprint,
  *    load the six official DSH modules from the closure via
  *    `createDshRuntimeApi`, and mount web + tool containers with that runtime
  *    injected (the Bridge never statically imports `@deepseek-ai/*`).
- * 3. `disabled`/`degraded` → `undefined` is returned and the host keeps
- *    running untouched (no `console.warn`; the manager already logged the
- *    structured diagnosis).
+ * 3. `disabled`/`degraded` → `undefined` is returned and the native host keeps
+ *    running untouched; DSH failure never owns listener liveness.
  */
 export async function mountDshEngine(
   server: Listener,
@@ -223,20 +220,14 @@ export async function mountDshEngine(
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
-  const status = await initializeDshRuntime({
+  const preparation = await prepareDshHost({
     wopalHome,
-    logFile: runtimeLogFile,
+    runtimeLogFile,
     logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
-    entry: opts.entry ?? "serve",
-    manifest,
+    onProgress: writeCorePreparationProgress,
   })
-  // Publish the terminal runtime status so /global/health can answer with a
-  // runtime fact (disabled / ready / degraded) instead of the raw kill switch.
-  if (status !== "ready") {
-    setDshStatus(status)
-    return undefined
-  }
+  if (preparation.status !== "prepared") return undefined
 
   // Runtime admission is separate from preparation. Hold this shared lease
   // for the whole lifetime of every in-process DSH Home consumer so a newer

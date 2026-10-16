@@ -74,6 +74,7 @@ async function prepareClosure(
     // A cancellation that arrives during the durable publication is observed
     // only after publication settles; the generic service reports cancellation.
     context.signal.throwIfAborted()
+    context.report({ phase: "closure.completed" })
     return ready()
   } finally {
     await releaseMaterializeLock(layout.lockFile, token)
@@ -92,10 +93,17 @@ async function inspectHome(options: DshPreparationOptions): Promise<CorePreparat
   return { state: "NEEDS_PREPARATION" }
 }
 
-async function prepareHome(options: DshPreparationOptions): Promise<CorePreparationStepResult> {
+async function prepareHome(
+  options: DshPreparationOptions,
+  context: Parameters<CorePreparationContributor["prepare"]>[1],
+): Promise<CorePreparationStepResult> {
   if (disabled(options)) return ready()
+  context.report({ phase: "home.prepare" })
   const result = await prepareDshHome({ wopalHome: options.wopalHome, closureVersion: options.closureVersion })
-  if (result.ok) return ready()
+  if (result.ok) {
+    context.report({ phase: "home.completed" })
+    return ready()
+  }
   return {
     state: result.reason === "DSH_HOME_BUSY" ? "BUSY" : "DEGRADED",
     code: result.reason,
@@ -114,13 +122,20 @@ async function inspectProfiles(options: DshPreparationOptions): Promise<CorePrep
   return inspection.ready ? ready() : { state: "NEEDS_PREPARATION" }
 }
 
-async function prepareProfiles(options: DshPreparationOptions): Promise<CorePreparationStepResult> {
+async function prepareProfiles(
+  options: DshPreparationOptions,
+  context: Parameters<CorePreparationContributor["prepare"]>[1],
+): Promise<CorePreparationStepResult> {
   if (disabled(options)) return ready()
+  context.report({ phase: "profiles.prepare" })
   const result = await withDshHomeExclusiveAccess(
     { wopalHome: options.wopalHome, closureVersion: options.closureVersion },
     () => prepareDshProfileResources(options.wopalHome, profileRuntime(options)),
   )
-  if (result.ok) return ready()
+  if (result.ok) {
+    context.report({ phase: "profiles.completed" })
+    return ready()
+  }
   return {
     state: result.reason === "DSH_HOME_BUSY" ? "BUSY" : "DEGRADED",
     code: result.reason,
@@ -144,13 +159,13 @@ export function createDshPreparationContributors(
       step: "dsh.home",
       target: "host",
       inspect: () => inspectHome(options),
-      prepare: () => prepareHome(options),
+      prepare: (_target, context) => prepareHome(options, context),
     },
     {
       step: "dsh.profiles",
       target: "host",
       inspect: () => inspectProfiles(options),
-      prepare: () => prepareProfiles(options),
+      prepare: (_target, context) => prepareProfiles(options, context),
     },
   ]
 }

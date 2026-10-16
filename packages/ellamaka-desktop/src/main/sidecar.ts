@@ -211,8 +211,8 @@ async function start(command: StartCommand) {
       })
     }
     // Optional dsh engine (single-process, DESIGN-dsh-base.md). The
-    // unified Runtime Manager (consumed via `virtual:opencode-server`, which
-    // the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
+    // unified CorePreparation host service (consumed via `virtual:opencode-server`,
+    // which the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
     // (`=0` → disabled with zero file access) and materialises the closure on
     // demand; `disabled`/`degraded` never block the sidecar — the server runs
     // untouched. The web VirtualWebServer mounts onto the Ellamaka listener
@@ -304,9 +304,9 @@ export async function resolveEllamakaInstallCommand(wopalHomeOverride?: string):
   })
 }
 /**
- * Mount the dsh web engine via the unified Runtime Manager.
+ * Mount the dsh web engine after unified product CorePreparation.
  *
- * Initialises the dsh runtime exactly once per launch (W-02) and reuses the
+ * Prepares the dsh host resources exactly once per launch (W-02) and reuses the
  * outcome for both the web and tool mounts. Only on `ready` does it resolve
  * the install anchor, load the closure runtime and mount the VirtualWebServer
  * onto the Ellamaka listener under `/dsh`. `disabled`/`degraded` return
@@ -387,8 +387,8 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
 }
 
 /**
- * Mount the dsh tool container (ellamaka-tools profile) via the unified
- * Runtime Manager, and expose it via `globalThis.__ellamakaDshContainer` so
+ * Mount the dsh tool container (ellamaka-tools profile) after the unified
+ * CorePreparation result, and expose it via `globalThis.__ellamakaDshContainer` so
  * the dsh-adapter plugin can project container tools into ellamaka's
  * ToolRegistry. Same manager call as the web engine (single-flight, and this
  * launch's shared init result), only mounting on `ready`. `disabled`/`degraded`
@@ -433,12 +433,10 @@ async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
 }
 
 /**
- * Initialise the dsh runtime exactly once per launch and cache the outcome
- * (W-02). The manager's per-process in-flight cache covers concurrent calls in
- * one process, but after a FAILED run the in-flight entry is removed, so two
- * sequential manager calls from the web + tool mounts would each re-run the
- * state machine. Caching here makes the web and tool mounts share one status /
- * anchor / runtime.
+ * Prepare DSH resources exactly once per launch and cache the activation inputs
+ * (W-02). CorePreparation already single-flights equivalent host targets; this
+ * cache additionally makes the sequential web + tool mounts share one terminal
+ * preparation result, Home lease, anchor and closure runtime.
  */
 async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof dshLaunchState>> {
   if (dshLaunchState) return dshLaunchState
@@ -446,7 +444,7 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
   const {
     DEFAULT_DSH_RUNTIME_MANIFEST,
     acquireDshHomeRuntimeAccess,
-    initializeDshRuntime,
+    prepareDshHost,
     resolveInstallAnchor,
     createDshRuntimeApi,
     setDshStatus,
@@ -455,16 +453,15 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
   } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
-  sidecarLog.info("dsh.desktop.init.start", { wopalHome, runtimeLogFile })
-  const status = await initializeDshRuntime({
+  sidecarLog.info("dsh.desktop.prepare.start", { wopalHome, runtimeLogFile })
+  const preparation = await prepareDshHost({
     wopalHome,
-    logFile: runtimeLogFile,
+    runtimeLogFile,
     logLevel: toDshLogLevel(sidecarLogLevel.current),
-    entry: "tui",
-    manifest,
   })
-  if (status !== "ready") setDshStatus(status)
-  sidecarLog.info("dsh.desktop.init.status", { status })
+  const status: import("virtual:opencode-server").DshRuntimeStatus =
+    preparation.status === "prepared" ? "ready" : preparation.status
+  sidecarLog.info("dsh.desktop.prepare.status", { status })
   if (status !== "ready") {
     dshLaunchState = { status }
     return dshLaunchState

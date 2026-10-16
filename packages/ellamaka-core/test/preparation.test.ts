@@ -221,6 +221,34 @@ describe("CorePreparationService", () => {
     expect(await running).toMatchObject({ state: "READY" })
   })
 
+  test("re-emits the current real phase as a heartbeat while preparation stays busy", async () => {
+    const events: CorePreparationEvent[] = []
+    const contributor: CorePreparationContributor = {
+      step: "host.slow",
+      target: "host",
+      async inspect() {
+        return { state: "NEEDS_PREPARATION" }
+      },
+      async prepare(_target, context) {
+        context.report({ phase: "download" })
+        await delay(35)
+        return { state: "READY" }
+      },
+    }
+    const service = createCorePreparationService({
+      hostKey: "test-host",
+      contributors: [contributor],
+      heartbeatMs: 10,
+    })
+
+    await service.prepare({ target: { kind: "host" } }, { onProgress: (event) => events.push(event) })
+
+    expect(events.length).toBeGreaterThanOrEqual(3)
+    expect(events.every((event) => event.step === "host.slow" && event.phase === "download")).toBe(true)
+    expect(events.map((event) => event.sequence)).toEqual(events.map((_, index) => index + 1))
+    expect(events.at(-1)!.elapsedMs).toBeGreaterThan(events[0].elapsedMs)
+  })
+
   test("does not let progress observers fail or cancel the shared preparation", async () => {
     let executions = 0
     const contributor: CorePreparationContributor = {
@@ -284,10 +312,19 @@ describe("CorePreparationService", () => {
       }
       const service = createCorePreparationService({ hostKey: "test-host", contributors: [contributor] })
 
-      expect(await service.prepare({ target: { kind: "host" } })).toMatchObject({
+      const failureEvents: CorePreparationEvent[] = []
+      expect(
+        await service.prepare({ target: { kind: "host" } }, { onProgress: (event) => failureEvents.push(event) }),
+      ).toMatchObject({
         state: "DEGRADED",
         reason: "TEMPORARY_FAILURE",
         steps: [{ step: "host.retry", state: "DEGRADED", code: "TEMPORARY_FAILURE" }],
+      })
+      expect(failureEvents.at(-1)).toMatchObject({
+        step: "host.retry",
+        phase: "failed",
+        state: "DEGRADED",
+        code: "TEMPORARY_FAILURE",
       })
       expect(
         await fs.stat(lock).then(

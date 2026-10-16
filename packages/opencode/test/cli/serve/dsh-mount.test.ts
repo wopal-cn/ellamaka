@@ -32,12 +32,13 @@ describe("server entry points wire the shared dsh assembly", () => {
     })
   }
 
-  test("dsh-mount drives the runtime manager and injects the resolved runtime", () => {
+  test("dsh-mount drives unified CorePreparation and injects the resolved runtime", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
-    expect(source).toContain("initializeDshRuntime")
+    expect(source).toContain("prepareDshHost")
+    expect(source).not.toContain("initializeDshRuntime")
     expect(source).toContain("resolveInstallAnchor")
     expect(source).toContain("createDshRuntimeApi")
-    expect(source).toContain('entry: opts.entry ?? "serve"')
+    expect(source).toContain("runtimeLogFile")
     // One level boundary for every DSH consumer: the host's effective level
     // (written back to ELLAMAKA_LOG_LEVEL) is mapped once, in cordis.
     expect(source).toContain("toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL)")
@@ -47,7 +48,7 @@ describe("server entry points wire the shared dsh assembly", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
     expect(source).toContain('"dsh-runtime.log"')
     expect(source).toContain("runtimeLogFile")
-    expect(source).toContain("logFile: runtimeLogFile")
+    expect(source).toContain("runtimeLogFile")
     // The profile mounts receive the plugin-log directory, never a fixed
     // file: each profile derives its own bounded `dsh-plugins-<profile>.log`.
     expect(source).toContain("logDir")
@@ -79,7 +80,7 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).toContain("process.env.DSH_HOME = activeDshHome")
     // Task 4 safety boundary: the manager kill-switch and Home preparation
     // must complete before any DSH-specific environment mutation.
-    const call = source.indexOf("initializeDshRuntime({")
+    const call = source.indexOf("prepareDshHost({")
     const env = source.indexOf("process.env.DSH_HOME =")
     expect(call).toBeGreaterThan(-1)
     expect(env).toBeGreaterThan(call)

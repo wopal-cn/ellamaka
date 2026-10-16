@@ -47,3 +47,4 @@ export { setDshUrlGetter } from "@/workbench/dsh-url"
 // with a runtime fact in Desktop mode too.
 export { setDshStatus } from "@/workbench/dsh-status"
 export type { DshRuntimeStatus } from "@/workbench/dsh-status"
+export { prepareDshHost, getCorePreparationHealth } from "@/core/preparation"

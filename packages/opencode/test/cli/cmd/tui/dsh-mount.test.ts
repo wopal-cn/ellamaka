@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "@wopal/ellamaka-cordis/runtime"
@@ -36,6 +36,14 @@ afterEach(() => {
   for (const dir of dshHomes.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+describe("tui CorePreparation presentation", () => {
+  test("renders shared core.preparation events in the dedicated TUI surface", () => {
+    const app = readFileSync(join(import.meta.dir, "../../../../src/cli/cmd/tui/app.tsx"), "utf8")
+    expect(app).toContain('event.on("core.preparation"')
+    expect(app).toContain('title: "Preparing runtime"')
+  })
 })
 
 describe("tui dsh mount", () => {

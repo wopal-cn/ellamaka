@@ -6,12 +6,22 @@ import "@/server/event"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"
+import { CorePreparationResultSchema } from "@/core/preparation-event"
 
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
   version: Schema.String,
   cli: CliHealthSchema,
+  managedInstanceId: Schema.optional(Schema.String),
   dsh: Schema.optional(Schema.Literals(["disabled", "preparing", "ready", "degraded"])),
+  dshRuntime: Schema.optional(
+    Schema.Struct({
+      closureVersion: Schema.Number,
+      homeVersion: Schema.optional(Schema.Number),
+      reasonCode: Schema.optional(Schema.String),
+    }),
+  ),
+  preparation: Schema.optional(CorePreparationResultSchema),
 })
 
 const GlobalEventSchema = Schema.Struct({

@@ -40,7 +40,6 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
 import { DshPackageWorkerCommand } from "./cli/cmd/dsh-package-worker"
-import { DshInitCommand } from "./cli/cmd/dsh-init"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
 import { resolveLogLevel, resolveTrace } from "./cli/log-level"
@@ -286,7 +285,6 @@ const cli = yargs(args)
         })
         .command(DshPluginCommand)
         .command(DshDumpConfigCommand)
-        .command(DshInitCommand)
         .command(DshPackageWorkerCommand)
         .epilogue(DSH_HELP_EXAMPLES),
     handler: async (argv) => {

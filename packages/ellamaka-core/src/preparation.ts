@@ -125,6 +125,8 @@ function safeNotify(observer: ProgressObserver, event: CorePreparationEvent): vo
 export function createCorePreparationService(options: {
   hostKey: string
   contributors: readonly CorePreparationContributor[]
+  /** Re-emit the latest real phase while a long step is still running. */
+  heartbeatMs?: number
 }): CorePreparationService {
   const contributors = [...options.contributors]
   const stepsByTarget = new Map<"host" | "instance", Set<string>>()
@@ -186,7 +188,14 @@ export function createCorePreparationService(options: {
   const emit = (
     current: ActivePreparation,
     step: string,
-    progress: { phase: string; current?: number; total?: number; unit?: string },
+    progress: {
+      phase: string
+      current?: number
+      total?: number
+      unit?: string
+      state?: PreparationState
+      code?: string
+    },
   ) => {
     const event: CorePreparationEvent = {
       runId: current.runId,
@@ -194,11 +203,12 @@ export function createCorePreparationService(options: {
       target: current.target,
       step,
       phase: progress.phase,
-      state: "PREPARING",
+      state: progress.state ?? "PREPARING",
       elapsedMs: Math.max(0, performance.now() - current.startedAt),
       ...(progress.current === undefined ? {} : { current: progress.current }),
       ...(progress.total === undefined ? {} : { total: progress.total }),
       ...(progress.unit === undefined ? {} : { unit: progress.unit }),
+      ...(progress.code === undefined ? {} : { code: progress.code }),
     }
     current.latestEvent = event
     for (const observer of current.observers) safeNotify(observer, event)
@@ -226,20 +236,49 @@ export function createCorePreparationService(options: {
       }
 
       let prepared: CorePreparationStepResult
+      let latestProgress: { phase: string; current?: number; total?: number; unit?: string } | undefined
+      const heartbeatMs = options.heartbeatMs ?? 5_000
+      const heartbeat =
+        heartbeatMs > 0
+          ? setInterval(() => {
+              if (latestProgress) emit(current, contributor.step, latestProgress)
+            }, heartbeatMs)
+          : undefined
+      heartbeat?.unref?.()
       try {
         prepared = await contributor.prepare(current.target, {
           signal: current.controller.signal,
-          report: (progress) => emit(current, contributor.step, progress),
+          report: (progress) => {
+            latestProgress = progress
+            emit(current, contributor.step, progress)
+          },
         })
       } catch (error) {
-        steps[index] = current.controller.signal.aborted
-          ? cancelledStep(contributor.step)
-          : { step: contributor.step, state: "DEGRADED", code: failureCode(error) }
+        if (heartbeat) clearInterval(heartbeat)
+        if (current.controller.signal.aborted) {
+          steps[index] = cancelledStep(contributor.step)
+          emit(current, contributor.step, {
+            phase: "cancelled",
+            state: "DEGRADED",
+            code: PREPARATION_CANCELLED,
+          })
+        } else {
+          const code = failureCode(error)
+          steps[index] = { step: contributor.step, state: "DEGRADED", code }
+          emit(current, contributor.step, { phase: "failed", state: "DEGRADED", code })
+        }
         return resultFromSteps(current.target, steps, current)
+      } finally {
+        if (heartbeat) clearInterval(heartbeat)
       }
 
       if (current.controller.signal.aborted && prepared.state !== "DEGRADED" && prepared.state !== "BUSY") {
         steps[index] = cancelledStep(contributor.step)
+        emit(current, contributor.step, {
+          phase: "cancelled",
+          state: "DEGRADED",
+          code: PREPARATION_CANCELLED,
+        })
         return resultFromSteps(current.target, steps, current)
       }
 
@@ -248,7 +287,14 @@ export function createCorePreparationService(options: {
         state: prepared.state,
         ...(prepared.code ? { code: prepared.code } : {}),
       }
-      if (prepared.state !== "READY") return resultFromSteps(current.target, steps, current)
+      if (prepared.state !== "READY") {
+        emit(current, contributor.step, {
+          phase: prepared.state === "BUSY" ? "blocked" : "failed",
+          state: prepared.state,
+          ...(prepared.code ? { code: prepared.code } : {}),
+        })
+        return resultFromSteps(current.target, steps, current)
+      }
     }
 
     return resultFromSteps(current.target, steps, current)

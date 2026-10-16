@@ -56,15 +56,18 @@ declare module "virtual:opencode-server" {
     genId: string
   }
 
-  export interface DshInitializeOptions {
+  export interface DshHostPreparationOptions {
     wopalHome: string
-    logFile: string
+    runtimeLogFile: string
     logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
-    entry: "serve" | "web" | "tui"
-    manifest: DshRuntimeManifest
+    print?: boolean
+    env?: Record<string, string | undefined>
   }
 
-  export const initializeDshRuntime: (options: DshInitializeOptions) => Promise<DshRuntimeStatus>
+  export const prepareDshHost: (options: DshHostPreparationOptions) => Promise<{
+    status: "disabled" | "prepared" | "degraded"
+    preparation?: unknown
+  }>
   export interface DshHomeRuntimeLease {
     readonly mode: "shared"
     release(): Promise<void>

@@ -5,12 +5,12 @@ import { GlobalBus } from "@/bus/global"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   acquireDshHomeRuntimeAccess,
-  initializeDshRuntime,
   resolveInstallAnchor,
   toDshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { setDshStatus } from "@/workbench/dsh-status"
+import { prepareDshHost } from "@/core/preparation"
 
 const CONTAINER_KEY = "__ellamakaDshContainer"
 
@@ -50,20 +50,13 @@ export async function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<Dsh
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
 
-  const status = await initializeDshRuntime({
+  const preparation = await prepareDshHost({
     wopalHome,
-    logFile: runtimeLogFile,
+    runtimeLogFile,
     logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
-    entry: "tui",
-    manifest,
   })
-  // Publish the terminal runtime status so /global/health answers with a
-  // runtime fact even when the TUI (not the workbench) hosts the server.
-  if (status !== "ready") {
-    setDshStatus(status)
-    return undefined
-  }
+  if (preparation.status !== "prepared") return undefined
 
   // Runtime admission is separate from preparation. Hold this shared lease
   // for the whole lifetime of every in-process DSH Home consumer so a newer

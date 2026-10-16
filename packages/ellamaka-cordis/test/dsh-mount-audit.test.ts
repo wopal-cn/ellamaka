@@ -121,16 +121,19 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
 describe("Home runtime lease audit", () => {
   const root = join(import.meta.dir, "..", "..", "..")
 
-  test("serve and TUI gate DSH_HOME mutation behind manager readiness and retain a shared lease", () => {
+  test("serve and TUI gate DSH_HOME mutation behind CorePreparation readiness and retain a shared lease", () => {
     for (const relative of [
       "packages/opencode/src/cli/cmd/dsh-mount.ts",
       "packages/opencode/src/cli/cmd/tui/dsh-mount.ts",
     ]) {
       const source = readFileSync(join(root, relative), "utf-8")
-      const init = source.indexOf("const status = await initializeDshRuntime")
+      const prepare = source.indexOf("const preparation = await prepareDshHost")
+      const readyGate = source.indexOf('if (preparation.status !== "prepared") return undefined')
       const envWrite = source.indexOf("process.env.DSH_HOME =")
-      expect(init).toBeGreaterThanOrEqual(0)
-      expect(envWrite).toBeGreaterThan(init)
+      expect(prepare).toBeGreaterThanOrEqual(0)
+      expect(readyGate).toBeGreaterThan(prepare)
+      expect(envWrite).toBeGreaterThan(readyGate)
+      expect(source).not.toContain("initializeDshRuntime")
       expect(source).toMatch(/acquireDshHomeRuntimeAccess/)
       expect(source).toMatch(/homeAccess\.lease\.release\(\)/)
     }

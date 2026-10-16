@@ -5,44 +5,19 @@ export type ClientOptions = {
 }
 
 export type Event =
-  | EventTuiPromptAppend
-  | EventTuiCommandExecute
-  | EventTuiToastShow1
-  | EventTuiSessionSelect
-  | EventServerConnected
-  | EventGlobalDisposed
+  | EventInstallationUpdated
+  | EventInstallationUpdateAvailable
   | EventServerInstanceDisposed
-  | EventFileEdited
-  | EventFileWatcherUpdated
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventMessagePartDelta
   | EventPermissionAsked
   | EventPermissionReplied
   | EventSessionError
-  | EventQuestionAsked
-  | EventQuestionReplied
-  | EventQuestionRejected
-  | EventTodoUpdated
-  | EventSessionStatus
-  | EventSessionIdle
-  | EventMcpToolsChanged
-  | EventMcpBrowserOpenFailed
-  | EventCommandExecuted
-  | EventProjectUpdated
-  | EventSessionCompacted
-  | EventVcsBranchUpdated
-  | EventWorkspaceReady
-  | EventWorkspaceFailed
-  | EventWorkspaceStatus
-  | EventWorktreeReady
-  | EventWorktreeFailed
   | EventPtyCreated
   | EventPtyUpdated
   | EventPtyExited
   | EventPtyDeleted
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -50,6 +25,38 @@ export type Event =
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
+  | EventTuiPromptAppend
+  | EventTuiCommandExecute
+  | EventTuiToastShow1
+  | EventTuiSessionSelect
+  | EventMcpToolsChanged
+  | EventMcpBrowserOpenFailed
+  | EventCommandExecuted
+  | EventProjectUpdated
+  | EventSessionStatus
+  | EventSessionIdle
+  | EventQuestionAsked
+  | EventQuestionReplied
+  | EventQuestionRejected
+  | EventSessionCompacted
+  | EventFileEdited
+  | EventFileWatcherUpdated
+  | EventTodoUpdated
+  | EventVcsBranchUpdated
+  | EventWorkspaceReady
+  | EventWorkspaceFailed
+  | EventWorkspaceStatus
+  | EventWorktreeReady
+  | EventWorktreeFailed
+  | EventServerConnected
+  | EventGlobalDisposed
+  | EventCorePreparation
+  | EventModelsDevRefreshed
+  | EventPluginAdded
+  | EventCatalogModelUpdated
+  | EventAccountAdded
+  | EventAccountRemoved
+  | EventAccountSwitched
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextPrompted
@@ -76,12 +83,6 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
-  | EventPluginAdded
-  | EventCatalogModelUpdated
-  | EventModelsDevRefreshed
-  | EventAccountAdded
-  | EventAccountRemoved
-  | EventAccountSwitched
 
 export type OAuth = {
   type: "oauth"
@@ -119,59 +120,29 @@ export type InvalidRequestError = {
   field?: string
 }
 
-export type EventTuiPromptAppend = {
-  id: string
-  type: "tui.prompt.append"
-  properties: {
-    text: string
+export type CorePreparationResult = {
+  target:
+    | {
+        kind: "host"
+      }
+    | {
+        kind: "instance"
+        directory: string
+      }
+  state: "READY" | "NEEDS_PREPARATION" | "PREPARING" | "BUSY" | "DEGRADED"
+  reason?: string
+  run?: {
+    runId: string
+    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    step: string
+    phase: string
+    elapsedMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
-}
-
-export type EventTuiCommandExecute = {
-  id: string
-  type: "tui.command.execute"
-  properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
-  }
-}
-
-export type EventTuiToastShow = {
-  id: string
-  type: "tui.toast.show"
-  properties: {
-    title?: string
-    message: string
-    variant: "info" | "success" | "warning" | "error"
-    duration?: number
-  }
-}
-
-export type EventTuiSessionSelect = {
-  id: string
-  type: "tui.session.select"
-  properties: {
-    /**
-     * Session ID to navigate to
-     */
-    sessionID: string
-  }
+  steps: Array<{
+    step: string
+    state: "READY" | "NEEDS_PREPARATION" | "PREPARING" | "BUSY" | "DEGRADED"
+    code?: string
+  }>
 }
 
 export type PermissionRequest = {
@@ -249,123 +220,6 @@ export type ApiError = {
       [key: string]: string
     }
   }
-}
-
-export type QuestionOption = {
-  /**
-   * Display text (1-5 words, concise)
-   */
-  label: string
-  /**
-   * Explanation of choice
-   */
-  description: string
-}
-
-export type QuestionInfo = {
-  /**
-   * Complete question
-   */
-  question: string
-  /**
-   * Very short label (max 30 chars)
-   */
-  header: string
-  /**
-   * Available choices
-   */
-  options: Array<QuestionOption>
-  multiple?: boolean
-  custom?: boolean
-}
-
-export type QuestionTool = {
-  messageID: string
-  callID: string
-}
-
-export type QuestionRequest = {
-  id: string
-  sessionID: string
-  /**
-   * Questions to ask
-   */
-  questions: Array<QuestionInfo>
-  tool?: QuestionTool
-}
-
-export type QuestionAnswer = Array<string>
-
-export type QuestionReplied = {
-  sessionID: string
-  requestID: string
-  answers: Array<QuestionAnswer>
-}
-
-export type QuestionRejected = {
-  sessionID: string
-  requestID: string
-}
-
-export type Todo = {
-  /**
-   * Brief description of the task
-   */
-  content: string
-  /**
-   * Current status of the task: pending, in_progress, completed, cancelled
-   */
-  status: string
-  /**
-   * Priority level of the task: high, medium, low
-   */
-  priority: string
-}
-
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-      action?: {
-        reason: string
-        provider: string
-        title: string
-        message: string
-        label: string
-        link?: string
-      }
-      next: number
-    }
-  | {
-      type: "busy"
-    }
-
-export type Project = {
-  id: string
-  worktree: string
-  vcs?: "git"
-  name?: string
-  icon?: {
-    url?: string
-    override?: string
-    color?: string
-  }
-  commands?: {
-    /**
-     * Startup script to run when creating a new workspace (worktree)
-     */
-    start?: string
-  }
-  time: {
-    created: number
-    updated: number
-    initialized?: number
-  }
-  sandboxes: Array<string>
 }
 
 export type Pty = {
@@ -798,6 +652,199 @@ export type Session = {
   }
 }
 
+export type EventTuiPromptAppend = {
+  id: string
+  type: "tui.prompt.append"
+  properties: {
+    text: string
+  }
+}
+
+export type EventTuiCommandExecute = {
+  id: string
+  type: "tui.command.execute"
+  properties: {
+    command:
+      | "session.list"
+      | "session.new"
+      | "session.share"
+      | "session.interrupt"
+      | "session.compact"
+      | "session.page.up"
+      | "session.page.down"
+      | "session.line.up"
+      | "session.line.down"
+      | "session.half.page.up"
+      | "session.half.page.down"
+      | "session.first"
+      | "session.last"
+      | "prompt.clear"
+      | "prompt.submit"
+      | "agent.cycle"
+      | string
+  }
+}
+
+export type EventTuiToastShow = {
+  id: string
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    duration?: number
+  }
+}
+
+export type EventTuiSessionSelect = {
+  id: string
+  type: "tui.session.select"
+  properties: {
+    /**
+     * Session ID to navigate to
+     */
+    sessionID: string
+  }
+}
+
+export type Project = {
+  id: string
+  worktree: string
+  vcs?: "git"
+  name?: string
+  icon?: {
+    url?: string
+    override?: string
+    color?: string
+  }
+  commands?: {
+    /**
+     * Startup script to run when creating a new workspace (worktree)
+     */
+    start?: string
+  }
+  time: {
+    created: number
+    updated: number
+    initialized?: number
+  }
+  sandboxes: Array<string>
+}
+
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      action?: {
+        reason: string
+        provider: string
+        title: string
+        message: string
+        label: string
+        link?: string
+      }
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type QuestionOption = {
+  /**
+   * Display text (1-5 words, concise)
+   */
+  label: string
+  /**
+   * Explanation of choice
+   */
+  description: string
+}
+
+export type QuestionInfo = {
+  /**
+   * Complete question
+   */
+  question: string
+  /**
+   * Very short label (max 30 chars)
+   */
+  header: string
+  /**
+   * Available choices
+   */
+  options: Array<QuestionOption>
+  multiple?: boolean
+  custom?: boolean
+}
+
+export type QuestionTool = {
+  messageID: string
+  callID: string
+}
+
+export type QuestionRequest = {
+  id: string
+  sessionID: string
+  /**
+   * Questions to ask
+   */
+  questions: Array<QuestionInfo>
+  tool?: QuestionTool
+}
+
+export type QuestionAnswer = Array<string>
+
+export type QuestionReplied = {
+  sessionID: string
+  requestID: string
+  answers: Array<QuestionAnswer>
+}
+
+export type QuestionRejected = {
+  sessionID: string
+  requestID: string
+}
+
+export type Todo = {
+  /**
+   * Brief description of the task
+   */
+  content: string
+  /**
+   * Current status of the task: pending, in_progress, completed, cancelled
+   */
+  status: string
+  /**
+   * Priority level of the task: high, medium, low
+   */
+  priority: string
+}
+
+export type CorePreparationEvent = {
+  runId: string
+  sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  target:
+    | {
+        kind: "host"
+      }
+    | {
+        kind: "instance"
+        directory: string
+      }
+  step: string
+  phase: string
+  state: "READY" | "NEEDS_PREPARATION" | "PREPARING" | "BUSY" | "DEGRADED"
+  elapsedMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  current?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  total?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  unit?: string
+  code?: string
+}
+
 export type Prompt = {
   text: string
   files?: Array<PromptFileAttachment>
@@ -810,44 +857,19 @@ export type GlobalEvent = {
   project?: string
   workspace?: string
   payload:
-    | EventTuiPromptAppend
-    | EventTuiCommandExecute
-    | EventTuiToastShow
-    | EventTuiSessionSelect
-    | EventServerConnected
-    | EventGlobalDisposed
+    | EventInstallationUpdated
+    | EventInstallationUpdateAvailable
     | EventServerInstanceDisposed
-    | EventFileEdited
-    | EventFileWatcherUpdated
     | EventLspClientDiagnostics
     | EventLspUpdated
     | EventMessagePartDelta
     | EventPermissionAsked
     | EventPermissionReplied
     | EventSessionError
-    | EventQuestionAsked
-    | EventQuestionReplied
-    | EventQuestionRejected
-    | EventTodoUpdated
-    | EventSessionStatus
-    | EventSessionIdle
-    | EventMcpToolsChanged
-    | EventMcpBrowserOpenFailed
-    | EventCommandExecuted
-    | EventProjectUpdated
-    | EventSessionCompacted
-    | EventVcsBranchUpdated
-    | EventWorkspaceReady
-    | EventWorkspaceFailed
-    | EventWorkspaceStatus
-    | EventWorktreeReady
-    | EventWorktreeFailed
     | EventPtyCreated
     | EventPtyUpdated
     | EventPtyExited
     | EventPtyDeleted
-    | EventInstallationUpdated
-    | EventInstallationUpdateAvailable
     | EventMessageUpdated
     | EventMessageRemoved
     | EventMessagePartUpdated
@@ -855,6 +877,38 @@ export type GlobalEvent = {
     | EventSessionCreated
     | EventSessionUpdated
     | EventSessionDeleted
+    | EventTuiPromptAppend
+    | EventTuiCommandExecute
+    | EventTuiToastShow
+    | EventTuiSessionSelect
+    | EventMcpToolsChanged
+    | EventMcpBrowserOpenFailed
+    | EventCommandExecuted
+    | EventProjectUpdated
+    | EventSessionStatus
+    | EventSessionIdle
+    | EventQuestionAsked
+    | EventQuestionReplied
+    | EventQuestionRejected
+    | EventSessionCompacted
+    | EventFileEdited
+    | EventFileWatcherUpdated
+    | EventTodoUpdated
+    | EventVcsBranchUpdated
+    | EventWorkspaceReady
+    | EventWorkspaceFailed
+    | EventWorkspaceStatus
+    | EventWorktreeReady
+    | EventWorktreeFailed
+    | EventServerConnected
+    | EventGlobalDisposed
+    | EventCorePreparation
+    | EventModelsDevRefreshed
+    | EventPluginAdded
+    | EventCatalogModelUpdated
+    | EventAccountAdded
+    | EventAccountRemoved
+    | EventAccountSwitched
     | EventSessionNextAgentSwitched
     | EventSessionNextModelSwitched
     | EventSessionNextPrompted
@@ -881,12 +935,6 @@ export type GlobalEvent = {
     | EventSessionNextCompactionStarted
     | EventSessionNextCompactionDelta
     | EventSessionNextCompactionEnded
-    | EventPluginAdded
-    | EventCatalogModelUpdated
-    | EventModelsDevRefreshed
-    | EventAccountAdded
-    | EventAccountRemoved
-    | EventAccountSwitched
     | SyncEventMessageUpdated
     | SyncEventMessageRemoved
     | SyncEventMessagePartUpdated
@@ -2056,6 +2104,27 @@ export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
 }
 
+export type CorePreparationEvent1 = {
+  runId: string
+  sequence: number | "NaN" | "Infinity" | "-Infinity"
+  target:
+    | {
+        kind: "host"
+      }
+    | {
+        kind: "instance"
+        directory: string
+      }
+  step: string
+  phase: string
+  state: "READY" | "NEEDS_PREPARATION" | "PREPARING" | "BUSY" | "DEGRADED"
+  elapsedMs: number | "NaN" | "Infinity" | "-Infinity"
+  current?: number | "NaN" | "Infinity" | "-Infinity"
+  total?: number | "NaN" | "Infinity" | "-Infinity"
+  unit?: string
+  code?: string
+}
+
 export type SyncEventMessageUpdated = {
   type: "sync"
   name: "message.updated.1"
@@ -2591,19 +2660,19 @@ export type SyncEventSessionNextCompactionEnded = {
   }
 }
 
-export type EventServerConnected = {
+export type EventInstallationUpdated = {
   id: string
-  type: "server.connected"
+  type: "installation.updated"
   properties: {
-    [key: string]: unknown
+    version: string
   }
 }
 
-export type EventGlobalDisposed = {
+export type EventInstallationUpdateAvailable = {
   id: string
-  type: "global.disposed"
+  type: "installation.update-available"
   properties: {
-    [key: string]: unknown
+    version: string
   }
 }
 
@@ -2612,23 +2681,6 @@ export type EventServerInstanceDisposed = {
   type: "server.instance.disposed"
   properties: {
     directory: string
-  }
-}
-
-export type EventFileEdited = {
-  id: string
-  type: "file.edited"
-  properties: {
-    file: string
-  }
-}
-
-export type EventFileWatcherUpdated = {
-  id: string
-  type: "file.watcher.updated"
-  properties: {
-    file: string
-    event: "add" | "change" | "unlink"
   }
 }
 
@@ -2693,142 +2745,6 @@ export type EventSessionError = {
   }
 }
 
-export type EventQuestionAsked = {
-  id: string
-  type: "question.asked"
-  properties: QuestionRequest
-}
-
-export type EventQuestionReplied = {
-  id: string
-  type: "question.replied"
-  properties: QuestionReplied
-}
-
-export type EventQuestionRejected = {
-  id: string
-  type: "question.rejected"
-  properties: QuestionRejected
-}
-
-export type EventTodoUpdated = {
-  id: string
-  type: "todo.updated"
-  properties: {
-    sessionID: string
-    todos: Array<Todo>
-  }
-}
-
-export type EventSessionStatus = {
-  id: string
-  type: "session.status"
-  properties: {
-    sessionID: string
-    status: SessionStatus
-  }
-}
-
-export type EventSessionIdle = {
-  id: string
-  type: "session.idle"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventMcpToolsChanged = {
-  id: string
-  type: "mcp.tools.changed"
-  properties: {
-    server: string
-  }
-}
-
-export type EventMcpBrowserOpenFailed = {
-  id: string
-  type: "mcp.browser.open.failed"
-  properties: {
-    mcpName: string
-    url: string
-  }
-}
-
-export type EventCommandExecuted = {
-  id: string
-  type: "command.executed"
-  properties: {
-    name: string
-    sessionID: string
-    arguments: string
-    messageID: string
-  }
-}
-
-export type EventProjectUpdated = {
-  id: string
-  type: "project.updated"
-  properties: Project
-}
-
-export type EventSessionCompacted = {
-  id: string
-  type: "session.compacted"
-  properties: {
-    sessionID: string
-  }
-}
-
-export type EventVcsBranchUpdated = {
-  id: string
-  type: "vcs.branch.updated"
-  properties: {
-    branch?: string
-  }
-}
-
-export type EventWorkspaceReady = {
-  id: string
-  type: "workspace.ready"
-  properties: {
-    name: string
-  }
-}
-
-export type EventWorkspaceFailed = {
-  id: string
-  type: "workspace.failed"
-  properties: {
-    message: string
-  }
-}
-
-export type EventWorkspaceStatus = {
-  id: string
-  type: "workspace.status"
-  properties: {
-    workspaceID: string
-    status: "connected" | "connecting" | "disconnected" | "error"
-  }
-}
-
-export type EventWorktreeReady = {
-  id: string
-  type: "worktree.ready"
-  properties: {
-    name: string
-    branch?: string
-  }
-}
-
-export type EventWorktreeFailed = {
-  id: string
-  type: "worktree.failed"
-  properties: {
-    message: string
-  }
-}
-
 export type EventPtyCreated = {
   id: string
   type: "pty.created"
@@ -2859,22 +2775,6 @@ export type EventPtyDeleted = {
   type: "pty.deleted"
   properties: {
     id: string
-  }
-}
-
-export type EventInstallationUpdated = {
-  id: string
-  type: "installation.updated"
-  properties: {
-    version: string
-  }
-}
-
-export type EventInstallationUpdateAvailable = {
-  id: string
-  type: "installation.update-available"
-  properties: {
-    version: string
   }
 }
 
@@ -2940,6 +2840,353 @@ export type EventSessionDeleted = {
   properties: {
     sessionID: string
     info: Session
+  }
+}
+
+export type EventMcpToolsChanged = {
+  id: string
+  type: "mcp.tools.changed"
+  properties: {
+    server: string
+  }
+}
+
+export type EventMcpBrowserOpenFailed = {
+  id: string
+  type: "mcp.browser.open.failed"
+  properties: {
+    mcpName: string
+    url: string
+  }
+}
+
+export type EventCommandExecuted = {
+  id: string
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
+export type EventProjectUpdated = {
+  id: string
+  type: "project.updated"
+  properties: Project
+}
+
+export type EventSessionStatus = {
+  id: string
+  type: "session.status"
+  properties: {
+    sessionID: string
+    status: SessionStatus
+  }
+}
+
+export type EventSessionIdle = {
+  id: string
+  type: "session.idle"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventQuestionAsked = {
+  id: string
+  type: "question.asked"
+  properties: QuestionRequest
+}
+
+export type EventQuestionReplied = {
+  id: string
+  type: "question.replied"
+  properties: QuestionReplied
+}
+
+export type EventQuestionRejected = {
+  id: string
+  type: "question.rejected"
+  properties: QuestionRejected
+}
+
+export type EventSessionCompacted = {
+  id: string
+  type: "session.compacted"
+  properties: {
+    sessionID: string
+  }
+}
+
+export type EventFileEdited = {
+  id: string
+  type: "file.edited"
+  properties: {
+    file: string
+  }
+}
+
+export type EventFileWatcherUpdated = {
+  id: string
+  type: "file.watcher.updated"
+  properties: {
+    file: string
+    event: "add" | "change" | "unlink"
+  }
+}
+
+export type EventTodoUpdated = {
+  id: string
+  type: "todo.updated"
+  properties: {
+    sessionID: string
+    todos: Array<Todo>
+  }
+}
+
+export type EventVcsBranchUpdated = {
+  id: string
+  type: "vcs.branch.updated"
+  properties: {
+    branch?: string
+  }
+}
+
+export type EventWorkspaceReady = {
+  id: string
+  type: "workspace.ready"
+  properties: {
+    name: string
+  }
+}
+
+export type EventWorkspaceFailed = {
+  id: string
+  type: "workspace.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventWorkspaceStatus = {
+  id: string
+  type: "workspace.status"
+  properties: {
+    workspaceID: string
+    status: "connected" | "connecting" | "disconnected" | "error"
+  }
+}
+
+export type EventWorktreeReady = {
+  id: string
+  type: "worktree.ready"
+  properties: {
+    name: string
+    branch?: string
+  }
+}
+
+export type EventWorktreeFailed = {
+  id: string
+  type: "worktree.failed"
+  properties: {
+    message: string
+  }
+}
+
+export type EventServerConnected = {
+  id: string
+  type: "server.connected"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventGlobalDisposed = {
+  id: string
+  type: "global.disposed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventCorePreparation = {
+  id: string
+  type: "core.preparation"
+  properties: CorePreparationEvent
+}
+
+export type EventModelsDevRefreshed = {
+  id: string
+  type: "models-dev.refreshed"
+  properties: {
+    [key: string]: unknown
+  }
+}
+
+export type EventPluginAdded = {
+  id: string
+  type: "plugin.added"
+  properties: {
+    id: string
+  }
+}
+
+export type ModelV2Info = {
+  id: string
+  apiID: string
+  providerID: string
+  family?: string
+  name: string
+  endpoint:
+    | {
+        type: "unknown"
+      }
+    | {
+        type: "openai/responses"
+        url: string
+        websocket?: boolean
+      }
+    | {
+        type: "openai/completions"
+        url: string
+        reasoning?:
+          | {
+              type: "reasoning_content"
+            }
+          | {
+              type: "reasoning_details"
+            }
+      }
+    | {
+        type: "anthropic/messages"
+        url: string
+      }
+    | {
+        type: "aisdk"
+        package: string
+        url?: string
+      }
+  capabilities: {
+    tools: boolean
+    input: Array<string>
+    output: Array<string>
+  }
+  options: {
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    aisdk: {
+      provider: {
+        [key: string]: unknown
+      }
+      request: {
+        [key: string]: unknown
+      }
+    }
+    variant?: string
+  }
+  variants: Array<{
+    id: string
+    headers: {
+      [key: string]: string
+    }
+    body: {
+      [key: string]: unknown
+    }
+    aisdk: {
+      provider: {
+        [key: string]: unknown
+      }
+      request: {
+        [key: string]: unknown
+      }
+    }
+  }>
+  time: {
+    released: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+  cost: Array<{
+    tier?: {
+      type: "context"
+      size: number
+    }
+    input: number
+    output: number
+    cache: {
+      read: number
+      write: number
+    }
+  }>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: {
+    context: number
+    input?: number
+    output: number
+  }
+}
+
+export type EventCatalogModelUpdated = {
+  id: string
+  type: "catalog.model.updated"
+  properties: {
+    model: ModelV2Info
+  }
+}
+
+export type AccountV2oAuthCredential = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+}
+
+export type AccountV2ApiKeyCredential = {
+  type: "api"
+  key: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type AccountV2Credential = AccountV2oAuthCredential | AccountV2ApiKeyCredential
+
+export type AccountV2Info = {
+  id: string
+  serviceID: string
+  description: string
+  credential: AccountV2Credential
+}
+
+export type EventAccountAdded = {
+  id: string
+  type: "account.added"
+  properties: {
+    account: AccountV2Info
+  }
+}
+
+export type EventAccountRemoved = {
+  id: string
+  type: "account.removed"
+  properties: {
+    account: AccountV2Info
+  }
+}
+
+export type EventAccountSwitched = {
+  id: string
+  type: "account.switched"
+  properties: {
+    serviceID: string
+    from?: string
+    to?: string
   }
 }
 
@@ -3321,178 +3568,6 @@ export type EventSessionNextCompactionEnded = {
     sessionID: string
     text: string
     include?: string
-  }
-}
-
-export type EventPluginAdded = {
-  id: string
-  type: "plugin.added"
-  properties: {
-    id: string
-  }
-}
-
-export type ModelV2Info = {
-  id: string
-  apiID: string
-  providerID: string
-  family?: string
-  name: string
-  endpoint:
-    | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
-    | {
-        type: "aisdk"
-        package: string
-        url?: string
-      }
-  capabilities: {
-    tools: boolean
-    input: Array<string>
-    output: Array<string>
-  }
-  options: {
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-    variant?: string
-  }
-  variants: Array<{
-    id: string
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-  }>
-  time: {
-    released: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  }
-  cost: Array<{
-    tier?: {
-      type: "context"
-      size: number
-    }
-    input: number
-    output: number
-    cache: {
-      read: number
-      write: number
-    }
-  }>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: {
-    context: number
-    input?: number
-    output: number
-  }
-}
-
-export type EventCatalogModelUpdated = {
-  id: string
-  type: "catalog.model.updated"
-  properties: {
-    model: ModelV2Info
-  }
-}
-
-export type EventModelsDevRefreshed = {
-  id: string
-  type: "models-dev.refreshed"
-  properties: {
-    [key: string]: unknown
-  }
-}
-
-export type AccountV2oAuthCredential = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-}
-
-export type AccountV2ApiKeyCredential = {
-  type: "api"
-  key: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type AccountV2Credential = AccountV2oAuthCredential | AccountV2ApiKeyCredential
-
-export type AccountV2Info = {
-  id: string
-  serviceID: string
-  description: string
-  credential: AccountV2Credential
-}
-
-export type EventAccountAdded = {
-  id: string
-  type: "account.added"
-  properties: {
-    account: AccountV2Info
-  }
-}
-
-export type EventAccountRemoved = {
-  id: string
-  type: "account.removed"
-  properties: {
-    account: AccountV2Info
-  }
-}
-
-export type EventAccountSwitched = {
-  id: string
-  type: "account.switched"
-  properties: {
-    serviceID: string
-    from?: string
-    to?: string
   }
 }
 
@@ -4050,7 +4125,14 @@ export type GlobalHealthResponses = {
       actualVersion?: string
       reason?: string
     }
+    managedInstanceId?: string
     dsh?: "disabled" | "preparing" | "ready" | "degraded"
+    dshRuntime?: {
+      closureVersion: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      homeVersion?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      reasonCode?: string
+    }
+    preparation?: CorePreparationResult
   }
 }
 

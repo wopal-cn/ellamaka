@@ -8,6 +8,7 @@ import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecy
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import { getDshStatus } from "@/workbench/dsh-status"
+import { getCorePreparationHealth } from "@/core/preparation"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -126,11 +127,15 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     const bridge = yield* EffectBridge.make()
 
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
+      const readiness = yield* Effect.promise(() => getCorePreparationHealth())
+      const managedInstanceId = process.env.ELLAMAKA_MANAGED_INSTANCE_ID
       return {
         healthy: true as const,
         version: InstallationVersion,
         cli: yield* cliContract.inspect(),
+        ...(managedInstanceId ? { managedInstanceId } : {}),
         dsh: getDshStatus(),
+        ...readiness,
       }
     })
 
