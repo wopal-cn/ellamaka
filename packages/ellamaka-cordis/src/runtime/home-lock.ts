@@ -48,6 +48,7 @@ async function acquireShared(lockPath: string, deadline: number): Promise<HomeLo
   const readersPath = join(lockPath, READERS_DIR)
   for (;;) {
     await reclaimDeadWriter(lockPath)
+    reapDeadReaders(readersPath)
     if (existsSync(writerPath)) {
       if (Date.now() >= deadline) return null
       await sleep(POLL_MS)
