@@ -40,6 +40,7 @@ import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
 import { DshPackageWorkerCommand } from "./cli/cmd/dsh-package-worker"
+import { DshWebChildCommand } from "./cli/cmd/dsh-web-child-command"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
 import { resolveLogLevel, resolveTrace } from "./cli/log-level"
@@ -288,6 +289,7 @@ const cli = yargs(args)
         .command(DshPluginCommand)
         .command(DshDumpConfigCommand)
         .command(DshPackageWorkerCommand)
+        .command(DshWebChildCommand)
         .epilogue(DSH_HELP_EXAMPLES),
     handler: async (argv) => {
       // Official resolveBoot semantics (Plan 223 D-01/D-03): the root flags

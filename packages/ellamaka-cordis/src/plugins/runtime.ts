@@ -53,6 +53,15 @@ export interface DshPluginContainer {
    * official layers (rook B-01).
    */
   stackContext?: unknown
+  /**
+   * External rebuild boundary (DESIGN.md#unified-reload--lifecycle 冷重载):
+   * when present, the unit's composition change is delegated to this
+   * callback instead of the in-process include replay — the child-process
+   * web container owns its module graph, so its host rebuilds the unit
+   * rather than mutating a dead in-process entry. A failed rebuild keeps
+   * the unit's last hash like a failed replay (D-03).
+   */
+  rebuild?: () => Promise<void>
 }
 
 /** Options for {@link startDshPluginService}. */
@@ -226,7 +235,15 @@ export function startDshPluginService(options: DshPluginServiceOptions): DshPlug
   const replayUnit = async (unit: UnitState, hash: string): Promise<DshPluginReplayResult> => {
     if (unit.lastObservation?.hash === hash) return unit.lastObservation.result
     try {
-      await replayContainer(unit.container)
+      // An external rebuild boundary (child-process container) owns the
+      // unit's module graph: delegate instead of mutating the in-process
+      // entry (which no longer serves traffic).
+      const rebuild = (unit.container as { rebuild?: () => Promise<void> }).rebuild
+      if (typeof rebuild === "function") {
+        await rebuild()
+      } else {
+        await replayContainer(unit.container)
+      }
       unit.lastHash = hash
       unit.lastObservation = { hash, result: { ok: true } }
       return unit.lastObservation.result

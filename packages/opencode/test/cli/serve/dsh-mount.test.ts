@@ -53,8 +53,10 @@ describe("server entry points wire the shared dsh assembly", () => {
     // file: each profile derives its own bounded `dsh-plugins-<profile>.log`.
     expect(source).toContain("logDir")
     expect(source).not.toContain('"dsh-plugins.log"')
-    expect(source).toContain("mountDshWeb(webHub.ctx, {")
+    // The web container boots in the managed child (no in-process
+    // mountDshWeb left); the tools container stays in-process.
     expect(source).toContain("mountDshTools(toolsHub.ctx, {")
+    expect(source).not.toContain("mountDshWeb(")
   })
 
   test("dsh-mount wraps init+mount in a degrade boundary (B-06) and injects the closure context (B-01)", () => {
@@ -64,10 +66,13 @@ describe("server entry points wire the shared dsh assembly", () => {
     // undefined (no mount, no process.exit).
     expect(source).toContain("dsh engine mount failed")
     expect(source).toContain("mountDshEngine")
-    // The hub is constructed with the closure-resolved context — never a bare
-    // `new CordisHub(null)` that would fall back to the host package closure.
-    expect(source).toContain("new CordisHub(null, { context: new runtime.cordis.Context() })")
-    expect(source).not.toMatch(/new CordisHub\(null\)/)
+    // The in-process hub (tools container) is constructed with the
+    // closure-resolved context — never a bare `new CordisHub(null)` that
+    // would fall back to the host package closure. The web container boots in
+    // the child via the web-child command (closure anchor resolved there).
+    expect(source).toMatch(/CordisHub\(null, \{\s*context: new runtime\.cordis\.Context\(\),?\s*\}\)/)
+    expect(source).not.toMatch(/new CordisHub\(null\)(?!\s*,|\n?\s*\{)/)
+    expect(source).toContain("webChildArgs(resolveEllamakaCommand()")
   })
 
   test("dsh-mount points B-class $DSH_HOME reads at the official-layout home", () => {
