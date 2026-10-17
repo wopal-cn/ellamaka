@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "@wopal/ellamaka-cordis/runtime"
 import { mountDshIfEnabled } from "@/cli/cmd/tui/dsh-mount"
+import { getDshStatus } from "@/workbench/dsh-status"
 import { seedDshClosure } from "../../../fixture/dsh-closure"
 
 const CONTAINER_KEY = "__ellamakaDshContainer"
@@ -162,5 +163,37 @@ describe("tui dsh mount", () => {
     expect(error).toBeUndefined()
     expect(handle).toBeUndefined()
     expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
+  }, 60_000)
+
+  test("a tool container whose plugins fail to activate degrades fully to disabled (Issue #252)", async () => {
+    process.env.ELLAMAKA_DSH = "1"
+    const wopalHome = tmpWopalHome()
+    seedDshClosure(wopalHome)
+    // Publish the managed home state BEFORE the user patch lands: the
+    // preparation service fail-closes on a non-empty home with unknown
+    // version, and this test's subject is the activation gate, not home
+    // adoption.
+    const { prepareDshHome } = await import("@wopal/ellamaka-cordis/runtime")
+    expect((await prepareDshHome({ wopalHome, closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion })).ok).toBe(
+      true,
+    )
+    // A user plugin row that can never activate: the bundle package does not
+    // exist, so the loader import fails and the entry stays inactive. The
+    // user patch layer lives in the harness-home profile area.
+    const profileDir = join(wopalHome, "dsh", "home", "profiles", "ellamaka-tools")
+    mkdirSync(profileDir, { recursive: true })
+    writeFileSync(
+      join(profileDir, "cordis.patch.yml"),
+      ["- insert:", "    - id: broken-user-plugin", "      name: no-such-dsh-plugin-package", ""].join("\n"),
+    )
+    const handle = await mountDshIfEnabled({
+      wopalHome,
+      logDir: join(wopalHome, "logs"),
+    })
+    // Full degradation: no handle, no container handle, and the DSH status is
+    // DISABLED (not "degraded" — nothing dsh remains serving).
+    expect(handle).toBeUndefined()
+    expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
+    expect(getDshStatus()).toBe("disabled")
   }, 60_000)
 })

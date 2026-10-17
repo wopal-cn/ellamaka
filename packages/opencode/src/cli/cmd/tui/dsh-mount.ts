@@ -178,20 +178,26 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
       },
     }
   } catch (error) {
-    setDshStatus("degraded")
+    // Fail closed (Issue #252): a failed or half-activated tools container is
+    // worthless to the TUI — the dsh-adapter would project broken tools from
+    // it. Degrade fully to "no dsh": dispose everything, remove the container
+    // handle, and report the DSH status as DISABLED (not "degraded", which
+    // would suggest a partial dsh is still serving).
+    setDshStatus("disabled")
     // Surface the mount failure through the TUI error area (toast) — a bare
     // console write would corrupt the interface — and keep a structured log
     // record for diagnosis.
-    Log.Default.error("dsh tool container mount failed", {
-      error: error instanceof Error ? error.message : String(error),
+    const detail = error instanceof Error ? error.message : String(error)
+    Log.Default.error("dsh tool container mount failed — dsh disabled", {
+      error: detail,
     })
     GlobalBus.emit("event", {
       directory: "global",
       payload: {
         type: "tui.toast.show",
         properties: {
-          title: "dsh tool container failed",
-          message: `The dsh tool container did not mount; the TUI continues without dsh tools: ${error instanceof Error ? error.message : String(error)}`,
+          title: "dsh tools disabled",
+          message: `The dsh tool container failed to activate; the TUI continues with native tools only: ${detail}`,
           variant: "error",
           duration: 8000,
         },

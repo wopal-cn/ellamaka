@@ -229,6 +229,17 @@ type MountProfileOptions = DshHostOptions & {
   requireWebServer: boolean
   /** When set, provide this VirtualWebServer instead of binding a real socket. */
   virtualWebServer?: VirtualWebServer
+  /**
+   * Startup activation-audit policy. `"audit"` keeps the official behavior:
+   * optional-entry failures warn and the container still mounts. `"fail-closed"`
+   * treats ANY inactive entry (failed or pending) as a mount failure — the
+   * container is disposed and the error carries the official diagnostic. The
+   * tools container defaults to fail-closed: it is the direct capability
+   * handoff to the host adapter, and a half-activated container would project
+   * broken tools. The web profile keeps `"audit"` (its UI surface degrades
+   * per-entry instead).
+   */
+  activationAudit?: "audit" | "fail-closed"
 }
 
 type PtcReadinessRuntime = {
@@ -607,10 +618,32 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   if (ctx.get("loader") === undefined || includeEntry === undefined) {
     throw new Error("ellamaka-cordis: dsh boot did not provide a loader service")
   }
+  // Activation audit: in fail-closed mode the official optional-entry warnings
+  // are captured instead of falling through to stderr, and ANY inactive entry
+  // fails the mount (Issue #252: a half-activated tools container projects
+  // broken tools). The audit diagnostic text is embedded so the host surfaces
+  // the exact entries that did not activate.
+  const auditDiagnostics: string[] = []
+  const auditWarn = opts.activationAudit === "fail-closed" ? (line: string) => auditDiagnostics.push(line) : undefined
   await runtime.appBoot.auditStartupEntries(
     ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
     "ellamaka",
+    auditWarn,
   )
+  if (opts.activationAudit === "fail-closed" && auditDiagnostics.length > 0) {
+    const loader = ctx.get("loader")
+    if (loader !== undefined) {
+      try {
+        loader.remove(includeEntry.id)
+      } catch {
+        // Best-effort; the failure below is the outcome that matters.
+      }
+    }
+    await loaderFiber.dispose().catch(() => undefined)
+    throw new Error(
+      `DSH ${profileName} container activation incomplete — degrading to no dsh (Issue #252):\n${auditDiagnostics.join("\n")}`,
+    )
+  }
 
   const validate = async () => {
     await ctx.get("loader")?.await()
@@ -823,6 +856,10 @@ export async function mountDshTools(ctx: Context, opts: DshHostOptions): Promise
     ...opts,
     profileName: TOOLS_PROFILE_NAME,
     requireWebServer: false,
+    // Fail closed (Issue #252): the tools container IS the host-facing
+    // capability surface; optional entries failing silently would project
+    // broken tools. Any inactive entry fails the mount.
+    activationAudit: "fail-closed",
     extraPatches: toolsExtraPatches({ extraPatches: opts.extraPatches }),
   })
   return { ...host, ctx, includeEntry: host.includeEntry!, stackContext: host.stackContext! }
