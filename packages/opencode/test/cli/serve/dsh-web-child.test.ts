@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { createServer, request as httpRequest, type Server } from "node:http"
+import net from "node:net"
+import { PassThrough } from "node:stream"
 import { DshWebColdReload } from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
 import {
   spawnWebChildContainer,
@@ -23,6 +25,43 @@ import {
 
 let fakeChild: Server
 let fakePort = 0
+
+/**
+ * Minimal duplex socket pair standing in for the dispatcher boundary: writing
+ * to one end is readable from the other, which is all `handleUpgrade` needs.
+ * (Bun has no `net.createPair`; a real loopback socket pair would need an
+ * extra listener and adds no contract value here.)
+ */
+function socketPair(): [net.Socket, net.Socket] {
+  const make = (): { sock: net.Socket; feed: (chunk: Buffer) => void } => {
+    const source = new PassThrough()
+    const sink = new PassThrough()
+    const sock = source as unknown as net.Socket
+    // Cross-wire: writes to `sock` surface on the peer's readable side.
+    const peer = { feed: (chunk: Buffer) => source.write(chunk) }
+    void sink
+    sock.write = ((chunk: Buffer, _enc?: unknown, cb?: () => void) => {
+      peer.feed(chunk)
+      cb?.()
+      return true
+    }) as net.Socket["write"]
+    return { sock, feed: (chunk) => source.push(chunk) }
+  }
+  const a = make()
+  const b = make()
+  // a.write → readable on b; b.write → readable on a
+  a.sock.write = ((chunk: Buffer, _enc?: unknown, cb?: () => void) => {
+    b.feed(chunk)
+    cb?.()
+    return true
+  }) as net.Socket["write"]
+  b.sock.write = ((chunk: Buffer, _enc?: unknown, cb?: () => void) => {
+    a.feed(chunk)
+    cb?.()
+    return true
+  }) as net.Socket["write"]
+  return [a.sock, b.sock]
+}
 
 beforeEach(async () => {
   fakeChild = createServer((req, res) => {
@@ -57,6 +96,73 @@ describe("dsh:web child host builder", () => {
     // without throwing on a shaped request (controller contract: handler
     // never rejects synchronously).
     expect(() => container.handleRequest({}, { writeHead() {}, end() {} })).not.toThrow()
+  })
+
+  test("webChildProxyContainer forwards WebSocket upgrades to the child (101 handshake completes)", async () => {
+    // Regression (Bun runtime): the previous proxyUpgrade relied on
+    // node:http's `upgrade` event, which Bun does not emit — every browser
+    // WebSocket through the parent hung until the client gave up ("连接中断"
+    // retry loop). The contract is now end-to-end: a real upgrade request
+    // through `handleUpgrade` must reach the child and complete the 101
+    // handshake within a bounded time.
+    // The fake child is a RAW TCP server, matching the real child's upgrade
+    // path (cordis VirtualWebServer answers upgrades on the raw socket; Bun's
+    // node:http `upgrade` event fires but swallows socket bytes, so a plain
+    // createServer() cannot stand in for the child here).
+    const upgradeServer = net.createServer((socket) => {
+      socket.once("data", () => {
+        socket.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+        socket.end()
+      })
+    })
+    await new Promise<void>((resolve) => upgradeServer.listen(0, "127.0.0.1", resolve))
+    const address: unknown = upgradeServer.address()
+    expect(address).toHaveProperty("port")
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- expect guard above pins the shape
+    const upgradePort = (address as { port: number }).port
+
+    const container = webChildProxyContainer({ port: upgradePort })
+    // A client-side socket pair whose "server side" IS the proxy: we feed the
+    // raw upgrade request into `handleUpgrade` (the dispatcher's entry) and
+    // read the child's answer back from the paired client — the exact parent
+    // path without needing a real listening socket in between.
+    const [client, serverSide] = socketPair()
+    const raw = client
+    container.handleUpgrade(
+      {
+        method: "GET",
+        url: "/api/remote.mux",
+        headers: {
+          host: "127.0.0.1",
+          upgrade: "websocket",
+          connection: "Upgrade",
+          "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+          "sec-websocket-version": "13",
+        },
+      },
+      serverSide,
+      Buffer.alloc(0),
+    )
+    // The proxy must answer with the child's 101 within 5s; a hang is the
+    // exact Bun regression this test pins.
+    const response = await new Promise<string>((resolve) => {
+      let data = ""
+      const timer = setTimeout(() => resolve("TIMEOUT"), 5000)
+      raw.on("data", (chunk) => {
+        data += chunk.toString("latin1")
+        if (data.includes("\r\n\r\n")) {
+          clearTimeout(timer)
+          resolve(data)
+        }
+      })
+      raw.on("error", () => {
+        clearTimeout(timer)
+        resolve("ERROR")
+      })
+    })
+    expect(response).toContain("101 Switching Protocols")
+    raw.destroy()
+    await new Promise<void>((resolve) => upgradeServer.close(() => resolve()))
   })
 
   test("spawnWebChildContainer resolves after the ready line and proxies HTTP; dispose kills the child", async () => {

@@ -446,7 +446,7 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 - **Hot replay**：只重放配置/patch，不更换进程模块图。
 - **Cold reload**：代码或包版本变化时，按 `drain → dispose → build → verify → publish → notify` 重建对应单元。这里的单元 revision 只用于重载事件，不是 DSH `closureVersion`。
 
-**隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器、宿主经 node:http 代理转发 `/dsh`。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
+**隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器、宿主经 loopback TCP 隧道转发 `/dsh`（HTTP 与 WebSocket upgrade 一律原始字节双向转发；不用 `node:http` 的 `upgrade` 事件——Bun 不触发该事件，事件式代理会让浏览器 WS 全部挂起）。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
 
 **触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`；共享 dsh-base 配置变 → web+tools；产品闭包变更由产品重启与 Home 协议接管；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明依赖边；当前 global 不依赖任何 dsh 单元，未来做集中配置管理只需增补一条边。
 
