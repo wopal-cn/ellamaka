@@ -49,10 +49,8 @@ describe("dsh:web child process boundary", () => {
   })
 
   test("webChildReadyLine is one JSON line with the bound port", () => {
-    const line = webChildReadyLine(51234)
-    expect(line).toContain("\n")
-    const parsed: unknown = JSON.parse(line.trim())
-    expect(parsed).toEqual({ ready: true, port: 51234 })
+    const parsed: unknown = JSON.parse(webChildReadyLine(51234, "/?token=test-token"))
+    expect(parsed).toEqual({ ready: true, port: 51234, authPath: "/?token=test-token" })
   })
 
   test("child boots the web profile on a real port and serves HTTP until shutdown", async () => {
@@ -165,6 +163,11 @@ describe("dsh:web child process boundary", () => {
       }
     }
     expect(ready).toBeDefined()
+    // The ready line MUST carry the browser-auth entry path (Issue: the iframe
+    // needs `/dsh/?token=…` — without the token the official fence 401s every
+    // bare visit).
+    expect(typeof ready!.authPath).toBe("string")
+    expect(ready!.authPath).toMatch(/^\/\?token=/)
     child.stdin.write("shutdown\n")
     await Promise.race([
       child.exited,

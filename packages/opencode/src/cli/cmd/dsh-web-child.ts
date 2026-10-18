@@ -49,13 +49,20 @@ export interface SpawnWebChildOptions {
 export interface WebChildContainer extends ColdRebuildContainer {
   /** The child's bound loopback port. */
   readonly port: number
+  /**
+   * The child's browser-auth entry query (`/?token=…`, child-root relative).
+   * The parent re-attaches it under its `/dsh` mount when composing the
+   * Workbench iframe URL — without it the official fence 401s every bare
+   * visit.
+   */
+  readonly authPath?: string
 }
 
 /**
  * Wrap an already-running child listener into a proxying container. Exported
  * for tests and reuse; `spawnWebChildContainer` composes it with the spawn.
  */
-export function webChildProxyContainer(child: { port: number }): WebChildContainer {
+export function webChildProxyContainer(child: { port: number; authPath?: string }): WebChildContainer {
   const proxyRequest = (req: IncomingMessage, res: ServerResponse): void => {
     const upstream = httpRequest(
       {
@@ -102,6 +109,7 @@ export function webChildProxyContainer(child: { port: number }): WebChildContain
   }
   return {
     port: child.port,
+    authPath: child.authPath,
     handleRequest: proxyRequest,
     handleUpgrade: proxyUpgrade,
     dispose: undefined,
@@ -109,7 +117,10 @@ export function webChildProxyContainer(child: { port: number }): WebChildContain
 }
 
 /** Read ONE ready line from the child's stdout, racing child exit. */
-async function readReadyLine(child: WebChildProcess, timeoutMs: number): Promise<{ ready: boolean; port: number }> {
+async function readReadyLine(
+  child: WebChildProcess,
+  timeoutMs: number,
+): Promise<{ ready: boolean; port: number; authPath?: string }> {
   const reader = child.stdout.getReader()
   const decoder = new TextDecoder()
   let buffer = ""
@@ -150,12 +161,15 @@ async function readReadyLine(child: WebChildProcess, timeoutMs: number): Promise
           if (typeof parsed !== "object" || parsed === null) {
             throw new Error(`dsh web child reported an invalid ready line: ${line}`)
           }
-          const record = parsed as { ready?: unknown; port?: unknown }
+          const record = parsed as { ready?: unknown; port?: unknown; authPath?: unknown }
           const port = record["port"]
           if (record["ready"] !== true || typeof port !== "number" || port <= 0) {
             throw new Error(`dsh web child reported an invalid ready line: ${line}`)
           }
-          return { ready: true, port }
+          // authPath is optional in the parsed shape (tolerant), but the
+          // builder surfaces it so the iframe entry can carry the token.
+          const authPath = typeof record["authPath"] === "string" ? record["authPath"] : undefined
+          return { ready: true, port, authPath }
         }
       }
     }
@@ -235,7 +249,7 @@ export async function spawnWebChildContainer(options: SpawnWebChildOptions): Pro
       if (stderrTail.length > 20) stderrTail.shift()
     }
   })()
-  let ready: { ready: boolean; port: number }
+  let ready: { ready: boolean; port: number; authPath?: string }
   try {
     ready = await readReadyLine(child, options.readyTimeoutMs ?? 120_000)
   } catch (error) {
@@ -251,7 +265,7 @@ export async function spawnWebChildContainer(options: SpawnWebChildOptions): Pro
     }
     throw error
   }
-  const container = webChildProxyContainer({ port: ready.port })
+  const container = webChildProxyContainer({ port: ready.port, authPath: ready.authPath })
   return {
     ...container,
     dispose: async () => {

@@ -305,6 +305,15 @@ async function mountDshEngineImpl(
       installAnchor: anchor.path,
       logDir,
     })
+    // The Workbench iframe enters the DSH surface through the official rc.1
+    // browser-auth launch token. The web container runs in the child, so the
+    // child reports its browser-auth entry query on the ready line
+    // (`authPath` = `/?token=…`): the official fence only mints a cookie for a
+    // first visit CARRYING the token, and re-mints per Host authority, so the
+    // parent composes `<origin>/dsh/?token=…` per request. Before the child
+    // reported the token the iframe pointed at the bare mount and every visit
+    // 401'd ("reopen the URL printed by dsh web").
+    let dshAuthQuery = ""
     const reloader = new DshWebColdReload({
       build: async () => {
         const container = await spawnWebChildContainer({
@@ -319,6 +328,9 @@ async function mountDshEngineImpl(
           home,
           readyTimeoutMs: 120_000,
         })
+        // The child's launch token is process-scoped and re-reported on every
+        // rebuild, so each new generation refreshes the iframe entry.
+        dshAuthQuery = container.authPath ?? ""
         return { container, publish: () => {} }
       },
       logger: {
@@ -357,7 +369,7 @@ async function mountDshEngineImpl(
     setDshUrlGetter((requestHost) => {
       try {
         const origin = routableDshOrigin(server.hostname, server.port, requestHost)
-        return new URL(`${mountPath}/`, origin).toString()
+        return new URL(`${mountPath}/${dshAuthQuery}`, origin).toString()
       } catch {
         return undefined
       }

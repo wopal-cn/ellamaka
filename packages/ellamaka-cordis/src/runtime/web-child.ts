@@ -28,8 +28,8 @@ import type { Duplex } from "node:stream"
 export const WEB_CHILD_MARKER = "--ellamaka-dsh-web-child"
 
 /** One JSON readiness line the parent parses from the child's stdout. */
-export function webChildReadyLine(port: number): string {
-  return `${JSON.stringify({ ready: true, port })}\n`
+export function webChildReadyLine(port: number, authPath: string): string {
+  return `${JSON.stringify({ ready: true, port, authPath })}\n`
 }
 
 /** Parsed child argv contract. */
@@ -140,7 +140,23 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
     await new Promise<void>((resolve) => server!.listen(options.port, "127.0.0.1", resolve))
     const address = server.address()
     const boundPort = typeof address === "object" && address !== null ? address.port : options.port
-    process.stdout.write(webChildReadyLine(boundPort))
+    // The browser-auth entry the parent must hand the Workbench iframe: the
+    // official fence only mints a cookie for a FIRST visit carrying the launch
+    // token (`?token=…`); a bare visit 401s forever. The child owns the
+    // connection service, so it reports the token-carrying query here — the
+    // parent re-attaches it under its `/dsh` mount per request origin.
+    const connection: unknown = host.ctx.get("connection")
+    if (
+      typeof connection !== "object" ||
+      connection === null ||
+      !("authenticatedUrl" in connection) ||
+      typeof connection.authenticatedUrl !== "function"
+    ) {
+      throw new Error("dsh web child: profile did not provide the connection service")
+    }
+    const authUrl = new URL(connection.authenticatedUrl("http://dsh.invalid"))
+    const authPath = `/?${authUrl.searchParams}`
+    process.stdout.write(webChildReadyLine(boundPort, authPath))
     trace(`ready written, port=${boundPort}`)
 
     // Graceful shutdown: one `shutdown` line on stdin. SIGTERM/SIGHUP are NOT

@@ -60,10 +60,14 @@ describe("dsh:web child host builder", () => {
   })
 
   test("spawnWebChildContainer resolves after the ready line and proxies HTTP; dispose kills the child", async () => {
-    // Fake child: prints the ready line for the OS-assigned fake port, then
-    // serves until killed.
+    // Fake child: prints the ready line (with the browser-auth entry the
+    // iframe needs) for the OS-assigned fake port, then serves until killed.
     const fake = Bun.spawn(
-      [process.execPath, "-e", `console.log(JSON.stringify({ ready: true, port: ${fakePort} }))`],
+      [
+        process.execPath,
+        "-e",
+        `console.log(JSON.stringify({ ready: true, port: ${fakePort}, authPath: "/?token=abc" }))`,
+      ],
       {
         stdout: "pipe",
         stderr: "pipe",
@@ -82,6 +86,9 @@ describe("dsh:web child host builder", () => {
       home: "/unused",
     })
     expect(container).toBeDefined()
+    // The ready line's browser-auth entry surfaces on the container so the
+    // host composes `<origin>/dsh/?token=…` for the Workbench iframe.
+    expect(container.authPath).toBe("/?token=abc")
     const body = await new Promise<string>((resolve, reject) => {
       const req = httpRequest({ host: "127.0.0.1", port: fakePort, path: "/probe" }, (res) => {
         let data = ""
