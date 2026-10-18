@@ -177,6 +177,47 @@ describe("dsh:web child process boundary", () => {
     ])
     expect(await child.exited).toBe(0)
   }, 90_000)
+
+  test("child exits gracefully when the parent-side stdin closes (orphan guard)", async () => {
+    const wopalHome = mkdtempSync(join(tmpdir(), "web-child-orphan-"))
+    const home = join(wopalHome, "dsh")
+    const prepared = await prepareDshHome({ wopalHome, closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion })
+    expect(prepared.ok).toBe(true)
+    prepareDshProfiles(home)
+    const child = Bun.spawn(childArgv(home), {
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "pipe",
+      env: { ...process.env, ELLAMAKA_DSH: "1" },
+    })
+    // Wait for the ready line, then close the parent's write end WITHOUT the
+    // shutdown line: the only real-world way stdin hits EOF is the parent
+    // process dying (SIGKILL — no dispose chain can run). The child must treat
+    // stdin EOF as "parent is gone" and exit gracefully, releasing its Home
+    // lease instead of lingering as an orphan.
+    const reader = child.stdout.getReader()
+    let buffer = ""
+    const deadline = Date.now() + 60_000
+    let sawReady = false
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += new TextDecoder().decode(value)
+      if (buffer.includes("\n") && buffer.includes('"ready"')) {
+        sawReady = true
+        break
+      }
+    }
+    expect(sawReady).toBe(true)
+    child.stdin.end()
+    await Promise.race([
+      child.exited,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("child did not exit after parent stdin EOF")), 15_000),
+      ),
+    ])
+    expect(await child.exited).toBe(0)
+  }, 90_000)
 })
 
 /**

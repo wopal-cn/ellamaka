@@ -159,22 +159,30 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
     process.stdout.write(webChildReadyLine(boundPort, authPath))
     trace(`ready written, port=${boundPort}`)
 
-    // Graceful shutdown: one `shutdown` line on stdin. SIGTERM/SIGHUP are NOT
+    // Graceful shutdown: one `shutdown` line on stdin, OR stdin EOF. EOF is
+    // the orphan guard: the parent holds the write end for the child's whole
+    // lifetime and never ends it deliberately, so EOF can only mean the parent
+    // process DIED (SIGKILL — no dispose chain can run). A lingering detached
+    // child would hold its Home lease and port forever. SIGTERM/SIGHUP are NOT
     // re-registered here — the DSH profile boot installs its own bounded
     // signal shutdown (interrupt → dispose → forced exit ≤5s); a second
     // handler racing it double-disposes the container and hangs the exit.
     // The parent's process-tree cleanup therefore relies on the profile's own
-    // signal path; stdin `shutdown` is the host-coordinated channel that also
-    // releases the child's Home lease before exit.
+    // signal path; stdin `shutdown`/EOF is the host-coordinated channel that
+    // also releases the child's Home lease before exit.
     await new Promise<void>((resolve) => {
-      const onData = (chunk: Buffer | string) => {
-        if (chunk.toString().trim() === "shutdown") {
-          process.stdin.off("data", onData)
-          resolve()
-        }
+      const finish = () => {
+        process.stdin.off("data", onData)
+        process.stdin.off("end", onEnd)
+        resolve()
       }
+      const onData = (chunk: Buffer | string) => {
+        if (chunk.toString().trim() === "shutdown") finish()
+      }
+      const onEnd = () => finish()
       process.stdin.setEncoding("utf8")
       process.stdin.on("data", onData)
+      process.stdin.on("end", onEnd)
     })
     trace("shutdown received")
   } catch (error) {
