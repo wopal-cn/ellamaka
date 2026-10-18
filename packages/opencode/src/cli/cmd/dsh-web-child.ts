@@ -17,7 +17,7 @@
  * proxy target without remounting, so the browser-facing URL never changes.
  */
 import { request as httpRequest, type IncomingMessage, type ServerResponse } from "node:http"
-import net from "node:net"
+import { WebSocketServer, WebSocket } from "ws"
 import { spawn as nodeSpawn } from "node:child_process"
 import type { Duplex } from "node:stream"
 import type { ColdRebuildContainer } from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
@@ -64,6 +64,8 @@ export interface WebChildContainer extends ColdRebuildContainer {
  * for tests and reuse; `spawnWebChildContainer` composes it with the spawn.
  */
 export function webChildProxyContainer(child: { port: number; authPath?: string }): WebChildContainer {
+  // One noServer acceptor per container generation; dispose drops it.
+  const socketWss = new WebSocketServer({ noServer: true })
   const proxyRequest = (req: IncomingMessage, res: ServerResponse): void => {
     const upstream = httpRequest(
       {
@@ -85,35 +87,45 @@ export function webChildProxyContainer(child: { port: number; authPath?: string 
     if (typeof (req as { pipe?: unknown }).pipe === "function") req.pipe(upstream)
     else upstream.end()
   }
-  // Raw-TCP tunnel, not node:http `request().on("upgrade")`: Bun never emits
-  // that event, which left every browser WebSocket through this proxy hanging
-  // until the client gave up (the "连接中断" retry loop). Writing the upgrade
-  // request bytes straight at the loopback socket and piping both directions
-  // is transport-agnostic — Node and Bun behave identically — and the bytes
-  // are exactly what the dispatcher already received (headers preserved, so
-  // the child's token/cookie fence sees the original request).
+  // Bun swallows every socket.write() on a node:http upgrade socket
+  // (oven-sh/bun#9882, #35325): the `upgrade` event fires, writes report
+  // success, and no byte ever reaches the wire — so raw-byte tunnels can
+  // never answer a browser's 101. The `ws` package's noServer handleUpgrade
+  // takes Bun's native handoff and DOES reach the wire (that is also why the
+  // child's own WS works). Terminate the browser's handshake with `ws`, dial
+  // the child with Bun's native WebSocket client, and bridge frames.
   const proxyUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
-    const upstream = net.connect({ host: "127.0.0.1", port: child.port }, () => {
-      const headers = [`${req.method ?? "GET"} ${req.url ?? "/"} HTTP/1.1`]
-      for (const [key, value] of Object.entries(req.headers)) {
-        if (Array.isArray(value)) for (const entry of value) headers.push(`${key}: ${entry}`)
-        else if (value !== undefined) headers.push(`${key}: ${value}`)
+    socketWss.handleUpgrade(req, socket, head, (clientWs) => {
+      const upstream = new WebSocket(`ws://127.0.0.1:${child.port}${req.url ?? "/"}`)
+      upstream.binaryType = "arraybuffer"
+      let upstreamReady = false
+      const pendingOnOpen: (string | Uint8Array)[] = []
+      clientWs.on("message", (data) => {
+        if (upstreamReady) upstream.send(data)
+        else pendingOnOpen.push(data as string | Uint8Array)
+      })
+      upstream.on("open", () => {
+        upstreamReady = true
+        for (const frame of pendingOnOpen) upstream.send(frame)
+        pendingOnOpen.length = 0
+      })
+      upstream.on("message", (data) => clientWs.send(data))
+      const closeBoth = () => {
+        try {
+          clientWs.close()
+        } catch {
+          // already closing/closed
+        }
+        try {
+          upstream.close()
+        } catch {
+          // already closing/closed
+        }
       }
-      upstream.write(`${headers.join("\r\n")}\r\n\r\n`)
-      // Headers already drained from the incoming socket by Node arrive here;
-      // forward them so the child sees a byte-identical stream.
-      if (head.length > 0) upstream.write(head)
+      clientWs.on("close", closeBoth)
+      upstream.on("close", closeBoth)
+      upstream.on("error", closeBoth)
     })
-    upstream.on("data", (chunk) => socket.write(chunk))
-    socket.on("data", (chunk) => upstream.write(chunk))
-    const teardown = () => {
-      upstream.destroy()
-      socket.destroy()
-    }
-    upstream.on("error", teardown)
-    socket.on("error", teardown)
-    upstream.on("close", () => socket.destroy())
-    socket.on("close", () => upstream.destroy())
   }
   return {
     port: child.port,
