@@ -238,6 +238,7 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
       })
       watcher.on("all", (_event, path) => {
         const observed = resolve(path)
+        logger.info("config watcher event", { file: target, event: _event, observed })
         if (observed !== target && observed !== registration.watchFilename) return
         runRefresh()
       })
