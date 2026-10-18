@@ -369,7 +369,10 @@ async function mountDshEngineImpl(
     setDshUrlGetter((requestHost) => {
       try {
         const origin = routableDshOrigin(server.hostname, server.port, requestHost)
-        return new URL(`${mountPath}/${dshAuthQuery}`, origin).toString()
+        // authPath is child-root relative (`/?token=…`): strip its leading "/"
+        // before appending to the mount root so the composed entry stays
+        // `/dsh/?token=…` (never a doubled slash).
+        return new URL(`${mountPath}/${dshAuthQuery.replace(/^\//, "")}`, origin).toString()
       } catch {
         return undefined
       }
