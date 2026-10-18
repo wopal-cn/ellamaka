@@ -174,7 +174,13 @@ export function createBunHmr(options: BunHmrOptions): BunHmr {
         throw new Error(`dsh bun-hmr: config path already registered: ${filename}`)
       }
 
-      const watcher = transaction.exit(() => watch(target, { ignoreInitial: true }))
+      // Polling mode: the fsevents-backed file watch proved UNRELIABLE here
+      // (macOS aggregates fsevents per-directory; a file-target watcher
+      // intermittently went silent after process churn — rebuilds stopped
+      // triggering at all, field-observed 2026-10-18). Polling re-stats the
+      // target every second: three watched files cost three stats/sec, and
+      // correctness beats inotify-style latency for a config file.
+      const watcher = transaction.exit(() => watch(target, { ignoreInitial: true, usePolling: true, interval: 250 }))
       const registration: Registration = { watchFilename: target, watcher, state: { dirty: false }, disposed: false }
       registrations.set(target, registration)
       const content = () => {

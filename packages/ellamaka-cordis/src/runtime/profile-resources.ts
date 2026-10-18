@@ -152,6 +152,13 @@ export const TOOLS_PROFILE_PATCH = `# Patch layer for the ellamaka tool-containe
 - { id: repeat-tool-reminder, disabled: true }
 `
 
+/** The official empty home-level patch layer (dsh PROFILE_PATCH_TEMPLATE). */
+export const OFFICIAL_HOME_PATCH_TEMPLATE = `# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; \`!!js\` expressions allowed).
+[]
+`
+
 // Revision 1 migration: older host-seeded tool profiles disabled approval.
 // The profile patch is otherwise user-owned and must never be overwritten, so
 // migrate only this exact obsolete host row and preserve every other byte.
@@ -275,6 +282,20 @@ export function prepareDshProfileResourcesAtRoot(dshRoot: string, runtime: DshRu
     const current = readFileSync(paths.toolsPatch, "utf8")
     const migrated = migrateToolsProfileRc1Patch(migrateToolsProfileApprovalPatch(current))
     if (migrated !== current) writeFileSync(paths.toolsPatch, migrated)
+  }
+
+  // Self-heal a BLANK home-level patch layer: an empty (or whitespace-only)
+  // file parses as a null YAML document, not an array, and the official
+  // reader fail-louds on it — one bad write bricks every subsequent web
+  // profile boot ("must be a top-level YAML array"). At PREPARATION time the
+  // file carries no user intent (a real layer always has content), so
+  // restoring the official empty template here is initialization semantics,
+  // not silent repair of a load-time misconfiguration. (Field incident
+  // 2026-10-18: the file was observed blanked at runtime; the web container
+  // then 401-reconnect-looped until the file was restored by hand.)
+  const homePatchPath = join(dshRoot, "home", "cordis.patch.yml")
+  if (existsSync(homePatchPath) && readFileSync(homePatchPath, "utf8").trim() === "") {
+    writeFileSync(homePatchPath, OFFICIAL_HOME_PATCH_TEMPLATE)
   }
 
   // The official resolver uses this parent-walk fallback for shared packages.
