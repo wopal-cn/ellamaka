@@ -294,7 +294,7 @@ Server 使用单一 Runtime 生命周期。某项附加能力处于 `PREPARING` 
 
 ### DSH Home Safety Boundary
 
-DSH Home protection belongs to the Runtime, not Setup. Each product build carries the shared closureVersion. A running DSH process holds a shared Home lock; changing to a newer closure version requires the exclusive lock and a successful Home backup. A recorded newer version blocks an older product from opening Home. A persistent managed marker distinguishes first adoption of legacy Home from lost version state; unknown/corrupt metadata or backup failure blocks DSH writes. First legacy adoption requires older non-cooperating DSH processes to have stopped. Setup does not prepare other products, inspect Home internals, restore backups, or translate DSH data.
+DSH Home 的保护归 Runtime 所有，不归 Setup。每个产品构建携带共享的 closureVersion。运行中的 DSH 进程持有 Home 共享锁；切换到更新的 closure 版本必须取得排他锁并完成 Home 备份。已记录的更新版本会阻止较旧产品打开 Home。持久 managed marker 用来区分历史 Home 的首次接管与版本状态丢失；元数据未知/损坏或备份失败都会阻止 DSH 写入。历史 Home 首次接管要求旧的、不参与协议的 DSH 进程已经停止；该确认由交互入口完成一次。Setup 不准备其他产品、不检查 Home 内部、不恢复备份，也不翻译 DSH 数据。
 
 ### Readiness States
 
