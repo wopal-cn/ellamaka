@@ -126,24 +126,33 @@ describe("built-in dsh adapter", () => {
     expect(await dshAdapter(input())).toEqual({})
   })
 
-  test("missing container projects failing tools instead of rejecting the session", async () => {
+  test("missing container falls back to native tools instead of failing the session", async () => {
     process.env.ELLAMAKA_DSH = "1"
     delete globals.__ellamakaDshContainer
     const missing = await dshAdapter(input())
-    const missingTools = await projected(missing)
-    expect(Object.keys(missingTools)).toHaveLength(7)
-    await expect(missingTools.read.execute({}, context())).rejects.toThrow("DSH sandbox unavailable")
+    expect(await projected(missing)).toEqual({})
 
     globals.__ellamakaDshContainer = { get: () => undefined }
     const incomplete = await dshAdapter(input())
-    const incompleteTools = await projected(incomplete)
-    expect(Object.keys(incompleteTools)).toHaveLength(7)
-    await expect(incompleteTools.read.execute({}, context())).rejects.toThrow("DSH sandbox unavailable")
+    expect(await projected(incomplete)).toEqual({})
   })
 
-  test("validates effective config and preserves inline fallback precedence", async () => {
+  test("adopts a container that appears after preparation", async () => {
+    process.env.ELLAMAKA_DSH = "1"
+    delete globals.__ellamakaDshContainer
+    const hook = await dshAdapter(input())
+    expect(await projected(hook)).toEqual({})
+    const pool = container()
+    const tools = await projected(hook)
+    expect(Object.keys(tools)).toHaveLength(7)
+    await tools.read.execute({ filePath: "a" }, context())
+    expect(pool.calls).toHaveLength(1)
+    await hook.dispose?.()
+  })
+
+  test("invalid config falls back to native tools and inline precedence is preserved", async () => {
     container()
-    await expect(dshAdapter(input({ sandbox: { enabled: "yes" } }))).rejects.toThrow("validation")
+    expect(await dshAdapter(input({ sandbox: { enabled: "yes" } }))).toEqual({})
     expect(await dshAdapter(input({ sandbox: { enabled: false } }), { sandbox: { enabled: true } })).toEqual({})
     const inline = await dshAdapter({ ...input(), pluginConfig: {} }, { sandbox: { enabled: true } })
     expect(Object.keys(await projected(inline))).toHaveLength(7)

@@ -33,7 +33,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstallationChannel } from "@wopal/ellamaka-core/installation/version"
 import { resolveWopalSpaceRoot } from "@/config/wopal-space-settings"
-import { dshAdapter, DshAdapterError } from "@wopal/ellamaka-cordis/dsh-adapter"
+import { dshAdapter } from "@wopal/ellamaka-cordis/dsh-adapter"
 import { isBuiltinDshAdapter } from "@wopal/ellamaka-core/builtin-plugins"
 import { ConfigPlugin } from "@/config/plugin"
 
@@ -41,7 +41,6 @@ const log = Log.create({ service: "plugin" })
 
 type State = {
   hooks: Hooks[]
-  requiredDsh: boolean
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -223,26 +222,21 @@ export const layer = Layer.effect(
             adapterOptions = ConfigPlugin.pluginOptions(origin.spec)
           } else plugins.push(origin)
         }
-        let requiredDsh = false
         for (const plugin of internalPlugins(flags)) {
           if (plugin === dshAdapter) {
             const init = yield* Effect.promise(async () => {
               try {
                 return await plugin(input, adapterOptions)
               } catch (cause) {
-                const failure =
-                  cause instanceof DshAdapterError ? cause : new DshAdapterError("initialization failed", { cause })
-                log.error("required internal plugin initialization failed", { name: "dsh-adapter" })
-                // Preserve passive discovery/config reads, but retain the failure
-                // as a provider so model requests cannot fall back to native.
-                return {
-                  "tool.provider": async () => {
-                    throw failure
-                  },
-                } satisfies Hooks
+                // DSH unavailable degrades to native tools: the session must
+                // keep working. The reason reaches health/logs, not the model
+                // request.
+                log.error("dsh-adapter unavailable; using native tools", {
+                  error: cause instanceof Error ? cause.message : String(cause),
+                })
+                return {} satisfies Hooks
               }
             })
-            requiredDsh = !!init["tool.provider"]
             if (Object.keys(init).length) hooks.push(init)
             continue
           }
@@ -350,7 +344,7 @@ export const layer = Layer.effect(
           Effect.forkScoped,
         )
 
-        return { hooks, requiredDsh }
+        return { hooks }
       }),
     )
 
@@ -365,13 +359,7 @@ export const layer = Layer.effect(
         const fn = hook[name] as any
         if (!fn) continue
         yield* Effect.promise(async () => {
-          try {
-            await fn(input, output)
-          } catch (cause) {
-            if (name === "tool.provider" && s.requiredDsh)
-              throw new DshAdapterError("required tool provider failed", { cause })
-            throw cause
-          }
+          await fn(input, output)
         })
       }
       return output

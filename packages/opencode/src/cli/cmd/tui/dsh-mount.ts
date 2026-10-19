@@ -61,8 +61,8 @@ function reportDshPreparationFailure(preparation: Awaited<ReturnType<typeof prep
         title: "dsh tools unavailable",
         message:
           reason === "DSH_HOME_LEGACY_ADOPTION_REQUIRED"
-            ? "An existing DSH Home needs a one-time adoption. Restart the TUI and confirm the prompt to finish it."
-            : `DSH is degraded. Chat keeps working; DSH tools report this failure when called: ${reason}`,
+            ? "An existing DSH Home needs a one-time adoption. Restart the TUI and confirm the prompt to finish it. Until then tools run without the sandbox."
+            : `DSH is degraded, so tools run without the sandbox: ${reason}`,
         variant: "error",
         duration: 10000,
       },

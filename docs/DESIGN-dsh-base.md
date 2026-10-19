@@ -65,7 +65,7 @@ Resolve DSH runtime APIs from the product's install anchor so the Bridge and DSH
 
 Expose a stable failure reason, the current build closureVersion and the recorded Home version through Runtime health when available. Do not make consumers inspect Home state directly. Publish DSH routes, tools, and handles only after the requested profile passes activation checks.
 
-A preparation-state failure keeps the native Runtime and the model session usable. This covers a pending legacy adoption, a closure failure, a busy Home and a damaged cache. DSH-backed tools stay visible and fail on invocation with the stable reason; they never fall back to native tools or an empty provider while the configuration requires DSH. A container that fails after its profile became ready keeps the existing fail-closed request semantics.
+A preparation-state failure keeps the native Runtime and the model session usable. This covers a pending legacy adoption, a closure failure, a busy Home and a damaged cache. The DSH tool surface falls back to the native tools and the host reports the stable reason through health and the entry's own feedback; it never leaves the session without working tools. A container that fails after its profile became ready keeps the existing fail-closed request semantics.
 
 ### Compiled Runtime
 

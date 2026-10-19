@@ -54,30 +54,19 @@ type Container = {
 
 const names = ["bash", "edit", "glob", "grep", "read", "str_replace_editor", "write"]
 
-function reasonOf(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
-}
-
 /**
- * Preparation-state degradation: keep the model session alive and the DSH
- * sandbox contract intact. Every projected tool stays visible and fails on
- * invocation, so a request configured for DSH never falls back to native tools.
+ * DSH sandbox unavailable: fall back to Ellamaka's native tools. The operator
+ * asked for a sandbox but none exists, so the session degrades and stays
+ * usable; the host reports the reason through health and the TUI toast. The
+ * adapter keeps watching for a container so a later mount is adopted live.
  */
-function degradedHooks(reason: string, upgrade?: () => Hooks | undefined): Hooks {
+function degradedHooks(upgrade: () => Hooks | undefined): Hooks {
   let healthy: Hooks | undefined
   return {
     "tool.provider": async (request, output) => {
-      healthy ??= upgrade?.()
+      healthy ??= upgrade()
       if (healthy?.["tool.provider"]) return healthy["tool.provider"](request, output)
-      for (const name of names) {
-        output.tools[name] = {
-          description: `${name} is unavailable because the DSH sandbox is not ready: ${reason}`,
-          args: {},
-          execute: async () => {
-            throw new DshAdapterError(`DSH sandbox unavailable: ${reason}`)
-          },
-        }
-      }
+      // No projection: the registry keeps its native tool set.
     },
     dispose: async () => {
       await healthy?.dispose?.()
@@ -317,16 +306,14 @@ export async function dshAdapter(
   if (process.env.ELLAMAKA_DSH?.toLowerCase() === "0") return {}
   const configured = input.pluginConfig?.["dsh-adapter"]
   const parsed = configSchema.safeParse(configured !== undefined ? configured : (inline ?? {}))
-  if (!parsed.success)
-    throw new DshAdapterError(
-      `config validation failed: ${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
-    )
+  // Invalid configuration cannot be honoured; running native tools beats
+  // failing every model request.
+  if (!parsed.success) return {}
   if (!parsed.data.sandbox?.enabled) return {}
   const candidate: unknown = (globalThis as Record<string, unknown>).__ellamakaDshContainer
   if (isContainer(candidate)) return healthyHooks(candidate, parsed.data)
-  // Preparation may still be running: keep the session alive with failing
-  // tools and upgrade to the real container once it appears.
-  return degradedHooks("required tool container is unavailable", () => {
+  // No sandbox: native tools, and adopt the container live once it appears.
+  return degradedHooks(() => {
     const now = (globalThis as Record<string, unknown>).__ellamakaDshContainer
     return isContainer(now) ? healthyHooks(now, parsed.data) : undefined
   })
@@ -375,7 +362,7 @@ function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
     live()
   } catch (error) {
     off()
-    return degradedHooks(reasonOf(error))
+    throw error
   }
   return {
     dispose: async () => {
