@@ -622,9 +622,9 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   }
   // Activation audit: in fail-closed mode the official optional-entry warnings
   // are captured instead of falling through to stderr, and ANY inactive entry
-  // fails the mount (Issue #252: a half-activated tools container projects
-  // broken tools). The audit diagnostic text is embedded so the host surfaces
-  // the exact entries that did not activate.
+  // fails the mount (a half-activated tools container projects broken tools).
+  // The audit diagnostic text is embedded so the host surfaces the exact
+  // entries that did not activate.
   const auditDiagnostics: string[] = []
   const auditWarn = opts.activationAudit === "fail-closed" ? (line: string) => auditDiagnostics.push(line) : undefined
   await runtime.appBoot.auditStartupEntries(
@@ -643,7 +643,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     }
     await loaderFiber.dispose().catch(() => undefined)
     throw new Error(
-      `DSH ${profileName} container activation incomplete — degrading to no dsh (Issue #252):\n${auditDiagnostics.join("\n")}`,
+      `DSH ${profileName} container activation incomplete; degrading to no sandbox:\n${auditDiagnostics.join("\n")}`,
     )
   }
 
@@ -858,7 +858,7 @@ export async function mountDshTools(ctx: Context, opts: DshHostOptions): Promise
     ...opts,
     profileName: TOOLS_PROFILE_NAME,
     requireWebServer: false,
-    // Fail closed (Issue #252): the tools container IS the host-facing
+    // Fail closed: the tools container IS the host-facing
     // capability surface; optional entries failing silently would project
     // broken tools. Any inactive entry fails the mount.
     activationAudit: "fail-closed",

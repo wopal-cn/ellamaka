@@ -208,7 +208,7 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
       },
     }
   } catch (error) {
-    // Fail closed (Issue #252): a failed or half-activated tools container is
+    // Fail closed: a failed or half-activated tools container is
     // worthless to the TUI — the dsh-adapter would project broken tools from
     // it. Degrade fully to "no dsh": dispose everything, remove the container
     // handle, and report the DSH status as DISABLED (not "degraded", which

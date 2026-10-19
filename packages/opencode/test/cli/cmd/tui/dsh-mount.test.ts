@@ -165,7 +165,7 @@ describe("tui dsh mount", () => {
     expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
   }, 60_000)
 
-  test("a tool container whose plugins fail to activate degrades fully to disabled (Issue #252)", async () => {
+  test("a tool container whose plugins fail to activate degrades fully to disabled", async () => {
     process.env.ELLAMAKA_DSH = "1"
     const wopalHome = tmpWopalHome()
     seedDshClosure(wopalHome)
