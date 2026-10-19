@@ -15,7 +15,11 @@ import { prepareDshHome, readDshHomeState, withDshHomeExclusiveAccess } from "./
 import { createDshRuntimeApi, createPackageDshRuntimeApi } from "./loader.js"
 import { inspectDshProfileResources, prepareDshProfileResources } from "./profile-resources.js"
 
-export type DshPreparationOptions = Omit<InitializeDshOptions, "entry"> & { readonly closureVersion: number }
+export type DshPreparationOptions = Omit<InitializeDshOptions, "entry"> & {
+  readonly closureVersion: number
+  /** Operator confirmation for the one-time adoption of an unversioned Home. */
+  readonly legacyAdoptionConfirmed?: boolean
+}
 
 const LOCK_WAIT_MS = 10 * 60 * 1000
 
@@ -90,6 +94,8 @@ async function inspectHome(options: DshPreparationOptions): Promise<CorePreparat
     return { state: "NEEDS_PREPARATION" }
   }
   if (state.kind === "unknown") return { state: "DEGRADED", code: "DSH_HOME_VERSION_UNKNOWN" }
+  if (state.kind === "legacy" && !options.legacyAdoptionConfirmed)
+    return { state: "DEGRADED", code: "DSH_HOME_LEGACY_ADOPTION_REQUIRED" }
   return { state: "NEEDS_PREPARATION" }
 }
 
@@ -99,7 +105,11 @@ async function prepareHome(
 ): Promise<CorePreparationStepResult> {
   if (disabled(options)) return ready()
   context.report({ phase: "home.prepare" })
-  const result = await prepareDshHome({ wopalHome: options.wopalHome, closureVersion: options.closureVersion })
+  const result = await prepareDshHome({
+    wopalHome: options.wopalHome,
+    closureVersion: options.closureVersion,
+    ...(options.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
+  })
   if (result.ok) {
     context.report({ phase: "home.completed" })
     return ready()

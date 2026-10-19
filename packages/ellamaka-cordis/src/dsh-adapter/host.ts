@@ -9,7 +9,3 @@ export function trackDshToolsInitialization<T>(work: Promise<T>): Promise<T> {
   void work.then(settled, settled)
   return work
 }
-
-export async function waitForDshToolsInitialization(): Promise<void> {
-  await initialization
-}

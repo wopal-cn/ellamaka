@@ -231,7 +231,7 @@ describe("prepareDshHome", () => {
 
     expect(await prepareDshHome({ wopalHome, closureVersion: 1 })).toEqual({
       ok: false,
-      reason: "DSH_HOME_VERSION_UNKNOWN",
+      reason: "DSH_HOME_LEGACY_ADOPTION_REQUIRED",
     })
 
     const adopted = await prepareDshHome({ wopalHome, closureVersion: 1, legacyAdoptionConfirmed: true })

@@ -117,21 +117,17 @@ describe("built-in adapter engine registration", () => {
     }),
   )
 
-  it.instance("does not swallow required container or config failure as an optional internal plugin", () =>
+  it.instance("preparation failure projects failing tools instead of using the native backend", () =>
     Effect.gen(function* () {
       setup()
       delete globals.__ellamakaDshContainer
       const service = yield* Plugin.Service
-      // Passive config/discovery hooks remain usable; only an adopted tool
-      // request must fail, never quietly substitute the native backend.
+      // Passive config/discovery hooks remain usable and the session survives;
+      // the DSH tools stay visible and fail on invocation.
       expect(Exit.isSuccess(yield* service.list().pipe(Effect.exit))).toBe(true)
-      expect(
-        Exit.isFailure(
-          yield* service
-            .trigger("tool.provider", { providerID: "test", modelID: "test" }, { tools: {} })
-            .pipe(Effect.exit),
-        ),
-      ).toBe(true)
+      const output = yield* service.trigger("tool.provider", { providerID: "test", modelID: "test" }, { tools: {} })
+      expect(Object.keys(output.tools)).toHaveLength(7)
+      expect(JSON.stringify(output.tools)).toContain("DSH sandbox is not ready")
     }),
   )
 

@@ -126,12 +126,19 @@ describe("built-in dsh adapter", () => {
     expect(await dshAdapter(input())).toEqual({})
   })
 
-  test("missing container and tools fail explicitly instead of producing an empty provider", async () => {
+  test("missing container projects failing tools instead of rejecting the session", async () => {
     process.env.ELLAMAKA_DSH = "1"
     delete globals.__ellamakaDshContainer
-    await expect(dshAdapter(input())).rejects.toBeInstanceOf(DshAdapterError)
+    const missing = await dshAdapter(input())
+    const missingTools = await projected(missing)
+    expect(Object.keys(missingTools)).toHaveLength(7)
+    await expect(missingTools.read.execute({}, context())).rejects.toThrow("DSH sandbox unavailable")
+
     globals.__ellamakaDshContainer = { get: () => undefined }
-    await expect(dshAdapter(input())).rejects.toBeInstanceOf(DshAdapterError)
+    const incomplete = await dshAdapter(input())
+    const incompleteTools = await projected(incomplete)
+    expect(Object.keys(incompleteTools)).toHaveLength(7)
+    await expect(incompleteTools.read.execute({}, context())).rejects.toThrow("DSH sandbox unavailable")
   })
 
   test("validates effective config and preserves inline fallback precedence", async () => {

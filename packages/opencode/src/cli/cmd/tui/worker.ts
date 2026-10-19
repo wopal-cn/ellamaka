@@ -59,7 +59,9 @@ let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 // block the TUI: nothing dsh-related is mounted and the worker runs untouched.
 let dshHost: { dispose(): Promise<void> } | undefined
 
-void mountDshIfEnabled()
+void mountDshIfEnabled({
+  legacyAdoptionConfirmed: process.env.ELLAMAKA_DSH_LEGACY_ADOPTION_CONFIRMED === "1",
+})
   .then((host) => {
     dshHost = host
     if (host) Log.Default.info("dsh tool container mounted", {})

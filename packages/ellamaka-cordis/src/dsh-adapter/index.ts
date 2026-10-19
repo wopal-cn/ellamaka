@@ -9,7 +9,6 @@ import {
   type ToolContext,
   type ToolDefinition,
 } from "@wopal/ellamaka-plugin"
-import { waitForDshToolsInitialization } from "./host.js"
 export { trackDshToolsInitialization } from "./host.js"
 
 const z = tool.schema
@@ -54,6 +53,37 @@ type Container = {
 }
 
 const names = ["bash", "edit", "glob", "grep", "read", "str_replace_editor", "write"]
+
+function reasonOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause)
+}
+
+/**
+ * Preparation-state degradation: keep the model session alive and the DSH
+ * sandbox contract intact. Every projected tool stays visible and fails on
+ * invocation, so a request configured for DSH never falls back to native tools.
+ */
+function degradedHooks(reason: string, upgrade?: () => Hooks | undefined): Hooks {
+  let healthy: Hooks | undefined
+  return {
+    "tool.provider": async (request, output) => {
+      healthy ??= upgrade?.()
+      if (healthy?.["tool.provider"]) return healthy["tool.provider"](request, output)
+      for (const name of names) {
+        output.tools[name] = {
+          description: `${name} is unavailable because the DSH sandbox is not ready: ${reason}`,
+          args: {},
+          execute: async () => {
+            throw new DshAdapterError(`DSH sandbox unavailable: ${reason}`)
+          },
+        }
+      }
+    },
+    dispose: async () => {
+      await healthy?.dispose?.()
+    },
+  }
+}
 const camel: Record<string, string> = { file_path: "filePath", old_string: "oldString", new_string: "newString" }
 const snake = Object.fromEntries(Object.entries(camel).map(([a, b]) => [b, a]))
 type JsonSchema = {
@@ -292,15 +322,18 @@ export async function dshAdapter(
       `config validation failed: ${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
     )
   if (!parsed.data.sandbox?.enabled) return {}
-  try {
-    await waitForDshToolsInitialization()
-  } catch (cause) {
-    throw new DshAdapterError("host initialization failed", { cause })
-  }
   const candidate: unknown = (globalThis as Record<string, unknown>).__ellamakaDshContainer
-  if (!isContainer(candidate)) throw new DshAdapterError("required tool container is unavailable")
-  const container = candidate
-  const mode = parsed.data.sandbox.mode ?? "workspace-write"
+  if (isContainer(candidate)) return healthyHooks(candidate, parsed.data)
+  // Preparation may still be running: keep the session alive with failing
+  // tools and upgrade to the real container once it appears.
+  return degradedHooks("required tool container is unavailable", () => {
+    const now = (globalThis as Record<string, unknown>).__ellamakaDshContainer
+    return isContainer(now) ? healthyHooks(now, parsed.data) : undefined
+  })
+}
+
+function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
+  const mode = config.sandbox?.mode ?? "workspace-write"
   const sessions = new Map<string, Facade>()
   // The async call scope is shared by nested approval events, not by concurrent
   // executions with the same session id. No retained ask survives a call.
@@ -342,7 +375,7 @@ export async function dshAdapter(
     live()
   } catch (error) {
     off()
-    throw error
+    return degradedHooks(reasonOf(error))
   }
   return {
     dispose: async () => {
@@ -370,7 +403,7 @@ export async function dshAdapter(
               ctx.abort.throwIfAborted()
               let session = sessions.get(ctx.sessionID)
               if (!session) {
-                session = facade(ctx.sessionID, ctx.directory, mode, parsed.data.escalation ?? "ask")
+                session = facade(ctx.sessionID, ctx.directory, mode, config.escalation ?? "ask")
                 sessions.set(ctx.sessionID, session)
               }
               const requested = ctx.extra?.sandboxMode

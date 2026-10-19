@@ -22,6 +22,8 @@ export interface DshMountOptions {
   logDir?: string
   /** Path to the dedicated DSH runtime-manager log file. */
   runtimeLogFile?: string
+  /** The operator confirmed the one-time adoption of an unversioned Home. */
+  legacyAdoptionConfirmed?: boolean
 }
 
 export interface DshMountHandle {
@@ -42,6 +44,32 @@ export interface DshMountHandle {
  * runtime injected; `disabled`/`degraded` return `undefined` and the TUI runs
  * untouched.
  */
+/**
+ * Preparation-state failure (pending legacy adoption, closure failure, busy
+ * Home) must be visible and must never stop the session.
+ */
+function reportDshPreparationFailure(preparation: Awaited<ReturnType<typeof prepareDshHost>>): void {
+  if (preparation.status !== "degraded") return
+  const reason = preparation.preparation?.reason
+  if (!reason) return
+  Log.Default.warn("dsh tools unavailable", { reason })
+  GlobalBus.emit("event", {
+    directory: "global",
+    payload: {
+      type: "tui.toast.show",
+      properties: {
+        title: "dsh tools unavailable",
+        message:
+          reason === "DSH_HOME_LEGACY_ADOPTION_REQUIRED"
+            ? "An existing DSH Home needs a one-time adoption. Restart the TUI and confirm the prompt to finish it."
+            : `DSH is degraded. Chat keeps working; DSH tools report this failure when called: ${reason}`,
+        variant: "error",
+        duration: 10000,
+      },
+    },
+  })
+}
+
 export function mountDshIfEnabled(opts: DshMountOptions = {}): Promise<DshMountHandle | undefined> {
   return trackDshToolsInitialization(mountDshIfEnabledImpl(opts))
 }
@@ -60,7 +88,9 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
     runtimeLogFile,
     logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
+    ...(opts.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
   })
+  reportDshPreparationFailure(preparation)
   if (preparation.status !== "prepared") return undefined
 
   // Runtime admission is separate from preparation. Hold this shared lease

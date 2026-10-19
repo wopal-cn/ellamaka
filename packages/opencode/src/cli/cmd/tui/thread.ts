@@ -23,6 +23,9 @@ import {
 import { validateSession } from "./validate-session"
 import { flushStdout } from "./exit-flush"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+import { createInterface } from "node:readline/promises"
+import { Global } from "@wopal/ellamaka-core/global"
+import { readDshHomeState } from "@wopal/ellamaka-cordis/runtime"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -70,6 +73,32 @@ async function input(value?: string) {
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value
+}
+
+/**
+ * One-time, explicit operator confirmation for an unversioned DSH Home.
+ * The new Home lock cannot prove that a pre-lock build has stopped, so TUI is
+ * the interactive entry that turns the operator's assertion into permission.
+ */
+async function confirmLegacyDshHomeAdoption(): Promise<boolean> {
+  if (process.env.ELLAMAKA_DSH === "0") return false
+  if (!process.stdin.isTTY || !process.stdout.isTTY) return false
+  let state: Awaited<ReturnType<typeof readDshHomeState>>
+  try {
+    state = await readDshHomeState(Global.Path.wopalHome)
+  } catch {
+    return false
+  }
+  if (state.kind !== "legacy") return false
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const answer = await rl.question(
+      "An existing DSH Home needs a one-time adoption. Quit any older Ellamaka/DSH processes first. Back up and adopt it now? [y/N] ",
+    )
+    return /^y(es)?$/i.test(answer.trim())
+  } finally {
+    rl.close()
+  }
 }
 
 export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
@@ -140,9 +169,11 @@ export const TuiThreadCommand = cmd({
         return
       }
       const cwd = Filesystem.resolve(process.cwd())
+      const legacyAdoptionConfirmed = await confirmLegacyDshHomeAdoption()
       const env = sanitizedProcessEnv({
         [OPENCODE_PROCESS_ROLE]: "worker",
         [OPENCODE_RUN_ID]: ensureRunID(),
+        ...(legacyAdoptionConfirmed ? { ELLAMAKA_DSH_LEGACY_ADOPTION_CONFIRMED: "1" } : {}),
       })
 
       const worker = new Worker(file, {

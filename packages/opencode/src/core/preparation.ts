@@ -23,6 +23,8 @@ export type DshHostPreparationOptions = {
   logLevel?: DshLogLevel
   print?: boolean
   env?: Record<string, string | undefined>
+  /** Operator confirmation for the one-time adoption of an unversioned Home. */
+  legacyAdoptionConfirmed?: boolean
   onProgress?: (event: CorePreparationEvent) => void
 }
 
@@ -50,7 +52,10 @@ function enabled(env: Record<string, string | undefined>): boolean {
 }
 
 function hostKey(options: DshHostPreparationOptions): string {
-  return `${resolve(options.wopalHome)}::${DEFAULT_DSH_RUNTIME_MANIFEST.fingerprint ?? DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion}`
+  const identity = DEFAULT_DSH_RUNTIME_MANIFEST.fingerprint ?? DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion
+  // A confirmed legacy adoption is a distinct preparation attempt; it must not
+  // reuse the service created for the unconfirmed (degraded) inspection.
+  return `${resolve(options.wopalHome)}::${identity}::${options.legacyAdoptionConfirmed ? "adopted" : "default"}`
 }
 
 function publish(
@@ -86,6 +91,7 @@ function getRuntime(options: DshHostPreparationOptions): HostRuntime {
       env: options.env,
       manifest: DEFAULT_DSH_RUNTIME_MANIFEST,
       closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion,
+      ...(options.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
     }),
   }
   hosts.set(key, runtime)

@@ -30,11 +30,13 @@ type StartCommand = {
 
 type StopCommand = { type: "stop" }
 type SetLogLevelCommand = { type: "setLogLevel"; level: "DEBUG" | "INFO" | "WARN" | "ERROR" }
-type SidecarCommand = StartCommand | StopCommand | SetLogLevelCommand
+type AdoptLegacyDshHomeCommand = { type: "adoptLegacyDshHome" }
+type SidecarCommand = StartCommand | StopCommand | SetLogLevelCommand | AdoptLegacyDshHomeCommand
 
 type SidecarMessage =
   | { type: "sqlite"; progress: { type: "InProgress"; value: number } | { type: "Done" } }
   | { type: "ready" }
+  | { type: "dshLegacyAdoptionRequired" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
 
@@ -109,10 +111,14 @@ let disposeOnboarding: (() => void) | undefined
 let dshLaunchState:
   | {
       status: import("virtual:opencode-server").DshRuntimeStatus
+      reason?: string
       anchor?: import("virtual:opencode-server").DshInstallAnchor
       runtime?: import("virtual:opencode-server").DshRuntimeApi
     }
   | undefined
+let currentStartCommand: StartCommand | undefined
+let dshWatcherStarted = false
+let dshInitialization: Promise<void> | undefined
 let dshHomeAccess: { lease: import("virtual:opencode-server").DshHomeRuntimeLease; homeVersion: number } | undefined
 
 /**
@@ -130,6 +136,10 @@ export function handleSidecarMessage(data: unknown) {
   }
   if (command.type === "setLogLevel") {
     void setLogLevel(command.level)
+    return
+  }
+  if (command.type === "adoptLegacyDshHome") {
+    void adoptLegacyDshHome()
     return
   }
   void start(command)
@@ -214,6 +224,17 @@ async function start(command: StartCommand) {
         serverPassword: command.password,
       })
     }
+    // Server readiness is independent from DSH readiness: the window and the
+    // native Runtime must not wait for DSH preparation (DESIGN-desktop.md).
+    currentStartCommand = command
+    if (process.env.ELLAMAKA_DSH !== "0") {
+      const { setDshStatus } = await import("virtual:opencode-server")
+      // Health must not report the "disabled" default while preparation is
+      // about to run: the window may query it before the first step starts.
+      setDshStatus("preparing")
+    }
+    parentPort.postMessage({ type: "ready" })
+
     // Optional dsh engine (single-process, DESIGN-dsh-base.md). The
     // unified CorePreparation host service (consumed via `virtual:opencode-server`,
     // which the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
@@ -225,25 +246,8 @@ async function start(command: StartCommand) {
     // initialisation per launch is shared by both mounts (W-02); each mount is
     // wrapped in a degrade boundary so a broken closure never exits the
     // sidecar (B-06).
-    await mountDshIfPresent(command)
-    await mountDshToolsIfPresent(command)
-    await startDshPluginWatcher(command)
-    const { setDshStatus } = await import("virtual:opencode-server")
-    if (dshLaunchState?.status === "ready") {
-      if (dshHost && dshToolsHost) setDshStatus("ready")
-      else {
-        setDshStatus("degraded")
-        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
-        await dshPluginService?.stop()
-        dshPluginService = undefined
-        await Promise.allSettled([dshHost?.dispose(), dshToolsHost?.dispose()])
-        dshHost = undefined
-        dshToolsHost = undefined
-        if (dshHomeAccess) await dshHomeAccess.lease.release()
-        dshHomeAccess = undefined
-      }
-    }
-    parentPort.postMessage({ type: "ready" })
+    dshInitialization = initializeDsh(command)
+    await dshInitialization
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
     setImmediate(() => process.exit(1))
@@ -320,13 +324,13 @@ export async function resolveEllamakaInstallCommand(wopalHomeOverride?: string):
  * diagnosis). A broken closure degrades instead of crashing the sidecar
  * (B-06).
  */
-async function mountDshIfPresent(command: StartCommand): Promise<void> {
+async function mountDshIfPresent(command: StartCommand, legacyAdoptionConfirmed = false): Promise<void> {
   const { wopalHome, logDir, home } = dshLaunch(command)
   const { bootDshWeb, setDshUrlGetter, Log, toDshLogLevel } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   try {
     sidecarLog.info("dsh.desktop.web.start", { home, logDir })
-    const launch = await initDshLaunch(command)
+    const launch = await initDshLaunch(command, legacyAdoptionConfirmed)
     if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
       sidecarLog.warn("dsh.desktop.web.skip", { status: launch.status })
       return
@@ -401,12 +405,12 @@ async function mountDshIfPresent(command: StartCommand): Promise<void> {
  * skip silently; the adapter degrades to no projected tools and ellamaka
  * builtins keep serving.
  */
-async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
+async function mountDshToolsIfPresent(command: StartCommand, legacyAdoptionConfirmed = false): Promise<void> {
   const { logDir, home } = dshLaunch(command)
   const { bootDshTools, Log, toDshLogLevel } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   try {
-    const launch = await initDshLaunch(command)
+    const launch = await initDshLaunch(command, legacyAdoptionConfirmed)
     if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
       sidecarLog.warn("dsh.desktop.tools.skip", { status: launch.status })
       return
@@ -444,7 +448,10 @@ async function mountDshToolsIfPresent(command: StartCommand): Promise<void> {
  * cache additionally makes the sequential web + tool mounts share one terminal
  * preparation result, Home lease, anchor and closure runtime.
  */
-async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof dshLaunchState>> {
+async function initDshLaunch(
+  command: StartCommand,
+  legacyAdoptionConfirmed = false,
+): Promise<NonNullable<typeof dshLaunchState>> {
   if (dshLaunchState) return dshLaunchState
   const { wopalHome, runtimeLogFile } = dshLaunch(command)
   const {
@@ -464,12 +471,14 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
     wopalHome,
     runtimeLogFile,
     logLevel: toDshLogLevel(sidecarLogLevel.current),
+    ...(legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
   })
   const status: import("virtual:opencode-server").DshRuntimeStatus =
     preparation.status === "prepared" ? "ready" : preparation.status
-  sidecarLog.info("dsh.desktop.prepare.status", { status })
+  const reason = preparation.preparation?.reason
+  sidecarLog.info("dsh.desktop.prepare.status", { status, ...(reason ? { reason } : {}) })
   if (status !== "ready") {
-    dshLaunchState = { status }
+    dshLaunchState = { status, ...(reason ? { reason } : {}) }
     return dshLaunchState
   }
   const homeAccess = await acquireDshHomeRuntimeAccess({
@@ -503,6 +512,61 @@ async function initDshLaunch(command: StartCommand): Promise<NonNullable<typeof 
     dshLaunchState = { status: "degraded" }
     return dshLaunchState
   }
+}
+
+/**
+ * Prepare and mount DSH after server readiness. A failure degrades DSH only;
+ * the listener, native Runtime and window stay available.
+ */
+async function initializeDsh(command: StartCommand, legacyAdoptionConfirmed = false): Promise<void> {
+  try {
+    await mountDshIfPresent(command, legacyAdoptionConfirmed)
+    await mountDshToolsIfPresent(command, legacyAdoptionConfirmed)
+    if (!dshWatcherStarted) {
+      await startDshPluginWatcher(command)
+      if (dshHost?.includeEntry && dshToolsHost?.includeEntry) dshWatcherStarted = true
+    }
+    const { setDshStatus } = await import("virtual:opencode-server")
+    if (dshLaunchState?.status === "ready") {
+      if (dshHost && dshToolsHost) setDshStatus("ready")
+      else {
+        setDshStatus("degraded")
+        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+        await dshPluginService?.stop()
+        dshPluginService = undefined
+        await Promise.allSettled([dshHost?.dispose(), dshToolsHost?.dispose()])
+        dshHost = undefined
+        dshToolsHost = undefined
+        if (dshHomeAccess) await dshHomeAccess.lease.release()
+        dshHomeAccess = undefined
+      }
+    }
+    if (dshLaunchState?.reason === "DSH_HOME_LEGACY_ADOPTION_REQUIRED")
+      parentPort.postMessage({ type: "dshLegacyAdoptionRequired" })
+  } catch (error) {
+    const { Log, setDshStatus } = await import("virtual:opencode-server")
+    setDshStatus("degraded")
+    Log.create({ service: "dsh-desktop" }).error("dsh.desktop.initialize.failed", {
+      error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+    })
+  }
+}
+
+/** One-time adoption requested by the window-level confirmation dialog. */
+async function adoptLegacyDshHome(): Promise<void> {
+  const command = currentStartCommand
+  if (!command) return
+  // The startup preparation may still be running; wait so adoption never
+  // races it into two mounts of the same profile.
+  await dshInitialization?.catch(() => undefined)
+  const { Log } = await import("virtual:opencode-server")
+  Log.create({ service: "dsh-desktop" }).info("dsh.desktop.legacy-adoption.start")
+  dshLaunchState = undefined
+  if (dshHomeAccess) {
+    await dshHomeAccess.lease.release()
+    dshHomeAccess = undefined
+  }
+  await initializeDsh(command, true)
 }
 
 /**

@@ -14,12 +14,17 @@ export type SidecarRuntimeState = {
 }
 
 export type SidecarSpawnResult = {
-  listener: { stop: () => Promise<void>; setLogLevel: (level: SidecarLogLevel) => void }
+  listener: {
+    stop: () => Promise<void>
+    setLogLevel: (level: SidecarLogLevel) => void
+    adoptLegacyDshHome?: () => void
+  }
   health: { wait: Promise<void> }
 }
 
 export type SidecarSpawnOptions = {
   onSqliteProgress?: (progress: any) => void
+  onDshLegacyAdoptionRequired?: () => void
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
@@ -43,6 +48,7 @@ export type SidecarSupervisorDeps = {
   maxAttempts?: number
   stableWindowMs?: number
   onSqliteProgress?: (progress: any) => void
+  onDshLegacyAdoptionRequired?: () => void
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
@@ -97,6 +103,7 @@ export class SidecarSupervisor {
     maxAttempts: number
     stableWindowMs: number
     onSqliteProgress?: (progress: any) => void
+    onDshLegacyAdoptionRequired?: () => void
     onStdout?: (message: string) => void
     onStderr?: (message: string) => void
     onExit?: (code: number) => void
@@ -144,6 +151,10 @@ export class SidecarSupervisor {
     this.currentSpawn?.listener.setLogLevel(level)
   }
 
+  adoptLegacyDshHome(): void {
+    this.currentSpawn?.listener.adoptLegacyDshHome?.()
+  }
+
   waitForReady(): Promise<SidecarRuntimeState> {
     return new Promise<SidecarRuntimeState>((resolve, reject) => {
       if (this.state.status === "ready") {
@@ -188,10 +199,7 @@ export class SidecarSupervisor {
       this.waitForReadyResolve = undefined
       this.waitForReadyReject = undefined
     }
-    if (
-      (this.state.status === "failed" || this.state.status === "stopped") &&
-      this.waitForReadyReject
-    ) {
+    if ((this.state.status === "failed" || this.state.status === "stopped") && this.waitForReadyReject) {
       this.waitForReadyReject(new Error(`Sidecar is ${this.state.status}`))
       this.waitForReadyResolve = undefined
       this.waitForReadyReject = undefined
@@ -242,7 +250,9 @@ export class SidecarSupervisor {
       // Force restart from ready: suppress doLost during stop, then start anew
       this.suppressNextExit = true
       if (this.currentSpawn) {
-        try { await this.currentSpawn.listener.stop() } catch {}
+        try {
+          await this.currentSpawn.listener.stop()
+        } catch {}
         this.currentSpawn = null
       }
       this.clearTimers()
@@ -298,6 +308,7 @@ export class SidecarSupervisor {
     try {
       const result = await this.deps.spawn(hostname, port, password, {
         onSqliteProgress: this.deps.onSqliteProgress,
+        onDshLegacyAdoptionRequired: this.deps.onDshLegacyAdoptionRequired,
         onStdout: this.deps.onStdout,
         onStderr: this.deps.onStderr,
         onExit: (code: number) => {

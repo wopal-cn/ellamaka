@@ -62,11 +62,12 @@ declare module "virtual:opencode-server" {
     logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
     print?: boolean
     env?: Record<string, string | undefined>
+    legacyAdoptionConfirmed?: boolean
   }
 
   export const prepareDshHost: (options: DshHostPreparationOptions) => Promise<{
     status: "disabled" | "prepared" | "degraded"
-    preparation?: unknown
+    preparation?: { reason?: string }
   }>
   export interface DshHomeRuntimeLease {
     readonly mode: "shared"

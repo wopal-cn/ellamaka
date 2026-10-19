@@ -5,7 +5,7 @@ import { createServer } from "node:net"
 import { homedir } from "node:os"
 import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import type { Event } from "electron"
-import { app, BrowserWindow } from "electron"
+import { app, BrowserWindow, dialog } from "electron"
 
 import contextMenu from "electron-context-menu"
 
@@ -64,6 +64,32 @@ const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
 let mainWindow: BrowserWindow | null = null
+
+/**
+ * One-time confirmation for an unversioned DSH Home. The sidecar reports the
+ * need after the window is available; the dialog never blocks server startup
+ * or native sessions. Declining keeps DSH degraded.
+ */
+let pendingDshLegacyAdoption = false
+async function confirmDshLegacyAdoption() {
+  if (!mainWindow) {
+    pendingDshLegacyAdoption = true
+    return
+  }
+  pendingDshLegacyAdoption = false
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: "warning",
+    title: "DSH Home adoption",
+    message: "An existing DSH Home needs a one-time adoption",
+    detail:
+      "Quit any older Ellamaka or DSH processes first. Ellamaka will back up Home before recording the new version.",
+    buttons: ["Back up and adopt", "Not now"],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  })
+  if (result.response === 0) supervisor?.adoptLegacyDshHome()
+}
 let supervisor: SidecarSupervisor | null = null
 
 const initEmitter = new EventEmitter()
@@ -214,6 +240,7 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
       port,
       password,
       onSqliteProgress: (progress) => initEmitter.emit("sqlite", progress),
+      onDshLegacyAdoptionRequired: () => void confirmDshLegacyAdoption(),
       onStdout: (message) => writeLog("server", "stdout", { message }),
       onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
       onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
@@ -312,6 +339,7 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
     mainWindow = createMainWindow()
     if (mainWindow) attachWorkbenchChrome(mainWindow)
     overlay?.close()
+    if (mainWindow && pendingDshLegacyAdoption) void confirmDshLegacyAdoption()
   })
 
 const main = Effect.gen(function* () {

@@ -8,6 +8,7 @@ export type DshHomeFailureReason =
   | "DSH_HOME_BUSY"
   | "DSH_HOME_NEWER_THAN_RUNTIME"
   | "DSH_HOME_VERSION_UNKNOWN"
+  | "DSH_HOME_LEGACY_ADOPTION_REQUIRED"
   | "DSH_HOME_BACKUP_FAILED"
   | "DSH_HOME_STATE_WRITE_FAILED"
 
@@ -171,7 +172,7 @@ async function prepareUnderExclusive(
   }
 
   if (state.kind === "legacy" && !options.legacyAdoptionConfirmed) {
-    return { ok: false, reason: "DSH_HOME_VERSION_UNKNOWN" }
+    return { ok: false, reason: "DSH_HOME_LEGACY_ADOPTION_REQUIRED" }
   }
 
   // A valid state without its marker is not legacy. Repair the marker under
