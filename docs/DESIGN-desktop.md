@@ -136,9 +136,9 @@ sidecar (background)
        -> CorePreparation(instance(directory)) for plugin dependencies
 ```
 
-DSH preparation progress and terminal state reach the Renderer through `/global/health` and the `core.preparation` events. The window and native sessions never wait for DSH.
+DSH 的准备进度与终态通过 `/global/health` 和 `core.preparation` 事件送达 Renderer。窗口与原生会话从不等待 DSH。
 
-An unversioned Home adoption is confirmed once by the Desktop entry after the window is available. The confirmation is a Desktop window-level dialog, never an Onboarding step; Setup does not drive CorePreparation. Confirming asks the sidecar to adopt Home under the exclusive lock and then mount DSH. Declining keeps DSH degraded and the application usable; the same confirmation appears on the next launch while Home remains unadopted.
+无版本 Home 的接管由 Desktop 入口在窗口可用之后确认一次。确认面是 Desktop 的窗口级对话框，不是 Onboarding 步骤；Setup 不驱动 CorePreparation。确认后由 sidecar 在排他锁下接管 Home，再挂载 DSH。拒绝则保持 DSH degraded，应用继续可用；Home 未被接管期间，下次启动会再次出现同一确认。
 
 Core readiness 不是是否展示 Onboarding 的唯一条件。Renderer 依据 Setup state 和 machine facts 进入配置阶段或运行阶段。Desktop Main 不读取 `onboarding.json` 推断 Core，也不实现 closure materializer、Home backup 或 plugin dependency installer。
 
