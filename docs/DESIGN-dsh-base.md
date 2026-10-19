@@ -21,7 +21,7 @@ The basic safety boundary protects the single DSH Home from being opened by an o
 2. Ellamaka maintains one increasing closureVersion shared by CLI and Desktop builds. It changes when the pinned DSH closure or product-owned DSH files change in a way that can affect Home data. Product SemVer and release channel do not identify Home compatibility.
 3. Every DSH-enabled runtime holds a shared OS lock while using Home. The same closure version may run in multiple processes. Switching to a newer version requires the exclusive form of that same lock; an active older runtime therefore prevents the switch.
 4. Before a newer version can write Home, the product completes a backup and then records the new version. A backup or state write failure prevents DSH activation. An older version refuses to open a Home marked with a newer version.
-5. A small persistent managed marker records that Ellamaka has taken ownership of this Home. An existing Home without both marker and version state is adopted once, after old DSH processes have stopped, the exclusive lock is held, and a backup succeeds. If the marker exists but the version state is missing, or either metadata file is corrupt, report unknown state and refuse Home writes. Do not infer its history from DSH-private files.
+5. A small persistent managed marker records that Ellamaka has taken ownership of this Home. An existing Home without both marker and version state is adopted once, after the operator confirms that old DSH processes have stopped, the exclusive lock is held, and a backup succeeds. The product never adopts an unversioned Home on its own. If the marker exists but the version state is missing, or either metadata file is corrupt, report unknown state and refuse Home writes. Do not infer its history from DSH-private files.
 6. If activation fails after the new version may have changed Home, retain the backup and report the failure. Do not restore Home automatically or start an older closure.
 7. DSH owns its private data format. Ellamaka does not build a compatibility graph, data converter, automated restore flow, or recovery command. A DSH failure degrades DSH while native Ellamaka remains available.
 8. The product that starts a Runtime prepares its own DSH resources. Setup does not scan other installed products or prepare their Home.
@@ -64,6 +64,8 @@ Resolve DSH runtime APIs from the product's install anchor so the Bridge and DSH
 | degraded | DSH is unavailable; native Ellamaka remains usable |
 
 Expose a stable failure reason, the current build closureVersion and the recorded Home version through Runtime health when available. Do not make consumers inspect Home state directly. Publish DSH routes, tools, and handles only after the requested profile passes activation checks.
+
+A preparation-state failure keeps the native Runtime and the model session usable. This covers a pending legacy adoption, a closure failure, a busy Home and a damaged cache. DSH-backed tools stay visible and fail on invocation with the stable reason; they never fall back to native tools or an empty provider while the configuration requires DSH. A container that fails after its profile became ready keeps the existing fail-closed request semantics.
 
 ### Compiled Runtime
 
@@ -156,7 +158,7 @@ Before profile setup or DSH activation, compare the product's version with state
 | Home state | Handling |
 |---|---|
 | Home, marker and state are all absent | First preparation records the version and managed marker before DSH activation |
-| Existing Home has neither marker nor version state | With old DSH processes stopped and the exclusive lock held, back up Home, then record the current version and marker |
+| Existing Home has neither marker nor version state | With the operator's one-time confirmation that old DSH processes have stopped and the exclusive lock held, back up Home, then record the current version and marker |
 | Marker exists but version state is missing, or metadata is unreadable/invalid | Report unknown state, preserve the files and refuse Home writes |
 | Valid version state exists but marker is absent | Preserve the recorded version; complete the missing marker under the exclusive lock before activation, without treating Home as unversioned |
 | Recorded version equals the product version | Use the Home under a shared lock |
@@ -164,6 +166,8 @@ Before profile setup or DSH activation, compare the product's version with state
 | Product version is newer | Obtain the exclusive lock, back up the current Home, update the recorded version, then prepare product-owned files and activate DSH |
 
 A failed backup or metadata publication grants the candidate runtime no Home write access. Version and marker publication use atomic file writes; incomplete metadata is reported, not automatically erased or guessed. Existing managed Home keeps its previous version when a version update fails. The backup is a copy for manual recovery, not a runtime directory. It retains the source closureVersion and managed metadata when known; an unversioned legacy source is explicitly marked unknown. First adoption of unversioned Home is an offline upgrade boundary: older builds do not hold this new lock, so obtaining it alone does not prove those older processes have stopped. Ellamaka does not verify or translate DSH-private data formats.
+
+Unversioned Home adoption is the only Home transition that requires an operator action. The interactive entries TUI and Desktop present the confirmation once, next to the local application, and name the requirement to stop older Ellamaka/DSH processes. Non-interactive entries never prompt: they report `DSH_HOME_LEGACY_ADOPTION_REQUIRED` through health and preparation and direct the operator to an interactive entry. Confirmation performs exclusive lock, backup with an unknown source version, then atomic version and marker publication; any failure leaves Home untouched. The version gate protects every build that participates in this protocol. A lock-unaware build remains outside it, so it must not run against an adopted Home.
 
 ### Activation Failure and Manual Recovery
 
