@@ -111,6 +111,8 @@ Loader 的 internal 值保持真实。宿主不使用 Node 私有加载器模拟
 
 Bun 缺少官方 provider 消费的标准诊断 API 时，由 Bridge 在加载前初始化小型兼容入口。`getSystemErrorMessage` 缺失时，以 `getSystemErrorName` 提供错误码诊断并同步 builtin ESM exports。原生实现存在时直接使用原生实现。
 
+Bun 中 `node:util` 的 ESM 命名空间在首次被静态 import 时就已绑定，之后再声明新导出不会出现在该命名空间里，因此上一条的运行时补丁无法覆盖已经 import 过它的模块图。官方 subprocess provider 以命名导入方式消费 `getSystemErrorMessage`，Bun 下会直接 import 失败，进而使 `bash-sandbox`、`tool-bash`、`tool-fs-search`、`ptc-runtime` 等入口保持 pending。Bridge 在 Bun 下用加载插件把这一行导入改写成"保留 `getSystemErrorName` 与 `inspect`，本地以同义函数补 `getSystemErrorMessage`"；改写锚点必须精确且唯一，上游形状变化时显式失败，不静默降级为无 subprocess 后端。Node 与 Desktop 使用原生实现，不启用该改写。
+
 兼容入口只处理已确定的 API 差异。进程和沙箱错误分类依赖结构化 code/errno，避免依赖某个运行时的错误文案。
 
 ## Configuration Lifecycle

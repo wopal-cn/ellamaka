@@ -57,8 +57,12 @@ const names = ["bash", "edit", "glob", "grep", "read", "str_replace_editor", "wr
 /**
  * DSH sandbox unavailable: fall back to Ellamaka's native tools. The operator
  * asked for a sandbox but none exists, so the session degrades and stays
- * usable; the host reports the reason through health and the TUI toast. The
- * adapter keeps watching for a container so a later mount is adopted live.
+ * usable; the host reports the reason through health and the TUI toast.
+ *
+ * `upgrade` is polled on each tool listing, not by a timer. It only finds a
+ * container that this same process published after the adapter was created
+ * (Desktop publishes one when the operator confirms adoption). A process that
+ * never mounts a container keeps native tools until it restarts.
  */
 function degradedHooks(upgrade: () => Hooks | undefined): Hooks {
   let healthy: Hooks | undefined

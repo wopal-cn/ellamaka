@@ -34,6 +34,7 @@ import { profileCapabilityPatches } from "./plugins/profile-capabilities.js"
 import { createProfilePackages, createProfilePluginManager } from "./plugins/plugin-metadata.js"
 import { installElectronSubprocess } from "./runtime/electron-subprocess.js"
 import { installBunPtcCompatibility } from "./runtime/bun-ptc.js"
+import { installBunSubprocessCompatibility } from "./runtime/bun-subprocess.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
@@ -383,6 +384,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // test fixtures); for a real materialised closure it is a no-op.
   const installAnchor = realpathSync(opts.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"))
   installBunPtcCompatibility()
+  installBunSubprocessCompatibility()
 
   const { createRuntimeResolution } = runtime.appBoot
   const loadProfile = (...args: Parameters<typeof runtime.appBoot.loadProfile>) => {
