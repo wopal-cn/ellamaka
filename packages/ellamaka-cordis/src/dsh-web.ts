@@ -726,6 +726,19 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   for (const file of [profile.patchPath, join(profile.dir, "package.json"), join(homeDir, "cordis.patch.yml")]) {
     watchDisposers.push(await bunHmr.watchConfig(file, refresh))
   }
+  // The market's post-install acknowledgement must be answered by the
+  // container that owns the composition. With the web container in its own
+  // child process, nobody else can bind this bridge — leaving it unbound
+  // answers every `activate()` with "watcher is unavailable", so the market
+  // falls back to its own temporary loader tree (a second composition source).
+  pluginActivation?.bind(async () => {
+    try {
+      await bunHmr.runExclusive(refresh)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
   const watchDispose = async () => {
     for (const dispose of watchDisposers) await dispose()
   }

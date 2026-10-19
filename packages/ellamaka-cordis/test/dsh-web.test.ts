@@ -172,6 +172,14 @@ describe("dsh web engine", () => {
       const desktopPnpm = ctx.get("desktopPnpm") as { runPlugin?: unknown } | undefined
       expect(desktopPnpm).toBeDefined()
       expect(typeof desktopPnpm!.runPlugin).toBe("function")
+
+      // The market's post-install acknowledgement is served by the container
+      // that owns the composition. With the web container in its own child
+      // process the host cannot answer this bridge, so the mount binds it
+      // itself — an unbound bridge would answer "watcher is unavailable" and
+      // push the market onto its own temporary loader tree.
+      const activation = await host.pluginActivation!.activate()
+      expect(activation).toEqual({ ok: true })
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()

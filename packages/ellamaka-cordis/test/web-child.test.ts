@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http"
 import { join } from "node:path"
 import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { runWebChildIfRequested, webChildReadyLine } from "../src/runtime/web-child"
+import { runWebChildIfRequested, parseWebChildArgs, webChildReadyLine } from "../src/runtime/web-child"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 import { prepareDshHome } from "../src/runtime/home-guard"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "../src/runtime/manager"
@@ -51,6 +51,29 @@ describe("dsh:web child process boundary", () => {
   test("webChildReadyLine is one JSON line with the bound port", () => {
     const parsed: unknown = JSON.parse(webChildReadyLine(51234, "/?token=test-token"))
     expect(parsed).toEqual({ ready: true, port: 51234, authPath: "/?token=test-token" })
+  })
+
+  test("the child argv carries the install launcher and the fence allowlist", () => {
+    const options = parseWebChildArgs([
+      "ellamaka",
+      "dsh",
+      "web-child",
+      "--ellamaka-dsh-web-child",
+      "--home",
+      "/home/.wopal/dsh",
+      "--port",
+      "0",
+      "--trusted-host",
+      "192.168.1.5:4100",
+      "--ellamaka-command",
+      "bun",
+      "--ellamaka-command",
+      "/repo/src/index.ts",
+    ])
+    expect(options?.trustedHosts).toEqual(["192.168.1.5:4100"])
+    // The launcher is a multi-part command; each part is one flag occurrence,
+    // so a launcher with prefix args (`bun <entry>`) survives the hop.
+    expect(options?.ellamakaCommand).toEqual(["bun", "/repo/src/index.ts"])
   })
 
   test("child boots the web profile on a real port and serves HTTP until shutdown", async () => {

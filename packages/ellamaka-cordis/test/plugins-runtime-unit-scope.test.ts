@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { startDshPluginService, type DshPluginContainer, type DshPluginServiceHandle } from "../src/plugins/runtime"
 import { profileDirOf } from "../src/plugins/compose"
+import { createDependencyRebuildGate } from "../src/plugins/rebuild-gate"
 
 /**
  * Per-unit reload scoping (DESIGN.md#unified-reload--lifecycle, Plan Task 9).
@@ -140,5 +141,62 @@ describe("per-unit reload scoping", () => {
     expect(recovered).toEqual({ ok: true })
     expect(web.calls).toBe(1)
     expect(tools.calls).toBe(1) // tools unchanged since its 2.0.0 replay
+  })
+})
+
+describe("dsh:web external rebuild gating (hot replay vs cold reload)", () => {
+  /** A web unit behind an external rebuild boundary, as the child-process host wires it. */
+  function gatedWebUnit(home: string, rebuilds: { value: number }) {
+    return {
+      profile: "web",
+      includeEntry: { id: "web-child", async update() {} },
+      rebuild: createDependencyRebuildGate({
+        profileDir: profileDirOf(home, "web"),
+        rebuild: async () => {
+          rebuilds.value += 1
+        },
+      }),
+    } satisfies DshPluginContainer
+  }
+
+  function writeWebManifest(extra: Record<string, unknown>) {
+    const dir = profileDirOf(home, "web")
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, "package.json"),
+      JSON.stringify({ name: "web", dependencies: { dshmarket: "1.0.0" }, ...extra }, null, 2),
+    )
+  }
+
+  test("a patch/config edit replays nothing and rebuilds nothing", async () => {
+    writeWebManifest({ dsh: { profile: { bundles: ["@deepseek-ai/dsh-base"] } } })
+    const rebuilds = { value: 0 }
+    service = startDshPluginService({ home, containers: [gatedWebUnit(home, rebuilds)] })
+    expect(await service.replay()).toEqual({ ok: true })
+
+    // Composition-only change: enable/disable rows + the user patch layer.
+    // The child applies these itself; a host rebuild here is the reconnect bug.
+    writeWebManifest({ dsh: { profile: { bundles: ["@deepseek-ai/dsh-base", "@wopal/dsh-presets"] } } })
+    writeFileSync(join(profileDirOf(home, "web"), "cordis.patch.yml"), "- id: ui-theme\n  config:\n    fontSize: 20\n")
+    expect(await service.replay()).toEqual({ ok: true })
+    expect(rebuilds.value).toBe(0)
+
+    // The tools unit observes the same change: no rebuild there either.
+    expect(await service.replay()).toEqual({ ok: true })
+    expect(rebuilds.value).toBe(0)
+  })
+
+  test("a dependency change is the one cold-reload trigger", async () => {
+    writeWebManifest({ dsh: { profile: { bundles: ["@deepseek-ai/dsh-base"] } } })
+    const rebuilds = { value: 0 }
+    service = startDshPluginService({ home, containers: [gatedWebUnit(home, rebuilds)] })
+    expect(await service.replay()).toEqual({ ok: true })
+
+    writeWebManifest({
+      dependencies: { dshmarket: "2.0.0" },
+      dsh: { profile: { bundles: ["@deepseek-ai/dsh-base"] } },
+    })
+    expect(await service.replay()).toEqual({ ok: true })
+    expect(rebuilds.value).toBe(1)
   })
 })

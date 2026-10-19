@@ -4,6 +4,7 @@ import { WebSocketServer, WebSocket } from "ws"
 import { DshWebColdReload } from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
 import {
   spawnWebChildContainer,
+  webChildArgs,
   webChildProxyContainer,
   type WebChildProcess,
 } from "../../../src/cli/cmd/dsh-web-child"
@@ -358,5 +359,42 @@ describe("dsh:web child host builder", () => {
     expect(generation).toBe(2)
     expect(bodies).toEqual([])
     await reloader.dispose()
+  })
+})
+
+describe("webChildArgs: the child receives the host's launch-time facts", () => {
+  test("carries the closure anchor, log dir, trusted authorities and the install launcher", () => {
+    const argv = webChildArgs(["bun", "/repo/src/index.ts"], {
+      home: "/home/.wopal/dsh",
+      port: 0,
+      installAnchor: "/home/.wopal/dsh/closures/abc/node_modules/@deepseek-ai/dsh/package.json",
+      logDir: "/home/.wopal/logs",
+      trustedHosts: ["192.168.1.5:4100", "box.local:4100"],
+    })
+    expect(argv).toEqual([
+      "bun",
+      "/repo/src/index.ts",
+      "dsh",
+      "web-child",
+      "--home",
+      "/home/.wopal/dsh",
+      "--port",
+      "0",
+      "--install-anchor",
+      "/home/.wopal/dsh/closures/abc/node_modules/@deepseek-ai/dsh/package.json",
+      "--log-dir",
+      "/home/.wopal/logs",
+      "--trusted-host",
+      "192.168.1.5:4100",
+      "--trusted-host",
+      "box.local:4100",
+      // dshmarket lives in this child; the install worker must re-launch the
+      // SAME launcher the host resolved (bg: a stale binary or the official
+      // dsh CLI's pnpm installer must never win here).
+      "--ellamaka-command",
+      "bun",
+      "--ellamaka-command",
+      "/repo/src/index.ts",
+    ])
   })
 })

@@ -19,7 +19,8 @@ export const DshWebChildCommand = effectCmd({
       .option("port", { type: "number", demandOption: true })
       .option("install-anchor", { type: "string" })
       .option("log-dir", { type: "string" })
-      .option("trusted-host", { type: "string", array: true, default: [] as string[] }),
+      .option("trusted-host", { type: "string", array: true, default: [] as string[] })
+      .option("ellamaka-command", { type: "string", array: true, default: [] as string[] }),
   handler: Effect.fn("Cli.dshWebChild")(function* (args) {
     const entered = yield* Effect.promise(() =>
       runWebChildIfRequested([
@@ -33,6 +34,7 @@ export const DshWebChildCommand = effectCmd({
         ...(args["install-anchor"] ? ["--install-anchor", args["install-anchor"]] : []),
         ...(args["log-dir"] ? ["--log-dir", args["log-dir"]] : []),
         ...args["trusted-host"].flatMap((host: string) => ["--trusted-host", host]),
+        ...args["ellamaka-command"].flatMap((part: string) => ["--ellamaka-command", part]),
       ]),
     )
     if (!entered) {

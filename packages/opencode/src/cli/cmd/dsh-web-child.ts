@@ -388,7 +388,7 @@ export async function spawnWebChildContainer(options: SpawnWebChildOptions): Pro
  */
 export function webChildArgs(
   command: readonly string[],
-  options: { home: string; port: number; installAnchor: string; logDir?: string },
+  options: { home: string; port: number; installAnchor: string; logDir?: string; trustedHosts?: readonly string[] },
 ): string[] {
   return [
     ...command,
@@ -401,6 +401,14 @@ export function webChildArgs(
     "--install-anchor",
     options.installAnchor,
     ...(options.logDir ? ["--log-dir", options.logDir] : []),
+    // The host's CORS trust decision must reach the child: it owns the DSH
+    // connection fence, and a LAN origin the user trusted on the Ellamaka
+    // listener would otherwise be rejected inside the container.
+    ...(options.trustedHosts ?? []).flatMap((host) => ["--trusted-host", host]),
+    // The child mounts dshmarket, so it needs the launcher the install worker
+    // re-spawns. The host already resolved it; forwarding it keeps one
+    // decision point (`resolveInstallCommand`) instead of two.
+    ...command.flatMap((part) => ["--ellamaka-command", part]),
   ]
 }
 

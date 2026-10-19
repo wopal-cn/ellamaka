@@ -12,6 +12,8 @@ import {
 } from "@wopal/ellamaka-cordis/runtime"
 import { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-command"
+import { createDependencyRebuildGate } from "@wopal/ellamaka-cordis/plugins/rebuild-gate"
+import { profileDirOf } from "@wopal/ellamaka-cordis/plugins/compose"
 import { setDshUrlGetter } from "@/workbench/dsh-url"
 import { setDshStatus } from "@/workbench/dsh-status"
 import { prepareDshHost, writeCorePreparationProgress } from "@/core/preparation"
@@ -304,6 +306,15 @@ async function mountDshEngineImpl(
       port: 0,
       installAnchor: anchor.path,
       logDir,
+      // The fence allowlist is a HOST decision (CORS settings + the server's
+      // own serving authorities). The web container owns that fence inside the
+      // child, so the decision has to travel with the spawn — without it a
+      // wildcard bind rejects the very address the browser dials.
+      trustedHosts: trustedDshAuthorities(
+        { hostname: server.hostname, port: server.port },
+        opts.cors ?? [],
+        localDshInterfaceAddresses(),
+      ),
     })
     // The Workbench iframe enters the DSH surface through the official rc.1
     // browser-auth launch token. The web container runs in the child, so the
@@ -414,13 +425,18 @@ async function mountDshEngineImpl(
             stackContext: toolsHost.stackContext,
           },
           {
-            // The web container lives in the child process: its composition
-            // change delegates to a CHILD REBUILD (external rebuild boundary),
-            // not an in-process include replay (the in-process entry no longer
-            // serves traffic — DESIGN 冷重载).
+            // The web container lives in the child process: a composition
+            // change is applied IN PLACE there (its own watcher replays the
+            // patch stack), so the host must NOT rebuild — a rebuild drops
+            // every live WebSocket and the iframe reconnects for a config
+            // edit. Only a DEPENDENCY change needs a fresh module graph
+            // (DESIGN 两级重载: hot replay vs cold reload).
             profile: "web",
             includeEntry: { id: "web-child", update: async () => {} },
-            rebuild: () => reloader.rebuild(),
+            rebuild: createDependencyRebuildGate({
+              profileDir: profileDirOf(home, "web"),
+              rebuild: () => reloader.rebuild(),
+            }),
           },
         ],
         logger: {

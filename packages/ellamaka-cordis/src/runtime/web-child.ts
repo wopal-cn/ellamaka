@@ -44,6 +44,18 @@ export interface WebChildOptions {
   logDir?: string
   /** Non-loopback authorities accepted by the connection fence. */
   trustedHosts?: readonly string[]
+  /**
+   * The launcher for `<ellamaka> dsh plugin …` (the market's install worker).
+   * The container that mounts dshmarket is THIS child, so the child needs the
+   * command to provide `desktopPnpm`; without it the market falls back to
+   * spawning the official `dsh` CLI and its pnpm installer.
+   */
+  ellamakaCommand?: readonly string[]
+}
+
+/** Collect every repeated flag value after the child marker. */
+function repeated(argv: readonly string[], marker: number, flag: string): string[] {
+  return argv.flatMap((arg, index) => (arg === flag && index > marker ? [argv[index + 1]] : []))
 }
 
 /** Parse the child argv contract (`--marker --home H --port P ...`). */
@@ -59,15 +71,15 @@ export function parseWebChildArgs(argv: readonly string[]): WebChildOptions | un
   if (!home || !portRaw || !/^\d+$/.test(portRaw)) {
     throw new Error("ellamaka-cordis: invalid dsh web child invocation; --home and --port are required")
   }
-  const trustedHosts = argv.flatMap((arg, index) =>
-    arg === "--trusted-host" && index > marker ? [argv[index + 1]] : [],
-  )
+  const trustedHosts = repeated(argv, marker, "--trusted-host")
+  const ellamakaCommand = repeated(argv, marker, "--ellamaka-command")
   return {
     home,
     port: Number(portRaw),
     installAnchor: value("--install-anchor"),
     logDir: value("--log-dir"),
     trustedHosts: trustedHosts.length > 0 ? trustedHosts : undefined,
+    ellamakaCommand: ellamakaCommand.length > 0 ? ellamakaCommand : undefined,
   }
 }
 
@@ -128,6 +140,10 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
       installAnchor: options.installAnchor,
       runtime,
       trustedHosts: options.trustedHosts,
+      // dshmarket lives in THIS container: the install worker must re-launch
+      // the host CLI, not the official `dsh` pnpm path (DESIGN-dsh-web.md
+      // 「Bun 安装器流水线」). The host passes its own resolved launcher.
+      ellamakaCommand: options.ellamakaCommand,
     })
     trace("booted")
     // The VirtualWebServer answers (req, res) directly — the child binds it to
