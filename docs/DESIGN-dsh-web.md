@@ -12,6 +12,8 @@ profile 的 package.json 是插件依赖与激活的唯一真相源：dependenci
 
 官方闭包保持不可变；插件实体和依赖位于 profile 的 node_modules，官方 peer 从宿主共享解析层取得同一闭包版本。安装由官方 pluginManager 与其 pnpm 唯一负责：产品不维护第二套安装器，只保证清单对它可解析（本地来源一律 `file:`，裸路径会被记成不装依赖的 `link:`）。
 
+pnpm 是宿主前置条件，与官方 dsh 一致：产品既不随包分发 pnpm，也不代为安装；缺失时在安装入口直接报告，不留到官方安装器以裸退出码失败。
+
 ```text
 $DSH_HOME/profiles/
 ├── node_modules/                 # 官方依赖解析层

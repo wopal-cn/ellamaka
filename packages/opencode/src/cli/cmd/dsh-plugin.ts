@@ -34,6 +34,21 @@ import { CliError, effectCmd, fail } from "../effect-cmd"
 const RISK_NOTE =
   "Third-party dsh plugins run in the same process as Ellamaka with filesystem and shell access. Only install plugins you trust."
 
+/**
+ * pnpm is a HOST prerequisite, exactly as it is for the official dsh CLI:
+ * the product does not bundle or install one. Reporting the gap here keeps
+ * the failure actionable — the official installer would otherwise surface it
+ * as a bare exit 127 after printing its own log path.
+ */
+const PNPM_MISSING =
+  "dsh plugin needs pnpm on PATH (the official dsh installer runs it inside the profile); install pnpm and retry — Ellamaka does not bundle one."
+
+/** True when `pnpm` can be spawned. */
+function pnpmAvailable(): boolean {
+  const probe = spawnSync("pnpm", ["--version"], { stdio: "ignore" })
+  return probe.error === undefined
+}
+
 function dshHome(): string {
   return join(Global.Path.wopalHome, "dsh")
 }
@@ -116,6 +131,7 @@ function forwardToOfficial(home: string, profile: string, pluginArgs: readonly s
   if (command === undefined) {
     throw new Error("cannot resolve the ellamaka launcher for the official dsh installer")
   }
+  if (!pnpmAvailable()) throw new Error(PNPM_MISSING)
   const child = spawnSync(
     command[0],
     [...command.slice(1), "dsh", "official", "--home", home, "plugin", "--profile", profile, ...pluginArgs],
