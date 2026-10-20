@@ -10,7 +10,7 @@
 
 profile 的 package.json 是插件依赖与激活的唯一真相源：dependencies 保存可解析的包来源（registry 版本，或本地目录的 `file:` 路径），dsh.profile.bundles 保存有序 bundle 层。用户补丁按 entry id 保存配置和启停。
 
-官方闭包保持不可变；插件实体和依赖位于 profile 的 node_modules，官方 peer 从宿主共享解析层取得同一闭包版本。安装由官方 pluginManager 与其 pnpm 唯一负责：产品不维护第二套安装器，只保证清单对它可解析（本地来源一律 `file:`，裸路径会被记成不装依赖的 `link:`）。
+官方闭包保持不可变；插件实体和依赖位于 profile 的 node_modules。peer（`@deepseek-ai/*`）由 dsh loader 从安装作用域解析，得到与宿主同一份闭包版本，与安装 spec 形式无关；产品的 `profiles/node_modules` 兜底层只为裸包名的按父级回退提供同源链接。安装由官方 pluginManager 与其 pnpm 唯一负责：产品不维护第二套安装器，只保证清单对它可解析。本地目录一律以 `file:` 声明——它把包复制进 profile 并安装其依赖；裸路径会被 pnpm 记成 `link:` 软链，插件自身的 `dependencies` 不会落地。
 
 pnpm 是宿主前置条件，与官方 dsh 一致：产品既不随包分发 pnpm，也不代为安装；缺失时在安装入口直接报告，不留到官方安装器以裸退出码失败。
 
