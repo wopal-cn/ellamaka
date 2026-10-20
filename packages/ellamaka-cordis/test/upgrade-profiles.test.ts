@@ -40,12 +40,12 @@ describe("rc.2 profile assembly", () => {
       const facts = host.ctx.get("profileContext") as {
         home: string
         name: string
-        packageManager?: { command: string; args: string[] }
       }
       expect(facts.home).toBe(join(home, "home"))
       expect(facts.name).toBe("web")
-      expect(facts.packageManager?.command).toBe(process.execPath)
-      expect(facts.packageManager?.args).toContain("package-worker")
+      // The official plugin manager owns installs; Ellamaka injects no
+      // package-manager worker into its profile context.
+      expect(host.ctx.get("profileContext")).not.toHaveProperty("packageManager")
       const hmr = host.ctx.get("hmr") as { watchConfig: unknown; runExclusive: unknown }
       expect(typeof hmr.watchConfig).toBe("function")
       expect(typeof hmr.runExclusive).toBe("function")

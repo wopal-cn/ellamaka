@@ -515,24 +515,10 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       )
     }
   }
-  const packageManager = opts.ellamakaCommand?.length
-    ? {
-        command: opts.ellamakaCommand[0]!,
-        args: [
-          ...opts.ellamakaCommand.slice(1),
-          "dsh",
-          "package-worker",
-          "--home",
-          dshRoot,
-          "--profile",
-          profileName,
-          "--install-anchor",
-          installAnchor,
-          "--",
-        ],
-        env: { ELLAMAKA_DSH: "0", WOPAL_HOME: dirname(dshRoot), DSH_HOME: homeDir },
-      }
-    : undefined
+  // The official plugin manager owns installs: its pnpm graph reads this
+  // profile's manifest directly. Ellamaka no longer injects a `packageManager`
+  // worker here — the manifest is pnpm-resolvable (local sources are `file:`),
+  // so there is one installer and one owner (DESIGN-dsh-web.md「插件安装」).
   ctx.provide("profileContext", {
     name: profileName,
     dir: profile.dir,
@@ -552,7 +538,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       return [...extraPatches, ...homePatches, ...(stackContext.hostPatches?.(layers) ?? [])]
     },
     telemetryDisabledEnv: "1",
-    ...(profileName === WEB_PROFILE_NAME && packageManager ? { packageManager } : {}),
   })
   const resolution = await createRuntimeResolution({ installAnchor, profile, home: homeDir })
   projectRuntimePackages(resolution)

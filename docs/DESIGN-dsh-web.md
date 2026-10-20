@@ -8,9 +8,9 @@
 
 ## Plugin Supply Chain
 
-profile 的 package.json 是插件依赖与激活的唯一真相源：dependencies 保存精确包版本，dsh.profile.bundles 保存有序 bundle 层。用户补丁按 entry id 保存配置和启停。
+profile 的 package.json 是插件依赖与激活的唯一真相源：dependencies 保存可解析的包来源（registry 版本，或本地目录的 `file:` 路径），dsh.profile.bundles 保存有序 bundle 层。用户补丁按 entry id 保存配置和启停。
 
-官方闭包保持不可变；插件实体和依赖位于 profile 的 node_modules，官方 peer 从宿主共享解析层取得同一闭包版本。安装器使用现有 Bun 解析器、pacote 下载、完整性校验、临时区和跨进程锁。
+官方闭包保持不可变；插件实体和依赖位于 profile 的 node_modules，官方 peer 从宿主共享解析层取得同一闭包版本。安装由官方 pluginManager 与其 pnpm 唯一负责：产品不维护第二套安装器，只保证清单对它可解析（本地来源一律 `file:`，裸路径会被记成不装依赖的 `link:`）。
 
 ```text
 $DSH_HOME/profiles/
@@ -27,9 +27,7 @@ $DSH_HOME/profiles/
 
 Web 注入完整的 profileContext，settings、configEditor 和原生 pluginManager 由此获得 profile 的路径和配置事实。
 
-profileContext.packageManager 提供 command、prefix args 与仅用于包操作的 env。原生 pluginManager 拥有界面协议、检查、进度、取消和应用结果；执行器为 Ellamaka 自带的 package worker。
-
-worker 是产品内部入口。编译 CLI 调用自身，源码启动携带 CLI 源入口，Desktop 使用 install-command 解析的匹配引擎命令。cwd、profile、DSH root 和取消信号显式传递。
+原生 pluginManager 拥有界面协议、检查、进度、取消、应用结果与安装执行（pnpm）。Ellamaka 不注入 profileContext.packageManager，因此只有一套安装器、一份声明语义和一份 lockfile；`ellamaka dsh plugin` 只做转发，DSH_HOME 指向本产品的 home。
 
 | 操作                | 宿主语义                                                   |
 | ------------------- | ---------------------------------------------------------- |

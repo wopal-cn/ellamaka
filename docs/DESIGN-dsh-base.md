@@ -87,7 +87,7 @@ Ellamaka 自己创建的 profile 初始文件、固定 root Include 和必要格
 
 DSH v0.2 使用 `createRuntimeResolution` 提供不可变的包映射，`auditStartupEntries` 提供启动审计，`prepareProfilePatches/reconcileProfilePatches` 提供版本兼容与激活诊断。
 
-装配时注入 profileContext：name、dir、patchPath、installAnchor、cwd、home、startedBundles、overlays、telemetryDisabledEnv。Web 还注入 packageManager。overlays 包含必要的宿主约束，使原生设置与插件管理操作使用同一策略。
+装配时注入 profileContext：name、dir、patchPath、installAnchor、cwd、home、startedBundles、overlays、telemetryDisabledEnv。overlays 包含必要的宿主约束，使原生设置与插件管理操作使用同一策略。
 
 App Boot 审计后，宿主检查采用的必需服务和工具。Web 检查默认 preset 可解析和可绑定；tools 检查对应平台的采用集合。插件等待服务的警告不能直接等同于完整挂载成功。
 

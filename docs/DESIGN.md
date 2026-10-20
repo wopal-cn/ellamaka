@@ -520,7 +520,7 @@ Ellamaka Agent 的工具采用路径复用 DSH 工具执行能力，持久 Sessi
 | 受控路由挂载点      | `Listener.mountNodeRoute`                              | 按前缀分发 HTTP 与 upgrade 到已注册 handler，保留 Effect listener 生命周期                                      |
 | Ellamaka DSH Bridge | `@wopal/ellamaka-cordis`                               | 随产品编译发布，提供 DSH 调用协议适配、容器、虚拟 WebServer 与固定运行时装配                                    |
 | DSH Runtime Manager | `@wopal/ellamaka-cordis/runtime`                       | 所有入口共用的启动入口，负责禁用判断、闭包物化、完整性校验、动态加载与容器挂载                                  |
-| DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins`                       | 内置安装器、包解析、profile 声明与配置重放；原生 pluginManager 经 profileContext.packageManager 调用宿主 worker |
+| DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins`                       | profile 声明、配置重放与安装转发；安装由官方 pluginManager + pnpm 唯一执行，本地来源以 `file:` 声明 |
 | Wopal preset bundle | `@wopal/dsh-presets`（ontology `dsh/agents-presets/`） | 声明 wopal/fae/rook preset 并携带随包技能；通过标准 DSH bundle 装配                                             |
 | DSH 运行时清单      | ellamaka 构建产物                                      | 构建时从 `packages/ellamaka-cordis/package.json` 派生并锁定 dsh 官方依赖                                        |
 | dsh 引擎装配        | `@wopal/ellamaka-cordis/dsh-web`                       | 通过 installAnchor 和 profile facts 装配两个容器，验收服务、工具与默认 preset 后发布句柄                        |

@@ -3,24 +3,14 @@
  * mirroring the official `@deepseek-ai/dsh` launcher (bin.js) semantics:
  *
  * - `plugin`: `--profile` is the subcommand's own option; the remaining
- *   positional args are forwarded verbatim (add/remove/install official
- *   verbs; enable/disable/list ellamaka extensions).
+ *   positional args are forwarded verbatim to the official installer
+ *   (add/remove/install), while enable/disable/list stay ellamaka extensions.
  * - rejectParentOptions: the launcher flags (`--profile`, `--patch`,
  *   `--dump-config`, `--dump-default-config`) must not appear BEFORE the
  *   `plugin` subcommand.
  *
- * Commander-semantics equivalence note: the official parser's
- * `allowUnknownOption` + `passThroughOptions` (verbatim forwarding without
- * declaring every flag) is implemented here as plain verbatim positionals
- * resolved by `dshResolvePluginArgs` under the default (non-strict) child
- * parse, with explicit unknown-verb/missing-operand errors — the behaviour
- * is pinned by the dsh-plugin-command definition tests.
- *
- * Kept dependency-free so the CLI glue stays trivially testable (same pattern
- * as dsh-plugin-profiles.ts).
+ * Kept dependency-free so the CLI glue stays trivially testable.
  */
-
-import { parseProfiles } from "./dsh-plugin-profiles"
 
 /** The launcher flags the official dsh parser owns (order = help-text order). */
 export const DSH_PARENT_FLAGS = ["--profile", "--patch", "--dump-config", "--dump-default-config"] as const
@@ -37,92 +27,13 @@ Examples:
   ellamaka dsh --dump-config --profile web --patch ./extra.yml
                                                          apply extra overlays after the profile layer (repeatable)
   ellamaka dsh plugin --profile web add <package>        install a plugin into the web profile (official order)
+  ellamaka dsh plugin --profile web add /path/to/bundle  install a local bundle (forwarded as file:<abs>)
   ellamaka dsh plugin --profile web list --json          list the profile's plugins as JSON
   ellamaka dsh plugin --profile web install              re-install every declared plugin dependency
 
 Booting a profile is served by \`ellamaka serve\` — the official dsh boot mode
 and the \`web\` alias are not part of the ellamaka surface.
 `
-
-/** The plugin verbs: official verbatim forward + ellamaka extensions. */
-export const DSH_PLUGIN_OFFICIAL_VERBS = ["add", "remove", "install"] as const
-export const DSH_PLUGIN_EXTENSION_VERBS = ["enable", "disable", "list"] as const
-
-export interface DshPluginInvocation {
-  mode: "plugin"
-  profiles: string[]
-  action: string
-  pkg?: string
-  /** The add operand is a local directory spec (official pnpm path semantics). */
-  local?: boolean
-  json?: boolean
-}
-
-export interface DshInstallInvocation {
-  mode: "install"
-  profiles: string[]
-}
-
-/** One resolved `dsh plugin` invocation (official shape + ellamaka superset). */
-export type DshResolvedPlugin = DshPluginInvocation | DshInstallInvocation
-
-/** The verbatim verbs the ellamaka installer implements. */
-const KNOWN_VERBS: readonly string[] = [...DSH_PLUGIN_OFFICIAL_VERBS, ...DSH_PLUGIN_EXTENSION_VERBS]
-
-/**
- * Resolve `dsh plugin` verbatim args into one invocation, official order
- * (`plugin --profile web add <pkg>`); `--profile` supports single (official)
- * and comma-separated multi (ellamaka extension), omitted falls back to the
- * built-in default (A2 compat: `web,ellamaka-tools`).
- *
- * Throws with user-visible guidance for the official error cases: no args
- * (usage hint), unknown verbs (not forwarded), missing <pkg>.
- */
-export function dshResolvePluginArgs(
-  profile: string | undefined,
-  args: readonly string[],
-  opts: { json?: boolean } = {},
-): DshResolvedPlugin {
-  const verb = args[0]
-  if (verb === undefined) {
-    throw new Error("error: plugin needs arguments to forward (e.g. add <package>); in ellamaka: `ellamaka dsh plugin --profile <name> add <package>`")
-  }
-  if (!KNOWN_VERBS.includes(verb)) {
-    throw new Error(`error: unknown plugin verb "${verb}" (official pnpm verbs other than add/remove/install are not forwarded; ellamaka supports ${KNOWN_VERBS.join("|")})`)
-  }
-  const profiles = parseProfiles(profile)
-  const pkg = args[1]
-
-  if (verb === "install") {
-    return { mode: "install", profiles }
-  }
-  if (verb === "list") {
-    return { mode: "plugin", profiles, action: "list", json: opts.json === true }
-  }
-  // add/remove/enable/disable all require the package operand.
-  if (pkg === undefined) {
-    throw new Error(`error: plugin ${verb} requires a <package> argument (e.g. \`ellamaka dsh plugin --profile <name> ${verb} <package>\`)`)
-  }
-  // Official pnpm path-spec semantics: a local directory operand installs
-  // from the filesystem (add only — the other verbs operate on installed
-  // names, a path there is a user error).
-  if (verb === "add") {
-    return { mode: "plugin", profiles, action: "add", pkg, local: isPathSpec(pkg) }
-  }
-  if (isPathSpec(pkg)) {
-    throw new Error(`error: plugin ${verb} takes an installed package name, not a path ("${pkg}"; local directories are only valid for add)`)
-  }
-  return { mode: "plugin", profiles, action: verb, pkg, local: false }
-}
-
-/**
- * Official pnpm filesystem-spec detection: `add .`, `add ../dir`,
- * `add ./dir`, and absolute paths install from a local directory. Registry
- * names never start with these (`.`/`/`-prefixed names are impossible).
- */
-function isPathSpec(pkg: string): boolean {
-  return pkg === "." || pkg === ".." || pkg.startsWith("./") || pkg.startsWith("../") || pkg.startsWith("/")
-}
 
 /**
  * Official rejectParentOptions: detect launcher flags appearing BEFORE the

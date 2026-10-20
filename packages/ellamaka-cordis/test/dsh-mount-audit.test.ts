@@ -150,14 +150,18 @@ describe("Home runtime lease audit", () => {
     }
   })
 
-  test("Desktop sidecar and package worker hold their own shared Home qualification", () => {
+  test("Desktop sidecar holds its own shared Home qualification", () => {
     const desktop = readFileSync(join(root, "packages/ellamaka-desktop/src/main/sidecar.ts"), "utf-8")
-    const worker = readFileSync(join(root, "packages/opencode/src/cli/cmd/dsh-package-worker.ts"), "utf-8")
     expect(desktop).toMatch(/acquireDshHomeRuntimeAccess/)
     expect(desktop).toMatch(/dshHomeAccess.*lease/s)
     expect(desktop).toMatch(/dshHomeAccess\.lease\.release\(\)/)
-    expect(worker).toMatch(/acquireDshHomeRuntimeAccess/)
-    expect(worker).toMatch(/DSH_CLOSURE_VERSION/)
-    expect(worker).toMatch(/homeAccess\.lease\.release\(\)/)
+  })
+
+  test("plugin installs forward to the official dsh installer (no parallel package worker)", () => {
+    const plugin = readFileSync(join(root, "packages/opencode/src/cli/cmd/dsh-plugin.ts"), "utf-8")
+    expect(plugin).toMatch(/"dsh",\s*"official"/)
+    expect(plugin).toMatch(/normalizeAddArgs/)
+    expect(plugin).not.toContain("package-worker")
+    expect(plugin).not.toContain("plugins/installer")
   })
 })

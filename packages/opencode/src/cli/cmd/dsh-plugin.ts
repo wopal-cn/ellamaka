@@ -1,43 +1,34 @@
 import { log } from "@clack/prompts"
 import { Effect } from "effect"
-import { join } from "node:path"
-import { existsSync } from "node:fs"
-import { createRequire } from "node:module"
-import { DEFAULT_DSH_RUNTIME_MANIFEST, resolveInstallAnchor } from "@wopal/ellamaka-cordis/runtime"
+import { spawnSync } from "node:child_process"
+import { readFileSync } from "node:fs"
+import { join, resolve } from "node:path"
 import { Global } from "@wopal/ellamaka-core/global"
-import {
-  installPackage,
-  NotInstalledError,
-  removePackage,
-  listInstalled,
-} from "@wopal/ellamaka-cordis/plugins/installer"
+import { resolveInstallCommand } from "@wopal/ellamaka-cordis/plugins/install-command"
 import { migratePluginStore } from "@wopal/ellamaka-cordis/plugins/migrate-store"
 import { disableRow, enableRow } from "@wopal/ellamaka-cordis/plugins/patch-layer"
-import { assertNotGithubSource } from "@wopal/ellamaka-cordis/plugins/installer"
-import { parseRegistrySpec } from "./dsh-plugin-profiles"
-import { dshResolvePluginArgs, type DshResolvedPlugin } from "./dsh-cli"
+import { parseProfiles } from "./dsh-plugin-profiles"
 import { CliError, effectCmd, fail } from "../effect-cmd"
 
 /**
- * `ellamaka dsh plugin` — the official-order command surface (DESIGN-dsh-base.md
- * §632, Plan 223 D-02): `dsh plugin --profile <name> <args...>` with the
- * remaining args forwarded VERBATIM to the ellamaka Bun installer (never pnpm).
+ * `ellamaka dsh plugin` — a thin surface over the OFFICIAL dsh plugin CLI.
  *
- * Official verbs: `add <pkg>` / `remove <pkg>` / `install` (full reinstall of
- * every declared dependency, official `pnpm install` end state). Ellamaka
- * extensions: `enable <pkg>` / `disable <pkg>` / `list [--json]`. Unknown
- * verbs error with guidance instead of being forwarded.
+ * Installing a plugin is DSH's job: the profile directory is DSH state, its
+ * installer is pnpm (shipped by DSH's plugin manager), and it owns the
+ * declaration, the lockfile, the rollback and the bundle reconcile. Ellamaka
+ * used to keep a second, pacote-based installer in this directory; that
+ * duplicated the owner and wrote registry-shaped versions for packages that
+ * exist only on disk, which made every official install fail with a 404.
  *
- * Every subcommand is a pure disk operation writing the OFFICIAL end state:
- * the package entity lands in `<profile>/node_modules/`, the declaration in
- * the profile `package.json`, and enable/disable writes the user patch layer
- * (`cordis.patch.yml`, official patch.ts semantics). The running server
- * watches those composition files and hot-replays (D-02/D-03) — the CLI
- * never touches containers directly.
+ * So `add`, `remove` and `install` are forwarded verbatim to
+ * `dsh plugin --profile <name> …` running inside the product closure
+ * (`dsh official` child role), with DSH_HOME pointed at this installation's home. Only
+ * the verbs that are NOT installations stay here: `list` reads the profile
+ * manifest, `enable`/`disable` write the user patch layer.
  *
- * Before any operation the legacy plugin store (if present) is migrated
- * once into the profile manifests (idempotent; the retired file is kept for
- * rollback).
+ * Local directory operands are normalized to `file:<abs>` before forwarding:
+ * a bare path makes pnpm record `link:` (a symlink that receives none of the
+ * plugin's own dependencies). `file:` copies the package and installs them.
  */
 
 const RISK_NOTE =
@@ -47,27 +38,9 @@ function dshHome(): string {
   return join(Global.Path.wopalHome, "dsh")
 }
 
-function installerAnchor(): string {
-  const anchor = resolveInstallAnchor(Global.Path.wopalHome, DEFAULT_DSH_RUNTIME_MANIFEST).path
-  if (existsSync(anchor)) return anchor
-  try {
-    return createRequire(import.meta.url).resolve("@deepseek-ai/dsh/package.json")
-  } catch {
-    throw new Error("DSH runtime is not initialized; run ellamaka dsh init before installing plugins")
-  }
-}
-
-/** Map an installer/migration error to a user-visible CliError. */
+/** Map a forwarded failure to a user-visible CliError. */
 function toCliError(error: unknown): CliError {
-  if (error instanceof NotInstalledError) {
-    return new CliError({ message: error.message })
-  }
   return new CliError({ message: error instanceof Error ? error.message : String(error) })
-}
-
-/** One-time legacy-store migration hook (idempotent, runs before anything). */
-async function ensureMigrated(home: string): Promise<void> {
-  await migratePluginStore(home)
 }
 
 /** The profile patch file path for one profile. */
@@ -81,12 +54,87 @@ async function readManifestOf(home: string, profile: string) {
   return readProfileManifest(join(home, "home", "profiles", profile))
 }
 
+/** A registry range is a version; a local source is not (read the package instead). */
+export function declaredVersion(spec: string | undefined): string | undefined {
+  if (spec === undefined) return undefined
+  return spec.startsWith("file:") || spec.startsWith("link:") ? undefined : spec
+}
+
+/** The version recorded inside an installed package directory. */
+function installedVersion(home: string, profile: string, name: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(join(home, "home", "profiles", profile, "node_modules", ...name.split("/"), "package.json"), "utf8"),
+    )
+    if (typeof parsed !== "object" || parsed === null) return undefined
+    const version = (parsed as { version?: unknown }).version
+    return typeof version === "string" ? version : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** True for the operands pnpm treats as a local directory. */
+function isPathOperand(operand: string): boolean {
+  return (
+    operand === "." ||
+    operand === ".." ||
+    operand.startsWith("./") ||
+    operand.startsWith("../") ||
+    operand.startsWith("/")
+  )
+}
+
+/**
+ * Give pnpm an explicit `file:` source for a local directory. A bare path is
+ * recorded as `link:` (symlink only), which silently loses the plugin's own
+ * dependencies; `file:` copies the package and resolves them.
+ */
+export function normalizeAddArgs(args: readonly string[]): string[] {
+  if (args[0] !== "add") return [...args]
+  const operand = args[1]
+  if (operand === undefined || operand.startsWith("file:") || operand.startsWith("link:")) return [...args]
+  if (!isPathOperand(operand)) return [...args]
+  return ["add", `file:${resolve(operand)}`, ...args.slice(2)]
+}
+
+/**
+ * Run `<launcher> dsh official plugin --profile <p> <args>` for one profile.
+ *
+ * The child is the SAME CLI (resolved through the shared install-command
+ * decision table), because a compiled product cannot hand arbitrary JS to its
+ * own executable; the `dsh official` child role then runs the closure's dsh
+ * entry point in that child.
+ */
+function forwardToOfficial(home: string, profile: string, pluginArgs: readonly string[]): void {
+  const command = resolveInstallCommand({
+    argv: process.argv,
+    execPath: process.execPath,
+    isBun: process.versions.bun !== undefined,
+    env: process.env,
+  })
+  if (command === undefined) {
+    throw new Error("cannot resolve the ellamaka launcher for the official dsh installer")
+  }
+  const child = spawnSync(
+    command[0],
+    [...command.slice(1), "dsh", "official", "--home", home, "plugin", "--profile", profile, ...pluginArgs],
+    { stdio: "inherit", env: { ...process.env, ELLAMAKA_DSH: "0" } },
+  )
+  if (child.error) throw child.error
+  if (child.status !== 0) {
+    throw new Error(
+      `dsh plugin ${pluginArgs[0] ?? "?"} failed for profile ${profile} (exit ${child.status ?? child.signal})`,
+    )
+  }
+}
+
 export const DshPluginCommand = effectCmd({
   command: "plugin [args...]",
   describe:
-    "manage a profile's dsh plugins via the ellamaka installer (official order: dsh plugin --profile <name> add <package>)",
+    "manage a profile's dsh plugins through the official dsh installer (dsh plugin --profile <name> add <package>)",
   instance: false,
-  // Engine-free shim: pure profile-file operations, no AppLayer boot
+  // Engine-free shim: profile files and a forwarded CLI, no AppLayer boot
   // (DESIGN-dsh-base.md — `ellamaka dsh` must not start the engine).
   light: true,
   builder: (yargs) =>
@@ -95,7 +143,8 @@ export const DshPluginCommand = effectCmd({
         type: "string",
         array: true,
         default: [] as string[],
-        describe: "verbatim plugin arguments: add|remove|install|enable|disable|list (+ <package>)",
+        describe:
+          "plugin arguments forwarded to the official dsh CLI: add|remove|install <args> (a local directory becomes file:<abs>); ellamaka extensions: enable|disable|list",
       })
       // Official position: the subcommand's own option (works before or after
       // the verb, yargs hoists it into the child parse).
@@ -109,150 +158,96 @@ export const DshPluginCommand = effectCmd({
         describe: "machine-readable output (list only)",
       }),
   handler: Effect.fn("Cli.dshPlugin")(function* (args) {
-    const rawArgs = (args.args ?? []) as string[]
-    const profileSpec = args.profile as string | undefined
+    const rawArgs: string[] = Array.isArray(args.args) ? args.args.map((arg: unknown) => String(arg)) : []
     const home = dshHome()
 
-    // Verbatim-args resolution (official reject semantics: no args, unknown
-    // verb, missing <package>; local path operands resolve via `local`).
-    let invocation: DshResolvedPlugin
+    let profiles: string[]
     try {
-      invocation = dshResolvePluginArgs(profileSpec, rawArgs, { json: args.json === true })
+      profiles = parseProfiles(typeof args.profile === "string" ? args.profile : undefined)
     } catch (error) {
       return yield* fail(error instanceof Error ? error.message : String(error))
     }
 
+    const verb = rawArgs[0]
+    if (verb === undefined) {
+      return yield* fail(
+        "error: plugin needs arguments to forward (e.g. `ellamaka dsh plugin --profile web add <package>`)",
+      )
+    }
+
     yield* Effect.tryPromise({
-      try: () => ensureMigrated(home),
+      try: () => migratePluginStore(home),
       catch: toCliError,
     })
 
-    if (invocation.mode === "install") {
-      // Official `install` verb end state: every declared dependency is
-      // (re-)installed from the profile package.json; up-to-date entries are
-      // a no-op (replace semantics keep the same content).
-      let installed = 0
-      for (const profile of invocation.profiles) {
-        const count = yield* Effect.tryPromise({
-          try: async () => {
-            const manifest = await readManifestOf(home, profile)
-            const entries = Object.entries(manifest.dependencies)
-            for (const [name, range] of entries) {
-              await installPackage(
-                { kind: "registry", name, version: range },
-                { home, profiles: [profile], installAnchor: installerAnchor() },
-              )
-            }
-            return entries.length
-          },
-          catch: toCliError,
-        })
-        installed += count
-      }
-      log.success(`Install complete: ${installed} package(s) across ${invocation.profiles.length} profile(s)`)
-      log.info("A running ellamaka server hot-mounts changes via composition-file watching.")
-      return
-    }
-
-    const { action, pkg } = invocation
-
-    if (action === "add") {
-      const profiles = invocation.profiles
-      if (invocation.local) {
-        // Official pnpm path-spec semantics: the operand IS the directory.
-        const result = yield* Effect.tryPromise({
-          try: () => installPackage({ kind: "dir", path: pkg! }, { home, profiles, installAnchor: installerAnchor() }),
-          catch: toCliError,
-        })
-        log.success(`Installed ${result.name}@${result.version} (${result.source})`)
-        log.info(`Enabled in: ${profiles.join(", ")}`)
-        if (result.warning) log.warn(result.warning)
-        log.info(
-          "A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.",
-        )
-        return
-      }
-      // Phase-1 transport policy: github sources get a clear error with the
-      // npm alternative before any network activity (D-07).
-      yield* Effect.try({
-        try: () => {
-          const spec = parseRegistrySpec(pkg!)
-          assertNotGithubSource(spec.kind === "registry" ? (spec.version ?? spec.name) : spec.name)
-          return RISK_NOTE
+    if (verb === "list") {
+      const plugins = yield* Effect.tryPromise({
+        try: async () => {
+          const manifest = await readManifestOf(home, profiles[0] ?? "web")
+          return manifest.bundles
+            .filter((name) => !name.startsWith("@deepseek-ai/"))
+            .map((name) => {
+              const spec = manifest.dependencies[name]
+              return {
+                name,
+                version: declaredVersion(spec) ?? installedVersion(home, profiles[0] ?? "web", name) ?? "unknown",
+              }
+            })
         },
         catch: toCliError,
       })
-      const result = yield* Effect.tryPromise({
-        try: () => installPackage(parseRegistrySpec(pkg!), { home, profiles, installAnchor: installerAnchor() }),
-        catch: toCliError,
-      })
-      log.success(`Installed ${result.name}@${result.version} (${result.source})`)
-      log.info(`Enabled in: ${profiles.join(", ")}`)
-      if (result.warning) log.warn(result.warning)
-      log.info(
-        "A running ellamaka server hot-mounts it via composition-file watching; otherwise it mounts at next boot.",
-      )
-      return
+      if (args.json === true) {
+        process.stdout.write(JSON.stringify({ plugins }) + "\n")
+        return undefined
+      }
+      if (plugins.length === 0) {
+        log.info("No dsh plugins installed.")
+        return undefined
+      }
+      for (const entry of plugins) log.info(`${entry.name}@${entry.version}`)
+      return undefined
     }
 
-    if (action === "remove") {
-      yield* Effect.tryPromise({
-        try: () => removePackage(pkg!, { home }),
-        catch: toCliError,
-      })
-      log.success(`Removed ${pkg}`)
-      log.info("A running ellamaka server unmounts it via composition-file watching.")
-      return
-    }
-
-    if (action === "enable" || action === "disable") {
-      const enabled = action === "enable"
-      // Both verbs target the requested profiles (alias-expanded); omitted
-      // --profile already falls back to both built-ins via parseProfiles.
-      const targets = invocation.profiles
+    if (verb === "enable" || verb === "disable") {
+      const enabled = verb === "enable"
+      const pkg = rawArgs[1]
+      if (pkg === undefined) {
+        return yield* fail(`error: plugin ${verb} requires a <package> argument`)
+      }
       yield* Effect.tryPromise({
         try: async () => {
           let touched = false
-          for (const profile of targets) {
+          for (const profile of profiles) {
             // Only a package the profile's manifest declares can flip state;
             // the patch layer is the enable/disable surface, not the install
             // record.
-            const patchPath = patchPathOf(home, profile)
             const manifest = await readManifestOf(home, profile)
-            const installed = pkg! in manifest.dependencies || manifest.bundles.includes(pkg!)
+            const installed = pkg in manifest.dependencies || manifest.bundles.includes(pkg)
             if (!installed) continue
             touched = true
-            if (enabled) await enableRow(patchPath, pkg!)
-            else await disableRow(patchPath, pkg!)
+            if (enabled) await enableRow(patchPathOf(home, profile), pkg)
+            else await disableRow(patchPathOf(home, profile), pkg)
           }
-          if (!touched) throw new NotInstalledError(pkg!)
+          if (!touched) throw new Error(`dsh plugin: ${pkg} is not installed`)
         },
         catch: toCliError,
       })
       log.success(`${enabled ? "Enabled" : "Disabled"} ${pkg}`)
-      log.info(`Enabled in: ${targets.join(", ")}`)
-      return
+      log.info(`Enabled in: ${profiles.join(", ")}`)
+      return undefined
     }
 
-    if (action === "list") {
-      const plugins = yield* Effect.try({
-        try: () => listInstalled(home, invocation.profiles[0] ?? "web"),
-        catch: toCliError,
-      })
-      if (invocation.json === true) {
-        process.stdout.write(JSON.stringify({ plugins }) + "\n")
-        return
-      }
-      if (plugins.length === 0) {
-        log.info("No dsh plugins installed.")
-        return
-      }
-      for (const entry of plugins) {
-        log.info(`${entry.name}@${entry.version}`)
-      }
-      return
+    const forwarded = normalizeAddArgs(rawArgs)
+    if (forwarded[0] === "add" && forwarded[1] !== undefined && !forwarded[1].startsWith("file:")) {
+      log.info(RISK_NOTE)
     }
-
-    return yield* fail(`unknown dsh plugin action: ${action} (expected add|remove|install|enable|disable|list)`)
+    yield* Effect.try({
+      try: () => {
+        for (const profile of profiles) forwardToOfficial(home, profile, forwarded)
+      },
+      catch: toCliError,
+    })
+    log.info("A running ellamaka server hot-reloads the profile via composition-file watching.")
+    return undefined
   }),
 })

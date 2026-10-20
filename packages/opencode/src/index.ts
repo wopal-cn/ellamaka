@@ -39,7 +39,7 @@ import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
-import { DshPackageWorkerCommand } from "./cli/cmd/dsh-package-worker"
+import { runDshOfficialIfRequested } from "./cli/cmd/dsh-official"
 import { DshWebChildCommand } from "./cli/cmd/dsh-web-child-command"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
@@ -288,7 +288,6 @@ const cli = yargs(args)
         })
         .command(DshPluginCommand)
         .command(DshDumpConfigCommand)
-        .command(DshPackageWorkerCommand)
         .command(DshWebChildCommand)
         .epilogue(DSH_HELP_EXAMPLES),
     handler: async (argv) => {
@@ -329,6 +328,9 @@ const cli = yargs(args)
   .strict()
 
 try {
+  // The official-installer child role owns its own argv and exits; intercept it
+  // before yargs, whose parent `--profile` would otherwise swallow the flag.
+  if (await runDshOfficialIfRequested(process.argv)) process.exit()
   if (args.includes("-h") || args.includes("--help")) {
     await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
       if (err) throw err
