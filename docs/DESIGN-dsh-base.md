@@ -1,7 +1,7 @@
 # DSH 融合基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-19
+> **Updated**: 2026-10-20
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -42,13 +42,15 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 
 ### Release Boundary
 
-`packages/ellamaka-cordis/package.json` 与签入的包管理器锁文件固定 DSH 依赖版本。Ellamaka 源码拥有一个递增的 closureVersion，CLI 与 Desktop 都嵌入它。当锁定的 DSH 闭包或产品自有 DSH 文件发生可能影响 Home 数据的变化时提升它。不要用 CLI/Desktop 的 SemVer 或发布通道推断 Home 兼容性，也不要增加全内容指纹或兼容矩阵。
+`packages/ellamaka-cordis/package.json` 只声明 `@deepseek-ai/dsh` 一个包作为 DSH 依赖的唯一版本入口。`@deepseek-ai/cordis`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-app-boot`、`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@deepseek-ai/dsh-plugin-manager` 及全部子包版本均由 `@deepseek-ai/dsh` 自身的依赖树唯一锁定；`package.json` 与 `bunfig.toml` 不重复维护 `@deepseek-ai/dsh-*` 子包列表。
 
-生成的 manifest 与 lock 必须与这些输入保持一致。保留现有构建与漂移检查；它们不需要预测上游 DSH 的数据迁移，也不需要维护已发布 closureVersion 的历史。
+构建脚本从唯一的 `@deepseek-ai/dsh` 入口与工作区 `bun.lock` 派生 `dsh-runtime.manifest.json` 和完整的 `dsh-runtime.lock.json`（由 `Arborist` 展开全部传递依赖闭包），并通过漂移检查保证签入的 manifest、lock 与 `package.json` 一致。升级 DSH 版本只需更新 `@deepseek-ai/dsh` 版本号、重新生成 `bun.lock` 并刷新运行时清单与锁文件。
+
+Ellamaka 源码维护一个递增的 `closureVersion`，CLI 与 Desktop 构建共用。当锁定的 DSH 闭包或产品自有 DSH 文件发生可能影响 Home 数据的变化时提升它。Home 兼容性仅由 `closureVersion` 判定，与 CLI/Desktop 的产品 SemVer 及发布通道解耦。
 
 ### Materialization
 
-在读写 Home 之前，先物化并校验产品固定的 DSH 依赖。使用签入的 lock 及其现有的包完整性检查。下载、解包或必需包校验失败时，在触碰 Home 之前就让准备失败。保留现有 staging 与闭包复用行为；此处不引入第二套包管理器，也不另起一套 Home 安全协议。
+在读写 Home 之前，先在 `$WOPAL_HOME/dsh/staging` 物化并校验产品固定的 DSH 依赖闭包，通过包完整性检查后再就位到 `$WOPAL_HOME/dsh/closures/<version>`。同版本已就位的完整闭包直接复用。下载、解包或必需包校验失败时，在触碰 Home 之前终止准备。
 
 `ELLAMAKA_DSH=0` 在 DSH 专属环境设置、文件访问、网络访问、物化与 profile 挂载之前短路。
 
@@ -75,13 +77,13 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 
 ### Declarations and Layers
 
-profile 的 `package.json` 声明 dependencies 与有序 `dsh.profile.bundles`，是安装与激活的真相源。`cordis.yml` 是宿主生成的空 Include 根；`cordis.patch.yml` 是用户补丁。
+profile 的 `package.json` 声明有序 `dsh.profile.bundles` 与外部插件 `dependencies`，是安装与激活的真相源。官方内置 bundle（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`）从外部安装闭包（`installAnchor`）加载，不在 `profile/package.json` 的 `dependencies` 中锁定版本，也不安装到 `profile/node_modules`。`profile/pnpm-workspace.yaml` 固定 `autoInstallPeers: false`，外部插件声明的 `@deepseek-ai/*` 对等依赖不写入 `profile/node_modules`，运行期统一路由到当前活动的 DSH 闭包。
 
-完整配置按下列顺序求值：bundle 层 → profile 用户层 → home 注入与 home 用户层 → 命令行覆盖 → 宿主能力约束与显式环境硬禁用。一般用户配置保留覆盖能力；运行时不可执行的后端、无会话容器边界和禁用的 telemetry 由宿主约束保护。
+`cordis.patch.yml` 是用户补丁层；`cordis.yml` 是运行期合成根锚点（非用户配置文件）。完整配置按下列顺序求值：bundle 层 → profile 用户层 → home 注入与 home 用户层 → 命令行覆盖 → 宿主能力约束与显式环境硬禁用。一般用户配置保留覆盖能力；运行时不可执行的后端、无会话容器边界和禁用的 telemetry 由宿主约束保护。
 
 ProfileRuntime 拥有 profile facts、完整补丁生成、包解析、root Include、mutation queue、验收与释放。启动、配置转储和重放共用同一生成过程，后续重放重新读取实际声明文件。
 
-Ellamaka 自己创建的 profile 初始文件、固定 root Include 和必要格式整理只在首次准备或确认这些宿主文件缺失/未完成时写入；正常同版本 mount 只验证这些宿主文件，不重复改写。需要补写时遵守当前 Home lock 和 profile mutation queue。
+宿主通过官方 `initProfile` 初始化缺失的 `package.json`、`cordis.patch.yml` 与 `pnpm-workspace.yaml`，已有声明文件保持用户内容不变（若 `$DSH_HOME/cordis.patch.yml` 被意外清空为空白文本，准备阶段将其恢复为官方空数组模板 `[]`）。因为运行期 Cordis `Include.write()` 会将展开后的合成树写回 `cordis.yml`，宿主在准备阶段和每次 `mountProfile` 启动前都无条件将 `profile/cordis.yml` 重置为 `[]\n`，避免上一次运行写回的合成树在下次启动时重复叠加。
 
 ### Boot Contract
 
@@ -89,7 +91,9 @@ DSH v0.2 使用 `createRuntimeResolution` 提供不可变的包映射，`auditSt
 
 装配时注入 profileContext：name、dir、patchPath、installAnchor、cwd、home、startedBundles、overlays、telemetryDisabledEnv。overlays 包含必要的宿主约束，使原生设置与插件管理操作使用同一策略。
 
-App Boot 审计后，宿主检查采用的必需服务和工具。Web 检查默认 preset 可解析和可绑定；tools 检查对应平台的采用集合。插件等待服务的警告不能直接等同于完整挂载成功。
+`loadProfile` 与 `prepareProfilePatches` 按 `includePrerelease: true` 校验每个 bundle 与插件行的 `peerDependencies`（同时支持 `profile/compatibility.json` 的精确版本豁免）。宿主内置核心 bundle（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`）缺失或跳过时挂载直接失败；用户或第三方扩展 bundle 因版本不兼容进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）时，宿主记录告警诊断并跳过该扩展，保持核心容器与其余兼容插件正常启动。
+
+App Boot 审计后，宿主检查采用的必需服务和工具：`web` 检查核心 Web 服务与默认 preset（`standard`）可解析、可绑定；`ellamaka-tools` 检查本平台全部采用工具均已实际注册到 `tools` 服务（详见 `./DESIGN-ellamaka-tools.md`）。插件等待服务的警告不能等同于完整挂载成功。
 
 ## Host Compatibility
 
@@ -137,7 +141,7 @@ Electron 使用产品内置 Node。宿主以官方 LocalSubprocessRuntime 的子
 
 Bun 在引擎和界面 preload 之前安装 Node diagnostic 兼容层，解决 `getSystemErrorMessage` 的命名导出初始化时序；Node 原生实现保持。该处理仅涉及公开 builtin 函数，不伪造 Loader internal 或私有 Node 接口。
 
-Bun 的 PTC 兼容同样限制在确定的宿主差异上。主进程通过 Bun loader 对固定 rc.2 provider 的单一 `stripTypeScriptTypes` import 做精确替换，实际 strip-only 转换由随 Bridge 发布的 Amaro 执行。rc.2 默认把 JsonChannel 放在 `child_process` 的额外 fd 7 双向 pipe 上，而 Bun 连续创建额外 pipe 会出现可复现的 `ENOENT` / `EPIPE`；因此 Bun 路径只把该私有控制通道改走标准 stdin/stdout，stderr 保留为 bootstrap/进程诊断，官方 JsonChannel framing、binding、沙箱、取消、超时、输出预算与进程回收仍原样复用。源码态由 Bun 执行极小 child entry，编译态由同一产品二进制在 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 标记下进入私有 child 角色。固定 provider 的 strip、stdio/control、child bootstrap 任一适配锚点变化时，兼容层必须显式失败，禁止静默降级到无 PTC。
+Bun 的 PTC 兼容同样限制在确定的宿主差异上。主进程通过 Bun loader 对官方 `@deepseek-ai/dsh-ptc-runtime-node` provider 的单一 `stripTypeScriptTypes` import 做精确替换，实际 strip-only 转换由随 Bridge 发布的 Amaro 执行。上游默认把 JsonChannel 放在 `child_process` 的额外 fd 7 双向 pipe 上，而 Bun 连续创建额外 pipe 会出现可复现的 `ENOENT` / `EPIPE`；因此 Bun 路径只把该私有控制通道改走标准 stdin/stdout，stderr 保留为 bootstrap/进程诊断，官方 JsonChannel framing、binding、沙箱、取消、超时、输出预算与进程回收仍原样复用。源码态由 Bun 执行极小 child entry，编译态由同一产品二进制在 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 标记下进入私有 child 角色。provider 的 strip、stdio/control、child bootstrap 任一适配锚点变化时，兼容层必须显式失败，禁止静默降级到无 PTC。
 
 ## Closure and Startup Lifecycle
 
@@ -169,7 +173,7 @@ Home 检查与版本变化使用唯一的 Home 锁。进程只要可能访问 Ho
 
 备份或元数据发布失败时，候选运行时得不到任何 Home 写权限。版本与 marker 使用原子文件写入发布；不完整的元数据会被报告，不会被自动清除或猜测。已有 managed Home 在版本更新失败时保留原有版本。备份是供人工恢复的副本，不是运行时目录；在可知时保留源 closureVersion 与 managed 元数据，无版本的历史来源则明确标为 unknown。无版本 Home 的首次接管属于离线升级边界：旧构建不持有这把新锁，因此仅取得锁并不能证明那些旧进程已经停止。Ellamaka 不校验也不翻译 DSH 私有数据格式。
 
-无版本 Home 的接管是唯需要操作员动作的 Home 变更。交互入口 TUI 与 Desktop 在本地应用旁呈现一次确认，并明确要求先停止旧的 Ellamaka/DSH 进程。非交互入口从不提示：它们通过 health 与准备结果报告 `DSH_HOME_LEGACY_ADOPTION_REQUIRED`，并指引操作员改用交互入口。确认后依次执行排他锁、以未知源版本备份、原子发布版本与 marker；任一步失败都不改动 Home。版本闸门保护所有参与本协议的构建。不感知该锁的构建仍在协议之外，因此不得对已接管的 Home 运行。
+无版本 Home 的接管是唯一需要操作员确认的 Home 变更。交互入口 TUI 与 Desktop 在本地应用旁呈现一次确认，并明确要求先停止旧的 Ellamaka/DSH 进程。非交互入口从不提示：它们通过 health 与准备结果报告 `DSH_HOME_LEGACY_ADOPTION_REQUIRED`，并指引操作员改用交互入口。确认后依次执行排他锁、以未知源版本备份、原子发布版本与 marker；任一步失败都不改动 Home。版本闸门保护所有参与本协议的构建。不感知该锁的构建仍在协议之外，因此不得对已接管的 Home 运行。
 
 ### Activation Failure and Manual Recovery
 

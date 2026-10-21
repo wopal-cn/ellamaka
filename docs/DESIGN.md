@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-14
+> **Updated**: 2026-10-20
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -522,7 +522,7 @@ Ellamaka Agent 的工具采用路径复用 DSH 工具执行能力，持久 Sessi
 | DSH Runtime Manager | `@wopal/ellamaka-cordis/runtime`                       | 所有入口共用的启动入口，负责禁用判断、闭包物化、完整性校验、动态加载与容器挂载                                  |
 | DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins`                       | profile 声明、配置重放与安装转发；安装由官方 pluginManager + pnpm 唯一执行，本地来源以 `file:` 声明 |
 | Wopal preset bundle | `@wopal/dsh-presets`（ontology `dsh/agents-presets/`） | 声明 wopal/fae/rook preset 并携带随包技能；通过标准 DSH bundle 装配                                             |
-| DSH 运行时清单      | ellamaka 构建产物                                      | 构建时从 `packages/ellamaka-cordis/package.json` 派生并锁定 dsh 官方依赖                                        |
+| DSH 运行时清单      | ellamaka 构建产物                                      | 构建时从 `packages/ellamaka-cordis/package.json` 的唯一 `@deepseek-ai/dsh` 入口派生并锁定完整 DSH 依赖闭包      |
 | dsh 引擎装配        | `@wopal/ellamaka-cordis/dsh-web`                       | 通过 installAnchor 和 profile facts 装配两个容器，验收服务、工具与默认 preset 后发布句柄                        |
 | dsh-adapter         | `@wopal/ellamaka-cordis/dsh-adapter`                   | 把工具容器中的工具投影进 ellamaka ToolRegistry                                                                  |
 
@@ -624,16 +624,6 @@ WopalSpace 需要统一 Web UI 作为 TUI 之外的第二种用户界面。`ella
 
 Workbench 的界面、视图模型、目录架构、能力适配规则以及与 `wopal-cli` 的协同见 [DESIGN-workbench.md](./DESIGN-workbench.md)。需要参考上游 UI 代码时，从 `labs/ref-repos/opencode/packages/app` 读取。
 
----
-
-## Related Documents
-
-| 文档                                         | 引用目的                            |
-| -------------------------------------------- | ----------------------------------- |
-| `../../../projects/wopal-cli/docs/DESIGN.md` | wopal-cli 如何消费 ellamaka release |
-| `packages/opencode/AGENTS.md`                | engine package 内部规则             |
-| `packages/ellamaka-app/AGENTS.md`            | ellamaka 官方 web UI 包级开发规则   |
-
 ## Scheduled Plan Execution
 
 界面结构、空间级工作区切换、审批与排期交互由 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md) 定义；HTTP 路径、数据与错误契约由 [Scheduler API 草案](./DESIGN-plan-scheduler.md#api-proposal) 定义。Workbench 壳负责承载，调度领域状态由 CLI 提供。
@@ -643,3 +633,13 @@ Ellamaka 实现 Wopal CLI 定义的 Runner Port：版本协商、幂等执行身
 调度 profile 在普通配置合并后施加不可放宽的权限上限。它允许正常编辑、网络、构建和测试，保护 Git 管理元数据、权威 Plan 与审批/调度写权限，阻止 Agent 自行提交、合并或推进人工生命周期。工具代理/隔离覆盖间接 shell 与子进程路径，提示词不能替代强制执行。
 
 Workbench 经 Runtime Integration API 使用同一 CLI 能力，提供审批后停止、DAG 确认、cron/时区、阻塞诊断、运行历史和人工接管；Desktop/Web 共享行为。跨项目协议遵循 [Plan Orchestration](../../../docs/products/wopal-space/DESIGN-plan-orchestration.md)，交互遵循 [Scheduler UI](../../../docs/products/wopal-space/DESIGN-plan-scheduler-ui.md)。
+
+---
+
+## Reference Documents
+
+| 文档                                         | 引用目的                            |
+| -------------------------------------------- | ----------------------------------- |
+| `../../../projects/wopal-cli/docs/DESIGN.md` | wopal-cli 如何消费 ellamaka release |
+| `packages/opencode/AGENTS.md`                | engine package 内部规则             |
+| `packages/ellamaka-app/AGENTS.md`            | ellamaka 官方 web UI 包级开发规则   |
