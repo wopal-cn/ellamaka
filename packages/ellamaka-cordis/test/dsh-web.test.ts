@@ -9,7 +9,8 @@ import { once } from "node:events"
 import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
 import { bootDshWeb, mountDshWeb, mountDshTools } from "../src/dsh-web"
-import { createDshRuntimeApi } from "../src/runtime/loader"
+import { createDshRuntimeApi, createPackageDshRuntimeApi, type DshRuntimeApi } from "../src/runtime/loader"
+import { appendBundle, readProfileManifest, withProfileManifestWrite } from "../src/plugins/profile-manifest"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 /** Read the tool names registered on a mounted container (typed guard, no `any`). */
@@ -101,6 +102,37 @@ function makeSessionFake(id: string, cwd: string, seeded: { type: string; data: 
       return event
     },
     events,
+  }
+}
+
+/**
+ * Wrap the real runtime so one profile reports a selected bundle as skipped.
+ * Everything except `loadProfile` delegates to the real closure, keeping the
+ * test at the container boundary instead of mocking the skip semantics.
+ */
+function runtimeWithSkippedBundle(
+  profileName: "web" | "ellamaka-tools",
+  packageName: string,
+  reason: string,
+): DshRuntimeApi {
+  const base = createPackageDshRuntimeApi()
+  return {
+    ...base,
+    appBoot: {
+      ...base.appBoot,
+      loadProfile: (...args: Parameters<typeof base.appBoot.loadProfile>) => {
+        const loaded = base.appBoot.loadProfile(...args)
+        if (args[1] !== profileName) return loaded
+        return {
+          ...loaded,
+          layers: loaded.layers.filter((layer) => layer.packageName !== packageName),
+          skippedBundles: [
+            ...loaded.skippedBundles.filter((bundle) => bundle.packageName !== packageName),
+            { packageName, reason },
+          ],
+        }
+      },
+    },
   }
 }
 
@@ -215,6 +247,86 @@ describe("dsh web engine", () => {
       expect(presets.find((preset) => preset.id === "ptc")?.broken).toBeUndefined()
     } finally {
       await host.dispose()
+      await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
+  test("a skipped extension bundle keeps web ready and emits a WARN diagnostic", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-bundle-skip-"))
+    const logDir = join(home, "logs")
+    prepareDshProfiles(home)
+
+    const profileDir = join(home, "home", "profiles", "web")
+    const manifestPath = join(profileDir, "package.json")
+    const patchPath = join(profileDir, "cordis.patch.yml")
+    await withProfileManifestWrite(profileDir, (manifest) => appendBundle(manifest, "@example/incompatible-bundle"))
+    expect(readProfileManifest(profileDir).bundles).toContain("@example/incompatible-bundle")
+    const manifestBefore = readFileSync(manifestPath, "utf8")
+    const patchBefore = readFileSync(patchPath, "utf8")
+
+    const host = await bootDshWeb({
+      home,
+      port: 0,
+      logDir,
+      disablePtcRuntime: true,
+      ellamakaCommand: [process.execPath],
+    })
+    try {
+      expect(host.ctx.get("configEditor", false)).toBeDefined()
+      expect(readFileSync(manifestPath, "utf8")).toBe(manifestBefore)
+      expect(readFileSync(patchPath, "utf8")).toBe(patchBefore)
+
+      const content = readFileSync(join(logDir, "dsh-plugins-web.log"), "utf8")
+      expect(content).toContain("[WARN]")
+      expect(content).toContain("@example/incompatible-bundle")
+      expect(content).toContain("reason")
+    } finally {
+      await host.dispose()
+    }
+  }, 30_000)
+
+  test("a skipped core bundle rejects web startup with its official reason", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-core-skip-web-"))
+    prepareDshProfiles(home)
+    const ctx = new Context()
+    const runtime = runtimeWithSkippedBundle("web", "@deepseek-ai/dsh-web-app", "test-incompatible")
+
+    let error: unknown
+    try {
+      await mountDshWeb(ctx, { home, port: 0, runtime, disablePtcRuntime: true })
+    } catch (caught) {
+      error = caught
+    }
+    try {
+      expect(error).toBeInstanceOf(Error)
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).toMatch(/DSH core bundles could not load/)
+      expect(message).toContain("@deepseek-ai/dsh-web-app")
+      expect(message).toContain("test-incompatible")
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
+  test("a skipped core bundle rejects the tools container with its official reason", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-core-skip-tools-"))
+    prepareDshProfiles(home)
+    const ctx = new Context()
+    const runtime = runtimeWithSkippedBundle("ellamaka-tools", "@deepseek-ai/dsh-base", "test-incompatible")
+
+    let error: unknown
+    try {
+      await mountDshTools(ctx, { home, port: 0, runtime })
+    } catch (caught) {
+      error = caught
+    }
+    try {
+      expect(error).toBeInstanceOf(Error)
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).toMatch(/DSH core bundles could not load/)
+      expect(message).toContain("@deepseek-ai/dsh-base")
+      expect(message).toContain("test-incompatible")
+    } finally {
       await ctx.fiber.dispose()
     }
   }, 30_000)

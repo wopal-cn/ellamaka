@@ -386,13 +386,24 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   installBunSubprocessCompatibility()
 
   const { createRuntimeResolution } = runtime.appBoot
+  const coreBundles =
+    profileName === WEB_PROFILE_NAME ? ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] : ["@deepseek-ai/dsh-base"]
   const loadProfile = (...args: Parameters<typeof runtime.appBoot.loadProfile>) => {
     const loaded = runtime.appBoot.loadProfile(...args)
-    if (loaded.skippedBundles.length) {
-      throw new Error(
-        "DSH selected bundles could not load: " +
-          loaded.skippedBundles.map((bundle) => bundle.packageName + ": " + bundle.reason).join("; "),
-      )
+    const skipped = new Map(loaded.skippedBundles.map((bundle) => [bundle.packageName, bundle.reason]))
+    const loadedLayers = new Set(loaded.layers.map((layer) => layer.packageName))
+    const coreFailures = coreBundles.flatMap((packageName) => {
+      const reason = skipped.get(packageName)
+      if (reason !== undefined) return [packageName + ": " + reason]
+      if (!loadedLayers.has(packageName)) return [packageName + ": missing from loaded layers"]
+      return []
+    })
+    if (coreFailures.length > 0) {
+      throw new Error("DSH core bundles could not load: " + coreFailures.join("; "))
+    }
+    for (const { packageName, reason } of loaded.skippedBundles) {
+      if (coreBundles.includes(packageName)) continue
+      ctx.logger.warn("DSH extension bundle skipped", { packageName, reason })
     }
     return loaded
   }
