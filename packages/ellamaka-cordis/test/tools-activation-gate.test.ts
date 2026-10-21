@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
+import { createPackageDshRuntimeApi } from "../src/runtime/loader"
 import {
   assertDshActivationComplete,
   bootDshTools,
@@ -25,12 +26,6 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-/**
- * Insert a user plugin row that can never activate: the bundle package does
- * not exist, so the loader import fails and the entry stays inactive.
- * User patches live in the harness-home profile area (`<home>/home/profiles/
- * <profile>/cordis.patch.yml`), NOT the territory-root profiles directory.
- */
 function seedBrokenUserPlugin(profile: "ellamaka-tools" | "web"): (home: string) => void {
   return (home: string) => {
     const profileDir = join(home, "home", "profiles", profile)
@@ -42,44 +37,7 @@ function seedBrokenUserPlugin(profile: "ellamaka-tools" | "web"): (home: string)
   }
 }
 
-/**
- * A plugin that imports cleanly but can never activate: its Cordis `inject`
- * names a service nothing provides. Keep the service provider resolvable but
- * inert so the Loader records the settled outcome as pending (with the missing
- * service name) instead of a failed import.
- */
-function seedPendingUserPlugin(profile: "ellamaka-tools" | "web"): (home: string) => void {
-  return (home: string) => {
-    const profileDir = join(home, "home", "profiles", profile)
-    const pluginDir = join(profileDir, "node_modules", "pending-user-plugin")
-    mkdirSync(pluginDir, { recursive: true })
-    writeFileSync(
-      join(pluginDir, "package.json"),
-      JSON.stringify({ name: "pending-user-plugin", version: "1.0.0", type: "module", main: "index.js" }),
-    )
-    writeFileSync(join(pluginDir, "index.js"), "export const inject = ['missingService']\nexport function apply() {}\n")
-    writeFileSync(
-      join(profileDir, "cordis.patch.yml"),
-      [
-        "- insert:",
-        "    - id: pending-user-plugin",
-        "      name: pending-user-plugin",
-        "    - id: late-service-provider",
-        "      name: '@deepseek-ai/dsh-llm'",
-        "",
-      ].join("\n"),
-    )
-  }
-}
-
-/**
- * Simulate a future dsh-base split: `working-directory` is a NEW base provider
- * absent from rc.2's real bundle (this is a forward-compatibility fixture,
- * not a claim that the current container loads it). Its service name is
- * synthetic too; only the relationship matters — an adopted tool declares
- * the dependency and the provider must survive the host's pruning.
- */
-function syntheticWorkingDirectoryRows() {
+function syntheticRows() {
   return [
     { id: "tools", name: "@deepseek-ai/dsh-tools" },
     { id: "tool-bash", name: "@deepseek-ai/dsh-tool-bash" },
@@ -88,11 +46,6 @@ function syntheticWorkingDirectoryRows() {
   ]
 }
 
-/**
- * Test seam for a package that does not exist in rc.2. The real resolver
- * loads module exports; production keeps that single path, while this fixture
- * supplies only the declarations the synthetic packages would publish.
- */
 function syntheticServices(name: string) {
   if (name === "@deepseek-ai/dsh-tool-bash") return { requires: ["workingDirectory"], provides: [] }
   if (name === "@deepseek-ai/dsh-working-directory") return { requires: [], provides: ["workingDirectory"] }
@@ -101,8 +54,9 @@ function syntheticServices(name: string) {
 
 describe("tools provider adoption closure", () => {
   test("keeps a newly split base provider required by an adopted tool", () => {
-    const rows = syntheticWorkingDirectoryRows()
-    const patches = profileCapabilityPatches("ellamaka-tools", rows, false, syntheticServices)
+    const patches = profileCapabilityPatches("ellamaka-tools", syntheticRows(), false, {
+      inspect: syntheticServices,
+    })
     const disabled = new Set(patches.filter((patch) => patch.disabled === true).map((patch) => patch.id))
     expect(disabled.has("working-directory")).toBe(false)
     expect(disabled.has("unadopted-upstream-row")).toBe(true)
@@ -116,12 +70,36 @@ describe("tools provider adoption closure", () => {
       { id: "session", name: "@deepseek-ai/dsh-session" },
       { id: "agent", name: "@deepseek-ai/dsh-agent" },
     ]
-    const patches = profileCapabilityPatches("ellamaka-tools", rows, false)
+    const patches = profileCapabilityPatches("ellamaka-tools", rows, false, {
+      installAnchor: require.resolve("@deepseek-ai/dsh/package.json"),
+    })
     const disabled = new Set(patches.filter((patch) => patch.disabled === true).map((patch) => patch.id))
     expect(disabled.has("session-projection")).toBe(false)
     expect(disabled.has("sandbox-policy")).toBe(false)
     expect(disabled.has("session")).toBe(true)
     expect(disabled.has("agent")).toBe(true)
+  })
+
+  test("resolves a real service edge from the install anchor, not the fallback floor", () => {
+    const rows = [
+      { id: "tools", name: "@deepseek-ai/dsh-tools" },
+      { id: "tool-bash", name: "@deepseek-ai/dsh-tool-bash" },
+      { id: "shell-env", name: "@deepseek-ai/dsh-shell-env" },
+    ]
+    const patches = profileCapabilityPatches("ellamaka-tools", rows, false, {
+      installAnchor: require.resolve("@deepseek-ai/dsh/package.json"),
+    })
+    const disabled = new Set(patches.filter((patch) => patch.disabled === true).map((patch) => patch.id))
+    expect(disabled.has("tool-bash")).toBe(false)
+    expect(disabled.has("shell-env")).toBe(false)
+  })
+
+  test("fails loudly when the install anchor cannot resolve a declared package", () => {
+    expect(() =>
+      profileCapabilityPatches("ellamaka-tools", [{ id: "tool-bash", name: "@deepseek-ai/dsh-tool-bash" }], false, {
+        installAnchor: join(tempHome(), "missing-dsh", "package.json"),
+      }),
+    ).toThrow(/install anchor|resolve/)
   })
 })
 
@@ -161,57 +139,54 @@ describe("tools container activation gate", () => {
     const root = tempHome()
     const ctx = new Context()
     prepareDshProfiles(root)
+    // A real module that imports cleanly but can never activate: its Cordis
+    // `inject` names a service nothing provides, so Loader settles it as
+    // pending with that service in the diagnostic.
+    const pluginDir = join(root, "home", "profiles", "ellamaka-tools", "node_modules", "pending-user-plugin")
+    mkdirSync(pluginDir, { recursive: true })
+    writeFileSync(
+      join(pluginDir, "package.json"),
+      JSON.stringify({ name: "pending-user-plugin", version: "1.0.0", type: "module", main: "index.js" }),
+    )
+    writeFileSync(join(pluginDir, "index.js"), "export const inject = ['missingService']\nexport function apply() {}\n")
+
     const host = await mountDshTools(ctx, { home: root, port: 0, disablePtcRuntime: true })
     try {
-      const hmr = ctx.get("hmr") as unknown
-      if (
-        typeof hmr !== "object" ||
-        hmr === null ||
-        !("runExclusive" in hmr) ||
-        typeof hmr.runExclusive !== "function"
-      ) {
-        throw new Error("tools container did not provide the HMR transaction service")
-      }
-      const { composeFullPatchStack, readUserPatchLayer } = await import("../src/plugins/compose")
-      const { createPackageDshRuntimeApi } = await import("../src/runtime/loader")
-      const runtime = createPackageDshRuntimeApi()
-      seedPendingUserPlugin("ellamaka-tools")(root)
-      const patches = composeFullPatchStack({
-        ...host.stackContext,
-        userPatches: readUserPatchLayer(root, "ellamaka-tools"),
+      // Model the state bun-hmr hands to `afterApply`: the mounted tree already
+      // carries an entry that cannot activate because its `inject` service has
+      // no provider. Previously `validate()` re-ran only the warning audit, so
+      // this tree stayed "ready"; it must now fail closed with the entry and
+      // the missing service in the diagnostic.
+      const config = host.includeEntry.options?.config
+      if (config === undefined) throw new Error("root include carries no config snapshot")
+      await host.includeEntry.update({
+        config: {
+          ...config,
+          patches: [
+            {
+              insert: [
+                { id: "pending-user-plugin", name: "pending-user-plugin" },
+                { id: "stale-service-provider", name: "@deepseek-ai/dsh-llm" },
+              ],
+            },
+          ],
+        },
       })
-      // Exactly the HMR post-apply chain: apply the current composition, then
-      // run the fail-closed validator. The previous config is restored
-      // explicitly on failure, mirroring bun-hmr's transactional rollback.
-      let error: unknown
-      try {
-        const entry = host.includeEntry as unknown
-        if (typeof entry !== "object" || entry === null || !("update" in entry) || typeof entry.update !== "function") {
-          throw new Error("tools container did not expose an updatable root include")
-        }
-        const previous =
-          "options" in entry &&
-          typeof entry.options === "object" &&
-          entry.options !== null &&
-          "config" in entry.options &&
-          typeof entry.options.config === "object"
-            ? entry.options.config
-            : {}
-        await hmr.runExclusive(async () => {
-          const { patches: _previous, ...rest } = previous ?? {}
-          try {
-            await entry.update({ config: { ...rest, patches } })
-            await assertDshActivationComplete(runtime, ctx, "ellamaka-tools")
-          } finally {
-            await entry.update({ config: previous ?? {} })
-          }
-        })
-      } catch (caught) {
-        error = caught
-      }
-      expect(error).toBeInstanceOf(Error)
-      expect(error instanceof Error ? error.message : String(error)).toContain("pending-user-plugin")
-      void patches
+      // The pre-Plan behavior: the plain audit only WARNS about the inactive
+      // tree and returns normally, which is why an HMR replay could leave the
+      // container "ready" with a broken entry.
+      const warnings: string[] = []
+      await createPackageDshRuntimeApi().appBoot.auditStartupEntries(ctx, "ellamaka", (line: string) =>
+        warnings.push(line),
+      )
+      expect(warnings.join("\n")).toContain("pending-user-plugin")
+
+      // `assertDshActivationComplete` is what mountProfile registers as
+      // bun-hmr's `afterApply` (see the `afterApply: validate` wiring): the
+      // same tree must now fail closed instead of degrading silently.
+      await expect(assertDshActivationComplete(createPackageDshRuntimeApi(), ctx, "ellamaka-tools")).rejects.toThrow(
+        /container activation incomplete[\s\S]*pending-user-plugin/,
+      )
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()

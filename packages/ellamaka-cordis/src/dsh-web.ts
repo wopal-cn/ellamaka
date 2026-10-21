@@ -40,6 +40,7 @@ import { dshHomeDirOf } from "./runtime/status.js"
 import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
 import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
 import type { Entry } from "@deepseek-ai/cordis-plugin-loader"
+import type { PatchOptions } from "@deepseek-ai/cordis-plugin-include"
 
 const require = createRequire(import.meta.url)
 
@@ -541,8 +542,9 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   stackContext.hostPatches = (input) =>
     profileCapabilityPatches(
       profileName,
-      runtime.appBoot.composeEntries([input as Parameters<typeof runtime.appBoot.composeEntries>[0][number]]),
+      runtime.appBoot.composeEntries([input as PatchOptions[]]),
       opts.disablePtcRuntime === true,
+      { installAnchor },
     )
   const patches = composeFullPatchStack(stackContext)
   const rootConfig = join(profile.dir, "cordis.yml")

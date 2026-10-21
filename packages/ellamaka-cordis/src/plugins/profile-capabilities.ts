@@ -1,9 +1,13 @@
-import { createRequire } from "node:module"
+import { readFileSync } from "node:fs"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import type { PatchOptions } from "@deepseek-ai/cordis-plugin-include"
+import { resolveProfileModule } from "./profile-resolution.js"
 
-interface Row {
+type Row = {
   id?: string
   name?: string
-  config?: Record<string, unknown> | Row[]
+  config?: unknown
   group?: boolean | null
   disabled?: boolean | null
   insert?: Row[]
@@ -20,11 +24,11 @@ interface ServiceDeclaration {
 }
 
 /**
- * Compatibility floor, not the forward-compatibility mechanism. Some rc.2
- * providers expose their service through an inherited base class, so the
- * host cannot prove their service name from this row alone. Keep the known
- * adopted providers enabled; new dependencies are discovered from the
- * actual inject graph above this floor.
+ * Compatibility floor only for rows whose declaration cannot be read (for
+ * example an inherited Service base class with no literal service name).
+ * This is NOT the forward-compatibility mechanism: new dependencies are
+ * discovered from the adopted inject graph, and an unresolvable install
+ * anchor still throws.
  */
 const fallbackProviders = new Set([
   "timer",
@@ -53,8 +57,8 @@ const fallbackProviders = new Set([
   "storage-domain",
 ])
 
-/** Roots that define the adopted tool surface even without a service of their own. */
-const adoptedEntryIds = new Set(["tools"])
+/** Tool-surface entry points; the closure starts from what the container adopts. */
+const adoptedEntryIds = new Set(["tools", "tool-bash", "tool-pwsh", "tool-fs", "tool-fs-search"])
 const explicitProviderNames = new Set(["@deepseek-ai/dsh-tool-str-replace-editor"])
 const hardDisabledIds = new Set([
   "hmr",
@@ -66,82 +70,95 @@ const hardDisabledIds = new Set([
 ])
 const forbiddenServices = new Set(["sessions", "agents"])
 
-const require = createRequire(import.meta.url)
-
-function unique(values: Iterable<string>): string[] {
-  return [...new Set([...values].filter((value) => value.length > 0))]
-}
-
-function stringsOf(value: unknown): string[] {
-  if (typeof value === "string") return [value]
-  if (!Array.isArray(value)) return []
-  return value.filter((item): item is string => typeof item === "string")
-}
-
-function injectOf(value: unknown): unknown {
-  return typeof value === "object" && value !== null && "inject" in value ? value.inject : undefined
-}
-
 /**
- * Read declarations without evaluating `apply()`. rc.2 plugins expose either
- * `export const inject` or a Service class with static `inject`; service
- * providers also name themselves in `super(ctx, "service")`.
+ * Parse the declaration surface only: no module evaluation. The type entry
+ * names the classes and their static `inject`; the runtime entry holds the
+ * literal `inject` arrays and the `super(ctx, "service")` provider names.
  */
-function declarationFromModule(module: unknown): ServiceDeclaration | undefined {
-  if (typeof module !== "object" || module === null) return undefined
-  const requires = stringsOf(injectOf(module))
-  const provides = new Set<string>()
-  for (const [, value] of Object.entries(module)) {
-    if (typeof value !== "function") continue
-    requires.push(...stringsOf(injectOf(value)))
-    const source = Function.prototype.toString.call(value)
-    const match = /super\s*\(\s*ctx\s*,\s*["']([^"']+)["']/u.exec(source)
-    if (match !== null) provides.add(match[1])
+function declarationFromSource(source: string): ServiceDeclaration | undefined {
+  const requires = new Set<string>()
+  for (const match of source.matchAll(/(?:export\s+)?(?:declare\s+)?const\s+inject\s*=\s*\[([\s\S]*?)\]/gu)) {
+    for (const service of stringArray(match[1])) requires.add(service)
   }
-  return requires.length === 0 && provides.size === 0
-    ? undefined
-    : { requires: unique(requires), provides: [...provides] }
+  for (const match of source.matchAll(/static\s+inject\s*=\s*\[([\s\S]*?)\]/gu)) {
+    for (const service of stringArray(match[1])) requires.add(service)
+  }
+  const provides = new Set<string>()
+  for (const match of source.matchAll(/super\s*\(\s*ctx\s*,\s*["']([^"']+)["']/gu)) provides.add(match[1])
+  return requires.size === 0 && provides.size === 0 ? undefined : { requires: [...requires], provides: [...provides] }
 }
 
-/**
- * Metadata fallback. `package.json` has no Cordis service names for rc.2
- * (`inject` is usually a module export), and peerDependencies describe
- * importable packages rather than required services. Only package names are
- * usable here, so they are converted to the service-name shape and used
- * solely when the module cannot be inspected.
- */
-function declarationFromManifest(name: string): ServiceDeclaration | undefined {
+function stringArray(value: string): string[] {
+  return [...value.matchAll(/["']([^"']+)["']/gu)].map((match) => match[1])
+}
+
+function readSource(file: string): string | undefined {
   try {
-    const manifest: unknown = require(`${name}/package.json`)
-    const peerDependencies = (
-      typeof manifest === "object" &&
-      manifest !== null &&
-      "peerDependencies" in manifest &&
-      typeof manifest.peerDependencies === "object" &&
-      manifest.peerDependencies !== null
-        ? Object.keys(manifest.peerDependencies)
-        : []
-    )
-      .filter((specifier) => specifier.startsWith("@deepseek-ai/") && specifier !== "@deepseek-ai/cordis")
-      .map((specifier) => specifier.replace(/^@deepseek-ai\//u, ""))
-    const requires = unique([...stringsOf(injectOf(manifest)), ...peerDependencies])
-    return requires.length === 0 ? undefined : { requires, provides: [] }
+    return readFileSync(file, "utf8")
   } catch {
     return undefined
   }
 }
 
-function servicesOf(name: string, cache: Map<string, ServiceDeclaration | undefined>): ServiceDeclaration | undefined {
-  if (cache.has(name)) return cache.get(name)
-  let declaration: ServiceDeclaration | undefined
+function typesEntryOf(packageRoot: string, manifestSource: string): string | undefined {
   try {
-    declaration = declarationFromModule(require(name))
+    const manifest: unknown = JSON.parse(manifestSource)
+    if (typeof manifest !== "object" || manifest === null || !("exports" in manifest)) return undefined
+    const exports = manifest.exports
+    if (typeof exports !== "object" || exports === null || !("." in exports)) return undefined
+    const root = exports["."]
+    if (typeof root === "object" && root !== null && "types" in root && typeof root.types === "string") {
+      return resolve(packageRoot, root.types)
+    }
   } catch {
-    declaration = undefined
+    return undefined
   }
-  declaration ??= declarationFromManifest(name)
-  cache.set(name, declaration)
-  return declaration
+  return undefined
+}
+
+/**
+ * Resolve a package through the product closure anchor and read declarations
+ * as text. Anchoring here is mandatory: packaged hosts do not carry the DSH
+ * packages in their own module graph.
+ */
+function declarationForPackage(name: string, installAnchor: string): ServiceDeclaration | undefined {
+  const context = { installAnchor, dir: dirname(installAnchor) }
+  let entry: string
+  try {
+    entry = resolveProfileModule(name, context)
+  } catch (error) {
+    throw new Error(
+      `dsh profile capabilities: cannot resolve ${JSON.stringify(name)} from install anchor ${installAnchor}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      { cause: error },
+    )
+  }
+  const runtimeFile = fileURLToPath(entry)
+  const packageRoot = dirname(dirname(runtimeFile))
+  const manifestSource = readSource(resolve(packageRoot, "package.json"))
+  const typesFile = manifestSource === undefined ? undefined : typesEntryOf(packageRoot, manifestSource)
+  const declarationSource = (typesFile === undefined ? undefined : readSource(typesFile)) ?? readSource(runtimeFile)
+  return declarationSource === undefined ? undefined : declarationFromSource(declarationSource)
+}
+
+interface Inspection {
+  declaration: ServiceDeclaration | undefined
+  /** The package was found at the anchor but its declaration surface was unreadable. */
+  unreadable: boolean
+}
+
+function servicesOf(name: string, installAnchor: string, cache: Map<string, Inspection>): Inspection {
+  if (cache.has(name)) return cache.get(name)!
+  if (!name.startsWith("@deepseek-ai/")) {
+    const result = { declaration: undefined, unreadable: false }
+    cache.set(name, result)
+    return result
+  }
+  const declaration = declarationForPackage(name, installAnchor)
+  const result = { declaration, unreadable: declaration === undefined }
+  cache.set(name, result)
+  return result
 }
 
 function nativePresetPlugins(rows: readonly Row[]): Row[] {
@@ -150,13 +167,13 @@ function nativePresetPlugins(rows: readonly Row[]): Row[] {
     .map((row) => (row.group && Array.isArray(row.config) ? { ...row, config: nativePresetPlugins(row.config) } : row))
 }
 
-function adoptedProviderIds(rows: readonly Row[], inspect: ServicesOf): Set<string> {
+function adoptedProviderIds(rows: readonly Row[], inspect: (name: string) => Inspection): Set<string> {
   const byId = new Map<string, Row>()
   const byService = new Map<string, string[]>()
   for (const row of rows) {
     if (!row.id) continue
     byId.set(row.id, row)
-    const declaration = inspect(row.name ?? "")
+    const { declaration } = inspect(row.name ?? "")
     if (!declaration) continue
     for (const service of declaration.provides) {
       const owners = byService.get(service) ?? []
@@ -168,14 +185,15 @@ function adoptedProviderIds(rows: readonly Row[], inspect: ServicesOf): Set<stri
   for (const row of rows) {
     if (!row.id) continue
     if (explicitProviderNames.has(row.name ?? "")) adopted.add(row.id)
-    if (fallbackProviders.has(row.id)) adopted.add(row.id)
+    const inspection = inspect(row.name ?? "")
+    if (inspection.unreadable && fallbackProviders.has(row.id)) adopted.add(row.id)
   }
   const queue = [...adopted]
   while (queue.length > 0) {
     const id = queue.shift()!
     const row = byId.get(id)
     if (!row) continue
-    const declaration = inspect(row.name ?? "")
+    const { declaration } = inspect(row.name ?? "")
     if (!declaration) continue
     for (const service of declaration.requires) {
       if (forbiddenServices.has(service)) continue
@@ -189,21 +207,29 @@ function adoptedProviderIds(rows: readonly Row[], inspect: ServicesOf): Set<stri
   return adopted
 }
 
-type ServicesOf = (name: string) => ServiceDeclaration | undefined
-
 /** Host boundaries are generated after the complete user composition. */
+export interface ProfileCapabilityPatchOptions {
+  /** Absolute @deepseek-ai/dsh/package.json of the materialised product closure. */
+  installAnchor: string
+  /** Test seam; production always resolves declarations from `installAnchor`. */
+  inspect?: (name: string) => ServiceDeclaration | undefined
+}
+
 export function profileCapabilityPatches(
   profile: string,
   rows: readonly Row[],
   disablePtc: boolean,
-  inspect?: ServicesOf,
-): Row[] {
-  const patches: Row[] = []
-  const declarations = new Map<string, ServiceDeclaration | undefined>()
-  const adopted =
-    profile === "ellamaka-tools"
-      ? adoptedProviderIds(rows, inspect ?? ((name) => servicesOf(name, declarations)))
-      : undefined
+  options: ProfileCapabilityPatchOptions,
+): PatchOptions[] {
+  const patches: PatchOptions[] = []
+  const declarations = new Map<string, Inspection>()
+  const inspect = options.inspect
+    ? (name: string): Inspection => {
+        const declaration = options.inspect!(name)
+        return { declaration, unreadable: declaration === undefined }
+      }
+    : (name: string) => servicesOf(name, options.installAnchor, declarations)
+  const adopted = profile === "ellamaka-tools" ? adoptedProviderIds(rows, inspect) : undefined
   for (const row of rows) {
     if (!row.id) continue
     if (hardDisabledIds.has(row.id)) patches.push({ id: row.id, disabled: true })
