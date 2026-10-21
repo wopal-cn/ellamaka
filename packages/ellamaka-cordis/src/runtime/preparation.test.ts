@@ -5,6 +5,8 @@ import { join } from "node:path"
 import { acquireDshHomeRuntimeAccess, prepareDshHome } from "./home-guard"
 import { resolveDshLayout } from "./status"
 import { createDshPreparationContributors } from "./preparation"
+import { inspectDshProfileResources } from "./profile-resources"
+import { parseDocument } from "yaml"
 import type { DshRuntimeManifestV1 } from "./manifest"
 
 const dirs: string[] = []
@@ -52,7 +54,7 @@ describe("DSH CorePreparation contributors", () => {
     expect(contributors(tmpHome()).map((item) => item.step)).toEqual(["dsh.closure", "dsh.home", "dsh.profiles"])
   })
 
-  test("profile preparation is pure on inspect, creates host resources once, and preserves user edits", async () => {
+  test("profile preparation is pure on inspect, creates host resources once, and preserves user declarations", async () => {
     const home = tmpHome()
     const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
     const layout = resolveDshLayout(home)
@@ -72,16 +74,187 @@ describe("DSH CorePreparation contributors", () => {
     for (const file of [webManifest, webPatch, webRoot, toolsManifest, toolsPatch, toolsRoot])
       expect(existsSync(file)).toBe(true)
 
+    // A fresh home carries the official empty patch layer, never a host-owned
+    // static disable list.
+    const freshToolsPatch = readFileSync(toolsPatch, "utf8")
+    expect(freshToolsPatch).toContain("[]")
+    expect(freshToolsPatch).not.toContain("disabled: true")
+
     const userManifest = '{"name":"user-web","custom":true}\n'
     const userPatch = "# user-owned\n- { id: local-custom, disabled: false }\n"
     writeFileSync(webManifest, userManifest)
     writeFileSync(webPatch, userPatch)
-    unlinkSync(toolsRoot)
+    // The runtime synthetic root anchor is not user configuration: preparation
+    // resets it, including when the previous engine wrote a composed tree back.
+    writeFileSync(webRoot, "- id: composed-from-last-run\n")
+    writeFileSync(toolsRoot, "- id: composed-from-last-run\n")
 
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
     expect(readFileSync(webManifest, "utf8")).toBe(userManifest)
     expect(readFileSync(webPatch, "utf8")).toBe(userPatch)
-    expect(existsSync(toolsRoot)).toBe(true)
+    // Both synthetic root anchors are reset unconditionally.
+    expect(readFileSync(webRoot, "utf8")).toBe("[]\n")
+    expect(readFileSync(toolsRoot, "utf8")).toBe("[]\n")
+    // User patch layers are untouched by the reset.
+    expect(readFileSync(toolsPatch, "utf8")).toBe(freshToolsPatch)
+  })
+
+  test("a repaired missing cordis.yml is written as the empty root anchor", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const webRoot = join(layout.profileDir, "web", "cordis.yml")
+    unlinkSync(webRoot)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(webRoot, "utf8")).toBe("[]\n")
+  })
+
+  test("legacy host tools patch is cleaned once, keeps user rows, and settles to a byte-level no-op", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    const toolsRoot = join(layout.profileDir, "ellamaka-tools", "cordis.yml")
+    const webRoot = join(layout.profileDir, "web", "cordis.yml")
+    const userRoot = "- id: user-root-row\n"
+    writeFileSync(webRoot, userRoot)
+    writeFileSync(toolsRoot, userRoot)
+
+    // The legacy host template: its known comment marker plus the host-owned
+    // disable rows, with a user row and user comment appended after it.
+    writeFileSync(
+      toolsPatch,
+      [
+        "# Patch layer for the ellamaka tool-container profile.",
+        "#",
+        "# The tool container is a pure tool backend: the dsh-adapter drives its tools",
+        "# --- session & agent-loop core ---",
+        "- { id: session, disabled: true }",
+        "- { id: agent-loop, disabled: true }",
+        "- { id: session-projection-cache, disabled: true }",
+        "",
+        "# user comment",
+        "- { id: my-own-plugin, disabled: true }",
+        "",
+      ].join("\n"),
+    )
+
+    // Inspection reports pending work without exposing version-specific fields.
+    expect(Object.keys(inspectDshProfileResources(home)).sort()).toEqual(["missing", "ready"])
+    const inspection = await profile.inspect({ kind: "host" })
+    expect(inspection.state).toBe("NEEDS_PREPARATION")
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const cleaned = readFileSync(toolsPatch, "utf8")
+    expect(cleaned).not.toContain("id: session, disabled: true")
+    expect(cleaned).not.toContain("id: agent-loop, disabled: true")
+    expect(cleaned).not.toContain("id: session-projection-cache, disabled: true")
+    expect(cleaned).toContain("# user comment")
+    expect(cleaned).toContain("- { id: my-own-plugin, disabled: true }")
+    // The synthetic root anchor is a generated file, not user configuration:
+    // preparation resets it regardless of what the caller wrote there.
+    expect(readFileSync(webRoot, "utf8")).toBe("[]\n")
+    expect(readFileSync(toolsRoot, "utf8")).toBe("[]\n")
+
+    // Re-running preparation is a byte-level no-op on the user patch layer.
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(cleaned)
+    expect(readFileSync(webRoot, "utf8")).toBe("[]\n")
+    expect(readFileSync(toolsRoot, "utf8")).toBe("[]\n")
+  })
+
+  test("block-style legacy rows are removed without touching the following user row", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    // Block-style rows parse identically but span more than one source line;
+    // deletion must stop at the row boundary, never eat the next row.
+    writeFileSync(
+      toolsPatch,
+      [
+        "# Patch layer for the ellamaka tool-container profile.",
+        "- id: session",
+        "  disabled: true",
+        "- id: agent-loop",
+        "  disabled: true",
+        "# user-tail",
+        "- id: my-own-plugin",
+        "  disabled: true",
+        "",
+      ].join("\n"),
+    )
+
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    const cleaned = readFileSync(toolsPatch, "utf8")
+    expect(cleaned).not.toContain("id: session")
+    expect(cleaned).not.toContain("id: agent-loop")
+    expect(cleaned).toContain("# user-tail")
+    expect(cleaned).toContain("- id: my-own-plugin")
+    expect(cleaned).toContain("  disabled: true")
+
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(cleaned)
+  })
+
+  test("cleaning a host-only patch keeps its comments and restores a valid empty array", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    writeFileSync(
+      toolsPatch,
+      [
+        "# Patch layer for the ellamaka tool-container profile.",
+        "# every row below was host-owned",
+        "- { id: session, disabled: true }",
+        "- { id: tool-web, disabled: true }",
+        "",
+      ].join("\n"),
+    )
+
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    const cleaned = readFileSync(toolsPatch, "utf8")
+    // Comments survive; the file still parses as the loader's top-level array.
+    expect(cleaned).toContain("# Patch layer for the ellamaka tool-container profile.")
+    expect(cleaned).toContain("# every row below was host-owned")
+    expect(cleaned).not.toContain("disabled: true")
+    expect(parseDocument(cleaned).contents?.toJSON()).toEqual([])
+
+    // The follow-up run must not append a second empty array.
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(cleaned)
+  })
+
+  test("an unrecognisable tools patch is never rewritten", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    const ambiguous = "- { id: agent-loop, disabled: true }\n- { id: mine, disabled: true }\n"
+    writeFileSync(toolsPatch, ambiguous)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(ambiguous)
+
+    const unparsable = "this: is: not: an array\n"
+    writeFileSync(toolsPatch, unparsable)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(unparsable)
   })
 
   test("profile repair refuses write ownership while a runtime holds the Home lease", async () => {

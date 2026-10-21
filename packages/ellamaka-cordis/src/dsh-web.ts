@@ -19,7 +19,7 @@
 import type { Context } from "@deepseek-ai/cordis"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
-import { existsSync, realpathSync } from "node:fs"
+import { existsSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { createCordisLogExporter, type EllamakaLogLevel } from "./log-bridge.js"
@@ -38,7 +38,6 @@ import { installBunSubprocessCompatibility } from "./runtime/bun-subprocess.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
-export { migrateToolsProfileApprovalPatch, migrateToolsProfileRc1Patch } from "./runtime/profile-resources.js"
 import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
 import type { Entry } from "@deepseek-ai/cordis-plugin-loader"
 
@@ -595,6 +594,12 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // closure is materialised too (the kill switch guards its absence), so
   // passing the base unconditionally is mode-independent.
   const bareModuleBaseUrl = pathToFileURL(join(installAnchor, "..", "..", "..")).href + "/"
+  // The root include's YAML file is a synthetic anchor, not user config: the
+  // loader writes the composed tree back into it on every mount/update. Reset
+  // it immediately before each mount so a replayed composition never stacks on
+  // top of a stale one. This targets the NEW container only — a running engine
+  // keeps its own already-parsed tree in memory.
+  writeFileSync(rootConfig, "[]\n")
   const includeEntry = await runtime.appBoot.mountRootInclude(
     ctx as unknown as Parameters<typeof runtime.appBoot.mountRootInclude>[0],
     rootConfig,

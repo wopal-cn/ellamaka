@@ -1,156 +1,181 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { isMap, isSeq, parseDocument } from "yaml"
 import type { DshRuntimeApi } from "./loader.js"
 import { resolveDshLayout } from "./status.js"
 
-/** Host-owned DSH profile resources and narrowly-scoped migrations. */
+/** Host-owned DSH profile resources and the one-time legacy patch cleanup. */
 
 export const WEB_PROFILE_NAME = "web"
 export const TOOLS_PROFILE_NAME = "ellamaka-tools"
 
 /**
- * Default patch layer for the `ellamaka-tools` profile. Written on first
- * mount (never afterwards — user edits win), so the disable list lives in the
- * user-owned profile file, not in code.
- *
- * The tool container is a pure tool backend: the dsh-adapter drives its tools
- * with a lightweight per-call context (no live dsh sessions, no agent loops).
- * The rows below are agent-loop infrastructure — they need live sessions or
- * serve the dsh chat surface — and are disabled so the container stays
- * session-free and its tool surface stays clean. Re-enable a row only when
- * adopting the corresponding capability together with its full runtime
- * context.
- *
- * `approval` is intentionally NOT disabled: dsh's sandbox escalation
- * (`sandbox_permissions`) resolves its one-shot approval through the native
- * ApprovalService. The adapter's per-call facade satisfies the plugin's
- * runtime preconditions (open turn via turn/start..turn/end, appendable
- * events for the approval/asked + approval/decided audit pair), and the
- * adapter registers the `approval/request` answerer that bridges the ask to
- * ellamaka Permission. An absent answerer still fails closed
- * (`unavailable`), and a `never` escalation policy rejects in-service.
+ * Ids the retired host-owned `ellamaka-tools` template disabled. The template
+ * is gone — the container's pruning now lives only in the in-memory
+ * `profileCapabilityPatches` — but homes prepared by older hosts may still
+ * carry it on disk. This set exists solely to recognise those host-owned rows
+ * for the one-time cleanup below.
  */
-export const TOOLS_PROFILE_PATCH = `# Patch layer for the ellamaka tool-container profile.
-#
-# The tool container is a pure tool backend: the dsh-adapter drives its tools
-# with a lightweight per-call context (no live dsh sessions, no agent loops).
-# The rows below are agent-loop infrastructure — they need live sessions or
-# serve the dsh chat surface — and are disabled so the container stays
-# session-free and its tool surface stays clean. Re-enable a row only when
-# adopting the corresponding capability together with its full runtime
-# context.
-#
-# \`approval\` is intentionally NOT disabled: dsh's sandbox escalation
-# (\`sandbox_permissions\`) resolves its one-shot approval through the native
-# ApprovalService. The adapter's per-call facade satisfies the plugin's
-# runtime preconditions (open turn via turn/start..turn/end, appendable
-# events for the approval/asked + approval/decided audit pair), and the
-# adapter registers the \`approval/request\` answerer that bridges the ask to
-# ellamaka Permission. An absent answerer still fails closed
-# (\`unavailable\`), and a \`never\` escalation policy rejects in-service.
+const LEGACY_TOOLS_PATCH_IDS: ReadonlySet<string> = new Set([
+  "session",
+  "session-checkpoint-policy",
+  "agent",
+  "plugin-package-inventory-deepseek",
+  "agent-loop",
+  "agent-default-model",
+  "agent-instructions",
+  "session-title",
+  "session-title-llm",
+  "session-persistence-jsonl",
+  "session-log-deepseek",
+  "session-query-sqlite",
+  "session-projection-cache",
+  "session-telemetry-otel",
+  "llm",
+  "llm-retry",
+  "llm-deepseek",
+  "deepseek-llm-api-extensions",
+  "llm-pi-ai",
+  "settings",
+  "credentials",
+  "typert",
+  "typert-loader",
+  "typert-gateway",
+  "user-questions",
+  "permission",
+  "subagent",
+  "subagent-spawn-in-process",
+  "subagent-fork-in-process",
+  "tool-subagent",
+  "tool-subagent-fork",
+  "tool-subagent-control",
+  "tool-subagent-list-agents",
+  "workflow-worker-thread",
+  "tool-workflow",
+  "tool-ralph",
+  "jobs",
+  "tool-jobs",
+  "goal",
+  "goal-round-driver",
+  "tool-goal",
+  "command-goal",
+  "plan-mode",
+  "commands",
+  "command-feedback",
+  "command-compact",
+  "skill",
+  "skill-filesystem",
+  "tool-skill",
+  "compaction-basic",
+  "token-meter",
+  "tool-result-pruner",
+  "web",
+  "web-search-deepseek",
+  "web-fetch-http",
+  "tool-web",
+  "attachment-local",
+  "tool-todo",
+  "repeat-tool-reminder",
+])
 
-# --- session & agent-loop core ---
-# Session lifecycle belongs to ellamaka; the container must stay session-free.
-- { id: session, disabled: true }
-# Flushes the calling agent's live session before every tool call; the
-# adapter's per-call context has no live session, so this would throw.
-- { id: session-checkpoint-policy, disabled: true }
-- { id: agent, disabled: true }
-# rc.1 base row: the DeepSeek plugin inventory publishes against the agents
-# surface; the tool container carries none.
-- { id: plugin-package-inventory-deepseek, disabled: true }
-- { id: agent-loop, disabled: true }
-- { id: agent-default-model, disabled: true }
-- { id: agent-instructions, disabled: true }
+/** The first comment line of the retired host template, used only to recognise it. */
+const LEGACY_TOOLS_PATCH_MARKER = "# Patch layer for the ellamaka tool-container profile."
 
-# --- session persistence / query / projection / telemetry ---
-- { id: session-title, disabled: true }
-- { id: session-title-llm, disabled: true }
-- { id: session-persistence-jsonl, disabled: true }
-# rc.1 base row: the DeepSeek-native session log stream needs live sessions.
-- { id: session-log-deepseek, disabled: true }
-- { id: session-query-sqlite, disabled: true }
-# \`session-projection\` stays ENABLED (it is the provider of the
-# \`sessionProjections\` service, not a session consumer): rc.1 made the
-# sandbox policy session-aware (\`sandboxMode\` is a projection), so the
-# whole sandbox chain hangs off that service. The registry stays empty
-# without session event streams, and \`stateOf\` falls back to the
-# deployment default mode — exactly the tool container's semantics.
-- { id: session-projection-cache, disabled: true }
-- { id: session-telemetry-otel, disabled: true }
+interface LegacyCleanupPlan {
+  /** Source ranges (whole lines, including the trailing newline) to delete. */
+  readonly ranges: readonly { readonly start: number; readonly end: number }[]
+  /** A matched host row that cannot be dropped without touching user text. */
+  readonly blocked: boolean
+}
 
-# --- llm runtime & credentials (no model calls in the tool container) ---
-- { id: llm, disabled: true }
-- { id: llm-retry, disabled: true }
-- { id: llm-deepseek, disabled: true }
-# rc.1 base row: DeepSeek LLM API extensions belong to the llm face.
-- { id: deepseek-llm-api-extensions, disabled: true }
-- { id: llm-pi-ai, disabled: true }
-- { id: settings, disabled: true }
-- { id: credentials, disabled: true }
+/** A legacy host row: exactly `{ id: <retired id>, disabled: true }`. */
+function isLegacyHostRow(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const keys = Object.keys(value)
+  if (keys.length !== 2) return false
+  const row = value as { id?: unknown; disabled?: unknown }
+  return typeof row.id === "string" && LEGACY_TOOLS_PATCH_IDS.has(row.id) && row.disabled === true
+}
 
-# --- api gateway (typert) ---
-- { id: typert, disabled: true }
-- { id: typert-loader, disabled: true }
-- { id: typert-gateway, disabled: true }
+/**
+ * Plan the one-time cleanup of a retired host-owned tools patch.
+ *
+ * Only rows the old template owned — same id AND exactly `disabled: true`, with
+ * no extra keys — are removable. Comments and every unknown/user row stay
+ * byte-for-byte, and a file that cannot be parsed, is not a top-level array, or
+ * does not identify itself as the old template is never touched.
+ *
+ * Returns `null` when there is nothing to clean or ownership cannot be
+ * established.
+ */
+function planLegacyToolsPatchCleanup(content: string): LegacyCleanupPlan | null {
+  const document = parseDocument(content)
+  if (document.errors.length > 0) return null
+  const sequence = document.contents
+  if (!isSeq(sequence)) return null
+  // Only rows with a source range can be removed by line, and only those
+  // count as "rows" here — anything else means the file is not a shape whose
+  // ownership we can judge.
+  const rows = sequence.items.filter((item) => isMap(item) && item.range !== undefined)
+  const legacyRows = rows.filter((row) => isLegacyHostRow((row as { toJSON(): unknown }).toJSON()))
+  if (legacyRows.length === 0) return null
+  // Ownership: either the retired template's own header survives, or every
+  // row in the file is one the retired template owned.
+  const selfIdentified = content.includes(LEGACY_TOOLS_PATCH_MARKER)
+  const entirelyHostOwned = legacyRows.length === sequence.items.length
+  if (!selfIdentified && !entirelyHostOwned) return null
 
-# --- interactive surface (questions, permission presets) ---
-# 'approval' is ENABLED (not listed below): dsh's native escalation
-# choreography (approveEscalation) resolves 'sandbox_permissions' asks
-# through it. The per-call facade carries the open turn
-# (turn/start..turn/end from the adapter) and the audit-pair sink
-# (session.append), and the host bridges 'approval/request' to ellamaka
-# Permission — a rejected/missing answerer fails closed.
-- { id: user-questions, disabled: true }
-- { id: permission, disabled: true }
+  const ranges: { start: number; end: number }[] = []
+  let blocked = false
+  for (const row of legacyRows) {
+    const [start, end] = row.range
+    const lineStart = content.lastIndexOf("\n", start - 1) + 1
+    // A flow-style row (`- { ... }`) ends mid-line, so its trailing text is
+    // right after `end`. A block-style row ends on a line break, so `end` is
+    // already the next line's first character and nothing trails it.
+    const endsOnLineBreak = end > 0 && content[end - 1] === "\n"
+    const trailEnd = endsOnLineBreak ? end : content.indexOf("\n", end)
+    const endOfLine = trailEnd === -1 ? content.length : trailEnd
+    // A row the user annotated (or padded with other text on its line) is no
+    // longer provably host-owned: leave the whole file alone. The only text
+    // allowed before the row node is the sequence dash.
+    const prefix = content.slice(lineStart, start).trim()
+    const trail = endsOnLineBreak ? "" : content.slice(end, endOfLine)
+    if ((prefix !== "" && prefix !== "-") || trail.trim() !== "") {
+      blocked = true
+      continue
+    }
+    ranges.push({ start: lineStart, end: Math.min(endsOnLineBreak ? end : endOfLine + 1, content.length) })
+  }
+  if (ranges.length === 0) return null
+  return { ranges, blocked }
+}
 
-# --- subagent delegation (agent-loop stack; ellamaka has native subagents) ---
-- { id: subagent, disabled: true }
-- { id: subagent-spawn-in-process, disabled: true }
-- { id: subagent-fork-in-process, disabled: true }
-- { id: tool-subagent, disabled: true }
-- { id: tool-subagent-fork, disabled: true }
-- { id: tool-subagent-control, disabled: true }
-- { id: tool-subagent-list-agents, disabled: true }
-- { id: workflow-worker-thread, disabled: true }
-- { id: tool-workflow, disabled: true }
-- { id: tool-ralph, disabled: true }
+function applyCleanupRanges(content: string, ranges: readonly { start: number; end: number }[]): string {
+  let next = content
+  for (const range of [...ranges].sort((a, b) => b.start - a.start)) {
+    next = next.slice(0, range.start) + next.slice(range.end)
+  }
+  // Dropping every row can leave a comments-only file, which parses as `null`
+  // and fails the loader's top-level-array contract. Keep the comments and
+  // append the empty array they now describe.
+  if (!isSeq(parseDocument(next).contents)) {
+    if (next.length > 0 && !next.endsWith("\n")) next += "\n"
+    next += "[]\n"
+  }
+  return next
+}
 
-# --- background jobs ---
-- { id: jobs, disabled: true }
-- { id: tool-jobs, disabled: true }
-
-# --- goals / plan mode / commands / skills ---
-- { id: goal, disabled: true }
-- { id: goal-round-driver, disabled: true }
-- { id: tool-goal, disabled: true }
-- { id: command-goal, disabled: true }
-- { id: plan-mode, disabled: true }
-- { id: commands, disabled: true }
-- { id: command-feedback, disabled: true }
-- { id: command-compact, disabled: true }
-- { id: skill, disabled: true }
-- { id: skill-filesystem, disabled: true }
-- { id: tool-skill, disabled: true }
-
-# --- compaction / token accounting ---
-- { id: compaction-basic, disabled: true }
-- { id: token-meter, disabled: true }
-- { id: tool-result-pruner, disabled: true }
-
-# --- web search (needs llm + credentials) ---
-- { id: web, disabled: true }
-- { id: web-search-deepseek, disabled: true }
-# rc.1 base row: the http fetcher is the 'web' service provider; disabled
-# with the rest of the web face.
-- { id: web-fetch-http, disabled: true }
-- { id: tool-web, disabled: true }
-
-# --- attachments / todo / reminders (agent-loop UX) ---
-- { id: attachment-local, disabled: true }
-- { id: tool-todo, disabled: true }
-- { id: repeat-tool-reminder, disabled: true }
-`
+/**
+ * Clean a retired host-owned tools patch once, preserving every user byte.
+ * Returns the new content, or `null` when the file must be left untouched
+ * (nothing to clean, ambiguous ownership, or an unsafe match).
+ */
+function cleanLegacyToolsPatch(content: string): string | null {
+  const plan = planLegacyToolsPatchCleanup(content)
+  if (plan === null || plan.blocked) return null
+  return applyCleanupRanges(content, plan.ranges)
+}
 
 /** The official empty home-level patch layer (dsh PROFILE_PATCH_TEMPLATE). */
 export const OFFICIAL_HOME_PATCH_TEMPLATE = `# Your patch layer for this dsh profile, applied after every bundle layer:
@@ -159,55 +184,9 @@ export const OFFICIAL_HOME_PATCH_TEMPLATE = `# Your patch layer for this dsh pro
 []
 `
 
-// Revision 1 migration: older host-seeded tool profiles disabled approval.
-// The profile patch is otherwise user-owned and must never be overwritten, so
-// migrate only this exact obsolete host row and preserve every other byte.
-const LEGACY_APPROVAL_DISABLED_ROW = "- { id: approval, disabled: true }"
-
-export function migrateToolsProfileApprovalPatch(content: string): string {
-  const lines = content.split("\n")
-  const next = lines.filter((line) => line.trim() !== LEGACY_APPROVAL_DISABLED_ROW)
-  return next.length === lines.length ? content : next.join("\n")
-}
-
-// Revision 2 migration (rc.1): the sandbox chain became session-aware —
-// `dsh-sandbox-policy` now injects the `sessionProjections` service, so the
-// tool container must enable the `session-projection` provider (the registry
-// stays empty with no session stream and `stateOf` falls back to the
-// deployment default mode). User profiles seeded by the rc.2-era host row
-// disabled it, and rc.1 added session/agent-face base rows that must stay
-// disabled here. Like revision 1: migrate only these exact host-owned rows,
-// preserve every other byte, and never overwrite a user-owned patch.
-const LEGACY_SESSION_PROJECTION_DISABLED_ROW = "- { id: session-projection, disabled: true }"
-const RC1_TOOLS_DISABLED_ROWS = [
-  "- { id: session-log-deepseek, disabled: true }",
-  "- { id: plugin-package-inventory-deepseek, disabled: true }",
-  "- { id: session-projection-cache, disabled: true }",
-  "- { id: web-fetch-http, disabled: true }",
-  "- { id: deepseek-llm-api-extensions, disabled: true }",
-]
-
-export function migrateToolsProfileRc1Patch(content: string): string {
-  let lines = content.split("\n")
-  let changed = false
-  const withoutLegacy = lines.filter((line) => line.trim() !== LEGACY_SESSION_PROJECTION_DISABLED_ROW)
-  if (withoutLegacy.length !== lines.length) {
-    lines = withoutLegacy
-    changed = true
-  }
-  for (const row of RC1_TOOLS_DISABLED_ROWS) {
-    if (!lines.some((line) => line.trim() === row)) {
-      lines.push(row)
-      changed = true
-    }
-  }
-  return changed ? lines.join("\n") : content
-}
-
 export interface DshProfileResourceInspection {
   readonly ready: boolean
   readonly missing: readonly string[]
-  readonly needsToolsMigration: boolean
 }
 
 function resourcePathsAtRoot(dshRoot: string) {
@@ -229,6 +208,20 @@ function resourcePathsAtRoot(dshRoot: string) {
   }
 }
 
+/** Whether a tools patch still carries rows owned by the retired host template. */
+function needsLegacyToolsPatchCleanup(toolsPatch: string): boolean {
+  if (!existsSync(toolsPatch)) return false
+  try {
+    const content = readFileSync(toolsPatch, "utf8")
+    const plan = planLegacyToolsPatchCleanup(content)
+    return plan !== null && !plan.blocked
+  } catch {
+    // A present but unreadable user patch is an activation error, not a
+    // preparation invitation to replace user-owned content.
+    return false
+  }
+}
+
 /** Purely inspect Ellamaka-owned profile resources. */
 export function inspectDshProfileResources(wopalHome: string): DshProfileResourceInspection {
   const paths = resourcePathsAtRoot(resolveDshLayout(wopalHome).dshHome)
@@ -243,18 +236,10 @@ export function inspectDshProfileResources(wopalHome: string): DshProfileResourc
     paths.toolsWorkspace,
   ]
   const missing = files.filter((file) => !existsSync(file))
-  let needsToolsMigration = false
-  if (existsSync(paths.toolsPatch)) {
-    try {
-      const current = readFileSync(paths.toolsPatch, "utf8")
-      needsToolsMigration = migrateToolsProfileRc1Patch(migrateToolsProfileApprovalPatch(current)) !== current
-    } catch {
-      // A present but unreadable user patch is an activation error, not a
-      // preparation invitation to replace user-owned content.
-      needsToolsMigration = false
-    }
-  }
-  return { ready: missing.length === 0 && !needsToolsMigration, missing, needsToolsMigration }
+  // A retired host-owned patch still needs its one-time cleanup before the
+  // profile is ready; that state stays internal (no version-specific field).
+  const needsToolsPatchCleanup = needsLegacyToolsPatchCleanup(paths.toolsPatch)
+  return { ready: missing.length === 0 && !needsToolsPatchCleanup, missing }
 }
 
 /**
@@ -268,20 +253,27 @@ export function prepareDshProfileResources(wopalHome: string, runtime: DshRuntim
 /** Prepare an already-resolved DSH territory root (used by isolated activation tests). */
 export function prepareDshProfileResourcesAtRoot(dshRoot: string, runtime: DshRuntimeApi): void {
   const paths = resourcePathsAtRoot(dshRoot)
-  const toolsPatchWasMissing = !existsSync(paths.toolsPatch)
 
+  // The official initializer creates missing declarations only; existing user
+  // files (manifest, patch layer, pnpm settings) are never touched here.
   runtime.appBoot.initProfile(paths.web, ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"])
   runtime.appBoot.initProfile(paths.tools, runtime.appBoot.DEFAULT_PROFILE_BUNDLES)
 
-  if (!existsSync(paths.webRoot)) writeFileSync(paths.webRoot, "[]\n")
-  if (!existsSync(paths.toolsRoot)) writeFileSync(paths.toolsRoot, "[]\n")
+  // `cordis.yml` is the runtime's synthetic root anchor, not user config: the
+  // loader writes the composed tree back after every mount, so preparation
+  // always resets it or the next boot re-applies a stale composition.
+  writeFileSync(paths.webRoot, "[]\n")
+  writeFileSync(paths.toolsRoot, "[]\n")
 
-  if (toolsPatchWasMissing) {
-    writeFileSync(paths.toolsPatch, TOOLS_PROFILE_PATCH)
-  } else {
+  // One-time cleanup of a retired host-owned tools patch. The host no longer
+  // owns rows in this file — pruning lives in `profileCapabilityPatches` — but
+  // homes seeded by older hosts still carry the old disable list, which would
+  // re-disable capabilities the container now needs. Only provably host-owned
+  // rows are dropped; a user patch that cannot be attributed stays untouched.
+  if (existsSync(paths.toolsPatch)) {
     const current = readFileSync(paths.toolsPatch, "utf8")
-    const migrated = migrateToolsProfileRc1Patch(migrateToolsProfileApprovalPatch(current))
-    if (migrated !== current) writeFileSync(paths.toolsPatch, migrated)
+    const cleaned = cleanLegacyToolsPatch(current)
+    if (cleaned !== null && cleaned !== current) writeFileSync(paths.toolsPatch, cleaned)
   }
 
   // Self-heal a BLANK home-level patch layer: an empty (or whitespace-only)
