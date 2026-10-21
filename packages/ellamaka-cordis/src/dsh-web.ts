@@ -221,6 +221,23 @@ export interface DshHostOptions {
 }
 
 /**
+ * The single place the host context crosses into the official app-boot audit
+ * signature. `Context` is nominally narrower than the upstream parameter type,
+ * so every call site would otherwise repeat the same cast.
+ */
+async function auditStartupEntries(
+  runtime: Pick<DshRuntimeApi, "appBoot">,
+  ctx: Context,
+  warn?: (line: string) => void,
+): Promise<void> {
+  await runtime.appBoot.auditStartupEntries(
+    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
+    "ellamaka",
+    warn,
+  )
+}
+
+/**
  * Audit the settled Loader tree under the tools profile's fail-closed policy.
  * Pending entries mean a required `inject` service is missing; the official
  * diagnostic carries both the entry and that service name.
@@ -231,11 +248,7 @@ export async function assertDshActivationComplete(
   profileName: string,
 ): Promise<void> {
   const diagnostics: string[] = []
-  await runtime.appBoot.auditStartupEntries(
-    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
-    "ellamaka",
-    (line: string) => diagnostics.push(line),
-  )
+  await auditStartupEntries(runtime, ctx, (line: string) => diagnostics.push(line))
   if (diagnostics.length > 0) {
     throw new Error(
       `DSH ${profileName} container activation incomplete; degrading to no sandbox:\n${diagnostics.join("\n")}`,
@@ -675,11 +688,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // entries that did not activate.
   const auditDiagnostics: string[] = []
   const auditWarn = opts.activationAudit === "fail-closed" ? (line: string) => auditDiagnostics.push(line) : undefined
-  await runtime.appBoot.auditStartupEntries(
-    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
-    "ellamaka",
-    auditWarn,
-  )
+  await auditStartupEntries(runtime, ctx, auditWarn)
   if (opts.activationAudit === "fail-closed" && auditDiagnostics.length > 0) {
     const loader = ctx.get("loader")
     if (loader !== undefined) {
@@ -700,10 +709,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     if (opts.activationAudit === "fail-closed") {
       await assertDshActivationComplete(runtime, ctx, profileName)
     } else {
-      await runtime.appBoot.auditStartupEntries(
-        ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
-        "ellamaka",
-      )
+      await auditStartupEntries(runtime, ctx)
     }
     if (opts.disablePtcRuntime !== true) await verifyDshPtcBinding(ctx)
     if (profileName === TOOLS_PROFILE_NAME) {
