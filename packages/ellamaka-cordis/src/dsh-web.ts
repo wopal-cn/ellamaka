@@ -220,6 +220,53 @@ export interface DshHostOptions {
   trustedHosts?: readonly string[]
 }
 
+/**
+ * Audit the settled Loader tree under the tools profile's fail-closed policy.
+ * Pending entries mean a required `inject` service is missing; the official
+ * diagnostic carries both the entry and that service name.
+ */
+export async function assertDshActivationComplete(
+  runtime: Pick<DshRuntimeApi, "appBoot">,
+  ctx: Context,
+  profileName: string,
+): Promise<void> {
+  const diagnostics: string[] = []
+  await runtime.appBoot.auditStartupEntries(
+    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
+    "ellamaka",
+    (line: string) => diagnostics.push(line),
+  )
+  if (diagnostics.length > 0) {
+    throw new Error(
+      `DSH ${profileName} container activation incomplete; degrading to no sandbox:\n${diagnostics.join("\n")}`,
+    )
+  }
+}
+
+/**
+ * Enforce the platform's complete adopted tool surface after Loader
+ * settlement. A silently pending plugin leaves the registry short; that is a
+ * failed mount, never a degraded ready state (DESIGN-ellamaka-tools.md
+ * Container Composition item 3).
+ */
+export function verifyDshToolsRegistered(
+  lookup: (name: string) => { schemas(): { name: string }[] } | undefined,
+): void {
+  const tools = lookup("tools")
+  const expected = [
+    "read",
+    "write",
+    "edit",
+    "glob",
+    "grep",
+    "str_replace_editor",
+    process.platform === "win32" ? "pwsh" : "bash",
+  ]
+  const names = new Set(tools?.schemas().map((schema) => schema.name))
+  const missing = expected.filter((name) => !names.has(name))
+  if (missing.length) throw new Error("DSH adopted tools unavailable: " + missing.join(", "))
+}
+
 /** Internal mount options shared by the web and base entry points. */
 type MountProfileOptions = DshHostOptions & {
   profileName: string
@@ -650,25 +697,17 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
 
   const validate = async () => {
     await ctx.get("loader")?.await()
-    await runtime.appBoot.auditStartupEntries(
-      ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
-      "ellamaka",
-    )
+    if (opts.activationAudit === "fail-closed") {
+      await assertDshActivationComplete(runtime, ctx, profileName)
+    } else {
+      await runtime.appBoot.auditStartupEntries(
+        ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
+        "ellamaka",
+      )
+    }
     if (opts.disablePtcRuntime !== true) await verifyDshPtcBinding(ctx)
     if (profileName === TOOLS_PROFILE_NAME) {
-      const tools = ctx.get("tools") as { schemas(): { name: string }[] } | undefined
-      const expected = [
-        "read",
-        "write",
-        "edit",
-        "glob",
-        "grep",
-        "str_replace_editor",
-        process.platform === "win32" ? "pwsh" : "bash",
-      ]
-      const names = new Set(tools?.schemas().map((schema) => schema.name))
-      const missing = expected.filter((name) => !names.has(name))
-      if (missing.length) throw new Error("DSH adopted tools unavailable: " + missing.join(", "))
+      verifyDshToolsRegistered((name) => ctx.get(name, false) as { schemas(): { name: string }[] } | undefined)
       if (ctx.get("sessions", false) || ctx.get("agents", false))
         throw new Error("DSH tool profile activated Session lifecycle")
     } else {
