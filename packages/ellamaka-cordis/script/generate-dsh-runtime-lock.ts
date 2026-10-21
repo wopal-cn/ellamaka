@@ -14,12 +14,11 @@
  * lock and downloads each package with `pacote` — it never resolves the tree
  * itself (SEA single-file binaries cannot run Arborist's tree solver).
  *
- * Fast paths: when the in-repo lock already binds the current manifest
- * fingerprint, nothing is rewritten. When only the manifest generation
- * changes (for example closureVersion) while all exact direct dependency pins
- * stay the same, keep the committed transitive package table and rebind only
- * its manifest fingerprint. Registry resolution therefore happens only after
- * an actual direct dependency version change.
+ * Fast path: when the in-repo lock already binds the current manifest
+ * fingerprint, nothing is rewritten. Any fingerprint change triggers a fresh
+ * Arborist solve; a committed package table is never reused merely because it
+ * happens to contain the new direct dependency pins. This keeps the lock tied
+ * to one manifest generation instead of a partially revalidated old tree.
  *
  * The lock carries only the `packages` table of the resolved npm lockfile v3
  * tree: each entry maps a `node_modules/...` path (including nested entries
@@ -34,12 +33,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Arborist } from "@npmcli/arborist"
 import { buildDshRuntimeManifest, parseDshRuntimeManifest } from "../src/runtime/manifest.ts"
-import {
-  DSH_RUNTIME_LOCK_SCHEMA,
-  lockPackagesMatchManifest,
-  parseDshRuntimeLock,
-  type DshRuntimeLockV1,
-} from "../src/runtime/lockfile.ts"
+import { DSH_RUNTIME_LOCK_SCHEMA, parseDshRuntimeLock, type DshRuntimeLockV1 } from "../src/runtime/lockfile.ts"
 
 // Locate the package root (two levels up from this script) regardless of cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url))
@@ -180,15 +174,6 @@ const existing = readExistingLock()
 if (existing && existing.manifestFingerprint === manifest.fingerprint) {
   process.stdout.write(
     `ok: ${lockPath} already binds the current manifest (${Object.keys(existing.packages).length} packages) — nothing to do\n`,
-  )
-  process.exit(0)
-}
-
-if (existing && lockPackagesMatchManifest(existing, manifest)) {
-  const output = `${JSON.stringify({ ...existing, manifestFingerprint: manifest.fingerprint }, null, 2)}\n`
-  writeFileSync(lockPath, output)
-  process.stdout.write(
-    `rebound ${lockPath} to the current manifest without changing ${Object.keys(existing.packages).length} locked packages\n`,
   )
   process.exit(0)
 }

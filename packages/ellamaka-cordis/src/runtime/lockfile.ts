@@ -78,19 +78,6 @@ function assertLockShape(raw: unknown): DshRuntimeLockV1 {
 }
 
 /**
- * Whether an already-committed package table still matches the manifest's
- * exact direct dependency pins. The manifest fingerprint may differ because
- * closureVersion or other product-owned closure metadata changed; in that
- * case the fixed transitive package table is deliberately reusable and only
- * the generation binding needs to be updated.
- */
-export function lockPackagesMatchManifest(lock: DshRuntimeLockV1, manifest: DshRuntimeManifestV1): boolean {
-  return Object.entries(manifest.dependencies).every(([name, pinned]) => {
-    return lock.packages[`node_modules/${name}`]?.version === pinned
-  })
-}
-
-/**
  * Validate the embedded lock against the embedded manifest (drift gate).
  *
  * The lock is only loadable together with the manifest it was resolved from:

@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { DSH_CLOSURE_VERSION } from "./closure-version"
 import { DEFAULT_DSH_RUNTIME_LOCK } from "./embed-lock"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest"
+import { parseDshRuntimeLock, validateEmbeddedLock, type DshRuntimeLockV1 } from "./lockfile"
 import { computeManifestFingerprint, type DshRuntimeManifestV1 } from "./manifest"
-import { lockPackagesMatchManifest, parseDshRuntimeLock, validateEmbeddedLock, type DshRuntimeLockV1 } from "./lockfile"
 
 const MANIFEST: DshRuntimeManifestV1 = {
   schema: "ellamaka.dsh-runtime/v1",
@@ -67,32 +67,38 @@ describe("parseDshRuntimeLock", () => {
   })
 })
 
-describe("lockPackagesMatchManifest", () => {
-  test("allows fingerprint rebinding when direct dependency pins are unchanged", () => {
-    const lock = lockWith(
-      {
-        "node_modules/@deepseek-ai/dsh": { version: "0.1.1-rc.2" },
-        "node_modules/@deepseek-ai/cordis": { version: "4.0.2" },
-        "node_modules/transitive-only": { version: "7.8.9" },
+describe("runtime lock resolution boundary", () => {
+  test("rejects reusing an old package table even when it is a superset of the new direct dependencies", () => {
+    const oldManifest: DshRuntimeManifestV1 = {
+      schema: "ellamaka.dsh-runtime/v1",
+      bridgeAbi: 1,
+      dependencies: {
+        "@deepseek-ai/dsh": "0.2.0-rc.2",
+        "@deepseek-ai/cordis": "4.0.4",
+        "@deepseek-ai/schemastery": "3.18.4",
       },
-      "sha256:previous-generation",
+    }
+    const newManifest: DshRuntimeManifestV1 = {
+      schema: "ellamaka.dsh-runtime/v1",
+      bridgeAbi: 1,
+      dependencies: { "@deepseek-ai/dsh": "0.2.0-rc.2" },
+    }
+    const oldLock = lockWith(
+      {
+        "node_modules/@deepseek-ai/dsh": { version: "0.2.0-rc.2" },
+        "node_modules/@deepseek-ai/cordis": { version: "4.0.4" },
+        "node_modules/@deepseek-ai/schemastery": { version: "3.18.4" },
+      },
+      computeManifestFingerprint(oldManifest),
     )
-    expect(lockPackagesMatchManifest(lock, MANIFEST)).toBe(true)
-  })
 
-  test("rejects rebinding when a direct dependency is missing or changed", () => {
-    expect(
-      lockPackagesMatchManifest(lockWith({ "node_modules/@deepseek-ai/dsh": { version: "0.1.1-rc.2" } }), MANIFEST),
-    ).toBe(false)
-    expect(
-      lockPackagesMatchManifest(
-        lockWith({
-          "node_modules/@deepseek-ai/dsh": { version: "9.9.9" },
-          "node_modules/@deepseek-ai/cordis": { version: "4.0.2" },
-        }),
-        MANIFEST,
-      ),
-    ).toBe(false)
+    // The old table contains the new direct pin, but it was solved for a
+    // different direct dependency set. The fingerprint is the only safe
+    // generation binding, so a changed manifest cannot reuse this table.
+    expect(Object.keys(oldLock.packages)).toEqual(
+      expect.arrayContaining(Object.keys(newManifest.dependencies).map((name) => `node_modules/${name}`)),
+    )
+    expect(() => validateEmbeddedLock(oldLock, newManifest)).toThrow(/fingerprint|drift/i)
   })
 })
 
