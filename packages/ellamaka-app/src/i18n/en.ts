@@ -623,6 +623,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
+  "status.popover.plugin.builtin": "Built-in",
   "status.popover.action.manageServers": "Manage servers",
 
   "session.share.popover.title": "Publish on web",
