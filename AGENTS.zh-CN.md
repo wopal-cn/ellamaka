@@ -85,12 +85,12 @@ GUI、Onboarding 与 Desktop 壳层行为的验证入口。Agent 可用 CDP 检�
 | 入口 | 命令 | 隔离 |
 |---|---|---|
 | Desktop（常规） | `./scripts/dev.sh desktop` | 使用真实环境；首次需 `--rebuild` 构建 sidecar |
-| Desktop（CDP） | `./scripts/dev.sh desktop --rebuild --cdp-debug` | 使用真实环境；5173 与 9222 端口需空闲 |
+| Desktop（CDP） | `./scripts/dev.sh desktop --rebuild --cdp-debug [端口]` | 使用真实环境；5173 与所选 CDP 端口需空闲（默认 9222） |
 | Workbench / backend | `./scripts/dev.sh serve` | 端口 4096；`--cdp-debug` 打开 9222 CDP |
 | TUI | `./scripts/dev.sh tui` | 默认进程内 backend |
 | 停止 | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
-- Desktop CDP：`agent-browser --session <name> connect 9222` 连接 Electron 窗口做 UI 验证。
+- Desktop CDP：`agent-browser --session <name> connect <端口>` 连接 Electron 窗口做 UI 验证。9222 被占用时可指定端口，例如 `./scripts/dev.sh desktop --cdp-debug 9333` 后 `connect 9333`；只需所选端口空闲。
 - 日志（dev 运行）：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`。`<scope>` 是拥有 `scripts/dev.sh` 的仓库/工作树根（解析符号链接）的 md5 前 10 个十六进制字符；可从 `.wopal-space/logs/dev/registry` 解析，或按 dev.sh 同样方式计算 `printf '%s' "<root>" | md5 -q | cut -c1-10`。工作树运行记入其 base space 的 ledger。
 - Plan 的 User Validation 必须引用本表并给出用户可直接复制运行的命令；"启动应用"这类泛化措辞不可接受。
 

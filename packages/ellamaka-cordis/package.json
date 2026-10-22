@@ -22,7 +22,6 @@
     "./runtime/loader": "./src/runtime/loader.ts",
     "./plugins": "./src/plugins/profile-manifest.ts",
     "./plugins/compose": "./src/plugins/compose.ts",
-    "./plugins/resolve-specifiers": "./src/plugins/resolve-specifiers.ts",
     "./plugins/install-command": "./src/plugins/install-command.ts",
     "./plugins/runtime": "./src/plugins/runtime.ts",
     "./plugins/unit-trigger": "./src/plugins/unit-trigger.ts",
