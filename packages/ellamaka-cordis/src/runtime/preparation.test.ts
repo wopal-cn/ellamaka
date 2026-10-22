@@ -6,6 +6,7 @@ import { acquireDshHomeRuntimeAccess, prepareDshHome } from "./home-guard"
 import { resolveDshLayout } from "./status"
 import { createDshPreparationContributors } from "./preparation"
 import { inspectDshProfileResources } from "./profile-resources"
+import { TOOLS_PROFILE_BLOCK } from "./tools-profile"
 import { parseDocument } from "yaml"
 import type { DshRuntimeManifestV1 } from "./manifest"
 
@@ -241,7 +242,7 @@ describe("DSH CorePreparation contributors", () => {
     expect(readFileSync(toolsPatch, "utf8")).toBe(cleaned)
   })
 
-  test("cleaning a host-only patch keeps its comments and restores a valid empty array", async () => {
+  test("cleaning a host-only patch drops the retired scaffold and restores a valid array", async () => {
     const home = tmpHome()
     const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
     const layout = resolveDshLayout(home)
@@ -262,15 +263,77 @@ describe("DSH CorePreparation contributors", () => {
 
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
     const cleaned = readFileSync(toolsPatch, "utf8")
-    // Comments survive; the file still parses as the loader's top-level array.
-    expect(cleaned).toContain("# Patch layer for the ellamaka tool-container profile.")
-    expect(cleaned).toContain("# every row below was host-owned")
+    // The retired template's own scaffold is host text with no user row to
+    // describe: it goes, and the product composition replaces it.
+    expect(cleaned).not.toContain("# Patch layer for the ellamaka tool-container profile.")
+    expect(cleaned).not.toContain("# every row below was host-owned")
     expect(cleaned).not.toContain("id: session, disabled: true")
+    expect(cleaned).toContain("# >>> ellamaka-tools composition")
     expect(parseDocument(cleaned).contents?.toJSON()).not.toEqual([])
 
-    // The follow-up run must not append a second empty array.
+    // The follow-up run must not rewrite the settled declaration.
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
     expect(readFileSync(toolsPatch, "utf8")).toBe(cleaned)
+  })
+
+  test("a retired scaffold wrapped around the product block collapses to the block", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    const declaration = readFileSync(toolsPatch, "utf8")
+    // The shape a home reaches after the earlier cleanup removed the rows but
+    // left the template's comments, plus the dead extra-root override.
+    writeFileSync(
+      toolsPatch,
+      declaration +
+        [
+          "",
+          "# Patch layer for the ellamaka tool-container profile.",
+          "# --- session & agent-loop core ---",
+          "# Session lifecycle belongs to ellamaka; the container must stay session-free.",
+          "",
+          "- id: sandbox-roots-policy",
+          "  config:",
+          "    mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'",
+          "    workspaceRoot: !!js process.cwd()",
+          "",
+        ].join("\n"),
+    )
+
+    expect((await profile.inspect({ kind: "host" })).state).toBe("NEEDS_PREPARATION")
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    // Nothing outside the product block was user text, so only the block stays.
+    expect(readFileSync(toolsPatch, "utf8")).toBe(TOOLS_PROFILE_BLOCK)
+    // Settled: the scaffold never comes back on later boots.
+    expect((await profile.inspect({ kind: "host" })).state).toBe("READY")
+  })
+
+  test("a drifted product block is refreshed on inspection while the user tail stays", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    const declaration = readFileSync(toolsPatch, "utf8")
+    const userTail = "# my additions\n- id: tool-bash\n  config:\n    timeoutMs: !!js 1000 * 60\n"
+    writeFileSync(toolsPatch, declaration + userTail)
+    expect((await profile.inspect({ kind: "host" })).state).toBe("READY")
+
+    // An older closure's block (here: one row short) must not survive a boot.
+    const stale = declaration.replace(
+      "    - id: tool-str-replace-editor\n      name: '@deepseek-ai/dsh-tool-str-replace-editor'\n",
+      "",
+    )
+    writeFileSync(toolsPatch, stale + userTail)
+    expect((await profile.inspect({ kind: "host" })).state).toBe("NEEDS_PREPARATION")
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(declaration + userTail)
   })
 
   test("a valid user patch receives the product block once, while malformed YAML is reported unchanged", async () => {

@@ -84,11 +84,13 @@ const LEGACY_TOOLS_PATCH_MARKER = "# Patch layer for the ellamaka tool-container
 interface LegacyCleanupPlan {
   /** Source ranges (whole lines, including the trailing newline) to delete. */
   readonly ranges: readonly { readonly start: number; readonly end: number }[]
+  /** Whole-file replacement for a file that is entirely retired host text. */
+  readonly replacement?: string
   /** A matched host row that cannot be dropped without touching user text. */
   readonly blocked: boolean
 }
 
-/** A legacy host row: exactly `{ id: <retired id>, disabled: true }`. */
+/** A retired host disable row: exactly `{ id: <retired id>, disabled: true }`. */
 function isLegacyHostRow(value: unknown): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false
   const keys = Object.keys(value)
@@ -98,12 +100,40 @@ function isLegacyHostRow(value: unknown): boolean {
 }
 
 /**
+ * The retired template's extra-root override: `sandbox-roots-policy` with only
+ * the two keys the host owned. That row targeted a base entry the standalone
+ * composition does not declare, so it is dead configuration, not user intent.
+ */
+function isLegacyRootsRow(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const row = value as { id?: unknown; config?: unknown }
+  if (row.id !== "sandbox-roots-policy" || Object.keys(row).length !== 2) return false
+  const config = row.config
+  if (typeof config !== "object" || config === null || Array.isArray(config)) return false
+  const keys = Object.keys(config)
+  return keys.length === 2 && keys.every((key) => key === "mode" || key === "workspaceRoot")
+}
+
+function isRetiredHostRow(value: unknown): boolean {
+  return isLegacyHostRow(value) || isLegacyRootsRow(value)
+}
+
+/** The product-owned composition span, when both markers are intact. */
+function productBlockSpan(content: string): { start: number; end: number } | null {
+  const start = content.indexOf(TOOLS_PROFILE_BLOCK_BEGIN)
+  const end = content.indexOf(TOOLS_PROFILE_BLOCK_END)
+  if (start === -1 || end === -1 || end < start) return null
+  return { start, end: end + TOOLS_PROFILE_BLOCK_END.length }
+}
+
+/**
  * Plan the one-time cleanup of a retired host-owned tools patch.
  *
- * Only rows the old template owned — same id AND exactly `disabled: true`, with
- * no extra keys — are removable. Comments and every unknown/user row stay
- * byte-for-byte, and a file that cannot be parsed, is not a top-level array, or
- * does not identify itself as the old template is never touched.
+ * Only text the old template owned is removable: its disable rows (same id AND
+ * exactly `disabled: true`), its extra-root override, and — when the file holds
+ * no user row at all — its own comment scaffold. Every user row and every file
+ * that cannot be parsed, is not a top-level array, or does not identify itself
+ * as the old template is left untouched.
  *
  * Returns `null` when there is nothing to clean or ownership cannot be
  * established.
@@ -113,21 +143,48 @@ function planLegacyToolsPatchCleanup(content: string): LegacyCleanupPlan | null 
   if (document.errors.length > 0) return null
   const sequence = document.contents
   if (!isSeq(sequence)) return null
-  // Only rows with a source range can be removed by line, and only those
-  // count as "rows" here — anything else means the file is not a shape whose
-  // ownership we can judge.
-  const rows = sequence.items.filter((item) => isMap(item) && item.range !== undefined)
-  const legacyRows = rows.filter((row) => isLegacyHostRow((row as { toJSON(): unknown }).toJSON()))
-  if (legacyRows.length === 0) return null
+  const block = productBlockSpan(content)
+  // Product composition rows belong to the block above them, never to the
+  // retired template's ownership accounting.
+  const rows = sequence.items.filter(
+    (item) =>
+      !(
+        block !== null &&
+        isMap(item) &&
+        item.range !== undefined &&
+        item.range[0] >= block.start &&
+        item.range[0] < block.end
+      ),
+  )
+  const legacyRows = rows.filter((row) => isMap(row) && isRetiredHostRow((row as { toJSON(): unknown }).toJSON()))
+  const userRows = rows.filter((row) => !legacyRows.includes(row))
   // Ownership: either the retired template's own header survives, or every
   // row in the file is one the retired template owned.
   const selfIdentified = content.includes(LEGACY_TOOLS_PATCH_MARKER)
-  const entirelyHostOwned = legacyRows.length === sequence.items.length
-  if (!selfIdentified && !entirelyHostOwned) return null
+  if (!selfIdentified && (legacyRows.length === 0 || userRows.length > 0)) return null
+
+  // A self-identified file with no user row is the retired template end to
+  // end (its header, sections, comments and rows). Nothing in it is worth
+  // preserving except the product block, so the stale scaffold is replaced
+  // wholesale instead of being line-patched into a comment graveyard.
+  if (selfIdentified && userRows.length === 0) {
+    const removable = legacyRows.every((row) => isMap(row) && row.range !== undefined)
+    if (!removable) return { ranges: [], blocked: true }
+    return {
+      ranges: [],
+      blocked: false,
+      replacement: block === null ? "[]\n" : content.slice(block.start, block.end),
+    }
+  }
+  if (legacyRows.length === 0) return null
 
   const ranges: { start: number; end: number }[] = []
   let blocked = false
   for (const row of legacyRows) {
+    if (!isMap(row) || row.range === undefined) {
+      blocked = true
+      continue
+    }
     const [start, end] = row.range
     const lineStart = content.lastIndexOf("\n", start - 1) + 1
     // A flow-style row (`- { ... }`) ends mid-line, so its trailing text is
@@ -156,6 +213,8 @@ function applyCleanupRanges(content: string, ranges: readonly { start: number; e
   for (const range of [...ranges].sort((a, b) => b.start - a.start)) {
     next = next.slice(0, range.start) + next.slice(range.end)
   }
+  // Deleting every line leaves an empty document, which parses as `null`.
+  if (next.trim() === "") return "[]\n"
   // Dropping every row can leave a comments-only file, which parses as `null`
   // and fails the loader's top-level-array contract. Keep the comments and
   // append the empty array they now describe.
@@ -174,7 +233,20 @@ function applyCleanupRanges(content: string, ranges: readonly { start: number; e
 function cleanLegacyToolsPatch(content: string): string | null {
   const plan = planLegacyToolsPatchCleanup(content)
   if (plan === null || plan.blocked) return null
+  if (plan.replacement !== undefined) return plan.replacement
   return applyCleanupRanges(content, plan.ranges)
+}
+
+/** Whether the profile carries the current product composition block. */
+function toolsCompositionCurrent(toolsPatch: string): boolean {
+  if (!existsSync(toolsPatch)) return false
+  try {
+    const content = readFileSync(toolsPatch, "utf8")
+    const block = productBlockSpan(content)
+    return block !== null && content.slice(block.start, block.end) === TOOLS_PROFILE_BLOCK
+  } catch {
+    return false
+  }
 }
 
 /** The official empty home-level patch layer (dsh PROFILE_PATCH_TEMPLATE). */
@@ -288,8 +360,15 @@ export function inspectDshProfileResources(wopalHome: string): DshProfileResourc
   // A retired host-owned patch still needs its one-time cleanup before the
   // profile is ready; that state stays internal (no version-specific field).
   const needsToolsPatchCleanup = needsLegacyToolsPatchCleanup(paths.toolsPatch)
+  // The process only rewrites the block when it is actually stale, so a
+  // matching composition is never re-assembled on an ordinary boot.
+  const toolsCompositionDrifted = !toolsCompositionCurrent(paths.toolsPatch)
   return {
-    ready: missing.length === 0 && !needsToolsPatchCleanup && !baseBackedToolsManifest(paths.toolsManifest),
+    ready:
+      missing.length === 0 &&
+      !needsToolsPatchCleanup &&
+      !toolsCompositionDrifted &&
+      !baseBackedToolsManifest(paths.toolsManifest),
     missing,
   }
 }
