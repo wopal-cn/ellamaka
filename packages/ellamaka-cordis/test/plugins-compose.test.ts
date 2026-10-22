@@ -272,11 +272,15 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
           options?: { config?: { patches?: Record<string, unknown>[] } }
         }
       ).options?.config
-      const hmrRows = (includeConfig?.patches ?? [])
-        .flatMap((row) => (row as { insert?: { id?: string; disabled?: boolean }[] }).insert ?? [])
-        .filter((row) => row.id === "hmr")
-      expect(hmrRows.length).toBeGreaterThan(0)
-      expect(hmrRows.every((row) => row.disabled === true)).toBe(true)
+      const insertRows = (includeConfig?.patches ?? []).flatMap(
+        (row) => (row as { insert?: { id?: string }[] }).insert ?? [],
+      )
+      expect(insertRows.some((row) => row.id === "tools")).toBe(true)
+      expect(insertRows.some((row) => row.id === "tool-fs")).toBe(true)
+      // The host owns the Bun HMR adapter; the standalone composition has no
+      // dsh-hmr plugin row and therefore never installs loader.internal.
+      expect(insertRows.some((row) => row.id === "hmr")).toBe(false)
+      expect(ctx.get("hmr")).toBeDefined()
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()

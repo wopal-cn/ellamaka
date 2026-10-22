@@ -447,8 +447,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   installBunSubprocessCompatibility()
 
   const { createRuntimeResolution } = runtime.appBoot
-  const coreBundles =
-    profileName === WEB_PROFILE_NAME ? ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] : ["@deepseek-ai/dsh-base"]
+  const coreBundles = profileName === WEB_PROFILE_NAME ? ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] : []
   const loadProfile = (...args: Parameters<typeof runtime.appBoot.loadProfile>) => {
     const loaded = runtime.appBoot.loadProfile(...args)
     const skipped = new Map(loaded.skippedBundles.map((bundle) => [bundle.packageName, bundle.reason]))
@@ -544,7 +543,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       profileName,
       runtime.appBoot.composeEntries([input as PatchOptions[]]),
       opts.disablePtcRuntime === true,
-      { installAnchor },
     )
   const patches = composeFullPatchStack(stackContext)
   const rootConfig = join(profile.dir, "cordis.yml")

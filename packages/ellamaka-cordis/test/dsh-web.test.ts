@@ -308,25 +308,17 @@ describe("dsh web engine", () => {
     }
   }, 30_000)
 
-  test("a skipped core bundle rejects the tools container with its official reason", async () => {
-    const home = mkdtempSync(join(tmpdir(), "dsh-host-core-skip-tools-"))
+  test("standalone tools stays usable when the unrelated base bundle is unavailable", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-base-free-tools-"))
     prepareDshProfiles(home)
     const ctx = new Context()
     const runtime = runtimeWithSkippedBundle("ellamaka-tools", "@deepseek-ai/dsh-base", "test-incompatible")
-
-    let error: unknown
+    const host = await mountDshTools(ctx, { home, port: 0, runtime })
     try {
-      await mountDshTools(ctx, { home, port: 0, runtime })
-    } catch (caught) {
-      error = caught
-    }
-    try {
-      expect(error).toBeInstanceOf(Error)
-      const message = error instanceof Error ? error.message : String(error)
-      expect(message).toMatch(/DSH core bundles could not load/)
-      expect(message).toContain("@deepseek-ai/dsh-base")
-      expect(message).toContain("test-incompatible")
+      expect(readToolNames(ctx)).toContain("bash")
+      expect(ctx.get("sessions", false)).toBeUndefined()
     } finally {
+      await host.dispose()
       await ctx.fiber.dispose()
     }
   }, 30_000)
@@ -680,6 +672,11 @@ describe("dsh tools profile", () => {
     await seedHost.dispose()
     await seedCtx.fiber.dispose()
 
+    // Reconstruct the actual old base-backed manifest as well as its patch.
+    const manifestPath = join(home, "home", "profiles", "ellamaka-tools", "package.json")
+    const legacyManifest = JSON.parse(readFileSync(manifestPath, "utf8"))
+    legacyManifest.dsh.profile.bundles = ["@deepseek-ai/dsh-base"]
+    writeFileSync(manifestPath, JSON.stringify(legacyManifest))
     // An older host's static template plus rows the user appended afterwards.
     writeFileSync(
       patchPath,
@@ -715,8 +712,7 @@ describe("dsh tools profile", () => {
       // Mounting never rewrites the user patch layer, and resets the anchor.
       expect(readFileSync(patchPath, "utf8")).toBe(cleanedByPreparation)
       expect(readFileSync(rootConfig, "utf8")).toBe("[]\n")
-      // Pruning now comes from the in-memory capability patches, so the
-      // retired rows are still not activated and approval still composes.
+      // The standalone declaration supplies tools without Session lifecycle.
       expect(ctx.get("sessions", false)).toBeUndefined()
       expect(ctx.get("agents", false)).toBeUndefined()
       expect(ctx.get("approval")).toBeDefined()

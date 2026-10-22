@@ -1,7 +1,7 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-20
+> **Updated**: 2026-10-22
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -28,18 +28,21 @@ Ellamaka 通过 `ellamaka-tools` profile 获得工具执行后端。容器装配
 
 ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [DSH 基础设计](./DESIGN-dsh-base.md)。
 
-1. **单一裁剪真相源**：
-   - `ellamaka-tools` 是宿主专用的无会话内部工具容器。其磁盘目录 `$WOPAL_HOME/dsh/home/profiles/ellamaka-tools/` 由官方 `initProfile` 初始化为标准空补丁模板（`cordis.patch.yml` 保持空数组模板 `[]`，`cordis.yml` 在每次准备与挂载前无条件重置为 `[]\n`）。宿主不在磁盘 `cordis.patch.yml` 中写入静态禁用列表，也不维护针对磁盘补丁文件的跨版本字符串改写。
-   - 容器对 `@deepseek-ai/dsh-base` 的裁剪完全由宿主运行时的 `profileCapabilityPatches`（内存 overlay 层）作为唯一真相源统一生成。
-2. **采用集合与底层依赖服务闭包**：
-   - `profileCapabilityPatches` 保留工具容器所需的服务与工具 provider（`timer`、`session-projection`、`subprocess`、`sandbox`、`sandbox-policy`、`bash-sandbox`、`pwsh-sandbox`、`approval`、`ptc-runtime`、`shell-env`、`working-directory`、`tool-bash`、`tool-pwsh`、`fs-observation-policy`、`tool-fs`、`tool-fs-search`、`timeout-policy`、`spill-local`、`spill-policy`、`tools`、`system-prompt`、`fs-sandbox`、`storage`、`storage-json`、`storage-domain`），显式插入 `@deepseek-ai/dsh-tool-str-replace-editor`，并将 `tools.mode` 固定为 `"native"`、关闭 `tool-bash` 与 `tool-pwsh` 的 `enableRunInBackground`（schema 不宣告 `run_in_background`，强制传入由工具拒绝）。其余耦合了会话生命周期、检查点、Agent 循环、模型调用、界面、账号、子代理与后台任务的 `@deepseek-ai/*` 行统一禁用。
-   - `session-projection` 注册表保持启用以向 `sandbox-policy` 提供策略折叠，容器不生成真实 Session；`approval` 保持启用以承接沙箱单次提权，缺失询问闭包时按原生 `unavailable` 结果关闭提权。
-   - 为防止上游 DSH 升级时从既有工具拆分出新的底层基础服务（如 `working-directory`）而被白名单误禁，宿主校验已采用工具与服务插件的 Cordis `inject` 服务声明（或 `peerDependencies`），确保已采用插件依赖的基础服务包含在启用集合中。
-3. **挂载完成强验收门禁**：
-   - Cordis 对缺失 `inject` 服务的插件采取静默等待策略，不会自动抛错。因此 `ellamaka-tools` 在 Loader settlement 后必须执行**注册工具完整性强验收**：
-     - macOS / Linux 必须实际注册齐 7 个工具：`bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；
-     - Windows 必须实际注册齐文件工具与 `pwsh` 后端。
-   - 缺失任一必需工具或存在挂起等待（pending `inject`）的已采用插件时，挂载直接失败并明确报告缺失工具及未就绪的依赖服务，绝不允许带着残缺工具集进入 `ready` 状态。
+`ellamaka-tools` 是从空 Cordis 根独立装配的无会话工具 profile。它使用官方 profile、bundle 与 YAML `insert` 格式，直接声明所需工具和基础服务；`dsh.profile.bundles` 的初始选择不包含 `@deepseek-ai/dsh-base`。产品维护最小工具装配声明，用户在标准 profile 补丁中配置插件，并通过官方插件安装流程添加外部包与 bundle。
+
+装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端；`tools.mode` 为 `native`，shell 后台执行关闭。`session-projection` 提供策略折叠，`approval` 承接沙箱单次提权，缺失询问闭包时返回原生 `unavailable`。容器保持无持久 DSH Session 的边界。
+
+插件包与服务的选择由标准配置表达。宿主按官方声明加载、解析并报告激活结果；不增加 `adopt` 字段、整棵 `dsh-base` 的禁用表，或通过扫描上游源码推导并改写装配的机制。必要的 Bun/Electron 宿主接线归基础设计。
+
+产品在 tools 补丁中维护一个有明确首尾注释边界的装配块，块后为用户内容。closureVersion 变化触发 Home 备份后，准备阶段只刷新该块，块外字节原样保留；这是产品装配与用户覆盖的唯一交界。用户插件、bundle 与配置继续使用官方 profile 声明。`cordis.yml` 仍为每次准备与挂载前重置的空合成根。
+
+### Tool Availability Contract
+
+Loader settlement 后，macOS/Linux 必须实际注册 `bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；Windows 使用 `pwsh` 后端与相同文件/搜索能力。缺少必需工具或必需插件等待服务、激活失败时，容器报告具体原因并拒绝发布 ready。首次挂载与配置重放共用验收。
+
+升级兼容性由真实工具调用验证：读写和编辑结果、文件搜索、shell 工作目录与输出、字符串替换、沙箱拒绝、审批、取消和必要的 PTC 执行均有回归保护。工具注册与 schema 检查是启动条件，实际执行结果是兼容验收依据。测试固定对外行为，允许上游内部插件组织变化。
+
+升级使用基础设计的单一 DSH 版本入口。依赖安装及生成物刷新后运行同一组工具回归；通过即接受该版本在已覆盖工具契约上的兼容性。失败时依据模块解析、激活或执行诊断定位实际变化，再修正受影响的标准配置或 adapter。官方真实破坏性变更由具体修复承接，不通过预设别名、源码模式猜测或多版本分支预测。
 
 ## Internal Adapter
 

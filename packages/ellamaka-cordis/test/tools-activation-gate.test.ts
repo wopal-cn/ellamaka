@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
 import { createPackageDshRuntimeApi } from "../src/runtime/loader"
 import { bootDshTools, bootDshWeb, mountDshTools, verifyDshToolsRegistered } from "../src/dsh-web"
-import { profileCapabilityPatches } from "../src/plugins/profile-capabilities"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 const dirs: string[] = []
@@ -26,78 +25,65 @@ function seedBrokenUserPlugin(profile: "ellamaka-tools" | "web"): (home: string)
     mkdirSync(profileDir, { recursive: true })
     writeFileSync(
       join(profileDir, "cordis.patch.yml"),
-      ["- insert:", "    - id: broken-user-plugin", "      name: no-such-dsh-plugin-package", ""].join("\n"),
+      readFileSync(join(profileDir, "cordis.patch.yml"), "utf8").replace(/^\[\]\s*$/m, "") +
+        ["\n- insert:", "    - id: broken-user-plugin", "      name: no-such-dsh-plugin-package", ""].join("\n"),
     )
   }
 }
 
-function syntheticRows() {
-  return [
-    { id: "tools", name: "@deepseek-ai/dsh-tools" },
-    { id: "tool-bash", name: "@deepseek-ai/dsh-tool-bash" },
-    { id: "working-directory", name: "@deepseek-ai/dsh-working-directory" },
-    { id: "unadopted-upstream-row", name: "@deepseek-ai/dsh-unadopted-upstream-row" },
-  ]
-}
-
-function syntheticServices(name: string) {
-  if (name === "@deepseek-ai/dsh-tool-bash") return { requires: ["workingDirectory"], provides: [] }
-  if (name === "@deepseek-ai/dsh-working-directory") return { requires: [], provides: ["workingDirectory"] }
-  return undefined
-}
-
-describe("tools provider adoption closure", () => {
-  test("keeps a newly split base provider required by an adopted tool", () => {
-    const patches = profileCapabilityPatches("ellamaka-tools", syntheticRows(), false, {
-      inspect: syntheticServices,
-    })
-    const disabled = new Set(patches.filter((patch) => patch.disabled === true).map((patch) => patch.id))
-    expect(disabled.has("working-directory")).toBe(false)
-    expect(disabled.has("unadopted-upstream-row")).toBe(true)
-  })
-
-  test("keeps the adopted service closure free of Session lifecycle", () => {
-    const rows = [
-      { id: "tools", name: "@deepseek-ai/dsh-tools" },
-      { id: "session-projection", name: "@deepseek-ai/dsh-session-projection" },
-      { id: "sandbox-policy", name: "@deepseek-ai/dsh-sandbox-policy" },
-      { id: "session", name: "@deepseek-ai/dsh-session" },
-      { id: "agent", name: "@deepseek-ai/dsh-agent" },
-    ]
-    const patches = profileCapabilityPatches("ellamaka-tools", rows, false, {
-      installAnchor: require.resolve("@deepseek-ai/dsh/package.json"),
-    })
-    const disabled = new Set(patches.filter((patch) => patch.disabled === true).map((patch) => patch.id))
-    expect(disabled.has("session-projection")).toBe(false)
-    expect(disabled.has("sandbox-policy")).toBe(false)
-    expect(disabled.has("session")).toBe(true)
-    expect(disabled.has("agent")).toBe(true)
-  })
-
-  test("resolves a real service edge from the install anchor, not the fallback floor", () => {
-    const rows = [
-      { id: "tools", name: "@deepseek-ai/dsh-tools" },
-      { id: "tool-bash", name: "@deepseek-ai/dsh-tool-bash" },
-      { id: "shell-env", name: "@deepseek-ai/dsh-shell-env" },
-    ]
-    const patches = profileCapabilityPatches("ellamaka-tools", rows, false, {
-      installAnchor: require.resolve("@deepseek-ai/dsh/package.json"),
-    })
-    const disabled = new Set(patches.filter((patch) => patch.disabled === true).map((patch) => patch.id))
-    expect(disabled.has("tool-bash")).toBe(false)
-    expect(disabled.has("shell-env")).toBe(false)
-  })
-
-  test("fails loudly when the install anchor cannot resolve a declared package", () => {
-    expect(() =>
-      profileCapabilityPatches("ellamaka-tools", [{ id: "tool-bash", name: "@deepseek-ai/dsh-tool-bash" }], false, {
-        installAnchor: join(tempHome(), "missing-dsh", "package.json"),
-      }),
-    ).toThrow(/install anchor|resolve/)
-  })
-})
-
 describe("tools container activation gate", () => {
+  test("a standard user plugin mounts and its configuration replays without a host adoption list", async () => {
+    const home = tempHome()
+    prepareDshProfiles(home)
+    const profile = join(home, "home", "profiles", "ellamaka-tools")
+    const plugin = join(profile, "node_modules", "fixture-tools-extension")
+    mkdirSync(plugin, { recursive: true })
+    writeFileSync(
+      join(plugin, "package.json"),
+      JSON.stringify({
+        name: "fixture-tools-extension",
+        version: "1.0.0",
+        type: "module",
+        main: "index.js",
+      }),
+    )
+    writeFileSync(
+      join(plugin, "index.js"),
+      "export function apply(ctx, config) { ctx.provide('fixtureToolsValue', config.value) }\n",
+    )
+    const patch = join(profile, "cordis.patch.yml")
+    writeFileSync(
+      patch,
+      readFileSync(patch, "utf8") +
+        "\n- insert:\n    - id: fixture-extension\n      name: fixture-tools-extension\n      config:\n        value: first\n",
+    )
+    const host = await bootDshTools({ home, port: 0, disablePtcRuntime: true })
+    try {
+      expect(host.ctx.get("fixtureToolsValue")).toBe("first")
+      const config = host.includeEntry.options?.config
+      if (!config || !Array.isArray(config.patches)) throw new Error("missing live composition")
+      const source = readFileSync(join(profile, "cordis.patch.yml"), "utf8")
+      writeFileSync(join(profile, "cordis.patch.yml"), source.replace("value: first", "value: second"))
+      await host.ctx.get("hmr").runExclusive(async () => {
+        const current = createPackageDshRuntimeApi().appBoot.loadProfile(
+          "ellamaka",
+          "ellamaka-tools",
+          require.resolve("@deepseek-ai/dsh/package.json"),
+          join(home, "home"),
+        )
+        await createPackageDshRuntimeApi().appBoot.reconcileProfilePatches(
+          host.ctx,
+          [...current.layers.flatMap((layer) => layer.patches), ...current.patches],
+          "ellamaka",
+        )
+      })
+      expect(host.ctx.get("fixtureToolsValue")).toBe("second")
+      verifyDshToolsRegistered((name) => host.ctx.get(name, false))
+    } finally {
+      await host.dispose()
+    }
+  }, 30_000)
+
   test("rejects a tools registry missing any required platform tool", () => {
     const lookup = (name: string) =>
       name === "tools"

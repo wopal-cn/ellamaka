@@ -74,11 +74,11 @@ describe("DSH CorePreparation contributors", () => {
     for (const file of [webManifest, webPatch, webRoot, toolsManifest, toolsPatch, toolsRoot])
       expect(existsSync(file)).toBe(true)
 
-    // A fresh home carries the official empty patch layer, never a host-owned
-    // static disable list.
+    // A fresh tools profile declares its own composition over an empty root.
     const freshToolsPatch = readFileSync(toolsPatch, "utf8")
-    expect(freshToolsPatch).toContain("[]")
-    expect(freshToolsPatch).not.toContain("disabled: true")
+    expect(JSON.parse(readFileSync(toolsManifest, "utf8")).dsh.profile.bundles).toEqual([])
+    expect(freshToolsPatch).toContain("name: '@deepseek-ai/dsh-tools'")
+    expect(freshToolsPatch).not.toContain("@deepseek-ai/dsh-base")
 
     const userManifest = '{"name":"user-web","custom":true}\n'
     const userPatch = "# user-owned\n- { id: local-custom, disabled: false }\n"
@@ -97,6 +97,41 @@ describe("DSH CorePreparation contributors", () => {
     expect(readFileSync(toolsRoot, "utf8")).toBe("[]\n")
     // User patch layers are untouched by the reset.
     expect(readFileSync(toolsPatch, "utf8")).toBe(freshToolsPatch)
+  })
+
+  test("base-backed tools becomes standalone once while preserving user configuration and extensions", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })
+    await profile.prepare({ kind: "host" }, context())
+    const manifestPath = join(layout.profileDir, "ellamaka-tools", "package.json")
+    const patchPath = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
+    manifest.dependencies = { "my-tools": "file:/example/my-tools" }
+    manifest.dsh.profile.bundles = ["@deepseek-ai/dsh-base", "my-tools"]
+    writeFileSync(manifestPath, JSON.stringify(manifest))
+    const userPatch = "# user settings\n- id: tool-bash\n  config:\n    timeoutMs: !!js 1000 * 60\n"
+    writeFileSync(patchPath, userPatch)
+    expect((await profile.inspect({ kind: "host" })).state).toBe("NEEDS_PREPARATION")
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    const converted = JSON.parse(readFileSync(manifestPath, "utf8"))
+    expect(converted.dependencies).toEqual(manifest.dependencies)
+    expect(converted.dsh.profile.bundles).toEqual(["my-tools"])
+    const declaration = readFileSync(patchPath, "utf8")
+    expect(declaration).toContain("name: '@deepseek-ai/dsh-tools'")
+    expect(declaration.endsWith(userPatch)).toBe(true)
+    // A shipped composition refresh replaces only the product block.
+    const stale = declaration.replace(
+      "    - id: tool-str-replace-editor\n      name: '@deepseek-ai/dsh-tool-str-replace-editor'\n",
+      "",
+    )
+    writeFileSync(patchPath, stale)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(patchPath, "utf8")).toBe(declaration)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(patchPath, "utf8")).toBe(declaration)
+    expect(JSON.parse(readFileSync(manifestPath, "utf8"))).toEqual(converted)
   })
 
   test("a repaired missing cordis.yml is written as the empty root anchor", async () => {
@@ -196,8 +231,8 @@ describe("DSH CorePreparation contributors", () => {
 
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
     const cleaned = readFileSync(toolsPatch, "utf8")
-    expect(cleaned).not.toContain("id: session")
-    expect(cleaned).not.toContain("id: agent-loop")
+    expect(cleaned).not.toContain("- id: session\n  disabled: true")
+    expect(cleaned).not.toContain("- id: agent-loop\n  disabled: true")
     expect(cleaned).toContain("# user-tail")
     expect(cleaned).toContain("- id: my-own-plugin")
     expect(cleaned).toContain("  disabled: true")
@@ -230,15 +265,15 @@ describe("DSH CorePreparation contributors", () => {
     // Comments survive; the file still parses as the loader's top-level array.
     expect(cleaned).toContain("# Patch layer for the ellamaka tool-container profile.")
     expect(cleaned).toContain("# every row below was host-owned")
-    expect(cleaned).not.toContain("disabled: true")
-    expect(parseDocument(cleaned).contents?.toJSON()).toEqual([])
+    expect(cleaned).not.toContain("id: session, disabled: true")
+    expect(parseDocument(cleaned).contents?.toJSON()).not.toEqual([])
 
     // The follow-up run must not append a second empty array.
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
     expect(readFileSync(toolsPatch, "utf8")).toBe(cleaned)
   })
 
-  test("an unrecognisable tools patch is never rewritten", async () => {
+  test("a valid user patch receives the product block once, while malformed YAML is reported unchanged", async () => {
     const home = tmpHome()
     const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
     const layout = resolveDshLayout(home)
@@ -246,14 +281,18 @@ describe("DSH CorePreparation contributors", () => {
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
 
     const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
-    const ambiguous = "- { id: agent-loop, disabled: true }\n- { id: mine, disabled: true }\n"
-    writeFileSync(toolsPatch, ambiguous)
+    const userRows = "- { id: mine, disabled: true }\n"
+    writeFileSync(toolsPatch, userRows)
     expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
-    expect(readFileSync(toolsPatch, "utf8")).toBe(ambiguous)
+    const declared = readFileSync(toolsPatch, "utf8")
+    expect(declared).toContain("# >>> ellamaka-tools composition")
+    expect(declared.endsWith(userRows)).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(declared)
 
     const unparsable = "this: is: not: an array\n"
     writeFileSync(toolsPatch, unparsable)
-    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    await expect(profile.prepare({ kind: "host" }, context())).rejects.toThrow(/top-level YAML array/)
     expect(readFileSync(toolsPatch, "utf8")).toBe(unparsable)
   })
 

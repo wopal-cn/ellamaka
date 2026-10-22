@@ -6,8 +6,8 @@
  *
  * - web profile composition/manifest change → `dsh:web` only
  * - tools profile composition/manifest change → `dsh:tools` only
- * - shared dsh-base change (home-level `cordis.patch.yml`) → web + tools
- *   (the one declared multi-unit dependency edge)
+ * - shared home-level `cordis.patch.yml` change → web + tools
+ *   (both profiles explicitly consume this layer)
  * - global provider/config change → `global` / `instance:*`, never DSH
  * - a CODE (module-graph) change cold-rebuilds the web unit in a new child
  *   process; the tools unit is in-process by default and reports
@@ -35,7 +35,7 @@ export interface UnitTriggerInput {
   profile?: string
   /** The changed file name (informational; the profile decides the unit). */
   file: string
-  /** A home-level (shared dsh-base) composition change. */
+  /** A home-level composition change consumed by both profiles. */
   sharedBase?: boolean
   /** A global provider/config change (settings, providers). */
   globalConfig?: boolean
@@ -55,10 +55,10 @@ export function restartRequiredForTools(
   // Global provider/config changes never touch DSH units (触发定域: 全局
   // provider/config 变 → global/instance，不牵动 dsh).
   if (options.globalConfig) return { units: [] }
-  // Shared dsh-base change: the one declared multi-unit edge.
+  // Shared home composition: both independent profiles consume this layer.
   if (options.sharedBase) {
     if (options.codeChange) {
-      // A code-level shared-base change cold-rebuilds web; tools reports
+      // A code-level shared-home change cold-rebuilds web; tools reports
       // restart-required (in-process, cannot swap its module graph).
       return { units: ["dsh:web"], coldRebuild: true, restartRequired: "dsh:tools" }
     }

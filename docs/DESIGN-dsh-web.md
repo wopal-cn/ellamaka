@@ -1,7 +1,7 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-20
+> **Updated**: 2026-10-22
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -10,6 +10,12 @@
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 
 `web` profile 承载 DSH 的完整界面与会话。宿主基座、Home、包解析与配置队列由 [DSH 基础设计](./DESIGN-dsh-base.md) 拥有，本文定义 Web 的插件供应链、声明式 preset 和界面承载。
+
+## Upgrade Ownership
+
+Web 使用当前固定 DSH 版本的官方 Web profile 配置和 bundle 默认值，用户与空间扩展通过官方补丁和插件机制配置。官方拥有自身配置、会话数据和升级时的自动格式处理；Ellamaka 拥有宿主挂载、Home 备份与运行诊断。
+
+升级后的验收是实际启动并检查 Web 运行。若官方能够直接处理已有配置，就沿用该结果；若出现破坏性变更，保留诊断，依据对应版本发布说明手动修正配置。产品不推测官方未来配置变更，也不增加一套自动转换规则。Web 的工具和默认行为跟随官方；Ellamaka tools 的最小装配与固定工具回归独立维护。
 
 ## Plugin Supply Chain
 
@@ -141,7 +147,7 @@ dsh/agents-presets/
 配置单与 profile 在 WopalSpace 体系下按职责边界分层维护与装配：
 
 1. **能力包与 Profile 职责分离**：本体仓库（`dsh/`）仅维护跨版本的声明式预设包（`dsh/agents-presets`）与扩展插件包（`dsh/plugins/*`），不维护 `web` 或 `ellamaka-tools` 的 profile 基线目录。
-2. **Profile 初始化**：CorePreparation（`dsh.profiles` 步骤）通过官方 `initProfile` 在固定核心 Home `$WOPAL_HOME/dsh/home/profiles/<profile>/` 直接初始化缺失的 `package.json`、`cordis.patch.yml` 与 `pnpm-workspace.yaml`，并在每次准备与启动前将合成根锚点 `cordis.yml` 重置为 `[]\n`。已有用户声明文件保持不变。
+2. **Profile 初始化**：CorePreparation（`dsh.profiles` 步骤）在固定核心 Home `$WOPAL_HOME/dsh/home/profiles/<profile>/` 使用官方文件格式准备 profile：Web 使用官方模板，tools 使用产品最小插件声明。每次准备与启动前将合成根锚点 `cordis.yml` 重置为 `[]\n`。已有用户声明文件保持不变。
 3. **预设与插件安装**：WopalSpace Onboarding 或插件管理命令在用户启用相关增强时，通过官方 `pluginManager` 流水线将本体仓库提供的 `@wopal/dsh-presets` 及扩展插件以 `file:` 本地包快照方式安装到 `web` profile，保持本地目录物理独立。
 4. **准备与激活**：`serve`、Desktop 与默认 TUI 共用 CorePreparation；`ellamaka run` 固定跳过 DSH。Runtime 使用统一 `closureVersion` 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Core READY 后各入口才按需挂载 `web` 或 `ellamaka-tools`；`ELLAMAKA_DSH=0` 时整个 DSH 分支跳过。细节归 [DSH 基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 

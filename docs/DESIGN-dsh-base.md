@@ -1,7 +1,7 @@
 # DSH 融合基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-20
+> **Updated**: 2026-10-22
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -46,6 +46,8 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 
 构建脚本从唯一的 `@deepseek-ai/dsh` 入口与工作区 `bun.lock` 派生 `dsh-runtime.manifest.json` 和完整的 `dsh-runtime.lock.json`（由 `Arborist` 展开全部传递依赖闭包），并通过漂移检查保证签入的 manifest、lock 与 `package.json` 一致。升级 DSH 版本只需更新 `@deepseek-ai/dsh` 版本号、重新生成 `bun.lock` 并刷新运行时清单与锁文件。
 
+升级的日常流程是更新这一个版本入口、重新安装依赖并刷新派生产物，然后运行工具容器的固定行为回归。测试通过表示该版本满足已覆盖的工具契约。`web` 使用所选版本的官方 profile 配置，并以实际启动与运行检查确认可用。官方配置和数据格式的升级行为由 DSH 拥有；出现真实不兼容时，依据对应发布说明和失败诊断做具体修正。Ellamaka 保留必要的宿主接线，不建设预测未来破坏性变更的装配转换层。
+
 Ellamaka 源码维护一个递增的 `closureVersion`，CLI 与 Desktop 构建共用。当锁定的 DSH 闭包或产品自有 DSH 文件发生可能影响 Home 数据的变化时提升它。Home 兼容性仅由 `closureVersion` 判定，与 CLI/Desktop 的产品 SemVer 及发布通道解耦。
 
 ### Materialization
@@ -79,11 +81,13 @@ Ellamaka 源码维护一个递增的 `closureVersion`，CLI 与 Desktop 构建�
 
 profile 的 `package.json` 声明有序 `dsh.profile.bundles` 与外部插件 `dependencies`，是安装与激活的真相源。官方内置 bundle（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`）从外部安装闭包（`installAnchor`）加载，不在 `profile/package.json` 的 `dependencies` 中锁定版本，也不安装到 `profile/node_modules`。`profile/pnpm-workspace.yaml` 固定 `autoInstallPeers: false`，外部插件声明的 `@deepseek-ai/*` 对等依赖不写入 `profile/node_modules`，运行期统一路由到当前活动的 DSH 闭包。
 
+两个 profile 分别拥有自己的装配。`web` 跟随官方 Web 模板与 bundle；`ellamaka-tools` 从空根以官方 YAML 声明所需插件和服务，其初始 bundle 列表不包含 `dsh-base`。tools 的配置与行为契约归工具容器设计，Web 的官方配置不成为 tools 的隐含依赖。
+
 `cordis.patch.yml` 是用户补丁层；`cordis.yml` 是运行期合成根锚点（非用户配置文件）。完整配置按下列顺序求值：bundle 层 → profile 用户层 → home 注入与 home 用户层 → 命令行覆盖 → 宿主能力约束与显式环境硬禁用。一般用户配置保留覆盖能力；运行时不可执行的后端、无会话容器边界和禁用的 telemetry 由宿主约束保护。
 
 ProfileRuntime 拥有 profile facts、完整补丁生成、包解析、root Include、mutation queue、验收与释放。启动、配置转储和重放共用同一生成过程，后续重放重新读取实际声明文件。
 
-宿主通过官方 `initProfile` 初始化缺失的 `package.json`、`cordis.patch.yml` 与 `pnpm-workspace.yaml`，已有声明文件保持用户内容不变（若 `$DSH_HOME/cordis.patch.yml` 被意外清空为空白文本，准备阶段将其恢复为官方空数组模板 `[]`）。因为运行期 Cordis `Include.write()` 会将展开后的合成树写回 `cordis.yml`，宿主在准备阶段和每次 `mountProfile` 启动前都无条件将 `profile/cordis.yml` 重置为 `[]\n`，避免上一次运行写回的合成树在下次启动时重复叠加。
+宿主复用官方 profile 文件格式与初始化原语：缺失的 Web profile 使用官方模板，缺失的 tools profile 使用产品最小装配声明。已有声明文件保持用户内容不变（若 `$DSH_HOME/cordis.patch.yml` 被意外清空为空白文本，准备阶段将其恢复为官方空数组模板 `[]`）。因为运行期 Cordis `Include.write()` 会将展开后的合成树写回 `cordis.yml`，宿主在准备阶段和每次 `mountProfile` 启动前都无条件将 `profile/cordis.yml` 重置为 `[]\n`，避免上一次运行写回的合成树在下次启动时重复叠加。
 
 ### Boot Contract
 
@@ -91,7 +95,7 @@ DSH v0.2 使用 `createRuntimeResolution` 提供不可变的包映射，`auditSt
 
 装配时注入 profileContext：name、dir、patchPath、installAnchor、cwd、home、startedBundles、overlays、telemetryDisabledEnv。overlays 包含必要的宿主约束，使原生设置与插件管理操作使用同一策略。
 
-`loadProfile` 与 `prepareProfilePatches` 按 `includePrerelease: true` 校验每个 bundle 与插件行的 `peerDependencies`（同时支持 `profile/compatibility.json` 的精确版本豁免）。宿主内置核心 bundle（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`）缺失或跳过时挂载直接失败；用户或第三方扩展 bundle 因版本不兼容进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）时，宿主记录告警诊断并跳过该扩展，保持核心容器与其余兼容插件正常启动。
+`loadProfile` 与 `prepareProfilePatches` 按 `includePrerelease: true` 校验每个 bundle 与插件行的 `peerDependencies`（同时支持 `profile/compatibility.json` 的精确版本豁免）。Web 当前模板的核心 bundle（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`）缺失或跳过时 Web 挂载直接失败；tools 的必需性由自身声明的服务与工具契约判定。用户或第三方扩展 bundle 因版本不兼容进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）时，宿主保留官方告警诊断；所需能力仍满足各 profile 的验收契约后才可发布 ready。
 
 App Boot 审计后，宿主检查采用的必需服务和工具：`web` 检查核心 Web 服务与默认 preset（`standard`）可解析、可绑定；`ellamaka-tools` 检查本平台全部采用工具均已实际注册到 `tools` 服务（详见 `./DESIGN-ellamaka-tools.md`）。插件等待服务的警告不能等同于完整挂载成功。
 

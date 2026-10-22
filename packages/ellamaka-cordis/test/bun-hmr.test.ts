@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
@@ -170,7 +170,7 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
       // transactionally update the container's include entry.
       await hmr.watchCompositionFiles("ellamaka-tools")
       const patchFile = join(profileDirOf(root, "ellamaka-tools"), "cordis.patch.yml")
-      writeFileSync(patchFile, "[]\n")
+      writeFileSync(patchFile, readFileSync(patchFile, "utf8") + "\n# user edit\n")
       await new Promise((r) => setTimeout(r, 900))
 
       // The container's include config was replaced with the recomposed
@@ -206,7 +206,8 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
       const patchFile = join(profileDirOf(root, "ellamaka-tools"), "cordis.patch.yml")
       const hmr = ctx.get("hmr") as { registerConfig(filename: string, refresh: () => Promise<void>): Promise<unknown> }
       await expect(hmr.registerConfig(patchFile, async () => {})).rejects.toThrow(/already registered/)
-      writeFileSync(patchFile, `- id: ${name}\n  disabled: true\n`)
+      const source = readFileSync(patchFile, "utf8")
+      writeFileSync(patchFile, source + `\n- id: ${name}\n  disabled: true\n`)
 
       await waitFor(() => ctx.get(`${name}.marker`, false) === undefined)
     } finally {

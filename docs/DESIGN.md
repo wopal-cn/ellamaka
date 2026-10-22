@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-20
+> **Updated**: 2026-10-22
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -448,7 +448,7 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 **隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器，宿主经 loopback 代理转发 `/dsh`：HTTP 走 `node:http` 请求代理；WebSocket upgrade 在宿主以 `ws` noServer 终结（Bun 对 `ws` 握手走原生通道），再以 Bun 原生 WebSocket 客户端拨子进程桥接帧——禁止在宿主 upgrade socket 上直接 `socket.write`（Bun 吞掉全部字节，oven-sh/bun#9882/#35325），也不得改用 `ws` 包客户端拨号（其握手依赖 `node:http` 的 upgrade 事件，Bun 不投递）。桥接必须保持两条不变量：拨号携带浏览器原始 Host/Cookie/Origin（子进程 DSH 见证 Host 派生 cookie 名并校验 cookie，改写为子进程 loopback authority 必然 401）；逐帧保持文本/二进制类型（RPC 在同一 socket 混发 JSON 文本与二进制，文本降级为二进制会被解码拒绝并断开）。子进程拒绝 upgrade 时不得先回浏览器 101——握手完成必须晚于上游接受，否则认证或后端失败会表现为永久重连。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
 
-**触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`；共享 dsh-base 配置变 → web+tools；产品闭包变更由产品重启与 Home 协议接管；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明依赖边；当前 global 不依赖任何 dsh 单元，未来做集中配置管理只需增补一条边。
+**触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`。Web 使用官方 Web 配置；tools 从空根按标准声明装配自身插件，`dsh-base` 的配置变化只影响采用该 bundle 的 Web。共同输入只在确实被两个 profile 消费时影响两者。产品闭包变更由产品重启与 Home 协议接管；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明实际依赖边。
 
 **发布与事件**：每个单元原子发布 entry/route 与自身 revision，事件携带 `unit` 与 `revision`。`global.disposed` 语义保持不变；DSH 单元重载只重建 Workbench 的 DSH iframe，不触发整个 sidecar 重启。
 

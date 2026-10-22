@@ -1,6 +1,6 @@
 {
   "schema": "ellamaka.dsh-runtime-lock/v1",
-  "manifestFingerprint": "sha256:18f6dd229dccdc34695f137cd19206b0d87411dd09f6f302a6cf3d1cd282aa4e",
+  "manifestFingerprint": "sha256:6e89a185309267bdd6cc7996f040b9ee8ce39480ebb1987187ef2fa315c0bec4",
   "packages": {
     "node_modules/@agentclientprotocol/sdk": {
       "version": "1.4.0"
@@ -12,55 +12,55 @@
       "version": "3.1127.0"
     },
     "node_modules/@aws-sdk/core": {
-      "version": "3.978.4"
+      "version": "3.978.5"
     },
     "node_modules/@aws-sdk/credential-provider-env": {
-      "version": "3.972.75"
+      "version": "3.972.76"
     },
     "node_modules/@aws-sdk/credential-provider-http": {
-      "version": "3.972.77"
+      "version": "3.972.78"
     },
     "node_modules/@aws-sdk/credential-provider-ini": {
-      "version": "3.973.20"
+      "version": "3.973.21"
     },
     "node_modules/@aws-sdk/credential-provider-login": {
-      "version": "3.972.82"
+      "version": "3.972.83"
     },
     "node_modules/@aws-sdk/credential-provider-node": {
-      "version": "3.972.87"
+      "version": "3.972.88"
     },
     "node_modules/@aws-sdk/credential-provider-process": {
-      "version": "3.972.75"
+      "version": "3.972.76"
     },
     "node_modules/@aws-sdk/credential-provider-sso": {
-      "version": "3.973.19"
+      "version": "3.973.20"
     },
     "node_modules/@aws-sdk/credential-provider-sso/node_modules/@aws-sdk/token-providers": {
-      "version": "3.1153.0"
+      "version": "3.1155.0"
     },
     "node_modules/@aws-sdk/credential-provider-web-identity": {
-      "version": "3.972.81"
+      "version": "3.972.82"
     },
     "node_modules/@aws-sdk/eventstream-handler-node": {
-      "version": "3.972.37"
+      "version": "3.972.38"
     },
     "node_modules/@aws-sdk/middleware-eventstream": {
-      "version": "3.972.32"
+      "version": "3.972.33"
     },
     "node_modules/@aws-sdk/middleware-websocket": {
-      "version": "3.972.57"
+      "version": "3.972.58"
     },
     "node_modules/@aws-sdk/nested-clients": {
-      "version": "3.997.49"
+      "version": "3.997.50"
     },
     "node_modules/@aws-sdk/signature-v4-multi-region": {
-      "version": "3.996.48"
+      "version": "3.996.49"
     },
     "node_modules/@aws-sdk/token-providers": {
       "version": "3.1127.0"
     },
     "node_modules/@aws-sdk/types": {
-      "version": "3.974.6"
+      "version": "3.975.0"
     },
     "node_modules/@aws-sdk/xml-builder": {
       "version": "3.972.41"
@@ -1284,7 +1284,7 @@
       "version": "4.0.0"
     },
     "node_modules/@smithy/core": {
-      "version": "3.36.1"
+      "version": "3.36.2"
     },
     "node_modules/@smithy/credential-provider-imds": {
       "version": "4.5.2"

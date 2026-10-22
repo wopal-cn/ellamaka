@@ -7,6 +7,7 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
+    "test:tools": "bun test src/runtime/preparation.test.ts test/tools-activation-gate.test.ts test/dsh-web.test.ts test/dsh-adapter-runtime.test.ts test/bun-ptc-runtime.test.ts test/upgrade-profiles.test.ts",
     "test:unit": "bun test --path-ignore-patterns '**/plugins-runtime.test.ts' --path-ignore-patterns '**/bun-ptc-runtime.test.ts' --path-ignore-patterns '**/dsh-adapter-runtime.test.ts'",
     "test:integration": "bun test test/plugins-runtime.test.ts test/dsh-web.test.ts test/bun-ptc-runtime.test.ts test/dsh-adapter-runtime.test.ts"
   },

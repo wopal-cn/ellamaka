@@ -14,9 +14,8 @@ describe("per-unit trigger scoping (Plan Task 9 触发定域)", () => {
     })
   })
 
-  test("the shared dsh-base composition targets web+tools", () => {
-    // A shared-base change (home-level cordis.patch.yml) invalidates BOTH
-    // DSH units — it is the one declared multi-unit dependency edge.
+  test("the shared home composition targets both independent profiles", () => {
+    // Home-level cordis.patch.yml is an explicit input of both profiles.
     expect(restartRequiredForTools(undefined, "cordis.patch.yml", { sharedBase: true })).toEqual({
       units: ["dsh:web", "dsh:tools"],
     })

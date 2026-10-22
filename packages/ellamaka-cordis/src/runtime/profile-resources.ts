@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { isMap, isSeq, parseDocument } from "yaml"
 import type { DshRuntimeApi } from "./loader.js"
 import { resolveDshLayout } from "./status.js"
+import { TOOLS_PROFILE_BLOCK, TOOLS_PROFILE_BLOCK_BEGIN, TOOLS_PROFILE_BLOCK_END } from "./tools-profile.js"
 
 /** Host-owned DSH profile resources and the one-time legacy patch cleanup. */
 
@@ -11,10 +12,9 @@ export const TOOLS_PROFILE_NAME = "ellamaka-tools"
 
 /**
  * Ids the retired host-owned `ellamaka-tools` template disabled. The template
- * is gone — the container's pruning now lives only in the in-memory
- * `profileCapabilityPatches` — but homes prepared by older hosts may still
- * carry it on disk. This set exists solely to recognise those host-owned rows
- * for the one-time cleanup below.
+ * is gone, but homes prepared by older hosts may still carry it on disk.
+ * This set only recognises host-owned rows for the one-time cleanup below;
+ * it never determines the active composition.
  */
 const LEGACY_TOOLS_PATCH_IDS: ReadonlySet<string> = new Set([
   "session",
@@ -208,6 +208,55 @@ function resourcePathsAtRoot(dshRoot: string) {
   }
 }
 
+/** Recognise only the known base-backed product profile being replaced. */
+function baseBackedToolsManifest(file: string) {
+  if (!existsSync(file)) return undefined
+  const manifest = JSON.parse(readFileSync(file, "utf8"))
+  if (!Array.isArray(manifest.dsh?.profile?.bundles) || !manifest.dsh.profile.bundles.includes("@deepseek-ai/dsh-base"))
+    return undefined
+  return manifest
+}
+
+/** Replace only the product-owned block; user bytes outside it stay verbatim. */
+function standaloneToolsPatch(content: string): string {
+  const begin = content.indexOf(TOOLS_PROFILE_BLOCK_BEGIN)
+  const end = content.indexOf(TOOLS_PROFILE_BLOCK_END)
+  if (begin !== -1 || end !== -1) {
+    if (begin === -1 || end === -1 || end < begin) {
+      throw new Error(
+        "DSH tools profile composition markers are incomplete; restore both marker lines before preparation",
+      )
+    }
+    const current = content.slice(begin, end + TOOLS_PROFILE_BLOCK_END.length)
+    if (current === TOOLS_PROFILE_BLOCK) return content
+    const next = content.slice(0, begin) + TOOLS_PROFILE_BLOCK + content.slice(end + TOOLS_PROFILE_BLOCK_END.length)
+    const composed = parseDocument(next)
+    if (composed.errors.length || !isSeq(composed.contents)) {
+      throw new Error(
+        "DSH tools profile patch is invalid after refreshing the product composition; preserve it and resolve the YAML conflict",
+      )
+    }
+    return next
+  }
+  const document = parseDocument(content)
+  if (document.errors.length || !isSeq(document.contents)) {
+    throw new Error("DSH tools profile patch must be a valid top-level YAML array before standalone preparation")
+  }
+  const sequence = document.contents
+  const tail =
+    sequence.items.length === 0 && sequence.range
+      ? content.slice(0, sequence.range[0]) + content.slice(sequence.range[1])
+      : content
+  const next = TOOLS_PROFILE_BLOCK + "\n" + tail
+  const composed = parseDocument(next)
+  if (composed.errors.length || !isSeq(composed.contents)) {
+    throw new Error(
+      "DSH tools profile patch cannot be combined with the standalone composition; preserve it and resolve the YAML conflict",
+    )
+  }
+  return next
+}
+
 /** Whether a tools patch still carries rows owned by the retired host template. */
 function needsLegacyToolsPatchCleanup(toolsPatch: string): boolean {
   if (!existsSync(toolsPatch)) return false
@@ -239,7 +288,10 @@ export function inspectDshProfileResources(wopalHome: string): DshProfileResourc
   // A retired host-owned patch still needs its one-time cleanup before the
   // profile is ready; that state stays internal (no version-specific field).
   const needsToolsPatchCleanup = needsLegacyToolsPatchCleanup(paths.toolsPatch)
-  return { ready: missing.length === 0 && !needsToolsPatchCleanup, missing }
+  return {
+    ready: missing.length === 0 && !needsToolsPatchCleanup && !baseBackedToolsManifest(paths.toolsManifest),
+    missing,
+  }
 }
 
 /**
@@ -253,11 +305,12 @@ export function prepareDshProfileResources(wopalHome: string, runtime: DshRuntim
 /** Prepare an already-resolved DSH territory root (used by isolated activation tests). */
 export function prepareDshProfileResourcesAtRoot(dshRoot: string, runtime: DshRuntimeApi): void {
   const paths = resourcePathsAtRoot(dshRoot)
+  const baseManifest = baseBackedToolsManifest(paths.toolsManifest)
 
   // The official initializer creates missing declarations only; existing user
   // files (manifest, patch layer, pnpm settings) are never touched here.
   runtime.appBoot.initProfile(paths.web, ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"])
-  runtime.appBoot.initProfile(paths.tools, runtime.appBoot.DEFAULT_PROFILE_BUNDLES)
+  runtime.appBoot.initProfile(paths.tools, [])
 
   // `cordis.yml` is the runtime's synthetic root anchor, not user config: the
   // loader writes the composed tree back after every mount, so preparation
@@ -265,15 +318,25 @@ export function prepareDshProfileResourcesAtRoot(dshRoot: string, runtime: DshRu
   writeFileSync(paths.webRoot, "[]\n")
   writeFileSync(paths.toolsRoot, "[]\n")
 
-  // One-time cleanup of a retired host-owned tools patch. The host no longer
-  // owns rows in this file — pruning lives in `profileCapabilityPatches` — but
-  // homes seeded by older hosts still carry the old disable list, which would
-  // re-disable capabilities the container now needs. Only provably host-owned
-  // rows are dropped; a user patch that cannot be attributed stays untouched.
+  // Remove only provably host-owned retired disables. User rows stay intact.
   if (existsSync(paths.toolsPatch)) {
     const current = readFileSync(paths.toolsPatch, "utf8")
     const cleaned = cleanLegacyToolsPatch(current)
     if (cleaned !== null && cleaned !== current) writeFileSync(paths.toolsPatch, cleaned)
+  }
+
+  {
+    const current = readFileSync(paths.toolsPatch, "utf8")
+    const next = standaloneToolsPatch(current)
+    if (next !== current) writeFileSync(paths.toolsPatch, next)
+    // Publish the manifest last. If interrupted, the unchanged base selection
+    // causes preparation to retry without inserting the composition twice.
+    if (baseManifest) {
+      baseManifest.dsh.profile.bundles = baseManifest.dsh.profile.bundles.filter(
+        (name: string) => name !== "@deepseek-ai/dsh-base",
+      )
+      writeFileSync(paths.toolsManifest, JSON.stringify(baseManifest, null, 2) + "\n")
+    }
   }
 
   // Self-heal a BLANK home-level patch layer: an empty (or whitespace-only)
