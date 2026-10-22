@@ -7,9 +7,8 @@
 //   read-only        → { enabled: true, mode: "read-only" }
 //   workspace-write  → { enabled: true, mode: "workspace-write" }
 //   full-access      → { enabled: false } (sandbox off; adapter default)
-// Assembly entries follow ConfigPlugin.Spec: a plugin is either a string url
-// or a [url, options] tuple. Behavior settings come from config-v2's separate
-// pluginConfig table.
+// The adapter is built into Ellamaka; behavior settings come from
+// config-v2's pluginConfig table, independently of external plugin declarations.
 
 export type SandboxPreset = "read-only" | "workspace-write" | "full-access"
 
@@ -18,11 +17,7 @@ export type SandboxOptions = {
   mode?: string
 }
 
-export type PluginSpec = string | [string, Record<string, unknown>]
-
 export const SANDBOX_PRESETS: SandboxPreset[] = ["read-only", "workspace-write", "full-access"]
-
-const DSH_ADAPTER_MARKER = "dsh-adapter"
 
 export function sandboxToPreset(cfg?: SandboxOptions): SandboxPreset {
   if (!cfg?.enabled) return "full-access"
@@ -39,23 +34,6 @@ export function isSandboxPreset(value: unknown): value is SandboxPreset {
   return typeof value === "string" && (SANDBOX_PRESETS as string[]).includes(value)
 }
 
-function isTupleSpec(spec: PluginSpec): spec is [string, Record<string, unknown>] {
-  return Array.isArray(spec)
-}
-
-function specUrl(spec: PluginSpec): string {
-  return isTupleSpec(spec) ? spec[0] : spec
-}
-
-function isDshAdapterSpec(spec: PluginSpec): boolean {
-  return specUrl(spec).includes(DSH_ADAPTER_MARKER)
-}
-
-export function hasDshAdapterPlugin(plugins: PluginSpec[] | undefined): boolean {
-  if (!plugins) return false
-  return plugins.some(isDshAdapterSpec)
-}
-
 export function readSandboxOptions(sandbox: unknown): SandboxOptions | undefined {
   if (typeof sandbox !== "object" || sandbox === null) return undefined
   if (!("enabled" in sandbox) || typeof sandbox.enabled !== "boolean") return undefined
@@ -66,35 +44,11 @@ export function readSandboxOptions(sandbox: unknown): SandboxOptions | undefined
 }
 
 export function sandboxControlConfig(effective?: {
-  ellamaka?: { plugin?: PluginSpec[] }
   wopal?: { pluginConfig?: Record<string, Record<string, unknown>> }
-}): { plugins?: PluginSpec[]; sandbox?: unknown } {
+}): { sandbox?: unknown } {
   return {
-    plugins: effective?.ellamaka?.plugin,
     sandbox: effective?.wopal?.pluginConfig?.["dsh-adapter"]?.sandbox,
   }
-}
-
-// Space-default writer. The composer does NOT call this (session choices
-// never touch settings files); it stays for future space-default editing
-// surfaces. Minimal-patch semantics: only the dsh-adapter spec's `sandbox`
-// key changes; every other plugin entry and option field keeps its reference.
-export function patchDshAdapterSandbox(
-  plugins: PluginSpec[],
-  sandbox: SandboxOptions,
-): PluginSpec[] | undefined {
-  const index = plugins.findIndex(isDshAdapterSpec)
-  if (index < 0) return undefined
-  const next = [...plugins]
-  const spec = plugins[index]
-  const options: Record<string, unknown> = isTupleSpec(spec) ? { ...spec[1] } : {}
-  options.sandbox = { ...sandbox }
-  if (!isTupleSpec(spec)) {
-    next[index] = [spec, options]
-  } else {
-    next[index] = [spec[0], options]
-  }
-  return next
 }
 
 // The wire value for a per-message sandbox choice. `full-access` folds to the
@@ -128,9 +82,8 @@ export function drainPendingSessionSandbox(sessionKey: string): SandboxPreset | 
 //   2. The DSH runtime is `ready` — the kill switch is open (`ELLAMAKA_DSH`
 //      not `0`, which maps to `disabled`) AND the runtime materialised and
 //      mounted successfully (not `degraded`). `ready` therefore implies the
-//      kill switch check; `dshEnabled` is kept explicit for clarity.
-//   3. The instance-level (directory) effective config loads dsh-adapter.
-//   4. The separate effective plugin config enables the sandbox. `sandbox.enabled: false`
+//      kill switch check.
+//   3. The instance-level config enables the built-in adapter sandbox. `sandbox.enabled: false`
 //      idles the adapter's tool projection — no sandbox mode is in force, so
 //      there is nothing to select. Only `enabled: true` (with the mode as the
 //      space default) shows the control.
@@ -140,7 +93,6 @@ export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
 export function shouldShowSandboxControl(input: {
   variant: string | undefined
   dshStatus: DshRuntimeStatus | undefined
-  plugins?: PluginSpec[]
   sandbox?: unknown
 }): boolean {
   if (input.variant !== "dock") return false
@@ -149,7 +101,6 @@ export function shouldShowSandboxControl(input: {
   // switch is open. `ready` additionally proves the runtime actually works.
   if (input.dshStatus === "disabled") return false
   if (input.dshStatus !== "ready") return false
-  if (!hasDshAdapterPlugin(input.plugins)) return false
   // Sandbox off (or unconfigured) idles the adapter: no mode to choose.
   return readSandboxOptions(input.sandbox)?.enabled === true
 }
@@ -167,7 +118,9 @@ const escalationListeners = new Map<string, Set<(preset: SandboxPreset) => void>
 export function publishEscalatedSandboxPreset(sessionID: string, preset: SandboxPreset) {
   const listeners = escalationListeners.get(sessionID)
   if (!listeners) return
-  for (const listener of [...listeners]) listener(preset)
+  // Snapshot subscriptions so callbacks may safely unsubscribe while notifying.
+  const current = [...listeners]
+  for (const listener of current) listener(preset)
 }
 
 export function subscribeEscalatedSandboxPreset(

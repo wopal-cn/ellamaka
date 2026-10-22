@@ -24,7 +24,7 @@ const fetchSandboxSurface = async (input: RequestInfo | URL, init?: RequestInit)
   if (url.pathname === "/config-v2") {
     return Response.json({
       effective: {
-        ellamaka: { plugin: ["file:///spaces/zero-inline/plugins/dsh-adapter/index.ts"] },
+        ellamaka: { plugin: ["file:///spaces/plugins/wopal-plugin"] },
         wopal: { pluginConfig: { "dsh-adapter": { sandbox: { enabled: true, mode: "read-only" } } } },
       },
     })
@@ -57,7 +57,7 @@ const checkHealth: ReturnType<typeof useCheckServerHealth> = async () => {
 }
 
 describe("PromptInput sandbox control config-v2 integration", () => {
-  test("uses the directory SDK and global health for a zero-inline plugin, defaulting from pluginConfig", async () => {
+  test("renders the internal adapter without an external plugin declaration, defaulting from pluginConfig", async () => {
     const host = document.createElement("div")
     document.body.append(host)
     requests.length = 0

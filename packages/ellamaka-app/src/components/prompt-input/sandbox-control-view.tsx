@@ -1,5 +1,4 @@
 import { Show, createMemo, createResource, type Accessor, type JSX } from "solid-js"
-import type { PluginSpec } from "./sandbox-control"
 import type { useCheckServerHealth } from "@/utils/server-health"
 import { pathKey } from "@/utils/path-key"
 import { Icon } from "@wopal/ui/icon"
@@ -14,7 +13,6 @@ import {
 } from "./sandbox-control"
 
 type SandboxEffective = {
-  ellamaka?: { plugin?: PluginSpec[] }
   wopal?: { pluginConfig?: Record<string, Record<string, unknown>> }
 }
 
