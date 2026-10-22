@@ -2,12 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
-import {
-  checkClosureIntegrity,
-  materializeClosure,
-  validateClosureOnDisk,
-  type MaterializeDeps,
-} from "./materializer"
+import { checkClosureIntegrity, materializeClosure, validateClosureOnDisk, type MaterializeDeps } from "./materializer"
 import type { DshRuntimeManifestV1 } from "./manifest"
 import type { DshRuntimeLockV1 } from "./lockfile"
 import { closureNameForFingerprint, resolveDshLayout } from "./status"
@@ -76,10 +71,19 @@ function seedClosure(home: string, manifest = MANIFEST): string {
   const closureDir = join(layout.closuresDir, closureNameForFingerprint(manifest.fingerprint!))
   mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh"), { recursive: true })
   mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "cordis"), { recursive: true })
-  writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh", version: manifest.dependencies["@deepseek-ai/dsh"], bin: "lib/bin.js" }))
-  writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "cordis", "package.json"), JSON.stringify({ name: "@deepseek-ai/cordis", version: manifest.dependencies["@deepseek-ai/cordis"] }))
+  writeFileSync(
+    join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"),
+    JSON.stringify({ name: "@deepseek-ai/dsh", version: manifest.dependencies["@deepseek-ai/dsh"], bin: "lib/bin.js" }),
+  )
+  writeFileSync(
+    join(closureDir, "node_modules", "@deepseek-ai", "cordis", "package.json"),
+    JSON.stringify({ name: "@deepseek-ai/cordis", version: manifest.dependencies["@deepseek-ai/cordis"] }),
+  )
   writeFileSync(join(closureDir, "runtime-manifest.json"), JSON.stringify(manifest))
-  writeFileSync(join(closureDir, "package.json"), JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: manifest.dependencies }))
+  writeFileSync(
+    join(closureDir, "package.json"),
+    JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: manifest.dependencies }),
+  )
   // The stored lock is the embedded lock's on-disk copy (npm v3 shape).
   writeFileSync(
     join(closureDir, "package-lock.json"),
@@ -89,9 +93,7 @@ function seedClosure(home: string, manifest = MANIFEST): string {
       requires: true,
       packages: {
         "": {},
-        ...Object.fromEntries(
-          Object.entries(LOCK.packages).map(([path, entry]) => [path, entry]),
-        ),
+        ...Object.fromEntries(Object.entries(LOCK.packages).map(([path, entry]) => [path, entry])),
       },
       ...(!manifest.fingerprint ? {} : {}),
     }),
@@ -165,6 +167,32 @@ describe("materializeClosure", () => {
     expect(existsSync(join(closureDir, "node_modules", "@koromix", "koffi-android-x64"))).toBe(false)
   })
 
+  test("a required package that fails once is retried and the closure activates", async () => {
+    const home = tmpHome()
+    const lock: DshRuntimeLockV1 = {
+      ...LOCK,
+      packages: { ...LOCK.packages, "node_modules/flaky-required": { version: "1.0.0" } },
+    }
+    let attempts = 0
+    const deps: NonNullable<MaterializeDeps> = {
+      fetch: async () => ({ status: 200, ok: true }),
+      extract: async (spec: string, dest: string) => {
+        if (spec.startsWith("flaky-required@")) {
+          attempts++
+          if (attempts === 1) throw new Error("transient cache miss")
+        }
+        const name = spec.slice(0, spec.lastIndexOf("@"))
+        const body: Record<string, string> = { name, version: spec.slice(spec.lastIndexOf("@") + 1) }
+        if (name === "@deepseek-ai/dsh") body.bin = "lib/bin.js"
+        mkdirSync(dest, { recursive: true })
+        writeFileSync(join(dest, "package.json"), JSON.stringify(body))
+      },
+    }
+    const result = await materializeClosure({ home, manifest: MANIFEST, lock, deps })
+    expect(attempts).toBe(2)
+    expect(existsSync(result.anchor)).toBe(true)
+  })
+
   test("a required package that fails to extract still rejects (no closure activated)", async () => {
     const home = tmpHome()
     const lock: DshRuntimeLockV1 = {
@@ -228,7 +256,10 @@ describe("validateClosureOnDisk", () => {
     const closureDir = join(resolveDshLayout(home).closuresDir, closureNameForFingerprint(MANIFEST.fingerprint!))
     mkdirSync(join(closureDir, "node_modules", "@deepseek-ai"), { recursive: true })
     writeFileSync(join(closureDir, "runtime-manifest.json"), JSON.stringify(MANIFEST))
-    writeFileSync(join(closureDir, "package.json"), JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }))
+    writeFileSync(
+      join(closureDir, "package.json"),
+      JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }),
+    )
     writeFileSync(join(closureDir, "package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: {} }))
     expect(validateClosureOnDisk({ home, manifest: MANIFEST, deps: fakeExtractor() })).toBeNull()
   })
@@ -237,9 +268,15 @@ describe("validateClosureOnDisk", () => {
     const home = tmpHome()
     const closureDir = join(resolveDshLayout(home).closuresDir, closureNameForFingerprint(MANIFEST.fingerprint!))
     mkdirSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh"), { recursive: true })
-  writeFileSync(join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"), JSON.stringify({ name: "@deepseek-ai/dsh", version: "0.1.1-rc.2", main: "index.js" }))
+    writeFileSync(
+      join(closureDir, "node_modules", "@deepseek-ai", "dsh", "package.json"),
+      JSON.stringify({ name: "@deepseek-ai/dsh", version: "0.1.1-rc.2", main: "index.js" }),
+    )
     writeFileSync(join(closureDir, "runtime-manifest.json"), JSON.stringify(MANIFEST))
-    writeFileSync(join(closureDir, "package.json"), JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }))
+    writeFileSync(
+      join(closureDir, "package.json"),
+      JSON.stringify({ name: "ellamaka-dsh-closure", dependencies: MANIFEST.dependencies }),
+    )
     writeFileSync(join(closureDir, "package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: {} }))
     expect(validateClosureOnDisk({ home, manifest: MANIFEST, deps: fakeExtractor() })).toBeNull()
   })
@@ -290,10 +327,7 @@ describe("validateClosureOnDisk — closure content verification (B-03)", () => 
     // A well-formed JSON that is not a v3 lockfile (no lockfileVersion 3 /
     // packages map) is not a lock the materialiser writes — the closure is
     // damaged.
-    writeFileSync(
-      join(closureRoot(anchor), "package-lock.json"),
-      JSON.stringify({ foo: "bar" }),
-    )
+    writeFileSync(join(closureRoot(anchor), "package-lock.json"), JSON.stringify({ foo: "bar" }))
     expect(validateClosureOnDisk({ home, manifest: MANIFEST, deps: fakeExtractor() })).toBeNull()
   })
 
@@ -327,7 +361,9 @@ describe("validateClosureOnDisk — closure content verification (B-03)", () => 
     const anchor = seedClosure(home)
     // Re-serialize with reversed top-level key order (same content).
     const reversed = Object.fromEntries(
-      Object.entries(MANIFEST).reverse().filter(([, v]) => v !== undefined),
+      Object.entries(MANIFEST)
+        .reverse()
+        .filter(([, v]) => v !== undefined),
     )
     writeFileSync(join(closureRoot(anchor), "runtime-manifest.json"), JSON.stringify(reversed))
     expect(validateClosureOnDisk({ home, manifest: MANIFEST, deps: fakeExtractor() })).toBe(anchor)
@@ -363,6 +399,8 @@ describe("checkClosureIntegrity", () => {
   test("rejects when integrity metadata is present but the anchor is missing", async () => {
     const home = tmpHome()
     // no closure seeded
-    await expect(checkClosureIntegrity({ home, manifest: MANIFEST, deps: fakeExtractor() })).rejects.toThrow(/anchor|integrity/i)
+    await expect(checkClosureIntegrity({ home, manifest: MANIFEST, deps: fakeExtractor() })).rejects.toThrow(
+      /anchor|integrity/i,
+    )
   })
 })
