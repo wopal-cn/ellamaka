@@ -4,13 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
 import { createPackageDshRuntimeApi } from "../src/runtime/loader"
-import {
-  assertDshActivationComplete,
-  bootDshTools,
-  bootDshWeb,
-  mountDshTools,
-  verifyDshToolsRegistered,
-} from "../src/dsh-web"
+import { bootDshTools, bootDshWeb, mountDshTools, verifyDshToolsRegistered } from "../src/dsh-web"
 import { profileCapabilityPatches } from "../src/plugins/profile-capabilities"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
@@ -152,41 +146,34 @@ describe("tools container activation gate", () => {
 
     const host = await mountDshTools(ctx, { home: root, port: 0, disablePtcRuntime: true })
     try {
-      // Model the state bun-hmr hands to `afterApply`: the mounted tree already
-      // carries an entry that cannot activate because its `inject` service has
-      // no provider. Previously `validate()` re-ran only the warning audit, so
-      // this tree stayed "ready"; it must now fail closed with the entry and
-      // the missing service in the diagnostic.
       const config = host.includeEntry.options?.config
-      if (config === undefined) throw new Error("root include carries no config snapshot")
-      await host.includeEntry.update({
-        config: {
-          ...config,
-          patches: [
-            {
-              insert: [
-                { id: "pending-user-plugin", name: "pending-user-plugin" },
-                { id: "stale-service-provider", name: "@deepseek-ai/dsh-llm" },
-              ],
-            },
-          ],
-        },
-      })
-      // The pre-Plan behavior: the plain audit only WARNS about the inactive
-      // tree and returns normally, which is why an HMR replay could leave the
-      // container "ready" with a broken entry.
-      const warnings: string[] = []
-      await createPackageDshRuntimeApi().appBoot.auditStartupEntries(ctx, "ellamaka", (line: string) =>
-        warnings.push(line),
-      )
-      expect(warnings.join("\n")).toContain("pending-user-plugin")
+      if (config === undefined || !Array.isArray(config.patches)) throw new Error("root include has no patch stack")
+      const hmr = ctx.get("hmr")
+      if (!hmr) throw new Error("mounted tools container has no HMR service")
 
-      // `assertDshActivationComplete` is what mountProfile registers as
-      // bun-hmr's `afterApply` (see the `afterApply: validate` wiring): the
-      // same tree must now fail closed instead of degrading silently.
-      await expect(assertDshActivationComplete(createPackageDshRuntimeApi(), ctx, "ellamaka-tools")).rejects.toThrow(
-        /container activation incomplete[\s\S]*pending-user-plugin/,
-      )
+      // Use the service registered by mountDshTools, including its actual
+      // afterApply callback. Preserve the official stack so the normal tool
+      // registry stays complete even if fail-closed auditing is removed.
+      await expect(
+        hmr.runExclusive(async () => {
+          await host.includeEntry.update({
+            config: {
+              ...config,
+              patches: [...config.patches, { insert: [{ id: "pending-user-plugin", name: "pending-user-plugin" }] }],
+            },
+          })
+          await ctx.get("loader")?.await()
+          const warnings: string[] = []
+          await createPackageDshRuntimeApi().appBoot.auditStartupEntries(ctx, "ellamaka", (line: string) =>
+            warnings.push(line),
+          )
+          expect(warnings.join("\n")).toContain("pending-user-plugin")
+        }),
+      ).rejects.toThrow(/container activation incomplete[\s\S]*pending-user-plugin/)
+
+      // The failed candidate is rolled back through the same service and the
+      // queue remains usable for the next real operation.
+      await expect(hmr.runExclusive(async () => "recovered")).resolves.toBe("recovered")
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()
