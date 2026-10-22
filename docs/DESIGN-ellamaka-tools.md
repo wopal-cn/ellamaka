@@ -36,6 +36,25 @@ ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [DSH 基�
 
 产品在 tools 补丁中维护一个有明确首尾注释边界的装配块，块后为用户内容。准备阶段比较该块与产品声明：一致即整步跳过，普通启动不重写补丁层；不一致（closureVersion 上升、产品装配更新或旧宿主迁移）时只刷新该块，块外用户字节原样保留。这是产品装配与用户覆盖的唯一交界。旧宿主模板遗留的注释骨架与指向上游已不存在条目的失效行属于宿主文本，在一次性迁移中清除，不与用户内容混同。用户插件、bundle 与配置继续使用官方 profile 声明。`cordis.yml` 仍为每次准备与挂载前重置的空合成根。
 
+### 补丁层的顺序规则与插件安装
+
+tools profile 的补丁层按固定顺序合成：bundle 层的 patch → 产品装配块 → 块后的用户行。Loader 的 patch 只能作用于**本层之前已经存在**的行，因此这条顺序决定了插件该怎么装：
+
+- **产品装配块**（首尾注释之间）声明工具容器必需的插件行。升级时整块刷新，块内内容不承载用户意图。
+- **块后的用户行**在上游之后应用，可以按 id 覆盖产品行的 config、或 `disabled: true` 关掉产品行。升级刷新产品块时这些行逐字保留，顺序也不变。
+- **bundle 层**位于两者之前，所以 bundle 自带的 disable 行**无法**关闭产品块插入的行；把替换型插件的 bundle 选进 `dsh.profile.bundles` 只会让替换行与产品行同时存在，造成服务重复注册。
+
+据此，tools profile 的插件装配分两类：
+
+| 情形                                       | 做法                                                                                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 追加型插件（新增独立能力，不替换产品行）   | `ellamaka dsh plugin --profile ellamaka-tools add <包目录或包名>`，bundle 层正常生效                                          |
+| 替换型插件（替换产品已声明的行，如沙箱链） | 同样用 `ellamaka dsh plugin add` 安装包，但把 `dsh.profile.bundles` 保持为空，并在**块后**手写 disable 产品行 + insert 插件行 |
+
+替换型的典型例子是 `@wopal/dsh-sandbox-roots`：它在 tools 中替换 `sandbox`、`sandbox-policy`、`fs-sandbox` 三条 stock 行。装配写在块后，`writableRoots` 也写在该行 config 中，因此该列表归用户所有——产品块刷新不会覆盖它。
+
+补丁覆盖是**整块替换 config**，不做深合并：覆盖 `sandbox-roots-policy` 时需同时重述 `mode` 与 `workspaceRoot`。缺少被引用的插件包时容器按 fail-closed 拒绝启动并报出条目名，不会静默降级。
+
 ### Tool Availability Contract
 
 Loader settlement 后，macOS/Linux 必须实际注册 `bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；Windows 使用 `pwsh` 后端与相同文件/搜索能力。缺少必需工具或必需插件等待服务、激活失败时，容器报告具体原因并拒绝发布 ready。首次挂载与配置重放共用验收。

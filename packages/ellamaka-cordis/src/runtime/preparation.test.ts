@@ -336,6 +336,80 @@ describe("DSH CorePreparation contributors", () => {
     expect(readFileSync(toolsPatch, "utf8")).toBe(declaration + userTail)
   })
 
+  test("a user-layer disable after the block survives an upgrade refresh and still targets the product row", async () => {
+    const home = tmpHome()
+    const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+
+    const toolsPatch = join(layout.profileDir, "ellamaka-tools", "cordis.patch.yml")
+    const declaration = readFileSync(toolsPatch, "utf8")
+    // A replacing plugin: install the package, keep `bundles` empty, and swap
+    // the stock sandbox chain from the user layer AFTER the product block. A
+    // bundle layer sits before the block, so its disables could not reach these.
+    const swap = [
+      "",
+      "# dsh-sandbox-roots replaces the stock sandbox chain",
+      "- id: sandbox",
+      "  disabled: true",
+      "- id: sandbox-policy",
+      "  disabled: true",
+      "- id: fs-sandbox",
+      "  disabled: true",
+      "",
+      "- insert:",
+      "    - id: sandbox-roots-policy",
+      "      name: '@wopal/dsh-sandbox-roots'",
+      "      config:",
+      "        mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'",
+      "        workspaceRoot: !!js process.cwd()",
+      "        writableRoots:",
+      "          - ~/.wopal",
+      "    - id: sandbox-roots-sandbox",
+      "      name: '@wopal/dsh-sandbox-roots/sandbox'",
+      "    - id: sandbox-roots-fs",
+      "      name: '@wopal/dsh-sandbox-roots/fs'",
+      "",
+    ].join("\n")
+    writeFileSync(toolsPatch, declaration + swap)
+
+    // The patched composition resolves: stock rows go, plugin rows stay, and
+    // the user-owned writable-root list is intact.
+    const parsed: unknown = parseDocument(readFileSync(toolsPatch, "utf8")).contents?.toJSON()
+    if (!Array.isArray(parsed)) throw new Error("tools patch did not parse as an entry list")
+    const rows = parsed.filter(
+      (row): row is Record<string, unknown> => typeof row === "object" && row !== null && !Array.isArray(row),
+    )
+    // Stock sandbox rows are disabled by the swap; the plugin rows arrive in
+    // one insert, and the user-owned writable-root list is intact.
+    const disabled = rows.filter((row) => row.disabled === true).map((row) => row.id)
+    expect(disabled).toEqual(expect.arrayContaining(["sandbox", "sandbox-policy", "fs-sandbox"]))
+    const inserted = rows
+      .flatMap((row) => (Array.isArray(row.insert) ? row.insert : []))
+      .filter((row): row is Record<string, unknown> => typeof row === "object" && row !== null)
+    expect(inserted.map((row) => row.id)).toEqual(
+      expect.arrayContaining(["sandbox-roots-policy", "sandbox-roots-sandbox", "sandbox-roots-fs"]),
+    )
+    const policyRow = inserted.find((row) => row.id === "sandbox-roots-policy")
+    const policyConfig = policyRow?.config
+    expect(
+      typeof policyConfig === "object" && policyConfig !== null && !Array.isArray(policyConfig)
+        ? (policyConfig as { writableRoots?: unknown }).writableRoots
+        : undefined,
+    ).toEqual(["~/.wopal"])
+
+    // An upgrade refresh rewrites only the product block; the swap survives.
+    const stale = declaration.replace(
+      "    - id: tool-str-replace-editor\n      name: '@deepseek-ai/dsh-tool-str-replace-editor'\n",
+      "",
+    )
+    writeFileSync(toolsPatch, stale + swap)
+    expect((await profile.inspect({ kind: "host" })).state).toBe("NEEDS_PREPARATION")
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(readFileSync(toolsPatch, "utf8")).toBe(declaration + swap)
+  })
+
   test("a valid user patch receives the product block once, while malformed YAML is reported unchanged", async () => {
     const home = tmpHome()
     const profile = contributors(home).find((item) => item.step === "dsh.profiles")!
