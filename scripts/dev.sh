@@ -69,9 +69,7 @@ FRONTEND_LOG="$DEV_DIR/ellamaka-dev-frontend.log"
 DESKTOP_LOG="$DEV_DIR/ellamaka-dev-desktop.log"
 SIDECAR_LOG="$DEV_DIR/ellamaka-dev-sidecar.log"
 PLUGIN_DEBUG_LOG="$LOGDIR/wopal-plugins-debug.log"
-# Tolerate a blocked /bin/ps (restricted sandboxes source this file for the
-# dry-run planning path); an empty pgid only disables group-scoped signals.
-SELF_PGID="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d '[:space:]' || true)"
+SELF_PGID="$(ps -o pgid= -p "$$" | tr -d '[:space:]')"
 # Per-bucket project root used by is_service_process to judge cross-worktree
 # records against their own paths. Empty means "the current $root".
 SCOPE_ROOT=""
@@ -1213,21 +1211,6 @@ cmd_desktop() {
   # when --cdp-debug. A caller may have another browser on the default 9222.
   local -a free_ports=(5173)
   $cdp_debug && free_ports+=("$cdp_port")
-
-  # Dry-run seam for the tests: print the exact plan the launch path uses
-  # (free ports, Electron env, ledger port) and stop. It runs before
-  # require_stopped/ps, so a regression that changes the resolved port
-  # between parsing and launch turns red instead of silently binding 9222.
-  if [ -n "${WOPAL_DEV_PLAN_ONLY:-}" ]; then
-    echo "free_ports=${free_ports[*]}"
-    if $cdp_debug; then
-      desktop_cdp_env_flags "$cdp_port" | sed 's/^/env=/'
-      echo "ledger=$cdp_port"
-    else
-      echo "ledger=-"
-    fi
-    return 0
-  fi
 
   require_stopped desktop || return 1
   require_free_ports "${free_ports[@]}" || return 1

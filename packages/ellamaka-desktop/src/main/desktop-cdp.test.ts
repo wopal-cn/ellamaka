@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-// Regression lock for the Desktop CDP port wiring. The root cause of the
-// 9222 collision was that three places disagreed: the free-port precheck, the
-// environment handed to Electron, and the listener ledger. These tests pin the
-// single resolver plus the call sites that must use it, without launching a
-// GUI.
+// Exercise the real launch wiring with process and persistent-state boundaries
+// stubbed: no GUI, listener, user profile, or dev registry is touched.
 
 const REPO_ROOT = join(import.meta.dir, "../../../..")
 
@@ -20,7 +18,9 @@ function resolvePort(explicit: string, env: Record<string, string> = {}): string
     source "${REPO_ROOT}/scripts/lib/desktop-cdp.sh"
     desktop_cdp_resolve_port "${explicit}"
   `
-  const proc = Bun.spawnSync(["bash", "-c", script], { env: { ...process.env, REPO_ROOT } })
+  const proc = Bun.spawnSync(["bash", "-c", script], {
+    env: { ...process.env, ELLAMAKA_DESKTOP_CDP_PORT: "", REPO_ROOT },
+  })
   if (proc.exitCode !== 0) throw new Error(`resolver failed: ${proc.stderr.toString()}`)
   return proc.stdout.toString().trim()
 }
@@ -49,42 +49,81 @@ describe("desktop_cdp_resolve_port", () => {
       source "${REPO_ROOT}/scripts/lib/desktop-cdp.sh"
       desktop_cdp_env_flags 9333
     `
-    const proc = Bun.spawnSync(["bash", "-c", script], { env: { ...process.env, REPO_ROOT } })
+    const proc = Bun.spawnSync(["bash", "-c", script], {
+      env: { ...process.env, ELLAMAKA_DESKTOP_CDP_PORT: "", REPO_ROOT },
+    })
     expect(proc.exitCode).toBe(0)
     expect(proc.stdout.toString()).toBe("ELLAMAKA_DESKTOP_CDP=1\nELLAMAKA_DESKTOP_CDP_PORT=9333\n")
   })
 })
 
-type DesktopPlan = { freePorts: string[]; env: string[]; ledger: string }
+type DesktopPlan = { freePorts: string[]; env: string[]; ledger: string; sidecar: string }
 
-/**
- * Run the real `cmd_desktop` argument parsing and port planning with the
- * dry-run seam, so the assertions observe the values the launch path would
- * hand to require_free_ports, Electron, and the ledger — not the shape of the
- * source text.
- */
+/** Run cmd_desktop itself; stub only OS/process and persistent-state boundaries. */
 function planDesktop(args: string[], env: Record<string, string> = {}): DesktopPlan {
+  const dir = mkdtempSync(join(tmpdir(), "ellamaka-cdp-wiring-"))
+  writeFileSync(join(dir, "desktop.log"), "server ready\n")
   const script = `
     set -euo pipefail
-    WOPAL_DEV_PLAN_ONLY=1
+    ps() { printf '123\n'; }
     source ./scripts/dev.sh
+    DEV_DIR="$CDP_TEST_DIR"
+    DESKTOP_LOG="$CDP_TEST_DIR/desktop.log"
+    require_stopped() { :; }
+    require_free_ports() { echo "free_ports=$*"; }
+    choose_free_port() { SELECTED_PORT=4097; }
+    sync_min_wopal_cli_version() { :; }
+    start_process() {
+      for arg in "$@"; do
+        case "$arg" in
+          ELLAMAKA_DESKTOP_CDP=*) echo "env=$arg" ;;
+          ELLAMAKA_DESKTOP_CDP_PORT=*) echo "env=$arg" ;;
+        esac
+      done
+    }
+    read_record() { RECORD_PID=123; RECORD_PGID=123; }
+    service_running() { return 0; }
+    pgrep() { echo 456; }
+    lsof() {
+      printf 'node 456 user 1u IPv4 0 0 TCP 127.0.0.1:5173\n'
+      printf 'node 456 user 2u IPv4 0 0 TCP 127.0.0.1:9333\n'
+      printf 'node 456 user 3u IPv4 0 0 TCP 127.0.0.1:4097\n'
+    }
+    write_record() { echo "sidecar=$2"; }
+    record_listener() {
+      if [ "$1" = desktop-devtools ]; then echo "ledger=$2"; fi
+      return 0
+    }
+    record_crashpads() { :; }
     cmd_desktop "$@"
   `
-  const proc = Bun.spawnSync(["bash", "-c", script, "scripts/dev.sh", ...args], {
-    cwd: REPO_ROOT,
-    env: { ...process.env, ...env },
-  })
-  if (proc.exitCode !== 0) throw new Error(`desktop plan failed: ${proc.stderr.toString()}`)
-  const lines = proc.stdout.toString().trim().split("\n")
-  const read = (prefix: string) => lines.find((line) => line.startsWith(prefix))?.slice(prefix.length) ?? ""
-  return {
-    freePorts: read("free_ports=").split(" ").filter(Boolean),
-    env: lines.filter((line) => line.startsWith("env=")).map((line) => line.slice("env=".length)),
-    ledger: read("ledger="),
+  try {
+    const proc = Bun.spawnSync(["bash", "-c", script, "scripts/dev.sh", ...args], {
+      cwd: REPO_ROOT,
+      env: {
+        ...process.env,
+        ELLAMAKA_DESKTOP_CDP_PORT: "",
+        WOPAL_HOME: dir,
+        MIN_WOPAL_CLI_VERSION: "0.0.0",
+        ...env,
+        CDP_TEST_DIR: dir,
+      },
+    })
+    if (proc.exitCode !== 0) throw new Error(`desktop wiring failed: ${proc.stderr.toString()}`)
+    const lines = proc.stdout.toString().trim().split("\n")
+    const read = (prefix: string) => lines.find((line) => line.startsWith(prefix))?.slice(prefix.length) ?? ""
+    return {
+      freePorts: read("free_ports=").split(" ").filter(Boolean),
+      env: lines.filter((line) => line.startsWith("env=")).map((line) => line.slice("env=".length)),
+      ledger: read("ledger=") || "-",
+      sidecar: read("sidecar="),
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
   }
 }
 
-describe("dev.sh plans the port it will actually use", () => {
+describe("dev.sh wires the selected port to the real consumers", () => {
   const desktopIndex = readFileSync(join(REPO_ROOT, "packages/ellamaka-desktop/src/main/index.ts"), "utf8")
 
   test("a custom --cdp-debug port reaches the check, the env, and the ledger", () => {
@@ -92,6 +131,7 @@ describe("dev.sh plans the port it will actually use", () => {
     expect(plan.freePorts).toEqual(["5173", "9333"])
     expect(plan.env).toEqual(["ELLAMAKA_DESKTOP_CDP=1", "ELLAMAKA_DESKTOP_CDP_PORT=9333"])
     expect(plan.ledger).toBe("9333")
+    expect(plan.sidecar).toBe("4097,5173")
   })
 
   test("--cdp-debug without a port falls back to 9222 everywhere", () => {
@@ -104,7 +144,15 @@ describe("dev.sh plans the port it will actually use", () => {
   test("ELLAMAKA_DESKTOP_CDP_PORT is used when no port argument is given", () => {
     const plan = planDesktop(["--cdp-debug"], { ELLAMAKA_DESKTOP_CDP_PORT: "9444" })
     expect(plan.freePorts).toEqual(["5173", "9444"])
+    expect(plan.env).toContain("ELLAMAKA_DESKTOP_CDP_PORT=9444")
     expect(plan.ledger).toBe("9444")
+  })
+
+  test("an explicit port overrides the environment throughout the launch", () => {
+    const plan = planDesktop(["--cdp-debug", "9333"], { ELLAMAKA_DESKTOP_CDP_PORT: "9444" })
+    expect(plan.freePorts).toEqual(["5173", "9333"])
+    expect(plan.env).toContain("ELLAMAKA_DESKTOP_CDP_PORT=9333")
+    expect(plan.ledger).toBe("9333")
   })
 
   test("without --cdp-debug only 5173 is reserved and no ledger entry is made", () => {
