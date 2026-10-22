@@ -8,8 +8,8 @@
  *   binds the dsh NATIVE webserver to a second loopback port — the surface
  *   the Workbench iframe embeds. The port is chosen by the caller (explicit,
  *   or `0` for an OS-assigned port).
- * - {@link mountDshTools} loads the `ellamaka-tools` profile (dsh-base with
- *   the agent-loop-only plugins disabled) with NO webserver — the pure tool
+ * - {@link mountDshTools} loads the standalone minimal `ellamaka-tools`
+ *   profile with NO webserver — the pure tool
  *   backend the dsh-adapter drives with a lightweight per-call context.
  *
  * dsh source is untouched and community plugins keep working.
@@ -655,23 +655,10 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // socket. The official `webserver` entry is disabled via extraPatches.
   await prepare?.(ctx)
   await installElectronSubprocess(ctx, installAnchor)
-  // When the runtime provides a REAL internal loader (Node sidecar), wrap its
-  // import with the profiles fallback (rook W-01): the internal loader
-  // resolves official closure packages but not user plugins under
-  // `profiles/node_modules`, so EVERY internal import path must end with a
-  // profiles-anchored require whose parent-walk hits the healed plugin
-  // symlinks. An unresolved name throws the original error. This runs AFTER
-  // `prepare` so an internal injected there is wrapped too, and BEFORE the
-  // root include mount below (the only consumer of internal.import).
-  // Bare package names in the patch layers (e.g. `@deepseek-ai/dsh-web-app`)
-  // must resolve against the closure the install anchor lives in, not the
-  // host module graph: a bundled host (packaged CLI bunfs, Desktop sidecar)
-  // carries no dsh packages, so the Node internal loader resolves them via
-  // this parent URL — the dsh home root, whose `node_modules/` ancestry holds
-  // the materialised closure (DESIGN-dsh-base.md). From source the same
-  // closure is materialised too (the kill switch guards its absence), so
-  // passing the base unconditionally is mode-independent.
-  const bareModuleBaseUrl = pathToFileURL(join(installAnchor, "..", "..", "..")).href + "/"
+  // Profile routing resolves every package against the closure or its owning
+  // profile before the official loader imports it. Do not select the official
+  // HostResolvedRootInclude: its Node-only override bypasses EntryTree.import
+  // and would send profile-local packages straight to the closure's loader.
   // The root include's YAML file is a synthetic anchor, not user config: the
   // loader writes the composed tree back into it on every mount/update. Reset
   // it immediately before each mount so a replayed composition never stacks on
@@ -682,7 +669,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     ctx as unknown as Parameters<typeof runtime.appBoot.mountRootInclude>[0],
     rootConfig,
     patches as Parameters<typeof runtime.appBoot.mountRootInclude>[2],
-    bareModuleBaseUrl,
   )
   await ctx.get("loader")?.await()
   if (ctx.get("loader") === undefined || includeEntry === undefined) {

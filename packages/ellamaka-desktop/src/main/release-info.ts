@@ -97,12 +97,26 @@ export function validateEmbeddedIdentity(identity: EmbeddedIdentity, meta: AppMe
     )
   }
 }
+export function resolveReleaseResourcesDir(input: {
+  packaged: boolean
+  appPath: string
+  resourcesPath: string
+}): string {
+  // Development Electron's resourcesPath belongs to the Electron distribution,
+  // not to this product. Read the generated identity beside the app package.
+  return input.packaged ? input.resourcesPath : join(input.appPath, "resources")
+}
+
 export function getReleaseInfo(): ReleaseInfo {
   let version = app.getVersion()
   let build: string | undefined
 
   try {
-    const resourcesPath = process.resourcesPath || join(app.getAppPath(), "resources")
+    const resourcesPath = resolveReleaseResourcesDir({
+      packaged: app.isPackaged,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+    })
     const embedded = readEmbeddedReleaseIdentity(resourcesPath)
     if (embedded?.version) {
       version = embedded.version

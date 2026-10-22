@@ -12,6 +12,7 @@ import { useServer } from "@/context/server"
 import { useQueryOptions, useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 import { useServers } from "@/context/servers"
+import { resolveServerHealthKey } from "@/utils/server-health"
 import { pathKey } from "@/utils/path-key"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
@@ -22,8 +23,9 @@ export function StatusPopover() {
   const server = useServer()
   const servers = useServers()
   const sync = useSync()
+  const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
-  const ready = createMemo(() => servers.health[server.key]?.healthy === false || sync.data.mcp_ready)
+  const ready = createMemo(() => servers.health[healthKey()]?.healthy === false || sync.data.mcp_ready)
   const mcpIssue = createMemo(() => {
     const mcp = Object.values(sync.data.mcp ?? {})
     const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
@@ -32,8 +34,8 @@ export function StatusPopover() {
     if (warn) return "warning" as const
     return undefined
   })
-  const serverHealthy = () => servers.health[server.key]?.healthy === true
-  const healthy = createMemo(() => servers.health[server.key]?.healthy === true && !mcpIssue())
+  const serverHealthy = () => servers.health[healthKey()]?.healthy === true
+  const healthy = createMemo(() => servers.health[healthKey()]?.healthy === true && !mcpIssue())
 
   return (
     <Popover
@@ -90,8 +92,9 @@ function DirectoryStatusPopover() {
   const server = useServer()
   const servers = useServers()
   const sync = useSync()
+  const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => servers.health[server.key]?.healthy
+  const serverHealth = () => servers.health[healthKey()]?.healthy
   const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready)
   const mcpIssue = createMemo(() => {
     const mcp = Object.values(sync.data.mcp ?? {})
@@ -124,8 +127,9 @@ function ServerStatusPopover(props: { statusBar?: boolean }) {
   const language = useLanguage()
   const server = useServer()
   const servers = useServers()
+  const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => servers.health[server.key]?.healthy
+  const serverHealth = () => servers.health[healthKey()]?.healthy
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),
     ready: serverHealth() !== undefined,
@@ -226,8 +230,9 @@ export function StatusBarStatusPopover(props: { spaceRoot?: string }) {
   const serverSync = useServerSync()
   const queryClient = useQueryClient()
   const queryOptions = useQueryOptions()
+  const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => servers.health[server.key]?.healthy
+  const serverHealth = () => servers.health[healthKey()]?.healthy
   const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready)
   const mcpIssue = createMemo(() => {
     const mcp = Object.values(sync.data.mcp ?? {})

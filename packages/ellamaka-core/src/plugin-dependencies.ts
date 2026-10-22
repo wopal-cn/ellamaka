@@ -13,6 +13,7 @@ import { Npm } from "./npm"
 import type { CorePreparationContributor, PreparationTarget } from "./preparation"
 import { EffectFlock } from "./util/effect-flock"
 import { Glob } from "./util/glob"
+import { Module } from "./util/module"
 import { isDshAdapterIdentity } from "./builtin-plugins"
 
 export type InstallDependency = {
@@ -237,7 +238,10 @@ async function dependencyResolves(dir: string, dependency: InstallDependency): P
   if (!dependencyVersionMatches(dependency.name, dependency.version, version)) return false
 
   try {
-    await realpath(Bun.resolveSync(dependency.name, dir))
+    const resolved =
+      typeof Bun !== "undefined" ? Bun.resolveSync(dependency.name, dir) : Module.resolve(dependency.name, dir)
+    if (!resolved) return false
+    await realpath(resolved)
     return true
   } catch {
     return false

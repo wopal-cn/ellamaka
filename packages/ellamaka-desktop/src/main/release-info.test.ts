@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { readEmbeddedReleaseIdentity, createReleaseInfo, validateEmbeddedIdentity } from "./release-info"
+import {
+  readEmbeddedReleaseIdentity,
+  createReleaseInfo,
+  resolveReleaseResourcesDir,
+  validateEmbeddedIdentity,
+} from "./release-info"
 
 const COMMIT_40 = "91a7db1f22a2007588ee2a62e5d738b7d8e80291"
 const UPSTREAM_COMMIT_40 = "385cb694419f98103af0e8fc6187ddcbcbb6eecb"
@@ -50,6 +55,27 @@ describe("release info (legacy createReleaseInfo)", () => {
       build: undefined,
       displayVersion: "1.15.13",
     })
+  })
+})
+
+describe("release resources location", () => {
+  test("development reads the product identity, not Electron's own resources", () => {
+    expect(
+      resolveReleaseResourcesDir({
+        packaged: false,
+        appPath: "/worktree/desktop",
+        resourcesPath: "/electron/resources",
+      }),
+    ).toBe("/worktree/desktop/resources")
+  })
+  test("packaged builds read the embedded identity beside the app", () => {
+    expect(
+      resolveReleaseResourcesDir({
+        packaged: true,
+        appPath: "/Applications/Ellamaka.app/Contents/Resources/app.asar",
+        resourcesPath: "/Applications/Ellamaka.app/Contents/Resources",
+      }),
+    ).toBe("/Applications/Ellamaka.app/Contents/Resources")
   })
 })
 

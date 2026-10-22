@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import os from "node:os"
+import { pathToFileURL } from "node:url"
 import { access, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises"
-import { createInstanceDependencyContributor } from "../src/plugin-dependencies"
+import { collectPluginDependencies, createInstanceDependencyContributor } from "../src/plugin-dependencies"
 
 async function writePackage(dir: string, pkg: Record<string, unknown>) {
   await mkdir(dir, { recursive: true })
@@ -24,6 +25,81 @@ async function runWorker(wopalHome: string, space: string) {
 }
 
 describe("instance plugin dependency preparation across processes", () => {
+  test("Node accepts installed dependencies without a Bun global or reinstall", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "plugin-deps-node-"))
+    const wopalHome = path.join(root, "home")
+    const space = path.join(root, "space")
+    const installDir = path.join(space, ".wopal")
+    try {
+      await writePackage(path.join(installDir, "node_modules", "@wopal/ellamaka-plugin"), {
+        name: "@wopal/ellamaka-plugin",
+        version: "1.0.0",
+        type: "module",
+        exports: { ".": { import: "./index.js" } },
+      })
+      await writePackage(path.join(installDir, "node_modules", "dep-a"), {
+        name: "dep-a",
+        version: "1.0.0",
+        main: "index.js",
+      })
+      await writePackage(path.join(installDir, "plugins", "sample"), {
+        name: "sample",
+        dependencies: { "dep-a": "1.0.0" },
+      })
+      await writeFile(
+        path.join(installDir, "package.json"),
+        JSON.stringify({
+          dependencies: { "@wopal/ellamaka-plugin": "latest", "dep-a": "1.0.0" },
+        }),
+      )
+      const collected = await collectPluginDependencies(installDir)
+      const stateDir = path.join(wopalHome, "ellamaka", "state")
+      await mkdir(stateDir, { recursive: true })
+      await writeFile(
+        path.join(stateDir, "plugin-deps.json"),
+        JSON.stringify({
+          version: 1,
+          dirs: { [await realpath(installDir)]: { ...collected, installed_at: 1 } },
+        }),
+      )
+      await symlink(path.join(import.meta.dir, "../../../node_modules"), path.join(root, "node_modules"), "dir")
+      // The installed dependency probe must be a standalone Node module: the
+      // test runner's own bundle resolution is deliberately not consulted.
+      const probe = path.join(root, "probe.mjs")
+      await writeFile(
+        probe,
+        `
+        import { createInstanceDependencyContributor } from ${JSON.stringify(pathToFileURL(path.join(root, "dependencies.mjs")).href)};
+        const result = await createInstanceDependencyContributor({ wopalHome: ${JSON.stringify(wopalHome)} })
+          .inspect({ kind: "instance", directory: ${JSON.stringify(space)} });
+        console.log(JSON.stringify(result));
+        if (result.state !== "READY") process.exitCode = 1;
+      `,
+      )
+      const bundle = path.join(root, "dependencies.mjs")
+      const build = await Bun.build({
+        entrypoints: [path.join(import.meta.dir, "../src/plugin-dependencies.ts")],
+        target: "node",
+        format: "esm",
+        external: Object.keys(
+          JSON.parse(await readFile(path.join(import.meta.dir, "../package.json"), "utf8")).dependencies,
+        ).filter((name) => name !== "@npmcli/config"),
+      })
+      expect(build.success).toBe(true)
+      await writeFile(bundle, await build.outputs[0].text())
+      const child = Bun.spawn(["node", probe], { stdout: "pipe", stderr: "pipe" })
+      const [stdout, stderr, exit] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ])
+      expect(exit, stderr + stdout).toBe(0)
+      expect(JSON.parse(stdout)).toEqual({ state: "READY" })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }, 30_000)
+
   test("same directory performs one real install transaction and the waiter reuses its committed fingerprint", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "plugin-deps-process-"))
     const wopalHome = path.join(root, "home")

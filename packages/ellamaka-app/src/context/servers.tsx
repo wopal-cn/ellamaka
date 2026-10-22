@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@wopal/ui/context"
 import { createEffect } from "solid-js"
 import { useServer } from "./server"
-import { useServerHealth } from "@/utils/server-health"
+import { resolveServerHealthKey, useServerHealth } from "@/utils/server-health"
 import { resolveAppVersion, setAppVersion } from "./app-version"
 
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
@@ -21,7 +21,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     // switch with a pending/failed health check falls back to pkg.version
     // instead of retaining the previous server's version.
     createEffect(() => {
-      setAppVersion(resolveAppVersion(health, server.key))
+      setAppVersion(resolveAppVersion(health, resolveServerHealthKey(server.key, server.current)))
     })
 
     return {

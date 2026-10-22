@@ -25,6 +25,7 @@ import { type ServerHealth } from "@/utils/server-health"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 import { useServers } from "@/context/servers"
+import { resolveServerHealthKey } from "@/utils/server-health"
 import { serverSwitchRedirect } from "@/utils/server-switch-route"
 import { sandboxControlConfig } from "./prompt-input/sandbox-control"
 import { describeStatusPlugin, statusPlugins } from "./status-plugins"
@@ -241,6 +242,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?:
   const sdk = useSDK()
   const servers = useServers()
   const server = useServer()
+  const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const dialog = useDialog()
   const language = useLanguage()
   const location = useLocation()
@@ -291,7 +293,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?:
           ? effectiveConfig()?.effective
           : undefined,
       ).sandbox,
-      server.key ? servers.health[server.key]?.dsh : undefined,
+      server.key ? servers.health[healthKey()]?.dsh : undefined,
     ).map((plugin) => ({
       specifier: plugin.name,
       ...describeStatusPlugin(plugin, {

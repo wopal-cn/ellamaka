@@ -388,7 +388,7 @@ const main = Effect.gen(function* () {
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
   if (!app.isPackaged && process.env.ELLAMAKA_DESKTOP_CDP === "1") {
-    app.commandLine.appendSwitch("remote-debugging-port", "9222")
+    app.commandLine.appendSwitch("remote-debugging-port", process.env.ELLAMAKA_DESKTOP_CDP_PORT ?? "9222")
   }
 
   if (!app.requestSingleInstanceLock()) {

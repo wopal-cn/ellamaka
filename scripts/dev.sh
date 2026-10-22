@@ -116,7 +116,7 @@ $self stop [target]
 $self desktop [options]
   --debug [mods]    Debug mode (modules: task,rules; default: all)
   --rebuild         Rebuild sidecar bundle and re-copy icons before launch
-  --cdp-debug       Enable Chrome DevTools Protocol debugging (port 9222)
+  --cdp-debug [port] Enable Desktop DevTools Protocol debugging (default: 9222)
   Desktop runs in background. Close the Electron window or use 'stop desktop'.
   By default sidecar build is skipped (assumes dist/node/node.js is current).
   Sidecar log: $SIDECAR_LOG
@@ -1182,7 +1182,7 @@ EOF
 }
 
 cmd_desktop() {
-  local CHANNEL="local" debug=false debug_modules="all" rebuild=false cdp_debug=false
+  local CHANNEL="local" debug=false debug_modules="all" rebuild=false cdp_debug=false cdp_port="${ELLAMAKA_DESKTOP_CDP_PORT:-9222}"
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --debug)
@@ -1190,7 +1190,10 @@ cmd_desktop() {
         [[ $# -gt 1 && ! "$2" =~ ^- ]] && { debug_modules="$2"; shift 2; } || { debug_modules="all"; shift; }
         ;;
       --rebuild) rebuild=true; shift ;;
-      --cdp-debug) cdp_debug=true; shift ;;
+      --cdp-debug)
+        cdp_debug=true
+        if [[ $# -gt 1 && "$2" =~ ^[0-9]+$ ]]; then cdp_port="$2"; shift 2; else shift; fi
+        ;;
       -h|--help) usage ;;
       *) echo "Unknown option: $1"; usage ;;
     esac
@@ -1198,9 +1201,10 @@ cmd_desktop() {
 
   local DESKTOP_DIR="$root/packages/ellamaka-desktop"
   require_stopped desktop || return 1
-  # 5173 (electron-vite) always required; 9222 (CDP) only when --cdp-debug.
+  # 5173 (electron-vite) is always required; the selected CDP port only
+  # when --cdp-debug. A caller may have another browser on 9222.
   if $cdp_debug; then
-    require_free_ports 5173 9222 || return 1
+    require_free_ports 5173 "$cdp_port" || return 1
   else
     require_free_ports 5173 || return 1
   fi
@@ -1238,7 +1242,7 @@ cmd_desktop() {
     desktop_env+=(ELLAMAKA_DSH_INSTALL_COMMAND="bun $root/packages/opencode/src/index.ts")
   fi
   if $cdp_debug; then
-    desktop_env+=(ELLAMAKA_DESKTOP_CDP=1)
+    desktop_env+=(ELLAMAKA_DESKTOP_CDP=1 ELLAMAKA_DESKTOP_CDP_PORT="$cdp_port")
   fi
   if [ -n "$WOPAL_HOME" ]; then
     desktop_env+=(WOPAL_HOME="$WOPAL_HOME")

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
-import { resolve } from "./source-ts-loader"
+import { load, resolve } from "./source-ts-loader"
 
 function testRoot(name: string) {
   return mkdtempSync(join(tmpdir(), `${name}-`))
@@ -52,5 +52,21 @@ describe("source-ts-loader", () => {
     const cordisParent = pathToFileURL(join(root, "packages", "ellamaka-cordis", "src", "entry.ts")).href
     const outside = await resolve("./shared.js", { parentURL: cordisParent }, nextResolve)
     expect(outside.url).toBe("./shared.js")
+  })
+})
+
+describe("source-ts-loader load hook", () => {
+  test("transforms TypeScript parameter properties for Node", async () => {
+    const root = testRoot("source-loader-transform")
+    const source = join(root, ".wopal", "plugins", "example", "src", "index.ts")
+    mkdirSync(join(root, ".wopal", "plugins", "example", "src"), { recursive: true })
+    writeFileSync(
+      source,
+      "export class A { constructor(private readonly value: string) {} get() { return this.value } }\n",
+    )
+    const loaded: { format: string; source: string } = await load(pathToFileURL(source).href, {}, nextResolve)
+    expect(loaded.format).toBe("module")
+    expect(loaded.source).toContain("this.value = value")
+    expect(loaded.source).not.toContain("private readonly value")
   })
 })
