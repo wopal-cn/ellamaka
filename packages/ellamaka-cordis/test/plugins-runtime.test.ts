@@ -227,41 +227,40 @@ describe("dsh plugin runtime service (profile composition files, event driven)",
       () => installFixture(home),
     )
 
-    // Break the composition: a manifest bundle row whose package entity is
-    // gone fails the recomposition loud (compose fail-loud semantics).
-    rmSync(join(profileDirOf(home, "web"), "node_modules", "fixture-dsh-plugin", "package.json"))
-    await withProfileManifestWrite(profileDirOf(home, "web"), (raw) => {
-      const dsh = (raw.dsh ??= {}) as Record<string, unknown>
-      const profileSection = (dsh.profile ??= {}) as Record<string, unknown>
-      profileSection.bundles = [...((profileSection.bundles ?? []) as string[]), "phantom-broken-plugin"]
-    })
+    // Extension bundles may now be skipped. An invalid user patch remains a
+    // hard composition error and fails before mutating the running container.
+    const patchPath = join(profileDirOf(home, "web"), "cordis.patch.yml")
+    const errorsBefore = replayErrors.length
+    writeFileSync(patchPath, "- id: [unbalanced\n")
     // The watcher fires (real change) and the replay FAILS.
-    await waitForCount(() => replayErrors.length, 1)
+    await waitForCount(() => replayErrors.length, errorsBefore + 1)
+    expect(replayErrors.at(-1)?.profile).toBe("web")
+    expect(String(replayErrors.at(-1)?.error)).toContain("failed to parse user patch layer")
     // The last good state stays mounted despite the failure.
     expect(marker(webCtxOf(web))).toBe("mounted")
 
-    // No retry storm: the failed hash is KEPT, so without further real
-    // changes nothing NEW fires. Converge on stability (the exact number
+    // No retry storm: the failed observation is cached, so without further
+    // real changes nothing NEW fires. Converge on stability (the exact number
     // of successful replays varies with the multi-profile write fan-out).
     await new Promise((resolve) => setTimeout(resolve, 1200))
     const errorsAfterQuiet = replayErrors.length
     const updatesAfterQuiet = updates
     await new Promise((resolve) => setTimeout(resolve, 800))
     expect(updates).toBe(updatesAfterQuiet) // quiet = no retry storm
-    expect(errorsAfterQuiet).toBeGreaterThanOrEqual(1) // the break was observed
+    expect(replayErrors.length).toBe(errorsAfterQuiet)
 
-    // Recovery: the next REAL change replays and the good state persists.
+    // Recovery: the next REAL change (a parseable patch layer) replays and the
+    // good state persists — the recovery must not depend on a reinstall.
+    writeFileSync(patchPath, "[]\n")
+    // The marker was already mounted during failure; it alone cannot prove
+    // recovery. Require a successful replay after repairing the watched file.
+    await waitForCount(() => updates, updatesAfterQuiet + 1)
+    expect(marker(webCtxOf(web))).toBe("mounted")
+    expect(replayErrors.length).toBe(errorsAfterQuiet)
+
+    // Exit the case at the empty composition both later cases expect.
     await uninstallFixture(home)
-    // Clear the phantom row: the next real change recomposes successfully
-    // and unmounts the fixture from web (the composition is now empty).
-    await withProfileManifestWrite(profileDirOf(home, "web"), (raw) => {
-      const dsh = (raw.dsh ??= {}) as Record<string, unknown>
-      const profileSection = (dsh.profile ??= {}) as Record<string, unknown>
-      profileSection.bundles = ((profileSection.bundles ?? []) as string[]).filter((b) => b !== "phantom-broken-plugin")
-    })
     await waitFor(() => marker(webCtxOf(web)), undefined)
-    // The service survived the whole cycle: both containers settled at the
-    // emptied composition (uninstallFixture cleared both profiles).
     await new Promise((resolve) => setTimeout(resolve, 800))
     expect(marker(tools.ctx)).toBeUndefined()
   }, 90_000)
