@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { isScalar, parseDocument, visit } from "yaml"
 import {
+  applicableHomePatches,
   composeDshDumpLayers,
   composeDshDumpProfileLayers,
   dumpDshConfig,
@@ -284,12 +285,16 @@ describe("lifted patch builders snapshot equality", () => {
     })
   })
 
+  test("home rows apply only to entries the standalone tools composition declares", () => {
+    const rows = [{ id: "shell-env" }, { insert: [{ id: "tools" }, { id: "tool-fs" }] }]
+    expect(applicableHomePatches("/tmp/dsh-home", rows).map((patch) => patch.id)).toEqual(["shell-env"])
+  })
+
   test("toolsExtraPatches matches mountDshTools original shape exactly", () => {
     const patches = toolsExtraPatches({
       extraPatches: [{ id: "custom-tool", config: {} }],
     })
     expect(patches).toEqual([
-      { id: "hmr", disabled: true },
       { id: "tool-bash", config: { enableRunInBackground: false } },
       { id: "custom-tool", config: {} },
     ])

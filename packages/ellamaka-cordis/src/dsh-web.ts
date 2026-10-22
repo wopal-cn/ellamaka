@@ -38,7 +38,7 @@ import { installBunSubprocessCompatibility } from "./runtime/bun-subprocess.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
-import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
+import { applicableHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
 import type { Entry } from "@deepseek-ai/cordis-plugin-loader"
 import type { PatchOptions } from "@deepseek-ai/cordis-plugin-include"
 
@@ -433,7 +433,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // agree. These two still stay DISABLED until their env-resolution paths
   // are re-verified against the live env — re-enable only after confirming
   // every write lands inside the home.
-  const homePatches = makeHomePatches(homeDir)
   // The dsh installation anchor: resolve the @deepseek-ai/dsh package.json
   // from this host package so loadProfile finds the bundle layers in the
   // host's node_modules closure. Desktop packaged mode overrides it to the
@@ -512,6 +511,14 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
 
   // Load the profile (bundle layers + user patch layer).
   const profile = loadProfile("ellamaka", profileName, installAnchor, homeDir)
+  // Home rows target entries by id. The standalone tools composition contains
+  // only the entries it declares, so host rows for dsh-base services are not
+  // applied there (official patch loading warns on every absent id).
+  const homePatches = applicableHomePatches(homeDir, [
+    ...profile.layers.flatMap((layer) => layer.patches as Record<string, unknown>[]),
+    ...(profile.patches as Record<string, unknown>[]),
+    ...extraPatches,
+  ])
   // The plugin layer (D-04): composed from the store — the single source of
   // truth — so boot and hot reload share one composition (D-03). Store order
   // is layer order; profiles never carry a bundles manifest for plugins.
