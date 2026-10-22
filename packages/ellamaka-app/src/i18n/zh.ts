@@ -561,7 +561,10 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "插件",
-  "status.popover.plugin.builtin": "内置",
+  "status.popover.plugin.system": "系统插件",
+  "status.popover.plugin.internal": "内部插件",
+  "status.popover.plugin.user": "用户插件",
+  "status.popover.plugin.space": "空间插件",
   "status.popover.action.manageServers": "管理服务器",
 
   "session.share.popover.title": "发布到网页",

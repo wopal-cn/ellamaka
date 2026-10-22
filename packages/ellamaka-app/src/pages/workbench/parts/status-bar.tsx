@@ -84,7 +84,7 @@ export function StatusBar() {
       {/* 右区：Server 状态控制按钮 + 名字，带有左边框分割 */}
       <div class="flex max-w-48 shrink-0 items-center gap-1 border-l border-v2-border-border-base pl-2">
         <WorkbenchActiveDirectoryProvider fallback={<StatusBarServerStatusPopover />}>
-          {() => <StatusBarStatusPopover />}
+          {() => <StatusBarStatusPopover spaceRoot={activePath()} />}
         </WorkbenchActiveDirectoryProvider>
         <span class="truncate select-none ml-1">{server.name}</span>
       </div>

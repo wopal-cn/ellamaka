@@ -30,6 +30,7 @@ export function StatusPopover() {
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
     if (warn) return "warning" as const
+    return undefined
   })
   const serverHealthy = () => servers.health[server.key]?.healthy === true
   const healthy = createMemo(() => servers.health[server.key]?.healthy === true && !mcpIssue())
@@ -98,6 +99,7 @@ function DirectoryStatusPopover() {
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
     if (warn) return "warning" as const
+    return undefined
   })
   const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
   const state = createMemo<StatusPopoverState>(() => ({
@@ -215,7 +217,7 @@ function StatusPopoverView(props: { state: StatusPopoverState }) {
   )
 }
 
-export function StatusBarStatusPopover() {
+export function StatusBarStatusPopover(props: { spaceRoot?: string }) {
   const language = useLanguage()
   const server = useServer()
   const servers = useServers()
@@ -233,6 +235,7 @@ export function StatusBarStatusPopover() {
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
     if (warn) return "warning" as const
+    return undefined
   })
   const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
 
@@ -262,7 +265,7 @@ export function StatusBarStatusPopover() {
     onOpenChange: setShown,
     body: () => (
       <StatusPopoverBody shown={shown()}>
-        <Body shown={shown} />
+        <Body shown={shown} spaceRoot={props.spaceRoot} />
       </StatusPopoverBody>
     ),
   }))

@@ -27,7 +27,7 @@ import { pathKey } from "@/utils/path-key"
 import { useServers } from "@/context/servers"
 import { serverSwitchRedirect } from "@/utils/server-switch-route"
 import { sandboxControlConfig } from "./prompt-input/sandbox-control"
-import { statusPlugins } from "./status-plugins"
+import { describeStatusPlugin, statusPlugins } from "./status-plugins"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -236,7 +236,7 @@ function ServerStatusList(props: { state: ServerStatusState }) {
   )
 }
 
-export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?: string }) {
   const sync = useSync()
   const sdk = useSDK()
   const servers = useServers()
@@ -292,7 +292,13 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
           : undefined,
       ).sandbox,
       server.key ? servers.health[server.key]?.dsh : undefined,
-    ),
+    ).map((plugin) => ({
+      specifier: plugin.name,
+      ...describeStatusPlugin(plugin, {
+        spaceRoot: props.spaceRoot ?? sync.data.path.worktree,
+        userHome: sync.data.path.home,
+      }),
+    })),
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
@@ -484,14 +490,17 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               >
                 <For each={plugins()}>
                   {(plugin) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
+                    <div
+                      class="flex min-w-0 items-center gap-2 w-full px-2 py-1.5"
+                      data-status-plugin={plugin.name}
+                      data-source={plugin.source}
+                      title={plugin.specifier}
+                    >
                       <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                      <span class="text-14-regular text-text-base break-all">{plugin.name}</span>
-                      <Show when={plugin.builtin}>
-                        <span class="text-12-regular text-text-weak shrink-0">
-                          {language.t("status.popover.plugin.builtin")}
-                        </span>
-                      </Show>
+                      <span class="min-w-0 flex-1 truncate text-14-regular text-text-base">{plugin.name}</span>
+                      <span class="shrink-0 rounded-sm border border-border-weak-base bg-surface-raised-base px-1.5 py-0.5 text-12-regular text-text-weak">
+                        {language.t(`status.popover.plugin.${plugin.source}`)}
+                      </span>
                     </div>
                   )}
                 </For>
