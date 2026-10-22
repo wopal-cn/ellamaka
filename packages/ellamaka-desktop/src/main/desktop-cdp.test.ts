@@ -55,25 +55,63 @@ describe("desktop_cdp_resolve_port", () => {
   })
 })
 
-describe("dev.sh and Electron consume the resolved port", () => {
-  const dev = readFileSync(join(REPO_ROOT, "scripts/dev.sh"), "utf8")
+type DesktopPlan = { freePorts: string[]; env: string[]; ledger: string }
+
+/**
+ * Run the real `cmd_desktop` argument parsing and port planning with the
+ * dry-run seam, so the assertions observe the values the launch path would
+ * hand to require_free_ports, Electron, and the ledger — not the shape of the
+ * source text.
+ */
+function planDesktop(args: string[], env: Record<string, string> = {}): DesktopPlan {
+  const script = `
+    set -euo pipefail
+    WOPAL_DEV_PLAN_ONLY=1
+    source ./scripts/dev.sh
+    cmd_desktop "$@"
+  `
+  const proc = Bun.spawnSync(["bash", "-c", script, "scripts/dev.sh", ...args], {
+    cwd: REPO_ROOT,
+    env: { ...process.env, ...env },
+  })
+  if (proc.exitCode !== 0) throw new Error(`desktop plan failed: ${proc.stderr.toString()}`)
+  const lines = proc.stdout.toString().trim().split("\n")
+  const read = (prefix: string) => lines.find((line) => line.startsWith(prefix))?.slice(prefix.length) ?? ""
+  return {
+    freePorts: read("free_ports=").split(" ").filter(Boolean),
+    env: lines.filter((line) => line.startsWith("env=")).map((line) => line.slice("env=".length)),
+    ledger: read("ledger="),
+  }
+}
+
+describe("dev.sh plans the port it will actually use", () => {
   const desktopIndex = readFileSync(join(REPO_ROOT, "packages/ellamaka-desktop/src/main/index.ts"), "utf8")
 
-  test("dev.sh resolves through the shared helper, not a hard-coded 9222", () => {
-    expect(dev).toContain('source "$root/scripts/lib/desktop-cdp.sh"')
-    expect(dev).toContain('cdp_port="$(desktop_cdp_resolve_port "$2")"')
-    expect(dev).toContain('cdp_port="$(desktop_cdp_resolve_port)"')
+  test("a custom --cdp-debug port reaches the check, the env, and the ledger", () => {
+    const plan = planDesktop(["--cdp-debug", "9333"])
+    expect(plan.freePorts).toEqual(["5173", "9333"])
+    expect(plan.env).toEqual(["ELLAMAKA_DESKTOP_CDP=1", "ELLAMAKA_DESKTOP_CDP_PORT=9333"])
+    expect(plan.ledger).toBe("9333")
   })
 
-  test("free-port precheck, Electron env, and ledger use the selected port", () => {
-    expect(dev).toContain('require_free_ports 5173 "$cdp_port"')
-    expect(dev).toContain('desktop_cdp_env_flags "$cdp_port"')
-    expect(dev).toContain('record_listener desktop-devtools "$cdp_port"')
+  test("--cdp-debug without a port falls back to 9222 everywhere", () => {
+    const plan = planDesktop(["--cdp-debug"])
+    expect(plan.freePorts).toEqual(["5173", "9222"])
+    expect(plan.env).toContain("ELLAMAKA_DESKTOP_CDP_PORT=9222")
+    expect(plan.ledger).toBe("9222")
   })
 
-  test("sidecar port detection excludes the selected CDP port, not only 9222", () => {
-    expect(dev).toContain('$cdp_debug && reserved_ports="5173|$cdp_port"')
-    expect(dev).toContain('grep -vE ":($reserved_ports)$"')
+  test("ELLAMAKA_DESKTOP_CDP_PORT is used when no port argument is given", () => {
+    const plan = planDesktop(["--cdp-debug"], { ELLAMAKA_DESKTOP_CDP_PORT: "9444" })
+    expect(plan.freePorts).toEqual(["5173", "9444"])
+    expect(plan.ledger).toBe("9444")
+  })
+
+  test("without --cdp-debug only 5173 is reserved and no ledger entry is made", () => {
+    const plan = planDesktop([])
+    expect(plan.freePorts).toEqual(["5173"])
+    expect(plan.env).toEqual([])
+    expect(plan.ledger).toBe("-")
   })
 
   test("Electron reads the port from the environment", () => {

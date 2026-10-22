@@ -69,7 +69,9 @@ FRONTEND_LOG="$DEV_DIR/ellamaka-dev-frontend.log"
 DESKTOP_LOG="$DEV_DIR/ellamaka-dev-desktop.log"
 SIDECAR_LOG="$DEV_DIR/ellamaka-dev-sidecar.log"
 PLUGIN_DEBUG_LOG="$LOGDIR/wopal-plugins-debug.log"
-SELF_PGID="$(ps -o pgid= -p "$$" | tr -d '[:space:]')"
+# Tolerate a blocked /bin/ps (restricted sandboxes source this file for the
+# dry-run planning path); an empty pgid only disables group-scoped signals.
+SELF_PGID="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d '[:space:]' || true)"
 # Per-bucket project root used by is_service_process to judge cross-worktree
 # records against their own paths. Empty means "the current $root".
 SCOPE_ROOT=""
@@ -514,8 +516,8 @@ choose_free_port() {
   fi
 }
 
-# Desktop keeps the strict contract: 5173 is electron-vite's fixed port and
-# 9222 is the CDP port its main process expects, so neither can move.
+# Desktop keeps 5173 fixed for electron-vite; the CDP port is whichever one
+# `desktop --cdp-debug [port]` resolved (see scripts/lib/desktop-cdp.sh).
 require_free_ports() {
   local port
   for port in "$@"; do
@@ -1207,14 +1209,28 @@ cmd_desktop() {
   done
 
   local DESKTOP_DIR="$root/packages/ellamaka-desktop"
-  require_stopped desktop || return 1
   # 5173 (electron-vite) is always required; the selected CDP port only
-  # when --cdp-debug. A caller may have another browser on 9222.
-  if $cdp_debug; then
-    require_free_ports 5173 "$cdp_port" || return 1
-  else
-    require_free_ports 5173 || return 1
+  # when --cdp-debug. A caller may have another browser on the default 9222.
+  local -a free_ports=(5173)
+  $cdp_debug && free_ports+=("$cdp_port")
+
+  # Dry-run seam for the tests: print the exact plan the launch path uses
+  # (free ports, Electron env, ledger port) and stop. It runs before
+  # require_stopped/ps, so a regression that changes the resolved port
+  # between parsing and launch turns red instead of silently binding 9222.
+  if [ -n "${WOPAL_DEV_PLAN_ONLY:-}" ]; then
+    echo "free_ports=${free_ports[*]}"
+    if $cdp_debug; then
+      desktop_cdp_env_flags "$cdp_port" | sed 's/^/env=/'
+      echo "ledger=$cdp_port"
+    else
+      echo "ledger=-"
+    fi
+    return 0
   fi
+
+  require_stopped desktop || return 1
+  require_free_ports "${free_ports[@]}" || return 1
   local desktop_sidecar_port="${ELLAMAKA_PORT:-4097}"
   choose_free_port desktop-sidecar "$desktop_sidecar_port"
   desktop_sidecar_port="$SELECTED_PORT"
