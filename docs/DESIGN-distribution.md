@@ -1,7 +1,7 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-10-14
+> **Updated**: 2026-10-23
 > **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
@@ -240,6 +240,8 @@ bump 写入前校验：版本符合 SemVer 子集、version/channel 一致、bra
 
 CLI rc 与 stable 走完全相同的 release job：同一 versioned path（`ellamaka/v<version>/`）、同一 latest promotion、同一 Release 页面。`-rc.N` 仅作为版本字符串进入 tag、build 注入与 manifest，任何步骤都不区分 rc 与 stable。
 
+两个产品发布流程在打包之前共享一个 Linux 测试关卡，固定使用 `ubuntu-24.04`：准备并探测系统沙箱 → 引擎清单检查 → 完整依赖清单检查 → 代数检查 → 工具容器回归。任一步非零退出即中止发布，没有跳过或放行的分支。打包作业依赖该关卡，清单检查只在关卡内执行一次。
+
 CLI 发布流程（release job）：
 
 1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 checkout commit、source tag 与本次 Ellamaka product/version/channel 一致。
@@ -249,7 +251,9 @@ CLI 发布流程（release job）：
 5. CLI/Desktop immutable release 与 component latest/updater feed 独立提交和 promotion。每个 component 只校验自己的 immutable manifest、channel、平台与 ReleaseIdentity；stable/beta 可以跨 minor。多组件 UX 直接组合已经提交的 component manifests，release identity 与发布元数据继续按 component 独立。写入 mutable alias 后主动 purge CDN。
 6. 创建 4 个 markdown-only release 条目（GitHub/Gitee × `wopal-cn/ellamaka`/`wopal-cn/wopal-space-ontology`），不挂 binary；ontology 仓库使用独立索引 tag/body，不复用 Ellamaka 产品 tag namespace。
 
-Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest 产 NSIS、ubuntu-latest 产 AppImage+deb）。R2 上传、manifest 校验与 CDN purge 复用 CLI 的既有机制。
+Desktop 发布流程：matrix 构建（macos-latest 产 dmg+zip、windows-latest 产 NSIS、ubuntu-latest 产 AppImage+deb），构建依赖上述 Linux 测试关卡。R2 上传、manifest 校验与 CDN purge 复用 CLI 的既有机制。
+
+除发布关卡之外，同一套安装、类型检查、静态检查与单元测试在每晚定时和手动触发下运行，只用 Linux runner。测试作业不响应 push，也不进入提 PR 的合并门。
 
 **重试状态**：tag 存在但没有有效 versioned manifest（failed attempt）时，release 脚本自动重发。当该失败 tag 指向的 commit 就是当前分支 HEAD（纯流程重试）时以该 tag 为 `--ref` 重新 `workflow_dispatch`（tag 不移动、版本文件不重复 bump）；当失败源于 source bug、当前分支 HEAD 已含修复且产品版本文件已等于目标版本时，脚本把失败 tag 重指到 HEAD 并 force-push（tag push 触发 workflow，tag 移动但从未产生有效 manifest，不违反不可变）。有效 immutable manifest 已提交时只能重试 release page 或 latest promotion，不能重新 build。已提交 release 出现 identity/hash mismatch 或重大运行问题时执行 [Failed Attempt and Whole-Version Withdrawal](#failed-attempt-and-whole-version-withdrawal) 整版 withdrawal，版本号永久作废，后续使用更高版本。
 
@@ -382,7 +386,9 @@ Stable/Beta 是不同 appId/路径，可以跨 minor 共存。Actual ReleaseIden
 
 DSH closure 是产品 Runtime 的固定组成。Ellamaka 源码维护一个递增 closureVersion，CLI 和 Desktop 使用同一值；锁文件固定实际 DSH 依赖。已知会影响 Home 的闭包变更提升 closureVersion，产品 SemVer/channel 不替代该值。
 
-备份成功后才允许较新 closure 写 Home；备份或版本状态写入失败时拒绝 DSH 启动。
+代际提升由发布前检查判定：以最近一个发布标签为基准，比对钉住的 DSH 版本与显式登记的、会写入 Home 的产品自有文件；任一项变化而代数未提升时，检查失败并阻止打包。发布关卡在执行打包之前运行该检查，每晚与手动的测试作业也运行它。
+
+备份成功后才允许较新 closure 写 Home；备份或版本状态写入失败时拒绝 DSH 启动。Home 保留最近 3 份切代备份，本次新建的那份始终保留。
 
 同一 closureVersion 的多进程使用沿用 DSH 自身的并发行为；Ellamaka 不预测 DSH 内部写入格式或建立额外的 single-writer hosting。
 

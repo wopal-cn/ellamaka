@@ -1,7 +1,7 @@
 # DSH 融合基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-22
+> **Updated**: 2026-10-23
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -29,7 +29,7 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 | 路径 | 用途 |
 |---|---|
 | `$WOPAL_HOME/dsh/home` | 唯一的活动 Home |
-| `$WOPAL_HOME/dsh/closures/<version>` | 产品固定的 DSH 运行时 |
+| `$WOPAL_HOME/dsh/closures/<fingerprint>` | 产品固定的 DSH 运行时，目录名取闭包内容指纹的前 12 位 |
 | `$WOPAL_HOME/dsh/backups/<timestamp>` | 版本切换前生成的副本 |
 | `$WOPAL_HOME/dsh/state/current.json` | 活动 closureVersion |
 | `$WOPAL_HOME/dsh/state/managed` | 最小持久所有权标记，不含历史，也不含 DSH 私有 schema |
@@ -44,15 +44,19 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 
 `packages/ellamaka-cordis/package.json` 只声明 `@deepseek-ai/dsh` 一个包作为 DSH 依赖的唯一版本入口。`@deepseek-ai/cordis`、`@deepseek-ai/schemastery`、`@deepseek-ai/dsh-app-boot`、`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@deepseek-ai/dsh-plugin-manager` 及全部子包版本均由 `@deepseek-ai/dsh` 自身的依赖树唯一锁定；`package.json` 与 `bunfig.toml` 不重复维护 `@deepseek-ai/dsh-*` 子包列表。
 
-构建脚本从唯一的 `@deepseek-ai/dsh` 入口与工作区 `bun.lock` 派生 `dsh-runtime.manifest.json` 和完整的 `dsh-runtime.lock.json`（由 `Arborist` 展开全部传递依赖闭包），并通过漂移检查保证签入的 manifest、lock 与 `package.json` 一致。升级 DSH 版本只需更新 `@deepseek-ai/dsh` 版本号、重新生成 `bun.lock` 并刷新运行时清单与锁文件。
+构建脚本从唯一的 `@deepseek-ai/dsh` 入口与工作区 `bun.lock` 派生 `dsh-runtime.manifest.json` 和完整的 `dsh-runtime.lock.json`（由 `Arborist` 展开全部传递依赖闭包），并通过漂移检查保证签入的 manifest、lock 与 `package.json` 一致。
 
-升级的日常流程是更新这一个版本入口、重新安装依赖并刷新派生产物，然后运行工具容器的固定行为回归。测试通过表示该版本满足已覆盖的工具契约。`web` 使用所选版本的官方 profile 配置，并以实际启动与运行检查确认可用。官方配置和数据格式的升级行为由 DSH 拥有；出现真实不兼容时，依据对应发布说明和失败诊断做具体修正。Ellamaka 保留必要的宿主接线，不建设预测未来破坏性变更的装配转换层。
+升级 DSH 由一条命令完成：`bun run dsh:upgrade <version>` 更新版本入口、重新生成 `bun.lock` 与两个运行时清单、提升 `closureVersion`，并运行工具容器的固定行为回归。命令可以重复执行：中途在某一步失败后重跑，得到同一个目标代数。目标版本低于当前钉住的版本时命令拒绝执行；`--dry-run` 只报告将要发生的改动。
+
+升级的验收标准是工具容器的固定行为回归通过，它表示该版本满足已覆盖的工具契约。`web` 使用所选版本的官方 profile 配置，并以实际启动与运行检查确认可用。官方配置和数据格式的升级行为由 DSH 拥有；出现真实不兼容时，依据对应发布说明和失败诊断做具体修正。Ellamaka 保留必要的宿主接线，不建设预测未来破坏性变更的装配转换层。
 
 Ellamaka 源码维护一个递增的 `closureVersion`，CLI 与 Desktop 构建共用。当锁定的 DSH 闭包或产品自有 DSH 文件发生可能影响 Home 数据的变化时提升它。Home 兼容性仅由 `closureVersion` 判定，与 CLI/Desktop 的产品 SemVer 及发布通道解耦。
 
+代际提升由一道只读检查保证。检查以最近一个发布标签为基准，比对钉住的 DSH 版本与一组显式列出的产品自有 DSH 文件；其中任一项发生变化时，当前代数必须高于基准代数，否则检查以 `DSH_HOME_GENERATION_STALE` 失败并打印修复命令。基准不存在时检查失败，不降级为通过。这份文件清单是产品契约：新增写入 Home 数据的代码时同步登记，规则见 `packages/ellamaka-cordis/AGENTS.md`。
+
 ### Materialization
 
-在读写 Home 之前，先在 `$WOPAL_HOME/dsh/staging` 物化并校验产品固定的 DSH 依赖闭包，通过包完整性检查后再就位到 `$WOPAL_HOME/dsh/closures/<version>`。同版本已就位的完整闭包直接复用。下载、解包或必需包校验失败时，在触碰 Home 之前终止准备。
+在读写 Home 之前，先在 `$WOPAL_HOME/dsh/staging` 物化并校验产品固定的 DSH 依赖闭包，通过包完整性检查后再就位到 `$WOPAL_HOME/dsh/closures/<fingerprint>`。指纹相同的完整闭包直接复用。下载、解包或必需包校验失败时，在触碰 Home 之前终止准备。
 
 `ELLAMAKA_DSH=0` 在 DSH 专属环境设置、文件访问、网络访问、物化与 profile 挂载之前短路。
 
@@ -175,7 +179,7 @@ Home 检查与版本变化使用唯一的 Home 锁。进程只要可能访问 Ho
 | 记录版本新于产品版本 | 拒绝访问；不降级，也不修改 Home |
 | 产品版本更新 | 取得排他锁，备份当前 Home，更新记录版本，再准备产品自有文件并激活 DSH |
 
-备份或元数据发布失败时，候选运行时得不到任何 Home 写权限。版本与 marker 使用原子文件写入发布；不完整的元数据会被报告，不会被自动清除或猜测。已有 managed Home 在版本更新失败时保留原有版本。备份是供人工恢复的副本，不是运行时目录；在可知时保留源 closureVersion 与 managed 元数据，无版本的历史来源则明确标为 unknown。无版本 Home 的首次接管属于离线升级边界：旧构建不持有这把新锁，因此仅取得锁并不能证明那些旧进程已经停止。Ellamaka 不校验也不翻译 DSH 私有数据格式。
+备份或元数据发布失败时，候选运行时得不到任何 Home 写权限。版本与 marker 使用原子文件写入发布；不完整的元数据会被报告，不会被自动清除或猜测。已有 managed Home 在版本更新失败时保留原有版本。备份是供人工恢复的副本，不是运行时目录；在可知时保留源 closureVersion 与 managed 元数据，无版本的历史来源则明确标为 unknown。Home 只保留最近 3 份切代备份，按备份目录名的时间前缀排序；本次新建立的备份始终保留，命名不符合产品规则的条目不计入也不删除。修剪在版本状态与 managed marker 都发布成功之后进行，修剪失败只记录一条受限诊断，不回滚已经完成的切代。无版本 Home 的首次接管属于离线升级边界：旧构建不持有这把新锁，因此仅取得锁并不能证明那些旧进程已经停止。Ellamaka 不校验也不翻译 DSH 私有数据格式。
 
 无版本 Home 的接管是唯一需要操作员确认的 Home 变更。交互入口 TUI 与 Desktop 在本地应用旁呈现一次确认，并明确要求先停止旧的 Ellamaka/DSH 进程。非交互入口从不提示：它们通过 health 与准备结果报告 `DSH_HOME_LEGACY_ADOPTION_REQUIRED`，并指引操作员改用交互入口。确认后依次执行排他锁、以未知源版本备份、原子发布版本与 marker；任一步失败都不改动 Home。版本闸门保护所有参与本协议的构建。不感知该锁的构建仍在协议之外，因此不得对已接管的 Home 运行。
 
@@ -211,6 +215,10 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 ### Release Guidance
 
 闭包版本变化在用户启动目标 Ellamaka 产品时处理。准备会在较新版本写入之前检查并备份 Home。若激活失败，备份保持为人工恢复材料；不尝试自动降级或恢复。
+
+代际提升在合并前由只读检查判定，在打包前由发布关卡再次判定。发布关卡属于两个产品发布流程的组成部分，位于打包之前，内容依次为：准备并探测系统沙箱、检查引擎清单、检查完整依赖清单、执行代数检查、运行工具容器回归。任一步失败即中止发布，没有跳过或放行的分支。打包作业依赖这个关卡，不再各自重复清单检查。
+
+仓库的测试门禁在三个位置运行，全部使用 Linux runner：每晚定时一次、手动一次、每次发布打包之前一次。日常提交只做静态检查与密钥扫描，不运行测试套件。
 
 官方 adapter/preset/profile 自身必须在发布前修好并随产品发布，不能把产品代码修补责任推给用户 Agent。
 
