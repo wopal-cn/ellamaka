@@ -1,25 +1,39 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-14
+> **Updated**: 2026-10-22
 > **Parent**: `./DESIGN.md`
+> **Sibling DESIGNs**:
+>
+> - `./DESIGN-dsh-base.md` — DSH 融合基础、依赖闭包与 Profile 生命周期
+> - `./DESIGN-ellamaka-tools.md` — 工具容器 profile 的装配与投影
+> - `./DESIGN-workbench.md` — Workbench 工作台设计
 
-`web` profile 承载 DSH 的完整界面与会话。宿主基座、home、包解析、数据导入和配置队列由 [DSH 基础设计](./DESIGN-dsh-base.md) 拥有，本文定义 Web 的插件供应链、声明式 preset 和界面承载。
+`web` profile 承载 DSH 的完整界面与会话。宿主基座、Home、包解析与配置队列由 [DSH 基础设计](./DESIGN-dsh-base.md) 拥有，本文定义 Web 的插件供应链、声明式 preset 和界面承载。
+
+## Upgrade Ownership
+
+Web 使用当前固定 DSH 版本的官方 Web profile 配置和 bundle 默认值，用户与空间扩展通过官方补丁和插件机制配置。官方拥有自身配置、会话数据和升级时的自动格式处理；Ellamaka 拥有宿主挂载、Home 备份与运行诊断。
+
+升级后的验收是实际启动并检查 Web 运行。若官方能够直接处理已有配置，就沿用该结果；若出现破坏性变更，保留诊断，依据对应版本发布说明手动修正配置。产品不推测官方未来配置变更，也不增加一套自动转换规则。Web 的工具和默认行为跟随官方；Ellamaka tools 的最小装配与固定工具回归独立维护。
 
 ## Plugin Supply Chain
 
-profile 的 package.json 是插件依赖与激活的唯一真相源：dependencies 保存精确包版本，dsh.profile.bundles 保存有序 bundle 层。用户补丁按 entry id 保存配置和启停。
+`web/package.json` 是插件依赖与激活的唯一真相源：`dsh.profile.bundles` 保存有序 bundle 包名列表（默认包含 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app`，只写包名不锁版本），`dependencies` 仅保存用户或空间额外安装的外部扩展包（registry 版本，或本地目录的 `file:` 路径）。用户补丁 `cordis.patch.yml` 按 entry id 保存配置和启停。
 
-官方闭包保持不可变；插件实体和依赖位于 profile 的 node_modules，官方 peer 从宿主共享解析层取得同一闭包版本。安装器使用现有 Bun 解析器、pacote 下载、完整性校验、临时区和跨进程锁。
+官方内置 bundle 始终从宿主当前固定的外部 DSH 闭包（`installAnchor`）解析，不写入 `web/package.json` 的 `dependencies`，也不安装进 `web/node_modules`。`web/pnpm-workspace.yaml` 固定设置 `autoInstallPeers: false`：外部插件将 `@deepseek-ai/*` 声明为 `peerDependencies`，安装时只在 `web/node_modules` 落地插件实体及其自身的第三方 `dependencies`，绝不在 profile 内保存任何版本的 `@deepseek-ai/*` 基础包。运行期所有 `@deepseek-ai/*` 导入由宿主解析路由统一指向当前唯一的 DSH 闭包（`profiles/node_modules` 兜底层仅为裸包名的父级回退提供同源链接）。安装由官方 `pluginManager` 与其 pnpm 唯一负责：本地目录一律以 `file:` 声明——它把包快照复制进 profile 并安装其第三方依赖。
+
+pnpm 是宿主前置条件，与官方 DSH 一致：产品既不随包分发 pnpm，也不代为安装；缺失时在安装入口直接报告，不留到官方安装器以裸退出码失败。
 
 ```text
 $DSH_HOME/profiles/
-├── node_modules/                 # 官方依赖解析层
+├── node_modules/                 # 官方依赖解析兜底层（指向当前闭包）
 └── web/
-    ├── package.json
-    ├── node_modules/             # 插件实体与依赖
-    ├── cordis.yml
-    ├── cordis.patch.yml
+    ├── package.json              # bundles 列表与外部插件 dependencies
+    ├── pnpm-workspace.yaml       # autoInstallPeers: false
+    ├── node_modules/             # 外部插件实体及其第三方依赖（不含 @deepseek-ai/*）
+    ├── cordis.yml                # 运行期合成根锚点（每次挂载前重置为 []）
+    ├── cordis.patch.yml          # 用户补丁层
     └── .plugin-manager/          # 官方管理操作状态和有界日志
 ```
 
@@ -27,9 +41,7 @@ $DSH_HOME/profiles/
 
 Web 注入完整的 profileContext，settings、configEditor 和原生 pluginManager 由此获得 profile 的路径和配置事实。
 
-profileContext.packageManager 提供 command、prefix args 与仅用于包操作的 env。原生 pluginManager 拥有界面协议、检查、进度、取消和应用结果；执行器为 Ellamaka 自带的 package worker。
-
-worker 是产品内部入口。编译 CLI 调用自身，源码启动携带 CLI 源入口，Desktop 使用 install-command 解析的匹配引擎命令。cwd、profile、DSH root 和取消信号显式传递。
+原生 pluginManager 拥有界面协议、检查、进度、取消、应用结果与安装执行（pnpm）。Ellamaka 不注入 profileContext.packageManager，因此只有一套安装器、一份声明语义和一份 lockfile；`ellamaka dsh plugin` 只做转发，DSH_HOME 指向本产品的 home。
 
 | 操作                | 宿主语义                                                   |
 | ------------------- | ---------------------------------------------------------- |
@@ -59,11 +71,14 @@ plugin 的 profile 选项归子命令；根级选项出现在 plugin 之前时�
 
 ### Bundles and Compatibility
 
-bundle.patch 支持一个文件或有序文件数组，语法与配置求值采用官方 schema。声明提交前检查包身份、peer 范围、Bun 私有 API 依赖和隔离挂载结果。
+`bundle.patch` 支持一个文件或有序文件数组，语法与配置求值采用官方 schema。声明提交前检查包身份、peer 范围、Bun 私有 API 依赖和隔离挂载结果。
 
-只有通过兼容门禁的候选参与激活。已有不兼容插件保留实体和声明，提供包、版本与 runtime 诊断；精确版本豁免由官方风险接受契约承接。
+启动与重放时，`loadProfile` 与 `prepareProfilePatches` 按 `includePrerelease: true` 校验每个 bundle 与插件行的 `peerDependencies`（同时读取 `web/compatibility.json` 中的精确版本风险豁免）：
 
-新 bundle、配置修改和启停可以重放。同名包重装或版本替换返回 restart-required；配置重放不清除原生模块缓存。文件监听与原生管理操作共用宿主 ProfileRuntime 的 mutation queue 和失败恢复。
+- **核心内置 bundle 门禁**：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 是 `web` 容器成立的必需内置 bundle，缺失或跳过时挂载直接失败。
+- **外部扩展与第三方插件兼容**：声明兼容版本范围（如 `^0.2.0-rc.2`）的外部插件在 DSH 升级后自动在新闭包下继续运行；因锁死旧版本且未配置豁免而进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）的第三方插件保留磁盘实体和声明，宿主输出包名、版本要求与当前 runtime 版本的告警诊断并跳过该插件，保持 `web` 容器与其余兼容插件正常启动。
+
+新 bundle、配置修改和启停可以重放。同名包重装或版本替换返回 `restart-required`；配置重放不清除原生模块缓存。文件监听与原生管理操作共用宿主 ProfileRuntime 的 mutation queue 和失败恢复。
 
 ### Failure and Cancellation
 
@@ -83,7 +98,7 @@ Web 的 preset 目录由 agent-preset 声明与 agent-preset-registry 服务组�
 
 ### Runtime Capability Policy
 
-Web 的能力组合与执行后端一致。Bun 与 Node Desktop 都装配标准 `ptcRuntime`，标准、PTC、Cordis 以及依赖 `workflow-ptc` 的用户配置单不再因 Bun 宿主而裁掉 PTC 行。Bun 仍复用 rc.2 的官方 `@deepseek-ai/dsh-ptc-runtime-node` provider；Bridge 只适配两个宿主差异：用 Amaro 的 strip-only 结果补齐缺失的 `node:module.stripTypeScriptTypes`，以及把 Bun 不稳定的额外 fd 控制 pipe 映射为标准 stdin/stdout Duplex。stderr 仍承载 bootstrap/进程诊断，DSH 的 JsonChannel framing、binding、期限、取消、沙箱、输出限制和清理逻辑保持上游实现。
+Web 的能力组合与执行后端一致。Bun 与 Node Desktop 都装配标准 `ptcRuntime`，标准、PTC、Cordis 以及依赖 `workflow-ptc` 的用户配置单不再因 Bun 宿主而裁掉 PTC 行。Bun 复用当前闭包中的官方 `@deepseek-ai/dsh-ptc-runtime-node` provider；Bridge 只适配两个宿主差异：用 Amaro 的 strip-only 结果补齐缺失的 `node:module.stripTypeScriptTypes`，以及把 Bun 不稳定的额外 fd 控制 pipe 映射为标准 stdin/stdout Duplex。stderr 仍承载 bootstrap/进程诊断，DSH 的 JsonChannel framing、binding、期限、取消、沙箱、输出限制和清理逻辑保持上游实现。
 
 源码 Bun 执行 Bridge 的极小 child entry 后进入官方 `process.js`；编译后的 CLI 复用同一个 Ellamaka 可执行文件，通过 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 私有角色在正常 CLI 初始化之前进入 child bootstrap。Node Desktop 继续直接使用原生 Node provider，不经过 Bun 兼容层。两种 Bun 形态都必须验证真实程序执行、连续多次进程启动、取消与平台沙箱拒绝；在 macOS 上 `workspace-write` 的验收要求 provider 报告 full enforcement，`read-only` 必须拒绝临时目录写入。Bun 的 heap 参数不声明为 Node/V8 等价的硬内存上限；资源边界以已验证的沙箱、deadline、取消和输出上限为准。
 
@@ -101,7 +116,7 @@ Wopal 的角色 preset 由 ontology 的 `dsh/agents-presets/` 提供，包名为
 
 ```text
 dsh/agents-presets/
-├── package.json              # @wopal/dsh-presets；dsh.bundle.patch 数组
+├── package.json              # @wopal/dsh-presets；dsh.bundle.patch 数组与兼容 peerDependencies 范围
 ├── generate-presets.mjs      # 使用目标 DSH 闭包的 YAML 方言生成/检查
 ├── wopal/
 │   ├── preset.yml            # 展示元数据源
@@ -112,30 +127,29 @@ dsh/agents-presets/
 └── rook/                     # 同样的三份声明文件
 ```
 
-`dsh.bundle.patch` 有序加载三个角色的 preset.patch.yml。每个补丁插入官方 agent-preset 声明，包含稳定 id、展示元数据与 plugins；注册、绑定和 revision 由 DSH 原生 preset 服务管理。工具、技能与 persona 使用对应 preset 中的官方插件行配置。
+`dsh.bundle.patch` 有序加载三个角色的 `preset.patch.yml`。每个补丁插入官方 `agent-preset` 声明，包含稳定 id、展示元数据与 plugins；注册、绑定和 revision 由 DSH 原生 preset 服务管理。工具、技能与 persona 使用对应 preset 中的官方插件行配置。`@wopal/dsh-presets` 及本体仓库的 DSH 插件（`dsh/plugins/*`）在 `package.json` 的 `peerDependencies` 中统一声明兼容的 SemVer 范围（如 `^0.2.0-rc.2`），不绑定单一精确 RC 版本号，使宿主升级 DSH 兼容版本时无需重新安装本体插件。
 
-安装通过标准插件供应链将包快照放入 web profile 的 node_modules，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，不以存在 package.json 作为已发布 npm 包的证明。生成与兼容检查使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 自身版本，不参与 Ellamaka Home closureVersion 判断，也不作为配置编辑目标。
+安装通过标准插件供应链将包快照放入 `web` profile 的 `node_modules`，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，生成与兼容检查使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 自身版本，不参与 Ellamaka Home `closureVersion` 判断，也不作为配置编辑目标。
 
-自定义 DSH tools 与 MCP 按各自标准 DSH 插件/bundle 挂载；此 preset bundle 不承担所有动态能力的总包职责。Ellamaka 通过工具容器消费外部能力，其内部 adapter 契约归工具容器设计。
+自定义 DSH tools 与 MCP 按各自标准 DSH 插件/bundle 挂载；此 preset bundle 不承担所有动态能力的总包职责。Ellamaka 通过工具容器消费外部能力，其内部 adapter 契约归 [工具容器设计](./DESIGN-ellamaka-tools.md)。
 
-## 组队语义
+## Team Collaboration
 
-直接采用 dsh 官方组队能力，不新建机制。
+直接采用 DSH 官方组队能力，不新建机制。
 
 - **招人**：主 agent 运行时经子代理工具招人；大规模并行用工作流工具。
 - **队员装备**：队员自动加入队长的配置单，继承队长的工具、技能与空间规则，天然知道这个空间的守则。角色差异由任务书（名称、描述、提示词）与目录规则表达。
 - **协作纪律**：消息往来、任务分派、完成上报是引擎内建能力；协作规范写入主 agent 人格。
-- **按角色配置装备**：官方招人接口不含配置单字段，需要自定义招人提供者按角色挂载不同配置单。这是条件触发项：第一阶段的任务书与目录规则已覆盖角色分化的主要诉求，只有当「队员必须带不同工具」成为真实需求时才立项。
+- **按角色配置装备**：官方招人接口不含配置单字段，按角色挂载不同配置单由自定义招人提供者在需要独立工具集时扩展。
 
 ## Preset and Profile Distribution
 
-配置单与 profile 在 WopalSpace 体系下按分层分发与运行时装配：
+配置单与 profile 在 WopalSpace 体系下按职责边界分层维护与装配：
 
-1. **分发源头**：配置单作为基础能力随本体仓库分发；profile 由本体统一维护 `web` 与 `ellamaka-tools` 的基准文件对（声明 bundles 与插件依赖的 package.json、写入配置规则与沙箱策略的补丁文件）。本体仓库不跟踪运行态生成的锚点文件与本地 node_modules。
-
-2. **物化生成**：Core Runtime Preparation 将运行必需的标准 profile 基线物化到固定核心 Home `$WOPAL_HOME/dsh/home`。WopalSpace Onboarding 只在用户选择相关增强时，通过同一受控写入服务追加 ontology 提供的 preset bundle。profile 的声明文件物理复制到 `$DSH_HOME/profiles/<profile>/`，更新时采用声明合并策略（bundle 去重联合，保护本地自定义修改）。保持本地目录物理独立，规避跨目录软链带来的锁失效、模块寻址逃逸与热加载穿透问题。
-
-3. **准备与激活**：serve、Desktop 与默认 TUI 共用 Core Runtime Preparation；ellamaka run 固定 DSH-disabled。Runtime 使用统一 closureVersion 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Core READY 后各入口才按需挂载 Web/tools；ELLAMAKA_DSH=0 时整个 DSH 分支跳过。细节归 [基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
+1. **能力包与 Profile 职责分离**：本体仓库（`dsh/`）仅维护跨版本的声明式预设包（`dsh/agents-presets`）与扩展插件包（`dsh/plugins/*`），不维护 `web` 或 `ellamaka-tools` 的 profile 基线目录。
+2. **Profile 初始化**：CorePreparation（`dsh.profiles` 步骤）在固定核心 Home `$WOPAL_HOME/dsh/home/profiles/<profile>/` 使用官方文件格式准备 profile：Web 使用官方模板，tools 使用产品最小插件声明。每次准备与启动前将合成根锚点 `cordis.yml` 重置为 `[]\n`。已有用户声明文件保持不变。
+3. **预设与插件安装**：WopalSpace Onboarding 或插件管理命令在用户启用相关增强时，通过官方 `pluginManager` 流水线将本体仓库提供的 `@wopal/dsh-presets` 及扩展插件以 `file:` 本地包快照方式安装到 `web` profile，保持本地目录物理独立。
+4. **准备与激活**：`serve`、Desktop 与默认 TUI 共用 CorePreparation；`ellamaka run` 固定跳过 DSH。Runtime 使用统一 `closureVersion` 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Core READY 后各入口才按需挂载 `web` 或 `ellamaka-tools`；`ELLAMAKA_DSH=0` 时整个 DSH 分支跳过。细节归 [DSH 基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
 ## Core Profile Hosting
 
@@ -145,27 +159,24 @@ dsh/agents-presets/
 
 **核心容器由同一 Runtime host 拥有**。Web 与 tools 使用独立 Cordis context；Web 的冷重建可使用受管子进程，tools 保持 session-free backend。它们与用户独立启动的实验进程是不同生命周期边界，不通过共享 Web Home owner 解决上游并发问题。
 
-## 与 Workbench 的界面融合
+## Workbench Integration
 
-### 当前承载模型
+### Hosting Model
 
-dsh iframe 在 Workbench 的助理标签中承载完整 DSH 界面。DSH 开启且当前激活通用空间时显示 iframe；关闭 DSH 时显示原生通用会话。
+DSH iframe 在 [Workbench](./DESIGN-workbench.md) 的助理标签中承载完整 DSH 界面。DSH 开启且当前激活通用空间时显示 iframe；关闭 DSH 时显示原生通用会话。
 
 - iframe 与原生工作区持久挂载，切换只改变可见性，不重载会话。
 - iframe 覆盖内容区，DSH 自带侧栏。
-- 独立 DSH 标签、实验 profile、空间皮肤与跨框架插件定制属于 Proposed 子设计，本轮不作为运行基础的交付目标。
+- 独立 DSH 标签、实验 profile、空间皮肤与跨框架插件定制归 [Proposed 定制方向](./DESIGN-dsh-custumize.md)。
 
-### iframe 地址派生
+### Iframe Origin Derivation
 
 iframe 的来源地址优先取认证入口，回落 `<server url>/dsh/` 派生，不写死相对路径。
 
 原因是开发模式下前端与后端分别监听不同端口，相对 `/dsh/` 在开发页面会解析到前端来源。开发下经代理指向页面来源的 `/dsh/`，Desktop 与生产指向后端来源，两侧都命中挂载点。
 
-## Related Documents
+## Reference Documents
 
-| 文档                                                                 | 引用目的                      |
-| -------------------------------------------------------------------- | ----------------------------- |
-| `./DESIGN-ellamaka-tools.md`                                         | 工具容器 profile 的装配与投影 |
-| `./DESIGN-dsh-custumize.md` | Proposed 定制方向，非本轮实施合同 |
-| `./DESIGN-workbench.md`                                              | Workbench 工作台设计          |
-| `research/deepseek-harness-architecture-and-integration-research.md` | dsh 全景调研                  |
+| 文档                                                                 | 引用目的     |
+| -------------------------------------------------------------------- | ------------ |
+| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 全景调研 |

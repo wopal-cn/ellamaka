@@ -1,7 +1,20 @@
 import { existsSync } from "node:fs"
+import { isUserTypeScriptSource, transformUserTypeScript } from "./source-ts-transform.js"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const SOURCE_PATH_MARKERS = ["/plugins/", "/skills/"]
+
+export async function load(
+  url: string,
+  context: unknown,
+  nextLoad: (url: string, context: unknown) => Promise<unknown>,
+) {
+  if (!url.startsWith("file://") || !isUserTypeScriptSource(new URL(url).pathname)) {
+    return nextLoad(url, context)
+  }
+  const { readFile } = await import("node:fs/promises")
+  return { format: "module", source: transformUserTypeScript(await readFile(new URL(url), "utf8")), shortCircuit: true }
+}
 
 export async function resolve(
   specifier: string,

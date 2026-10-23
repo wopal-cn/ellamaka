@@ -1,7 +1,14 @@
 import { join } from "node:path"
 
 export type Layer = "unit" | "integration" | "e2e"
-export type PackageName = "opencode" | "ellamaka-app" | "ellamaka-desktop" | "ellamaka-cordis" | "all"
+export type PackageName =
+  | "opencode"
+  | "ellamaka-app"
+  | "ellamaka-desktop"
+  | "ellamaka-cordis"
+  | "ellamaka-core"
+  | "wopalspace"
+  | "all"
 export type ConcretePackage = Exclude<PackageName, "all">
 
 // Layer -> package -> script name mapping. A package that has no entry for a
@@ -13,10 +20,13 @@ const LAYER_SCRIPTS: Record<Layer, Partial<Record<ConcretePackage, string>>> = {
     "ellamaka-app": "test:unit",
     "ellamaka-desktop": "test",
     "ellamaka-cordis": "test:unit",
+    "ellamaka-core": "test:unit",
+    wopalspace: "test:unit",
   },
   integration: {
     opencode: "test:integration",
     "ellamaka-cordis": "test:integration",
+    wopalspace: "test:integration",
   },
   e2e: {
     opencode: "test:e2e",
@@ -25,7 +35,14 @@ const LAYER_SCRIPTS: Record<Layer, Partial<Record<ConcretePackage, string>>> = {
   },
 }
 
-const PACKAGES: ConcretePackage[] = ["opencode", "ellamaka-app", "ellamaka-desktop", "ellamaka-cordis"]
+const PACKAGES: ConcretePackage[] = [
+  "opencode",
+  "ellamaka-app",
+  "ellamaka-desktop",
+  "ellamaka-cordis",
+  "ellamaka-core",
+  "wopalspace",
+]
 
 export interface PlannedCommand {
   pkg: ConcretePackage
@@ -36,18 +53,24 @@ export interface PlannedCommand {
 // package. `all` expands to every package that supports the layer (packages
 // without the layer are filtered out). An explicit package that lacks the layer
 // throws, as does an unknown package or layer.
-export function planLayer(layer: Layer, pkg: PackageName): PlannedCommand[] {
-  if (!(layer in LAYER_SCRIPTS)) {
-    throw new Error(`Invalid layer: ${String(layer)}. Expected one of unit, integration, e2e.`)
+export function planLayer(layer: string, pkg: string): PlannedCommand[] {
+  if (layer !== "unit" && layer !== "integration" && layer !== "e2e") {
+    throw new Error(`Invalid layer: ${layer}. Expected one of unit, integration, e2e.`)
   }
-  const targets = pkg === "all" ? PACKAGES.filter((p) => LAYER_SCRIPTS[layer][p]) : [pkg]
-  const commands: PlannedCommand[] = []
-  for (const target of targets) {
-    if (!PACKAGES.includes(target)) {
+  let targets: ConcretePackage[]
+  if (pkg === "all") {
+    targets = PACKAGES.filter((target) => LAYER_SCRIPTS[layer][target])
+  } else {
+    const target = concretePackage(pkg)
+    if (!target) {
       throw new Error(
-        `Unknown package: ${String(target)}. Expected one of opencode, ellamaka-app, ellamaka-desktop, ellamaka-cordis.`,
+        `Unknown package: ${pkg}. Expected one of opencode, ellamaka-app, ellamaka-desktop, ellamaka-cordis, ellamaka-core, wopalspace.`,
       )
     }
+    targets = [target]
+  }
+  const commands: PlannedCommand[] = []
+  for (const target of targets) {
     const script = LAYER_SCRIPTS[layer][target]
     if (!script) {
       throw new Error(`Package ${target} has no ${layer} layer.`)
@@ -55,6 +78,20 @@ export function planLayer(layer: Layer, pkg: PackageName): PlannedCommand[] {
     commands.push({ pkg: target, command: ["bun", "run", script] })
   }
   return commands
+}
+
+function concretePackage(value: string): ConcretePackage | undefined {
+  switch (value) {
+    case "opencode":
+    case "ellamaka-app":
+    case "ellamaka-desktop":
+    case "ellamaka-cordis":
+    case "ellamaka-core":
+    case "wopalspace":
+      return value
+    default:
+      return undefined
+  }
 }
 
 function packageDir(pkg: ConcretePackage): string {
@@ -80,10 +117,20 @@ async function main() {
       }
     } else if (arg === "--package") {
       const value = args[++index]
-      if (value === "opencode" || value === "ellamaka-app" || value === "ellamaka-desktop" || value === "ellamaka-cordis" || value === "all") {
+      if (
+        value === "opencode" ||
+        value === "ellamaka-app" ||
+        value === "ellamaka-desktop" ||
+        value === "ellamaka-cordis" ||
+        value === "ellamaka-core" ||
+        value === "wopalspace" ||
+        value === "all"
+      ) {
         pkg = value
       } else {
-        console.error(`Unknown package: ${value}. Expected one of opencode, ellamaka-app, ellamaka-desktop, ellamaka-cordis, all.`)
+        console.error(
+          `Unknown package: ${value}. Expected one of opencode, ellamaka-app, ellamaka-desktop, ellamaka-cordis, ellamaka-core, wopalspace, all.`,
+        )
         process.exit(1)
       }
     } else {
@@ -96,7 +143,7 @@ async function main() {
   try {
     commands = planLayer(layer, pkg)
   } catch (err) {
-    console.error((err as Error).message)
+    console.error(err instanceof Error ? err.message : String(err))
     process.exit(1)
   }
 
@@ -119,5 +166,5 @@ async function main() {
 }
 
 if (import.meta.main) {
-  main()
+  void main()
 }

@@ -23,13 +23,22 @@ import { join } from "node:path"
  */
 describe("B-01: production mount sites inject the closure-resolved runtime", () => {
   const entries = [
-    // CLI serve/web assembly.
+    // CLI serve/web assembly. The WEB container lives in the managed child
+    // process (DESIGN 隔离边界) — the child boots via bootDshWeb with the
+    // closure runtime resolved from its own install anchor; the in-process
+    // hub is the tools container only.
     {
       path: "packages/opencode/src/cli/cmd/dsh-mount.ts",
       // The hub must be constructed with an injected closure context, never a
       // bare `new CordisHub(null)` (which falls back to the package closure).
-      mustNotMatch: [/new CordisHub\(null\)/],
-      mustMatch: [/new CordisHub\(null, \{ context: new runtime\.cordis\.Context\(\) \}\)/],
+      mustNotMatch: [/new CordisHub\(null\)(?!\s*,|\n?\s*\{)/],
+      mustMatch: [
+        // The in-process hub (tools container) injects the closure context.
+        /CordisHub\(null, \{\s*context: new runtime\.cordis\.Context\(\),?\s*\}\)/,
+        // The child re-launches through the hidden web-child command, which
+        // boots the web container from the closure (runtime/web-child.ts).
+        /webChildArgs\(resolveEllamakaCommand\(\)/,
+      ],
     },
     // TUI tool container.
     {
@@ -98,7 +107,9 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
     // must bind that bridge to the SAME Plugin Runtime Service replay: a
     // missing binding falls back to market hotMount and reintroduces a second
     // .dsh-market loader source for each newly installed plugin.
-    expect(serve).toMatch(/dsh\.pluginActivation\?\.bind\(\(\) => pluginService!\.replay\(\)\)/)
+    // serve: with the web container in the child, the in-process watcher
+    // covers the tools unit; the web unit replays through the child rebuild.
+    expect(serve).toMatch(/pluginService = startDshPluginService/)
     expect(desktop).toMatch(/dshHost\.pluginActivation\?\.bind\(\(\) => dshPluginService!\.replay\(\)\)/)
     expect(desktop).toMatch(/dshHost = \{[\s\S]*?pluginActivation: host\.pluginActivation,/)
   })
@@ -116,4 +127,41 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
       }
     })
   }
+})
+
+describe("Home runtime lease audit", () => {
+  const root = join(import.meta.dir, "..", "..", "..")
+
+  test("serve and TUI gate DSH_HOME mutation behind CorePreparation readiness and retain a shared lease", () => {
+    for (const relative of [
+      "packages/opencode/src/cli/cmd/dsh-mount.ts",
+      "packages/opencode/src/cli/cmd/tui/dsh-mount.ts",
+    ]) {
+      const source = readFileSync(join(root, relative), "utf-8")
+      const prepare = source.indexOf("const preparation = await prepareDshHost")
+      const readyGate = source.indexOf('if (preparation.status !== "prepared") return undefined')
+      const envWrite = source.indexOf("process.env.DSH_HOME =")
+      expect(prepare).toBeGreaterThanOrEqual(0)
+      expect(readyGate).toBeGreaterThan(prepare)
+      expect(envWrite).toBeGreaterThan(readyGate)
+      expect(source).not.toContain("initializeDshRuntime")
+      expect(source).toMatch(/acquireDshHomeRuntimeAccess/)
+      expect(source).toMatch(/homeAccess\.lease\.release\(\)/)
+    }
+  })
+
+  test("Desktop sidecar holds its own shared Home qualification", () => {
+    const desktop = readFileSync(join(root, "packages/ellamaka-desktop/src/main/sidecar.ts"), "utf-8")
+    expect(desktop).toMatch(/acquireDshHomeRuntimeAccess/)
+    expect(desktop).toMatch(/dshHomeAccess.*lease/s)
+    expect(desktop).toMatch(/dshHomeAccess\.lease\.release\(\)/)
+  })
+
+  test("plugin installs forward to the official dsh installer (no parallel package worker)", () => {
+    const plugin = readFileSync(join(root, "packages/opencode/src/cli/cmd/dsh-plugin.ts"), "utf-8")
+    expect(plugin).toMatch(/"dsh",\s*"official"/)
+    expect(plugin).toMatch(/normalizeAddArgs/)
+    expect(plugin).not.toContain("package-worker")
+    expect(plugin).not.toContain("plugins/installer")
+  })
 })

@@ -10,6 +10,7 @@ import {
 } from "./shared"
 import { ConfigPlugin } from "@/config/plugin"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
+import { isBuiltinDshAdapter } from "@wopal/ellamaka-core/builtin-plugins"
 
 export namespace PluginLoader {
   // A normalized plugin declaration derived from config before any filesystem or npm work happens.
@@ -159,7 +160,13 @@ export namespace PluginLoader {
     // Deprecated plugin packages are silently ignored because they are now built in.
     if (plan.deprecated) return { retry: false }
 
+    // Emit start BEFORE any await so concurrent candidates report in list
+    // order (the builtin-identity check below awaits filesystem work, and a
+    // start after that await lets sibling candidates overtake the report
+    // order). The identity check itself stays before resolve: a built-in
+    // adapter is skipped without any resolve/install work.
     report?.start?.(candidate, retry)
+    if (await isBuiltinDshAdapter(plan.spec)) return { retry: false }
 
     const resolved = await resolve(plan, kind)
     if (!resolved.ok) {

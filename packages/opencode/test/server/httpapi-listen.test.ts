@@ -20,6 +20,7 @@ const original = {
   ELLAMAKA_SERVER_USERNAME: Flag.ELLAMAKA_SERVER_USERNAME,
   envPassword: process.env.ELLAMAKA_SERVER_PASSWORD,
   envUsername: process.env.ELLAMAKA_SERVER_USERNAME,
+  managedInstanceId: process.env.ELLAMAKA_MANAGED_INSTANCE_ID,
 }
 const auth = { username: "opencode", password: "listen-secret" }
 // PTY cases need a real `forkpty()`; hosts without spawn privileges (sandboxed
@@ -33,6 +34,8 @@ afterEach(async () => {
   else process.env.ELLAMAKA_SERVER_PASSWORD = original.envPassword
   if (original.envUsername === undefined) delete process.env.ELLAMAKA_SERVER_USERNAME
   else process.env.ELLAMAKA_SERVER_USERNAME = original.envUsername
+  if (original.managedInstanceId === undefined) delete process.env.ELLAMAKA_MANAGED_INSTANCE_ID
+  else process.env.ELLAMAKA_MANAGED_INSTANCE_ID = original.managedInstanceId
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -219,6 +222,30 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
     closed: new Promise<void>((resolve) => ws.addEventListener("close", () => resolve(), { once: true })),
   }
 }
+
+describe("managed health", () => {
+  test("reports trusted startup identity plus Core/DSH readiness facts", async () => {
+    process.env.ELLAMAKA_MANAGED_INSTANCE_ID = "managed-startup-123"
+    const listener = await startListener()
+    try {
+      const url = new URL(GlobalPaths.health, listener.url)
+      url.searchParams.set("managedInstanceId", "request-forgery")
+      const response = await fetch(url, {
+        headers: {
+          authorization: authorization(),
+          "x-ellamaka-managed-instance-id": "header-forgery",
+        },
+      })
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        managedInstanceId: "managed-startup-123",
+        dshRuntime: { closureVersion: expect.any(Number) },
+      })
+    } finally {
+      await listener.stop()
+    }
+  })
+})
 
 describe("HttpApi Server.listen", () => {
   test("releases the global SSE listener when a real client disconnects", async () => {

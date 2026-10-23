@@ -977,6 +977,25 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     })
   })
 
+  event.on("core.preparation", (evt) => {
+    const progress = evt.properties
+    const amount =
+      progress.current === undefined
+        ? ""
+        : progress.total === undefined
+          ? ` · ${progress.current}${progress.unit ? ` ${progress.unit}` : ""}`
+          : ` · ${progress.current}/${progress.total}${progress.unit ? ` ${progress.unit}` : ""}`
+    const code = progress.code ? ` · ${progress.code}` : ""
+    toast.show({
+      title: "Preparing runtime",
+      message: `${progress.step}: ${progress.phase} · ${(Number(progress.elapsedMs) / 1000).toFixed(1)}s${amount}${code}`,
+      variant: progress.state === "DEGRADED" ? "error" : progress.state === "BUSY" ? "warning" : "info",
+      // The Core heartbeat is at most five seconds apart; replacing this toast
+      // keeps one dedicated, continuously visible preparation status surface.
+      duration: 5500,
+    })
+  })
+
   event.on(TuiEvent.SessionSelect.type, (evt) => {
     route.navigate({
       type: "session",

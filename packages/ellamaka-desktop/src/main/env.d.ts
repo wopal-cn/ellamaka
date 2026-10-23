@@ -45,6 +45,7 @@ declare module "virtual:opencode-server" {
 
   export interface DshRuntimeManifest {
     schema: "ellamaka.dsh-runtime/v1"
+    closureVersion: number
     bridgeAbi: number
     dependencies: Record<string, string>
     fingerprint?: string
@@ -55,15 +56,32 @@ declare module "virtual:opencode-server" {
     genId: string
   }
 
-  export interface DshInitializeOptions {
+  export interface DshHostPreparationOptions {
     wopalHome: string
-    logFile: string
+    runtimeLogFile: string
     logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR"
-    entry: "serve" | "web" | "tui"
-    manifest: DshRuntimeManifest
+    print?: boolean
+    env?: Record<string, string | undefined>
+    legacyAdoptionConfirmed?: boolean
   }
 
-  export const initializeDshRuntime: (options: DshInitializeOptions) => Promise<DshRuntimeStatus>
+  export const prepareDshHost: (options: DshHostPreparationOptions) => Promise<{
+    status: "disabled" | "prepared" | "degraded"
+    preparation?: { reason?: string }
+  }>
+  export interface DshHomeRuntimeLease {
+    readonly mode: "shared"
+    release(): Promise<void>
+  }
+  export type DshHomeRuntimeAccessResult =
+    | { ok: true; homeVersion: number; lease: DshHomeRuntimeLease }
+    | { ok: false; reason: string; homeVersion?: number }
+  export const acquireDshHomeRuntimeAccess: (options: {
+    wopalHome: string
+    closureVersion: number
+    lockTimeoutMs?: number
+  }) => Promise<DshHomeRuntimeAccessResult>
+
   /** The four levels DSH understands; the host TRACE maps down to DEBUG. */
   export type DshLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
   export const toDshLogLevel: (level: string | undefined) => DshLogLevel
@@ -162,6 +180,7 @@ declare module "virtual:opencode-server" {
 
   export const bootDshWeb: (opts: DshWebHostOptions) => Promise<DshWebHost>
   export const bootDshTools: (opts: DshWebHostOptions) => Promise<DshToolsHost>
+  export const trackDshToolsInitialization: <T>(work: Promise<T>) => Promise<T>
   export const startDshPluginService: (options: DshPluginServiceOptions) => {
     replay(): Promise<{ ok: true } | { ok: false; error: string }>
     stop(): Promise<void>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { ServerConnection } from "@/context/server"
-import { checkServerHealth } from "./server-health"
+import { ServerConnection } from "@/context/server"
+import { checkServerHealth, resolveServerHealthKey } from "./server-health"
 
 const server: ServerConnection.HttpBase = {
   url: "http://localhost:4096",
@@ -27,18 +27,21 @@ describe("checkServerHealth", () => {
 
   test("preserves the Wopal CLI handshake status", async () => {
     const fetch = (async () =>
-      new Response(JSON.stringify({
-        healthy: true,
-        version: "1.2.3",
-        cli: {
-          state: "incompatible",
-          requiredVersion: "0.3.4",
-          actualVersion: "0.3.3",
+      new Response(
+        JSON.stringify({
+          healthy: true,
+          version: "1.2.3",
+          cli: {
+            state: "incompatible",
+            requiredVersion: "0.3.4",
+            actualVersion: "0.3.3",
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
         },
-      }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      })) as unknown as typeof globalThis.fetch
+      )) as unknown as typeof globalThis.fetch
 
     const result = await checkServerHealth(server, fetch)
 
@@ -171,5 +174,23 @@ describe("checkServerHealth", () => {
 
     expect(count).toBe(3)
     expect(result).toEqual({ healthy: false })
+  })
+})
+
+describe("resolveServerHealthKey", () => {
+  test("uses the concrete sidecar generation key instead of the symbolic default", () => {
+    const sidecar: ServerConnection.Sidecar = {
+      type: "sidecar",
+      variant: "base",
+      generation: 2,
+      http: { url: "http://127.0.0.1:4097" },
+    }
+    expect(resolveServerHealthKey(ServerConnection.Key.make("sidecar"), sidecar)).toBe(
+      ServerConnection.Key.make("http://127.0.0.1:4097#gen2"),
+    )
+  })
+
+  test("keeps the selected key while no connection is resolved", () => {
+    expect(resolveServerHealthKey(ServerConnection.Key.make("sidecar"))).toBe(ServerConnection.Key.make("sidecar"))
   })
 })

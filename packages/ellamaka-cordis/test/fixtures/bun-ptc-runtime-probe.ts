@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { runBunPtcChildIfRequested } from "../../src/runtime/bun-ptc-child"
+import { prepareDshProfileResourcesAtRoot } from "../../src/runtime/profile-resources"
 
 if (!(await runBunPtcChildIfRequested())) {
   const anchor = process.env.ELLAMAKA_PTC_TEST_ANCHOR
@@ -12,6 +13,7 @@ if (!(await runBunPtcChildIfRequested())) {
   const workspace = mkdtempSync(join(tmpdir(), "ellamaka-bun-ptc-workspace-"))
   const outside = mkdtempSync(join(tmpdir(), "ellamaka-bun-ptc-outside-"))
   const runtime = createDshRuntimeApi(anchor)
+  prepareDshProfileResourcesAtRoot(home, runtime)
   const host = await bootDshWeb({ home, port: 0, installAnchor: anchor, runtime })
   try {
     const ptc = host.ctx.get("ptcRuntime")

@@ -21,7 +21,22 @@ await $`bun ./scripts/copy-metainfo.ts ${channel}`
 const resourcesDir = resolve(import.meta.dir, "..", "resources")
 const dshManifestSrc = resolve(import.meta.dir, "..", "..", "ellamaka-cordis", "generated", "dsh-runtime-manifest.json")
 const dshManifestOut = join(resourcesDir, "dsh-runtime-manifest.json")
-const dshManifestGenerator = resolve(import.meta.dir, "..", "..", "ellamaka-cordis", "script", "generate-dsh-runtime-manifest.ts")
+const dshManifestGenerator = resolve(
+  import.meta.dir,
+  "..",
+  "..",
+  "ellamaka-cordis",
+  "script",
+  "generate-dsh-runtime-manifest.ts",
+)
+const dshLockGenerator = resolve(
+  import.meta.dir,
+  "..",
+  "..",
+  "ellamaka-cordis",
+  "script",
+  "generate-dsh-runtime-lock.ts",
+)
 
 if (channel === "main") {
   const generate = async () => {
@@ -38,9 +53,12 @@ if (channel === "main") {
       await generate()
     }
   }
+  console.log("[prebuild] ensuring DSH runtime lock")
+  await $`bun ${dshLockGenerator}`
 } else {
-  console.log("[prebuild] verifying DSH runtime manifest (--check)")
+  console.log("[prebuild] verifying DSH runtime manifest + lock (--check)")
   await $`bun ${dshManifestGenerator} --check`
+  await $`bun ${dshLockGenerator} --check`
 }
 
 // Copy the manifest into the resources injection dir (mirroring the

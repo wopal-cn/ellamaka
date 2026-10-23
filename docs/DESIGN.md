@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-14
+> **Updated**: 2026-10-22
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -446,9 +446,9 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 - **Hot replay**：只重放配置/patch，不更换进程模块图。
 - **Cold reload**：代码或包版本变化时，按 `drain → dispose → build → verify → publish → notify` 重建对应单元。这里的单元 revision 只用于重载事件，不是 DSH `closureVersion`。
 
-**隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器、宿主经 node:http 代理转发 `/dsh`。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
+**隔离边界**：进程内重挂载复用同 URL 的已求值模块（原生 `import()` 与内部 loader 均按 URL 缓存），插件版本升级不生效；冷重载依赖新进程边界来重置模块图，与内部 loader 无关。`dsh:web` 的 build 在独立可重启子进程中完成，宿主以 loopback HTTP 承接并稳定转发 `/dsh` 前缀。Desktop 复用 `utilityProcess`（现有 sidecar 已是同款）；bun standalone serve 以全新 bun 子进程承载 web 容器，宿主经 loopback 代理转发 `/dsh`：HTTP 走 `node:http` 请求代理；WebSocket upgrade 在宿主以 `ws` noServer 终结（Bun 对 `ws` 握手走原生通道），再以 Bun 原生 WebSocket 客户端拨子进程桥接帧——禁止在宿主 upgrade socket 上直接 `socket.write`（Bun 吞掉全部字节，oven-sh/bun#9882/#35325），也不得改用 `ws` 包客户端拨号（其握手依赖 `node:http` 的 upgrade 事件，Bun 不投递）。桥接必须保持两条不变量：拨号携带浏览器原始 Host/Cookie/Origin（子进程 DSH 见证 Host 派生 cookie 名并校验 cookie，改写为子进程 loopback authority 必然 401）；逐帧保持文本/二进制类型（RPC 在同一 socket 混发 JSON 文本与二进制，文本降级为二进制会被解码拒绝并断开）。子进程拒绝 upgrade 时不得先回浏览器 101——握手完成必须晚于上游接受，否则认证或后端失败会表现为永久重连。`dsh:tools` 是无会话的 per-call 执行，默认 in-process，必要时升级为同款隔离。`--expose-internals` 服务于官方 node-hmr，在 Electron 中当前不可用，是本设计的非依赖项；普通 Node 22 与 bun 子进程均可分载 web 容器并返回认证首页、宿主代理转发 200（已 spike）。
 
-**触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`；共享 dsh-base 配置变 → web+tools；产品闭包变更由产品重启与 Home 协议接管；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明依赖边；当前 global 不依赖任何 dsh 单元，未来做集中配置管理只需增补一条边。
+**触发定域**：按状态源变化定单元，不做固定组合——web profile 变 → `dsh:web`；tools profile 变 → `dsh:tools`。Web 使用官方 Web 配置；tools 从空根按标准声明装配自身插件，`dsh-base` 的配置变化只影响采用该 bundle 的 Web。共同输入只在确实被两个 profile 消费时影响两者。产品闭包变更由产品重启与 Home 协议接管；全局 provider/config 变 → `global` 与各 `instance:*`，不牵动 dsh。单元用 `invalidatedBy` 声明实际依赖边。
 
 **发布与事件**：每个单元原子发布 entry/route 与自身 revision，事件携带 `unit` 与 `revision`。`global.disposed` 语义保持不变；DSH 单元重载只重建 Workbench 的 DSH iframe，不触发整个 sidecar 重启。
 
@@ -520,9 +520,9 @@ Ellamaka Agent 的工具采用路径复用 DSH 工具执行能力，持久 Sessi
 | 受控路由挂载点      | `Listener.mountNodeRoute`                              | 按前缀分发 HTTP 与 upgrade 到已注册 handler，保留 Effect listener 生命周期                                      |
 | Ellamaka DSH Bridge | `@wopal/ellamaka-cordis`                               | 随产品编译发布，提供 DSH 调用协议适配、容器、虚拟 WebServer 与固定运行时装配                                    |
 | DSH Runtime Manager | `@wopal/ellamaka-cordis/runtime`                       | 所有入口共用的启动入口，负责禁用判断、闭包物化、完整性校验、动态加载与容器挂载                                  |
-| DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins`                       | 内置安装器、包解析、profile 声明与配置重放；原生 pluginManager 经 profileContext.packageManager 调用宿主 worker |
+| DSH 插件供应链      | `@wopal/ellamaka-cordis/plugins`                       | profile 声明、配置重放与安装转发；安装由官方 pluginManager + pnpm 唯一执行，本地来源以 `file:` 声明 |
 | Wopal preset bundle | `@wopal/dsh-presets`（ontology `dsh/agents-presets/`） | 声明 wopal/fae/rook preset 并携带随包技能；通过标准 DSH bundle 装配                                             |
-| DSH 运行时清单      | ellamaka 构建产物                                      | 构建时从 `packages/ellamaka-cordis/package.json` 派生并锁定 dsh 官方依赖                                        |
+| DSH 运行时清单      | ellamaka 构建产物                                      | 构建时从 `packages/ellamaka-cordis/package.json` 的唯一 `@deepseek-ai/dsh` 入口派生并锁定完整 DSH 依赖闭包      |
 | dsh 引擎装配        | `@wopal/ellamaka-cordis/dsh-web`                       | 通过 installAnchor 和 profile facts 装配两个容器，验收服务、工具与默认 preset 后发布句柄                        |
 | dsh-adapter         | `@wopal/ellamaka-cordis/dsh-adapter`                   | 把工具容器中的工具投影进 ellamaka ToolRegistry                                                                  |
 
@@ -624,16 +624,6 @@ WopalSpace 需要统一 Web UI 作为 TUI 之外的第二种用户界面。`ella
 
 Workbench 的界面、视图模型、目录架构、能力适配规则以及与 `wopal-cli` 的协同见 [DESIGN-workbench.md](./DESIGN-workbench.md)。需要参考上游 UI 代码时，从 `labs/ref-repos/opencode/packages/app` 读取。
 
----
-
-## Related Documents
-
-| 文档                                         | 引用目的                            |
-| -------------------------------------------- | ----------------------------------- |
-| `../../../projects/wopal-cli/docs/DESIGN.md` | wopal-cli 如何消费 ellamaka release |
-| `packages/opencode/AGENTS.md`                | engine package 内部规则             |
-| `packages/ellamaka-app/AGENTS.md`            | ellamaka 官方 web UI 包级开发规则   |
-
 ## Scheduled Plan Execution
 
 界面结构、空间级工作区切换、审批与排期交互由 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md) 定义；HTTP 路径、数据与错误契约由 [Scheduler API 草案](./DESIGN-plan-scheduler.md#api-proposal) 定义。Workbench 壳负责承载，调度领域状态由 CLI 提供。
@@ -643,3 +633,13 @@ Ellamaka 实现 Wopal CLI 定义的 Runner Port：版本协商、幂等执行身
 调度 profile 在普通配置合并后施加不可放宽的权限上限。它允许正常编辑、网络、构建和测试，保护 Git 管理元数据、权威 Plan 与审批/调度写权限，阻止 Agent 自行提交、合并或推进人工生命周期。工具代理/隔离覆盖间接 shell 与子进程路径，提示词不能替代强制执行。
 
 Workbench 经 Runtime Integration API 使用同一 CLI 能力，提供审批后停止、DAG 确认、cron/时区、阻塞诊断、运行历史和人工接管；Desktop/Web 共享行为。跨项目协议遵循 [Plan Orchestration](../../../docs/products/wopal-space/DESIGN-plan-orchestration.md)，交互遵循 [Scheduler UI](../../../docs/products/wopal-space/DESIGN-plan-scheduler-ui.md)。
+
+---
+
+## Reference Documents
+
+| 文档                                         | 引用目的                            |
+| -------------------------------------------- | ----------------------------------- |
+| `../../../projects/wopal-cli/docs/DESIGN.md` | wopal-cli 如何消费 ellamaka release |
+| `packages/opencode/AGENTS.md`                | engine package 内部规则             |
+| `packages/ellamaka-app/AGENTS.md`            | ellamaka 官方 web UI 包级开发规则   |

@@ -178,15 +178,12 @@ async function writeSpace(root: string, settings: Record<string, unknown>) {
 function createMockDeps(overrides: Record<string, string> = {}): WopalSpaceDeps {
   const result: Partial<Info> = {}
   return {
-    installPluginDeps: () => Effect.die(new Error("unexpected plugin dependency install in test")),
-    installPluginDepsWithFingerprint: () => Effect.die(new Error("unexpected plugin dependency install in test")),
     readConfigFile: (filepath) =>
       Effect.promise(async () => overrides[filepath] ?? (await fs.readFile(filepath, "utf8").catch(() => undefined))),
     loadConfig: () => Effect.succeed({} as Info),
     getGlobal: () => Effect.succeed({} as Info),
     merge: () => Effect.succeed(undefined),
     mergePluginOrigins: () => Effect.succeed(undefined),
-    ensureGitignore: () => Effect.succeed(undefined),
     applyPostMerge: () => {},
     initContainers: () => {},
     getResult: () => result as Info,

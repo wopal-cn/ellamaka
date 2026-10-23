@@ -84,12 +84,12 @@ GUI, onboarding, and desktop-shell behavior verification entries. An agent can c
 | Entry | Command | Isolation |
 |---|---|---|
 | Desktop (regular) | `./scripts/dev.sh desktop` | Uses the real environment; first run needs `--rebuild` to build the sidecar |
-| Desktop (CDP) | `./scripts/dev.sh desktop --rebuild --cdp-debug` | Uses the real environment; ports 5173 and 9222 must be free |
+| Desktop (CDP) | `./scripts/dev.sh desktop --rebuild --cdp-debug [port]` | Uses the real environment; port 5173 and the selected CDP port must be free (default 9222) |
 | Workbench / backend | `./scripts/dev.sh serve` | Port 4096; `--cdp-debug` opens 9222 CDP |
 | TUI | `./scripts/dev.sh tui` | In-process backend by default |
 | Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
 
-- Desktop CDP: `agent-browser --session <name> connect 9222` connects to the Electron window for UI verification.
+- Desktop CDP: `agent-browser --session <name> connect <port>` connects to the Electron window for UI verification. Pass a custom port when 9222 is taken, e.g. `./scripts/dev.sh desktop --cdp-debug 9333` then `connect 9333`; only the selected port must be free.
 - Logs (dev runs): `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`. `<scope>` is the first 10 hex chars of the md5 of the repo/worktree root that owns `scripts/dev.sh` (symlinks resolved) — resolve it from `.wopal-space/logs/dev/registry`, or recompute as dev.sh does `printf '%s' "<root>" | md5 -q | cut -c1-10`. A worktree run logs into its base space's ledger.
 - A Plan's User Validation must reference this table and give a command the user can copy and run directly; generic wording such as "start the app" is not acceptable.
 

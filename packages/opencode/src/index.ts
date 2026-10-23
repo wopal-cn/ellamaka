@@ -39,8 +39,8 @@ import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
-import { DshPackageWorkerCommand } from "./cli/cmd/dsh-package-worker"
-import { DshInitCommand } from "./cli/cmd/dsh-init"
+import { runDshOfficialIfRequested } from "./cli/cmd/dsh-official"
+import { DshWebChildCommand } from "./cli/cmd/dsh-web-child-command"
 import { DshDumpConfigCommand, runDshDump } from "./cli/cmd/dsh-dump-config"
 import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./cli/cmd/dsh-cli"
 import { resolveLogLevel, resolveTrace } from "./cli/log-level"
@@ -121,9 +121,14 @@ const cli = yargs(args)
     }
 
     const command = typeof opts._?.[0] === "string" ? opts._[0] : ""
-    // Native plugin-management children consume stdout as machine data and
-    // only operate on their scoped profile; they do not initialize the engine.
-    if (command === "dsh") return
+    // `run` is permanently native, even if the Space requests the sandbox.
+    if (command === "run") process.env.ELLAMAKA_DSH = "0"
+    // Contract generation and native plugin-management children are pure/tooling
+    // paths. They do not initialize the runtime Home.
+    if (command === "generate" || command === "dsh") return
+
+    await Global.ensure()
+
     const role: "serve" | "tui" = SERVER_COMMANDS.has(command) ? "serve" : "tui"
     const detection = detectWopalSpace(process.cwd())
     // The logger routes by role and space itself (`WOPAL_SPACE_ROOT` below) —
@@ -283,8 +288,7 @@ const cli = yargs(args)
         })
         .command(DshPluginCommand)
         .command(DshDumpConfigCommand)
-        .command(DshInitCommand)
-        .command(DshPackageWorkerCommand)
+        .command(DshWebChildCommand)
         .epilogue(DSH_HELP_EXAMPLES),
     handler: async (argv) => {
       // Official resolveBoot semantics (Plan 223 D-01/D-03): the root flags
@@ -292,12 +296,12 @@ const cli = yargs(args)
       // flag) errors pointing at `ellamaka serve` (Out of Scope here).
       const invocation = dshDumpResolve(
         {
-          profile: argv.profile as string | undefined,
-          patch: argv.patch as string[] | undefined,
+          profile: argv.profile,
+          patch: argv.patch,
           "dump-config": argv["dump-config"] === true,
           "dump-default-config": argv["dump-default-config"] === true,
         },
-        (argv.args ?? []) as string[],
+        argv.args ?? [],
       )
       await Effect.runPromise(
         runDshDump({
@@ -324,6 +328,9 @@ const cli = yargs(args)
   .strict()
 
 try {
+  // The official-installer child role owns its own argv and exits; intercept it
+  // before yargs, whose parent `--profile` would otherwise swallow the flag.
+  if (await runDshOfficialIfRequested(process.argv)) process.exit()
   if (args.includes("-h") || args.includes("--help")) {
     await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
       if (err) throw err

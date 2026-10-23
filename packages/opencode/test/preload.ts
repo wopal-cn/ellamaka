@@ -94,6 +94,15 @@ process.env["WOPAL_DEBUG_LOG_DIR"] = path.join(dir, "logs")
 // Use in-memory sqlite
 process.env["OPENCODE_DB"] = ":memory:"
 
+// Global.ensure creates the runtime directories (data/config/state/log/...)
+// explicitly since the module-load-time mkdir was removed from core global.
+// The CLI entry calls it at startup; tests bypass that entry, so the isolated
+// per-PID Home must ensure here or fixture writes into config/ hit ENOENT.
+{
+  const { Global } = await import("@wopal/ellamaka-core/global")
+  await Global.ensure()
+}
+
 // Now safe to import from src/
 const { Log } = await import("@wopal/ellamaka-core/util/log")
 const { initProjectors } = await import("../src/server/projectors")

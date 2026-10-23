@@ -13,16 +13,18 @@ export { JsonMigration } from "@/storage/json-migration"
 // compiled inside the sidecar bundle while the `@deepseek-ai/*` runtime is
 // loaded at startup from the materialised closure.
 export {
+  acquireDshHomeRuntimeAccess,
   initializeDshRuntime,
   DEFAULT_DSH_RUNTIME_MANIFEST,
   resolveInstallAnchor,
   toDshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
-export type { DshLogLevel } from "@wopal/ellamaka-cordis/runtime"
+export type { DshHomeRuntimeAccessResult, DshHomeRuntimeLease, DshLogLevel } from "@wopal/ellamaka-cordis/runtime"
 export type { InstallAnchor } from "@wopal/ellamaka-cordis/runtime"
 export { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export type { DshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export { bootDshWeb, bootDshTools } from "@wopal/ellamaka-cordis/dsh-web"
+export { trackDshToolsInitialization } from "@wopal/ellamaka-cordis/dsh-adapter/host"
 export type { DshWebHost, DshToolsHost } from "@wopal/ellamaka-cordis/dsh-web"
 export { startDshPluginService } from "@wopal/ellamaka-cordis/plugins/runtime"
 export type {
@@ -30,6 +32,19 @@ export type {
   DshPluginServiceHandle,
   DshPluginServiceOptions,
 } from "@wopal/ellamaka-cordis/plugins/runtime"
+// Unit-reload wiring (DESIGN.md#unified-reload--lifecycle): the trigger
+// decision table and the `dsh:web` cold-rebuild lifecycle controller. The
+// sidecar shares them with the CLI mount so every host scopes reloads and
+// events identically.
+export { restartRequiredForTools } from "@wopal/ellamaka-cordis/plugins/unit-trigger"
+export type { UnitTriggerDecision } from "@wopal/ellamaka-cordis/plugins/unit-trigger"
+export { DshWebColdReload } from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
+export type {
+  ColdBuildCandidate,
+  ColdRebuildBuilder,
+  ColdRebuildContainer,
+  ColdRebuildHandle,
+} from "@wopal/ellamaka-cordis/runtime/web-cold-reload"
 // The install-command decision table is shared with the CLI mount
 // (`dsh-mount.ts`), so the Desktop sidecar resolves its launcher through the
 // same rules instead of keeping a second, drifting copy. The sidecar is the
@@ -46,3 +61,4 @@ export { setDshUrlGetter } from "@/workbench/dsh-url"
 // with a runtime fact in Desktop mode too.
 export { setDshStatus } from "@/workbench/dsh-status"
 export type { DshRuntimeStatus } from "@/workbench/dsh-status"
+export { prepareDshHost, getCorePreparationHealth } from "@/core/preparation"

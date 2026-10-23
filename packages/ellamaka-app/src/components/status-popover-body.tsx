@@ -6,7 +6,16 @@ import { Tabs } from "@wopal/ui/tabs"
 import { useMutation, useQueryClient } from "@tanstack/solid-query"
 import { showToast } from "@wopal/ui/toast"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { type Accessor, createEffect, createMemo, For, type JSXElement, onCleanup, Show } from "solid-js"
+import {
+  type Accessor,
+  createEffect,
+  createMemo,
+  createResource,
+  For,
+  type JSXElement,
+  onCleanup,
+  Show,
+} from "solid-js"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
@@ -16,9 +25,10 @@ import { type ServerHealth } from "@/utils/server-health"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
 import { useServers } from "@/context/servers"
+import { resolveServerHealthKey } from "@/utils/server-health"
 import { serverSwitchRedirect } from "@/utils/server-switch-route"
-
-const pollMs = 10_000
+import { sandboxControlConfig } from "./prompt-input/sandbox-control"
+import { describeStatusPlugin, statusPlugins } from "./status-plugins"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -147,7 +157,7 @@ export function StatusPopoverServerBody() {
           const run = ++dialogRun
           void import("./dialog-select-server").then((x) => {
             if (dialogDead || dialogRun !== run) return
-            dialog.show(() => <x.DialogSelectServer />)
+            void dialog.show(() => <x.DialogSelectServer />)
           })
         },
       }}
@@ -227,10 +237,12 @@ function ServerStatusList(props: { state: ServerStatusState }) {
   )
 }
 
-export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
+export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?: string }) {
   const sync = useSync()
+  const sdk = useSDK()
   const servers = useServers()
   const server = useServer()
+  const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const dialog = useDialog()
   const language = useLanguage()
   const location = useLocation()
@@ -261,8 +273,34 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
+  const [effectiveConfig] = createResource(
+    () => (props.shown() ? { directory: pathKey(sdk.directory), server: server.key } : undefined),
+    (target) =>
+      sdk
+        .createClient({ directory: target.directory })
+        .config.configGet()
+        .then((response) => ({ ...target, effective: response.data?.effective }))
+        .catch((error: unknown) => {
+          fail(error)
+          return undefined
+        }),
+  )
   const plugins = createMemo(() =>
-    (sync.data.config.plugin ?? []).map((item) => (typeof item === "string" ? item : item[0])),
+    statusPlugins(
+      sync.data.config.plugin,
+      sandboxControlConfig(
+        effectiveConfig()?.directory === pathKey(sdk.directory) && effectiveConfig()?.server === server.key
+          ? effectiveConfig()?.effective
+          : undefined,
+      ).sandbox,
+      server.key ? servers.health[healthKey()]?.dsh : undefined,
+    ).map((plugin) => ({
+      specifier: plugin.name,
+      ...describeStatusPlugin(plugin, {
+        spaceRoot: props.spaceRoot ?? sync.data.path.worktree,
+        userHome: sync.data.path.home,
+      }),
+    })),
   )
   const pluginCount = createMemo(() => plugins().length)
   const pluginEmpty = createMemo(() => pluginEmptyMessage(language.t("dialog.plugins.empty"), "opencode.json"))
@@ -345,7 +383,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                   const run = ++dialogRun
                   void import("./dialog-select-server").then((x) => {
                     if (dialogDead || dialogRun !== run) return
-                    dialog.show(() => <x.DialogSelectServer />)
+                    void dialog.show(() => <x.DialogSelectServer />)
                   })
                 }}
               >
@@ -454,9 +492,17 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
               >
                 <For each={plugins()}>
                   {(plugin) => (
-                    <div class="flex items-center gap-2 w-full px-2 py-1">
+                    <div
+                      class="flex min-w-0 items-center gap-2 w-full px-2 py-1.5"
+                      data-status-plugin={plugin.name}
+                      data-source={plugin.source}
+                      title={plugin.specifier}
+                    >
                       <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                      <span class="text-14-regular text-text-base break-all">{plugin}</span>
+                      <span class="min-w-0 flex-1 truncate text-14-regular text-text-base">{plugin.name}</span>
+                      <span class="shrink-0 rounded-sm border border-border-weak-base bg-surface-raised-base px-1.5 py-0.5 text-12-regular text-text-weak">
+                        {language.t(`status.popover.plugin.${plugin.source}`)}
+                      </span>
                     </div>
                   )}
                 </For>

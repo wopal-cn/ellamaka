@@ -22,6 +22,7 @@ import {
   healPluginsModuleFallback,
   removePluginSymlink,
 } from "../src/plugins/compose"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 function tempRoot(): string {
   return mkdtempSync(join(tmpdir(), "dsh-plugin-compose-"))
@@ -225,6 +226,7 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
     healPluginsModuleFallback(root)
 
     const ctx = new Context()
+    prepareDshProfiles(root)
     const host = await mountDshTools(ctx, { home: root, port: 0 })
     try {
       const config = (
@@ -258,6 +260,7 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
   test("a fresh mount provides no loader.internal under bun (拆雷)", async () => {
     const root = mkdtempSync(join(tmpdir(), "dsh-plugin-b1-fake-"))
     const ctx = new Context()
+    prepareDshProfiles(root)
     const host = await mountDshTools(ctx, { home: root, port: 0 })
     try {
       const loader = ctx.get("loader") as { internal?: { import(name: string): Promise<unknown> } } | undefined
@@ -269,11 +272,15 @@ describe("B1 resolution: Bridge rows reach the Loader as file:// URLs", () => {
           options?: { config?: { patches?: Record<string, unknown>[] } }
         }
       ).options?.config
-      const hmrRows = (includeConfig?.patches ?? [])
-        .flatMap((row) => (row as { insert?: { id?: string; disabled?: boolean }[] }).insert ?? [])
-        .filter((row) => row.id === "hmr")
-      expect(hmrRows.length).toBeGreaterThan(0)
-      expect(hmrRows.every((row) => row.disabled === true)).toBe(true)
+      const insertRows = (includeConfig?.patches ?? []).flatMap(
+        (row) => (row as { insert?: { id?: string }[] }).insert ?? [],
+      )
+      expect(insertRows.some((row) => row.id === "tools")).toBe(true)
+      expect(insertRows.some((row) => row.id === "tool-fs")).toBe(true)
+      // The host owns the Bun HMR adapter; the standalone composition has no
+      // dsh-hmr plugin row and therefore never installs loader.internal.
+      expect(insertRows.some((row) => row.id === "hmr")).toBe(false)
+      expect(ctx.get("hmr")).toBeDefined()
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()
@@ -318,6 +325,7 @@ describe("loader.internal.import profiles fallback (rook W-01, post-B1)", () => 
     healPluginsModuleFallback(root)
 
     const ctx = new Context()
+    prepareDshProfiles(root)
     const host = await mountDshTools(ctx, {
       home: root,
       port: 0,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { BUILTIN_PROFILES, canonicalProfile, parseProfiles, parseRegistrySpec } from "@/cli/cmd/dsh-plugin-profiles"
+import { BUILTIN_PROFILES, canonicalProfile, parseProfiles } from "@/cli/cmd/dsh-plugin-profiles"
 
 describe("dsh plugin profiles", () => {
   test("omitted/blank --profile defaults to both built-in profiles", () => {
@@ -37,20 +37,5 @@ describe("dsh plugin profiles", () => {
 
   test("BUILTIN_PROFILES are the canonical pair", () => {
     expect(BUILTIN_PROFILES).toEqual(["web", "ellamaka-tools"])
-  })
-})
-
-describe("dsh plugin registry spec parsing", () => {
-  test("bare name, name@version, and scoped name@version split correctly", () => {
-    expect(parseRegistrySpec("is-odd")).toEqual({ kind: "registry", name: "is-odd" })
-    expect(parseRegistrySpec("is-odd@3.0.1")).toEqual({ kind: "registry", name: "is-odd", version: "3.0.1" })
-    expect(parseRegistrySpec("chalk@^5")).toEqual({ kind: "registry", name: "chalk", version: "^5" })
-    expect(parseRegistrySpec("@sindresorhus/is")).toEqual({ kind: "registry", name: "@sindresorhus/is" })
-    expect(parseRegistrySpec("@sindresorhus/is@7.0.1")).toEqual({
-      kind: "registry",
-      name: "@sindresorhus/is",
-      version: "7.0.1",
-    })
-    expect(parseRegistrySpec("@scope/pkg@^1.2")).toEqual({ kind: "registry", name: "@scope/pkg", version: "^1.2" })
   })
 })

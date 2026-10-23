@@ -117,6 +117,28 @@ export function homePatches(homeDir: string): Record<string, unknown>[] {
   ]
 }
 
+/** Collect every entry id in a composed tree, including native groups. */
+function collectIds(rows: readonly Record<string, unknown>[]): Set<string> {
+  const ids = new Set<string>()
+  const isRow = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+  const visit = (row: Record<string, unknown>) => {
+    if (typeof row.id === "string") ids.add(row.id)
+    if (Array.isArray(row.insert)) for (const child of row.insert) if (isRow(child)) visit(child)
+  }
+  for (const row of rows) visit(row)
+  return ids
+}
+
+/** Home rows that address an entry present in this profile's composition. */
+export function applicableHomePatches(
+  homeDir: string,
+  rows: readonly Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const ids = collectIds(rows)
+  return homePatches(homeDir).filter((patch) => typeof patch.id !== "string" || ids.has(patch.id))
+}
+
 export interface WebExtraPatchesOptions {
   extraPatches?: Record<string, unknown>[]
   /**
@@ -179,11 +201,7 @@ export interface ToolsExtraPatchesOptions {
  * background bash (which waits on session lifecycle) must stay off.
  */
 export function toolsExtraPatches(opts?: ToolsExtraPatchesOptions): Record<string, unknown>[] {
-  return [
-    { id: "hmr", disabled: true },
-    { id: "tool-bash", config: { enableRunInBackground: false } },
-    ...(opts?.extraPatches ?? []),
-  ]
+  return [{ id: "tool-bash", config: { enableRunInBackground: false } }, ...(opts?.extraPatches ?? [])]
 }
 
 export interface DumpDshConfigOptions {

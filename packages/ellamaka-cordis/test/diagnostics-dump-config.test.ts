@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { isScalar, parseDocument, visit } from "yaml"
 import {
+  applicableHomePatches,
   composeDshDumpLayers,
   composeDshDumpProfileLayers,
   dumpDshConfig,
@@ -133,7 +135,7 @@ describe("composeDshDumpLayers", () => {
 
 describe("dumpDshConfig", () => {
   test("dumps configuration for web profile with comments, plugin layers, and home patches", async () => {
-    const home = tempHome()
+    const home = join(tempHome(), "profile with a long directory name ".repeat(3).trim())
     await installedPlugin(home, "demo-plugin", "1.0.0")
     healPluginsModuleFallback(home)
 
@@ -158,14 +160,18 @@ describe("dumpDshConfig", () => {
     // The injected dshHome value must be EXACTLY the derived DSH home
     // (<root>/home), never the territory root itself — pins the
     // territory-root -> homeDir derivation against a dshRoot mispass.
-    // Assert the semantic value rather than one YAML scalar style: rc.2's
-    // renderer emits ordinary paths as plain scalars while expressions may
-    // still use folded scalars.
-    const dshHomeValues = output
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith("dshHome: "))
-      .map((line) => line.slice("dshHome: ".length))
+    // Long paths can render as folded scalars. Inspect parsed scalar values,
+    // not the renderer's indentation, line wrapping, or scalar style.
+    const document = parseDocument(output)
+    expect(document.errors).toEqual([])
+    const dshHomeValues: unknown[] = []
+    visit(document, {
+      Pair(_key, pair) {
+        if (!isScalar(pair.key) || pair.key.value !== "dshHome") return
+        expect(isScalar(pair.value)).toBe(true)
+        if (isScalar(pair.value)) dshHomeValues.push(pair.value.value)
+      },
+    })
     expect(dshHomeValues.length).toBeGreaterThan(0)
     expect(dshHomeValues.every((v) => v === join(home, "home"))).toBe(true)
   })
@@ -279,12 +285,16 @@ describe("lifted patch builders snapshot equality", () => {
     })
   })
 
+  test("home rows apply only to entries the standalone tools composition declares", () => {
+    const rows = [{ id: "shell-env" }, { insert: [{ id: "tools" }, { id: "tool-fs" }] }]
+    expect(applicableHomePatches("/tmp/dsh-home", rows).map((patch) => patch.id)).toEqual(["shell-env"])
+  })
+
   test("toolsExtraPatches matches mountDshTools original shape exactly", () => {
     const patches = toolsExtraPatches({
       extraPatches: [{ id: "custom-tool", config: {} }],
     })
     expect(patches).toEqual([
-      { id: "hmr", disabled: true },
       { id: "tool-bash", config: { enableRunInBackground: false } },
       { id: "custom-tool", config: {} },
     ])

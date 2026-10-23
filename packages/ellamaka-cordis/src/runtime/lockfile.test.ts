@@ -1,13 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import { DSH_CLOSURE_VERSION } from "./closure-version"
+import { DEFAULT_DSH_RUNTIME_LOCK } from "./embed-lock"
+import { DEFAULT_DSH_RUNTIME_MANIFEST } from "./embed-manifest"
+import { parseDshRuntimeLock, validateEmbeddedLock, type DshRuntimeLockV1 } from "./lockfile"
 import { computeManifestFingerprint, type DshRuntimeManifestV1 } from "./manifest"
-import {
-  parseDshRuntimeLock,
-  validateEmbeddedLock,
-  type DshRuntimeLockEntryV1,
-  type DshRuntimeLockV1,
-} from "./lockfile"
-
-const dirs: string[] = []
 
 const MANIFEST: DshRuntimeManifestV1 = {
   schema: "ellamaka.dsh-runtime/v1",
@@ -46,12 +42,10 @@ describe("parseDshRuntimeLock", () => {
 
   test("rejects malformed JSON, wrong schema, or missing fields", () => {
     expect(() => parseDshRuntimeLock("not json")).toThrow()
-    expect(() =>
-      parseDshRuntimeLock(JSON.stringify({ schema: "other/v1", packages: {} })),
-    ).toThrow(/schema/i)
-    expect(() =>
-      parseDshRuntimeLock(JSON.stringify({ schema: "ellamaka.dsh-runtime-lock/v1" })),
-    ).toThrow(/packages|fingerprint/i)
+    expect(() => parseDshRuntimeLock(JSON.stringify({ schema: "other/v1", packages: {} }))).toThrow(/schema/i)
+    expect(() => parseDshRuntimeLock(JSON.stringify({ schema: "ellamaka.dsh-runtime-lock/v1" }))).toThrow(
+      /packages|fingerprint/i,
+    )
   })
 
   test("accepts and preserves the optional flag on entries", () => {
@@ -73,7 +67,47 @@ describe("parseDshRuntimeLock", () => {
   })
 })
 
+describe("runtime lock resolution boundary", () => {
+  test("rejects reusing an old package table even when it is a superset of the new direct dependencies", () => {
+    const oldManifest: DshRuntimeManifestV1 = {
+      schema: "ellamaka.dsh-runtime/v1",
+      bridgeAbi: 1,
+      dependencies: {
+        "@deepseek-ai/dsh": "0.2.0-rc.2",
+        "@deepseek-ai/cordis": "4.0.4",
+        "@deepseek-ai/schemastery": "3.18.4",
+      },
+    }
+    const newManifest: DshRuntimeManifestV1 = {
+      schema: "ellamaka.dsh-runtime/v1",
+      bridgeAbi: 1,
+      dependencies: { "@deepseek-ai/dsh": "0.2.0-rc.2" },
+    }
+    const oldLock = lockWith(
+      {
+        "node_modules/@deepseek-ai/dsh": { version: "0.2.0-rc.2" },
+        "node_modules/@deepseek-ai/cordis": { version: "4.0.4" },
+        "node_modules/@deepseek-ai/schemastery": { version: "3.18.4" },
+      },
+      computeManifestFingerprint(oldManifest),
+    )
+
+    // The old table contains the new direct pin, but it was solved for a
+    // different direct dependency set. The fingerprint is the only safe
+    // generation binding, so a changed manifest cannot reuse this table.
+    expect(Object.keys(oldLock.packages)).toEqual(
+      expect.arrayContaining(Object.keys(newManifest.dependencies).map((name) => `node_modules/${name}`)),
+    )
+    expect(() => validateEmbeddedLock(oldLock, newManifest)).toThrow(/fingerprint|drift/i)
+  })
+})
+
 describe("validateEmbeddedLock", () => {
+  test("binds the generated lock to the source closureVersion and embedded manifest", () => {
+    expect(DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion).toBe(DSH_CLOSURE_VERSION)
+    expect(() => validateEmbeddedLock(DEFAULT_DSH_RUNTIME_LOCK, DEFAULT_DSH_RUNTIME_MANIFEST)).not.toThrow()
+  })
+
   test("accepts a lock whose fingerprint matches the manifest", () => {
     const lock = lockWith({
       "node_modules/@deepseek-ai/dsh": { version: "0.1.1-rc.2" },

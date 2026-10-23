@@ -5,19 +5,14 @@ import {
   presetToSandbox,
   readSandboxOptions,
   sandboxControlConfig,
-  hasDshAdapterPlugin,
-  patchDshAdapterSandbox,
   promptSandboxMode,
   setPendingSessionSandbox,
   drainPendingSessionSandbox,
   shouldShowSandboxControl,
   publishEscalatedSandboxPreset,
   subscribeEscalatedSandboxPreset,
-  type SandboxOptions,
   type SandboxPreset,
 } from "./sandbox-control"
-
-type Spec = string | [string, Record<string, unknown>]
 
 describe("sandbox preset mapping", () => {
   test("SANDBOX_PRESETS is the fixed tri-state list", () => {
@@ -63,44 +58,21 @@ describe("sandbox preset mapping", () => {
   })
 })
 
-describe("dsh-adapter visibility", () => {
-  test("detects dsh-adapter in string plugin specs", () => {
-    expect(hasDshAdapterPlugin(["file:///x/plugins/dsh-adapter/index.ts"])).toBe(true)
-  })
-
-  test("detects dsh-adapter in tuple plugin specs", () => {
-    expect(hasDshAdapterPlugin([["file:///x/dsh-adapter/index.ts", { sandbox: { enabled: true } }]])).toBe(true)
-  })
-
-  test("rejects plugins without dsh-adapter in the path", () => {
-    expect(hasDshAdapterPlugin(["file:///x/plugins/other/index.ts"])).toBe(false)
-    expect(hasDshAdapterPlugin([])).toBe(false)
-  })
-
-  test("substring dsh-adapter matches, unrelated names do not", () => {
-    expect(hasDshAdapterPlugin(["dsh-adapter"])).toBe(true)
-    expect(hasDshAdapterPlugin(["adapter-dsh"])).toBe(false)
-    expect(hasDshAdapterPlugin(["notdsh-adapterx"])).toBe(true)
-  })
-})
-
 describe("sandbox control visibility matrix (Issue #221)", () => {
-  const plugins = ["file:///x/plugins/dsh-adapter/index.ts"]
-  const base = { variant: "dock", plugins, sandbox: { enabled: true, mode: "read-only" } }
+  const base = { variant: "dock", sandbox: { enabled: true, mode: "read-only" } }
 
   test("dock composer + ready runtime + sandbox-enabled dsh-adapter config shows the control", () => {
     expect(shouldShowSandboxControl({ ...base, dshStatus: "ready" })).toBe(true)
   })
 
-  test("zero-inline dsh-adapter assembly uses config-v2 sandbox data and keeps the configured default", () => {
-    expect(plugins).toEqual(["file:///x/plugins/dsh-adapter/index.ts"])
+  test("the internal adapter uses config-v2 sandbox data and keeps the configured default", () => {
     expect(shouldShowSandboxControl({ ...base, dshStatus: "ready" })).toBe(true)
     expect(sandboxToPreset(base.sandbox)).toBe("read-only")
   })
 
   test("non-dock composer never shows the control", () => {
     for (const variant of ["new-session", "inline", "shell"]) {
-      expect(shouldShowSandboxControl({ variant, dshStatus: "ready", plugins, sandbox: base.sandbox })).toBe(false)
+      expect(shouldShowSandboxControl({ variant, dshStatus: "ready", sandbox: base.sandbox })).toBe(false)
     }
   })
 
@@ -120,18 +92,8 @@ describe("sandbox control visibility matrix (Issue #221)", () => {
     expect(shouldShowSandboxControl({ ...base, dshStatus: "preparing" })).toBe(false)
   })
 
-  test("ready runtime but no dsh-adapter in the effective config hides the control", () => {
-    expect(
-      shouldShowSandboxControl({
-        variant: "dock",
-        dshStatus: "ready",
-        plugins: ["file:///x/other.ts"],
-        sandbox: base.sandbox,
-      }),
-    ).toBe(false)
-    expect(
-      shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins: undefined, sandbox: base.sandbox }),
-    ).toBe(false)
+  test("ready runtime shows the internal adapter without an external plugin list", () => {
+    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", sandbox: base.sandbox })).toBe(true)
   })
 
   test("sandbox disabled hides the control: the adapter idles the tool projection", () => {
@@ -139,97 +101,31 @@ describe("sandbox control visibility matrix (Issue #221)", () => {
       shouldShowSandboxControl({
         variant: "dock",
         dshStatus: "ready",
-        plugins,
         sandbox: { enabled: false, mode: "workspace-write" },
       }),
     ).toBe(false)
   })
 
   test("dsh-adapter without a sandbox option hides the control (absent means off)", () => {
-    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", plugins })).toBe(false)
+    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready" })).toBe(false)
   })
 })
 
 describe("config-v2 sandbox inputs", () => {
-  test("reads assembly from effective.ellamaka and behavior from effective.wopal.pluginConfig", () => {
-    const inlineAssembly: Spec[] = [
-      ["file:///x/plugins/dsh-adapter/index.ts", { sandbox: { enabled: false } }],
-    ]
-    const inputs = sandboxControlConfig({
-      ellamaka: { plugin: inlineAssembly },
+  test("reads the internal adapter configuration independently of external plugin declarations", () => {
+    const effective = {
+      ellamaka: { plugin: ["file:///x/plugins/wopal-plugin"] },
       wopal: { pluginConfig: { "dsh-adapter": { sandbox: { enabled: true, mode: "read-only" } } } },
-    })
-
-    expect(inputs).toEqual({
-      plugins: inlineAssembly,
-      sandbox: { enabled: true, mode: "read-only" },
-    })
-    expect(readSandboxOptions(inputs.sandbox)).toEqual({ enabled: true, mode: "read-only" })
-    expect(
-      shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", ...inputs }),
-    ).toBe(true)
+    }
+    const inputs = sandboxControlConfig(effective)
+    expect(inputs).toEqual({ sandbox: { enabled: true, mode: "read-only" } })
+    expect(shouldShowSandboxControl({ variant: "dock", dshStatus: "ready", ...inputs })).toBe(true)
     expect(sandboxToPreset(readSandboxOptions(inputs.sandbox))).toBe("read-only")
   })
 
   test("returns no sandbox config when the pluginConfig entry is missing", () => {
-    expect(sandboxControlConfig({ ellamaka: { plugin: ["dsh-adapter"] }, wopal: { pluginConfig: {} } })).toEqual({
-      plugins: ["dsh-adapter"],
-      sandbox: undefined,
-    })
+    expect(sandboxControlConfig({ wopal: { pluginConfig: {} } })).toEqual({ sandbox: undefined })
     expect(readSandboxOptions({ enabled: "yes" })).toBeUndefined()
-  })
-})
-
-describe("patchDshAdapterSandbox", () => {
-  const tupleSpec: Spec = ["file:///x/dsh-adapter/index.ts", { tools: ["bash"], sandbox: { enabled: true } }]
-
-  test("patches sandbox on the dsh-adapter tuple spec and keeps other fields", () => {
-    const next = patchDshAdapterSandbox([tupleSpec, "file:///x/other.ts"], { enabled: false })
-    expect(next).toEqual([
-      ["file:///x/dsh-adapter/index.ts", { tools: ["bash"], sandbox: { enabled: false } }],
-      "file:///x/other.ts",
-    ])
-  })
-
-  test("does not mutate the input config", () => {
-    const plugin = [tupleSpec, "file:///x/other.ts"] as const as Spec[]
-    patchDshAdapterSandbox(plugin, { enabled: false })
-    expect(plugin[0]).toEqual(tupleSpec)
-  })
-
-  test("keeps other plugin entries untouched (reference preserved)", () => {
-    const other = "file:///x/other.ts"
-    const next = patchDshAdapterSandbox([tupleSpec, other], { enabled: true, mode: "read-only" })
-    expect(next).toBeDefined()
-    if (!next) return
-    expect(next[1]).toBe(other)
-    expect(next[0]).not.toBe(tupleSpec)
-    expect((next[0] as Spec & [string, Record<string, unknown>])[0]).toBe("file:///x/dsh-adapter/index.ts")
-  })
-
-  test("adds sandbox when the dsh-adapter spec has options without sandbox", () => {
-    const next = patchDshAdapterSandbox([["file:///x/dsh-adapter/index.ts", { tools: ["bash"] }]], {
-      enabled: true,
-      mode: "read-only",
-    })
-    expect(next).toEqual([["file:///x/dsh-adapter/index.ts", { tools: ["bash"], sandbox: { enabled: true, mode: "read-only" } }]])
-  })
-
-  test("promotes a bare string dsh-adapter spec to a tuple with options", () => {
-    const next = patchDshAdapterSandbox(["file:///x/dsh-adapter/index.ts"], { enabled: false })
-    expect(next).toEqual([["file:///x/dsh-adapter/index.ts", { sandbox: { enabled: false } }]])
-  })
-
-  test("returns undefined when no dsh-adapter spec exists", () => {
-    expect(patchDshAdapterSandbox(["file:///x/other.ts"], { enabled: false })).toBeUndefined()
-  })
-
-  test("full-access patch drops the mode key", () => {
-    const next = patchDshAdapterSandbox([tupleSpec], { enabled: false })
-    expect((next![0] as [string, Record<string, unknown>])[1]).toEqual({ tools: ["bash"], sandbox: { enabled: false } })
-    expect(Object.keys((next![0] as [string, Record<string, unknown>])[1].sandbox as SandboxOptions)).toEqual([
-      "enabled",
-    ])
   })
 })
 

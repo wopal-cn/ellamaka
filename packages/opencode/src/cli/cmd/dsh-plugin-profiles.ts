@@ -40,15 +40,3 @@ export function parseProfiles(spec: string | undefined): string[] {
   // Dedupe while keeping order (web,tools and tools,web both stay stable).
   return [...new Set(canonical)]
 }
-
-/** Parse `pkg[@version]` into an installer registry spec. */
-export function parseRegistrySpec(spec: string): { kind: "registry"; name: string; version?: string } {
-  if (spec.startsWith("@")) {
-    const idx = spec.indexOf("@", 1)
-    if (idx === -1) return { kind: "registry", name: spec }
-    return { kind: "registry", name: spec.slice(0, idx), version: spec.slice(idx + 1) }
-  }
-  const idx = spec.indexOf("@")
-  if (idx === -1) return { kind: "registry", name: spec }
-  return { kind: "registry", name: spec.slice(0, idx), version: spec.slice(idx + 1) }
-}

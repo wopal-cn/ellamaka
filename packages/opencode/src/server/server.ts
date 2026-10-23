@@ -4,14 +4,13 @@ import { NodeHttpServer } from "@effect/platform-node"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
-import { OpenApi } from "effect/unstable/httpapi"
 import { createServer, type Server } from "node:http"
 import { installDispatcher, type NodeRouteDispatcher, type NodeRouteMount } from "./node-route-mount"
 import { MDNS } from "./mdns"
 import { HttpApiApp } from "./routes/instance/httpapi/server"
 import { disposeMiddleware } from "./routes/instance/httpapi/lifecycle"
 import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
-import { PublicApi } from "./routes/instance/httpapi/public"
+import { publicOpenApi } from "./routes/instance/httpapi/openapi"
 import type { CorsOptions } from "./cors"
 import { lazy } from "@/util/lazy"
 
@@ -77,7 +76,7 @@ export const Default = lazy(() => {
 })
 
 export async function openapi() {
-  return OpenApi.fromApi(PublicApi)
+  return publicOpenApi()
 }
 
 export let url: URL | undefined

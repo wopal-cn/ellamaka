@@ -70,7 +70,11 @@ function assertLockShape(raw: unknown): DshRuntimeLockV1 {
       throw new Error(`dsh runtime lock: malformed packages entry "${path}" — \`optional\` must be a boolean`)
     }
   }
-  return lock as DshRuntimeLockV1
+  return {
+    schema: DSH_RUNTIME_LOCK_SCHEMA,
+    manifestFingerprint: lock.manifestFingerprint,
+    packages: lock.packages,
+  }
 }
 
 /**

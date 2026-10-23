@@ -70,6 +70,50 @@ const fixtureSpace = {
 }
 const fixtureTable = { app: { a: 1, b: 2, nested: { x: 1, y: 2, z: 3 } }, other: { flag: true } }
 
+describe("TuiConfig dependency boundary", () => {
+  test("reading TUI config does not start dependency installation", async () => {
+    await using tmp = await tmpdir()
+    const configDir = path.join(tmp.path, ".opencode")
+    await fs.mkdir(configDir, { recursive: true })
+    await fs.writeFile(path.join(tmp.path, "tui.json"), JSON.stringify({ plugin: ["example-plugin"] }))
+
+    const layer = TuiConfig.layer.pipe(
+      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Layer.succeed(CurrentWorkingDirectory, tmp.path)),
+    )
+
+    const config = await Effect.runPromise(
+      TuiConfig.Service.use((svc) =>
+        Effect.gen(function* () {
+          const value = yield* svc.get()
+          yield* Effect.yieldNow
+          return value
+        }),
+      ).pipe(Effect.provide(layer), Effect.scoped),
+    )
+
+    expect(config.plugin).toEqual(["example-plugin"])
+    expect(
+      await fs.stat(path.join(configDir, ".gitignore")).then(
+        () => true,
+        () => false,
+      ),
+    ).toBe(false)
+    expect(
+      await fs.stat(path.join(configDir, "package.json")).then(
+        () => true,
+        () => false,
+      ),
+    ).toBe(false)
+    expect(
+      await fs.stat(path.join(configDir, "node_modules")).then(
+        () => true,
+        () => false,
+      ),
+    ).toBe(false)
+  })
+})
+
 describe("TuiConfig.Resolved.pluginConfig", () => {
   it.instance("delivers the same three-layer merge as the server chain", () =>
     withEnv(

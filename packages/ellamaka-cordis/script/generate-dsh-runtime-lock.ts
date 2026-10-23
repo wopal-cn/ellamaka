@@ -15,8 +15,10 @@
  * itself (SEA single-file binaries cannot run Arborist's tree solver).
  *
  * Fast path: when the in-repo lock already binds the current manifest
- * fingerprint, nothing is re-resolved (regeneration costs minutes of registry
- * metadata resolution and only happens after a dependency version bump).
+ * fingerprint, nothing is rewritten. Any fingerprint change triggers a fresh
+ * Arborist solve; a committed package table is never reused merely because it
+ * happens to contain the new direct dependency pins. This keeps the lock tied
+ * to one manifest generation instead of a partially revalidated old tree.
  *
  * The lock carries only the `packages` table of the resolved npm lockfile v3
  * tree: each entry maps a `node_modules/...` path (including nested entries
@@ -30,11 +32,8 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Arborist } from "@npmcli/arborist"
-import {
-  buildDshRuntimeManifest,
-  parseDshRuntimeManifest,
-} from "../src/runtime/manifest.ts"
-import { DSH_RUNTIME_LOCK_SCHEMA, type DshRuntimeLockV1 } from "../src/runtime/lockfile.ts"
+import { buildDshRuntimeManifest, parseDshRuntimeManifest } from "../src/runtime/manifest.ts"
+import { DSH_RUNTIME_LOCK_SCHEMA, parseDshRuntimeLock, type DshRuntimeLockV1 } from "../src/runtime/lockfile.ts"
 
 // Locate the package root (two levels up from this script) regardless of cwd.
 const scriptDir = dirname(fileURLToPath(import.meta.url))
@@ -50,9 +49,18 @@ function fatal(message: string): never {
   process.exit(1)
 }
 
-/** Read a JSON file typed as the package.json subset the manifest builder needs. */
-function readPackageJson(path: string) {
-  return JSON.parse(readFileSync(path, "utf8")) as { dependencies?: Record<string, string> }
+/** Read the package.json subset the manifest builder needs without unsafe casts. */
+function readPackageJson(path: string): { dependencies?: Record<string, string> } {
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"))
+  if (typeof parsed !== "object" || parsed === null || !("dependencies" in parsed)) return {}
+  const rawDependencies = parsed.dependencies
+  if (typeof rawDependencies !== "object" || rawDependencies === null) return {}
+  const dependencies: Record<string, string> = {}
+  for (const [name, version] of Object.entries(rawDependencies)) {
+    if (typeof version !== "string") fatal(`package.json dependency "${name}" must have a string version`)
+    dependencies[name] = version
+  }
+  return { dependencies }
 }
 
 if (!existsSync(manifestPath)) {
@@ -77,11 +85,7 @@ if (manifest.fingerprint !== expectedManifest.fingerprint) {
 function readExistingLock(): DshRuntimeLockV1 | null {
   if (!existsSync(lockPath)) return null
   try {
-    const parsed = JSON.parse(readFileSync(lockPath, "utf8")) as Partial<DshRuntimeLockV1>
-    if (parsed.schema !== DSH_RUNTIME_LOCK_SCHEMA || !parsed.manifestFingerprint || !parsed.packages) {
-      return null
-    }
-    return parsed as DshRuntimeLockV1
+    return parseDshRuntimeLock(readFileSync(lockPath, "utf8"))
   } catch {
     return null
   }
@@ -108,14 +112,20 @@ async function resolveLock(): Promise<Record<string, { version: string; optional
     // tree; it also downloads tarballs, which the npm cacache makes cheap on
     // repeat runs. The staged package-lock.json IS the resolved tree.
     await arborist.reify({ save: true, saveType: "prod" })
-    const lock = JSON.parse(readFileSync(join(staging, "package-lock.json"), "utf8")) as {
-      packages?: Record<string, { version?: unknown; optional?: unknown }>
+    const lock: unknown = JSON.parse(readFileSync(join(staging, "package-lock.json"), "utf8"))
+    if (typeof lock !== "object" || lock === null || !("packages" in lock)) {
+      fatal("arborist produced a package-lock without a packages table")
     }
-    const packages = lock.packages ?? {}
+    const packages = lock.packages
+    if (typeof packages !== "object" || packages === null) {
+      fatal("arborist produced an invalid package-lock packages table")
+    }
     const out: Record<string, { version: string; optional?: boolean }> = {}
     for (const [path, entry] of Object.entries(packages)) {
       if (path === "") continue // the root entry carries no version
-      if (typeof entry.version !== "string") continue
+      if (typeof entry !== "object" || entry === null || !("version" in entry) || typeof entry.version !== "string") {
+        continue
+      }
       // macOS /tmp is a symlink chain (/tmp -> /private/tmp, $TMPDIR ->
       // /private/var/folders/...), and Arborist records package paths
       // relative to the REAL staging root while the process sees the logical

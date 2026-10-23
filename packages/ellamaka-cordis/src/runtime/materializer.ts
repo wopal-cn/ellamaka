@@ -71,8 +71,7 @@ export interface MaterializeOptions {
 /** Production extractor: `pacote.extract` from this package's own dependency. */
 async function createRealExtract(): Promise<ExtractLike> {
   const { default: pacote } = await import("pacote")
-  return (spec, dest, opts) =>
-    pacote.extract(spec, dest, { registry: opts?.registry, ignoreScripts: true })
+  return (spec, dest, opts) => pacote.extract(spec, dest, { registry: opts?.registry, ignoreScripts: true })
 }
 
 /** The global fetch (bun & node 18+). */
@@ -162,14 +161,7 @@ export function readRuntimeLock(closureDir: string): Record<string, unknown> | n
 }
 
 function anchorFor(layout: DshLayout, closureName: string): string {
-  return join(
-    layout.closuresDir,
-    closureName,
-    "node_modules",
-    "@deepseek-ai",
-    "dsh",
-    "package.json",
-  )
+  return join(layout.closuresDir, closureName, "node_modules", "@deepseek-ai", "dsh", "package.json")
 }
 
 /** Clear the staging scene. Called only while holding the materialise lock. */
@@ -324,7 +316,20 @@ async function extractAll(
           done++
           continue
         }
-        throw error
+        // A required package can fail transiently (registry blip, concurrent
+        // cache write). Retry once before failing the whole closure, and name
+        // the package so staging diagnosis is actionable.
+        log?.warn("materializer.extract.retry", {
+          package: spec,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        rmSync(dest, { recursive: true, force: true })
+        try {
+          await extract(spec, dest, { registry })
+        } catch (retryError) {
+          const message = retryError instanceof Error ? retryError.message : String(retryError)
+          throw new Error(`required package ${spec} failed twice: ${message}`, { cause: retryError })
+        }
       }
       done++
       if (done % 64 === 0) {
@@ -340,10 +345,7 @@ async function extractAll(
 }
 
 /** Direct dependency package.json paths missing under a closure dir. */
-function directDepsMissingOnDisk(options: {
-  closureDir: string
-  manifest: DshRuntimeManifestV1
-}): string[] {
+function directDepsMissingOnDisk(options: { closureDir: string; manifest: DshRuntimeManifestV1 }): string[] {
   const missing: string[] = []
   for (const name of Object.keys(options.manifest.dependencies)) {
     const pkgPath = join(options.closureDir, "node_modules", ...name.split("/"), "package.json")
@@ -460,9 +462,7 @@ export async function checkClosureIntegrity(options: {
   const closureDir = join(layout.closuresDir, closureName)
   const missing = directDepsMissingOnDisk({ closureDir, manifest: options.manifest })
   if (missing.length > 0) {
-    throw new Error(
-      `dsh runtime: closure integrity verification failed, missing packages: ${missing.join(", ")}`,
-    )
+    throw new Error(`dsh runtime: closure integrity verification failed, missing packages: ${missing.join(", ")}`)
   }
   verifyClosureContent(closureDir, options.manifest)
 }

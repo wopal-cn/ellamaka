@@ -32,12 +32,13 @@ describe("server entry points wire the shared dsh assembly", () => {
     })
   }
 
-  test("dsh-mount drives the runtime manager and injects the resolved runtime", () => {
+  test("dsh-mount drives unified CorePreparation and injects the resolved runtime", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
-    expect(source).toContain("initializeDshRuntime")
+    expect(source).toContain("prepareDshHost")
+    expect(source).not.toContain("initializeDshRuntime")
     expect(source).toContain("resolveInstallAnchor")
     expect(source).toContain("createDshRuntimeApi")
-    expect(source).toContain('entry: opts.entry ?? "serve"')
+    expect(source).toContain("runtimeLogFile")
     // One level boundary for every DSH consumer: the host's effective level
     // (written back to ELLAMAKA_LOG_LEVEL) is mapped once, in cordis.
     expect(source).toContain("toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL)")
@@ -47,13 +48,15 @@ describe("server entry points wire the shared dsh assembly", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
     expect(source).toContain('"dsh-runtime.log"')
     expect(source).toContain("runtimeLogFile")
-    expect(source).toContain("logFile: runtimeLogFile")
+    expect(source).toContain("runtimeLogFile")
     // The profile mounts receive the plugin-log directory, never a fixed
     // file: each profile derives its own bounded `dsh-plugins-<profile>.log`.
     expect(source).toContain("logDir")
     expect(source).not.toContain('"dsh-plugins.log"')
-    expect(source).toContain("mountDshWeb(webHub.ctx, {")
+    // The web container boots in the managed child (no in-process
+    // mountDshWeb left); the tools container stays in-process.
     expect(source).toContain("mountDshTools(toolsHub.ctx, {")
+    expect(source).not.toContain("mountDshWeb(")
   })
 
   test("dsh-mount wraps init+mount in a degrade boundary (B-06) and injects the closure context (B-01)", () => {
@@ -63,10 +66,13 @@ describe("server entry points wire the shared dsh assembly", () => {
     // undefined (no mount, no process.exit).
     expect(source).toContain("dsh engine mount failed")
     expect(source).toContain("mountDshEngine")
-    // The hub is constructed with the closure-resolved context — never a bare
-    // `new CordisHub(null)` that would fall back to the host package closure.
-    expect(source).toContain("new CordisHub(null, { context: new runtime.cordis.Context() })")
-    expect(source).not.toMatch(/new CordisHub\(null\)/)
+    // The in-process hub (tools container) is constructed with the
+    // closure-resolved context — never a bare `new CordisHub(null)` that
+    // would fall back to the host package closure. The web container boots in
+    // the child via the web-child command (closure anchor resolved there).
+    expect(source).toMatch(/CordisHub\(null, \{\s*context: new runtime\.cordis\.Context\(\),?\s*\}\)/)
+    expect(source).not.toMatch(/new CordisHub\(null\)(?!\s*,|\n?\s*\{)/)
+    expect(source).toContain("webChildArgs(resolveEllamakaCommand()")
   })
 
   test("dsh-mount points B-class $DSH_HOME reads at the official-layout home", () => {
@@ -75,12 +81,15 @@ describe("server entry points wire the shared dsh assembly", () => {
     // B-class env-reading plugins (e.g. agent presets) must land in the DSH
     // home, never fall back to ~/.dsh when DSH_HOME is unset.
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
-    expect(source).toContain('process.env.DSH_HOME = join(home, "home")')
-    // The env write must precede the manager run (the call site, not the import).
-    const call = source.indexOf("initializeDshRuntime({")
-    const env = source.indexOf("process.env.DSH_HOME")
+    expect(source).toContain('const activeDshHome = join(home, "home")')
+    expect(source).toContain("process.env.DSH_HOME = activeDshHome")
+    // Task 4 safety boundary: the manager kill-switch and Home preparation
+    // must complete before any DSH-specific environment mutation.
+    const call = source.indexOf("prepareDshHost({")
+    const env = source.indexOf("process.env.DSH_HOME =")
     expect(call).toBeGreaterThan(-1)
-    expect(env).toBeLessThan(call)
+    expect(env).toBeGreaterThan(call)
+    expect(source).toContain("acquireDshHomeRuntimeAccess")
   })
 
   test("web opens the browser before suspending on the dsh mount", () => {

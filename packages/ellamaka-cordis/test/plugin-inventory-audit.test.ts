@@ -4,9 +4,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createRequire } from "node:module"
 import { bootDshWeb } from "../src/dsh-web"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 test("actual Web inventory has metadata for every global and shipped preset row without Node internals", async () => {
   const home = mkdtempSync(join(tmpdir(), "dsh-inventory-audit-"))
+  prepareDshProfiles(home)
   const host = await bootDshWeb({ home, port: 0, disablePtcRuntime: true })
   try {
     const inventory = await createRequire(import.meta.url)(

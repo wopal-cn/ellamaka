@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
 import { mountDshWeb, mountDshTools } from "../src/dsh-web"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 /**
  * dsh runtime isolation (DESIGN-dsh-base.md): every dsh engine runtime byte
@@ -26,6 +27,7 @@ describe("dsh runtime isolation", () => {
     const ctx = new Context()
     let host: Awaited<ReturnType<typeof mountDshWeb>> | undefined
     try {
+      prepareDshProfiles(home)
       host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
       expect(process.env.DSH_HOME).toBeUndefined()
     } finally {
@@ -38,6 +40,7 @@ describe("dsh runtime isolation", () => {
   test("settings persist to the owned profile patch, not ~/.dsh", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-settings-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // The settings service is mounted; a namespaced update persists through
@@ -68,6 +71,7 @@ describe("dsh runtime isolation", () => {
   test("tools profile still overrides ctx dshHomePath to home/", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-tools-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
     try {
       // The tools profile disables the agent-loop rows (incl. `settings`), so
@@ -85,6 +89,7 @@ describe("dsh runtime isolation", () => {
   test("ctx dshHomePath override resolves storages/sessions under home/", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-dshhomepath-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // The ctx-injected dshHomePath is what `!!js dshHomePath('sessions')`
@@ -108,19 +113,20 @@ describe("dsh runtime isolation", () => {
     const wopalHome = mkdtempSync(join(tmpdir(), "dsh-iso-omitted-home-"))
     process.env.WOPAL_HOME = wopalHome
     const ctx = new Context()
-    let host: { dispose(): Promise<void> }
+    let host: { dispose(): Promise<void> } | undefined
     try {
+      prepareDshProfiles(join(wopalHome, "dsh"))
       host = await mountDshWeb(ctx, { port: 4097, disablePtcRuntime: true })
       const injected = ctx.get("dshHomePath") as ((...s: string[]) => string) | undefined
       expect(injected).toBeDefined()
       expect(injected!("sessions")).toBe(join(wopalHome, "dsh", "home", "sessions"))
 
-      // Profiles were seeded under the resolved home, not ~/.dsh.
+      // Profiles were explicitly prepared under the resolved home, not ~/.dsh.
       expect(existsSync(join(wopalHome, "dsh", "home", "profiles", "web", "package.json"))).toBe(true)
     } finally {
       if (prevWopalHome === undefined) delete process.env.WOPAL_HOME
       else process.env.WOPAL_HOME = prevWopalHome
-      await host.dispose()
+      await host?.dispose()
       await ctx.fiber.dispose()
     }
   }, 30_000)
@@ -133,6 +139,7 @@ describe("dsh runtime isolation", () => {
     // write to the user's default ~/.dsh.
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-llm-deepseek-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // Deterministic proof: with llm-deepseek disabled, its provider route is
@@ -157,6 +164,7 @@ describe("dsh runtime isolation", () => {
     process.env.DSH_TELEMETRY_MODE = "FULL"
     const home = mkdtempSync(join(tmpdir(), "dsh-isolate-telemetry-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
     try {
       // With session-telemetry-otel disabled, the `telemetry` service is absent.

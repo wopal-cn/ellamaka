@@ -215,6 +215,7 @@ jobs:
           # bundle time (via the opencode build); the committed manifest must
           # match the source before packaging. Read-only check, fails on drift.
           bun ../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
+          bun ../ellamaka-cordis/script/generate-dsh-runtime-lock.ts --check
 
       - name: Build desktop (electron-vite)
         working-directory: packages/ellamaka-desktop

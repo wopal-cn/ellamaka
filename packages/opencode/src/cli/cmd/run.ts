@@ -247,7 +247,7 @@ export const RunCommand = effectCmd({
   handler: Effect.fn("Cli.run")(function* (args) {
     const agentSvc = yield* Agent.Service
     const flags = yield* RuntimeFlags.Service
-    const localInstance = yield* InstanceRef
+    const localInstance = yield* args.attach ? Effect.succeed(undefined) : InstanceRef
     yield* Effect.promise(async () => {
       const rawMessage = [...args.message, ...(args["--"] || [])].join(" ")
       const thinking = args.interactive ? (args.thinking ?? true) : (args.thinking ?? false)
@@ -535,6 +535,7 @@ export const RunCommand = effectCmd({
 
       async function localAgent() {
         if (!args.agent) return undefined
+        if (!localInstance) throw new Error("local agent resolution requires a local instance")
         const name = args.agent
 
         const entry = await Effect.runPromise(

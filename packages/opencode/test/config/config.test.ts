@@ -575,21 +575,18 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
 )
 
-it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
+it.effect("keeps writable OPENCODE_CONFIG_DIR reads free of dependency-install writes", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
     const configDir = path.join(dir, "configdir")
     yield* AppFileSystem.use.ensureDir(configDir)
 
-    yield* withProcessEnv(
-      "OPENCODE_CONFIG_DIR",
-      configDir,
-      Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
-        provideInstanceEffect(dir),
-      ),
-    )
+    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
 
-    expect(yield* AppFileSystem.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
+    expect(yield* AppFileSystem.use.existsSafe(path.join(configDir, ".gitignore"))).toBe(false)
+    expect(yield* AppFileSystem.use.existsSafe(path.join(configDir, "package.json"))).toBe(false)
+    expect(yield* AppFileSystem.use.existsSafe(path.join(configDir, "package-lock.json"))).toBe(false)
+    expect(yield* AppFileSystem.use.existsSafe(path.join(configDir, "node_modules"))).toBe(false)
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
 )
 

@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test"
 import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@wopal/ellamaka-sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
-import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
+import {
+  applyDirectoryEvent,
+  applyGlobalEvent,
+  cleanupDroppedSessionCaches,
+  requiresGlobalReconciliation,
+} from "./event-reducer"
 
 const rootSession = (input: { id: string; parentID?: string; archived?: number }) =>
   ({
@@ -115,6 +120,36 @@ describe("applyGlobalEvent", () => {
     })
 
     expect(refreshCount).toBe(1)
+  })
+
+  test("runtime.reloaded for a DSH unit triggers a refresh (iframe reconnect) without full reconciliation", () => {
+    let refreshCount = 0
+    applyGlobalEvent({
+      event: { type: "runtime.reloaded", properties: { unit: "dsh:web", revision: 3 } },
+      project: [],
+      refresh: () => {
+        refreshCount += 1
+      },
+      setGlobalProject() {},
+    })
+
+    // DSH unit reloads only rebuild the DSH iframe — the Workbench refreshes
+    // its dsh-url entry, but no instance reconciliation is queued.
+    expect(refreshCount).toBe(1)
+    expect(requiresGlobalReconciliation("runtime.reloaded")).toBe(false)
+  })
+
+  test("runtime.reloaded for global/instance units does not refresh the project tree", () => {
+    let refreshCount = 0
+    applyGlobalEvent({
+      event: { type: "runtime.reloaded", properties: { unit: "global", revision: 1 } },
+      project: [],
+      refresh: () => {
+        refreshCount += 1
+      },
+      setGlobalProject() {},
+    })
+    expect(refreshCount).toBe(0)
   })
 
   test("keeps current data for a transport reconnection", () => {

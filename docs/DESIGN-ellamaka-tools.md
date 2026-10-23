@@ -1,8 +1,12 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-14
+> **Updated**: 2026-10-22
 > **Parent**: `./DESIGN.md`
+> **Sibling DESIGNs**:
+>
+> - `./DESIGN-dsh-base.md` — DSH 融合基础、依赖闭包与 Profile 生命周期
+>
 > **Scope**: DSH v0.2 的工具采用、内置 adapter、容器装配、审批与沙箱兼容。
 
 Ellamaka 通过 `ellamaka-tools` profile 获得工具执行后端。容器装配在进程内共享，空间配置决定是否采用沙箱投影。工具容器使用最小调用外观，Ellamaka 拥有持久 Session、权限与消息。
@@ -18,25 +22,52 @@ Ellamaka 通过 `ellamaka-tools` profile 获得工具执行后端。容器装配
 | 字符串编辑 | str_replace_editor          | 明确的 tool-str-replace-editor 行与 fs-sandbox |
 | Shell      | bash；Windows 实际源为 pwsh | 平台 shell executor 与 sandbox                 |
 
-本文的 Active 实施范围是当前工具采用表、内部 adapter、权限消费与宿主 PTC provider/preflight。Session 外部工具 grant、SDK 注入和 run_code 的新装配方式仍由独立 Session Assembly 草案讨论，正式定稿前不作为本文的无条件实施目标；本文保持当前 native 采用面的兼容。
+本文覆盖当前工具采用表、内部 adapter、权限消费与宿主 PTC provider/preflight。Session 外部工具授权、SDK 注入和 `run_code` 的装配归独立的 Session Assembly 契约。
 
 ## Container Composition
 
-ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [基础设计](./DESIGN-dsh-base.md)。工具容器装配 tools、system-prompt、fs、subprocess、sandbox、sandboxPolicy、session-projection、approval，以及所采用的文件和平台 shell provider。
+ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [DSH 基础设计](./DESIGN-dsh-base.md)。
 
-session-projection 注册表为最小外观提供策略折叠，容器不生成真实 Session。approval 保持可用，缺失询问闭包时按原生 unavailable 结果关闭提权。
+`ellamaka-tools` 是从空 Cordis 根独立装配的无会话工具 profile。它使用官方 profile、bundle 与 YAML `insert` 格式，直接声明所需工具和基础服务；`dsh.profile.bundles` 的初始选择不包含 `@deepseek-ai/dsh-base`。产品维护最小工具装配声明，用户在标准 profile 补丁中配置插件，并通过官方插件安装流程添加外部包与 bundle。
 
-宿主约束禁用 session 生命周期与检查点、agent-loop、模型调用、界面、configEditor/pluginManager、DeepSeek account、目标、计划、压缩、子代理和后台任务等耦合能力。新增基础 bundle 行也按容器边界审定，不能依靠一份按旧包名保存的用户禁用表维持该边界。
+装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端；`tools.mode` 为 `native`，shell 后台执行关闭。`session-projection` 提供策略折叠，`approval` 承接沙箱单次提权，缺失询问闭包时返回原生 `unavailable`。容器保持无持久 DSH Session 的边界。
 
-用户补丁保留工具配置，宿主能力约束负责保证无会话执行和可用后端。两种平台 shell 行均关闭后台执行，schema 不宣告 run_in_background，强制传入由工具拒绝。tools presentation 固定为 native，进程级 PTC 环境选择不改变采用表。
+插件包与服务的选择由标准配置表达。宿主按官方声明加载、解析并报告激活结果；不增加 `adopt` 字段、整棵 `dsh-base` 的禁用表，或通过扫描上游源码推导并改写装配的机制。必要的 Bun/Electron 宿主接线归基础设计。
 
-挂载验收检查本平台的采用集合及其 provider。macOS/Linux 检查七个工具；Windows 检查文件工具与 pwsh 后端。DSH 的 API 定义包可以在闭包中存在，相关会话 provider 的激活由该 profile 的边界决定。
+产品在 tools 补丁中维护一个有明确首尾注释边界的装配块，块后为用户内容。准备阶段比较该块与产品声明：一致即整步跳过，普通启动不重写补丁层；不一致（closureVersion 上升、产品装配更新或旧宿主迁移）时只刷新该块，块外用户字节原样保留。这是产品装配与用户覆盖的唯一交界。旧宿主模板遗留的注释骨架与指向上游已不存在条目的失效行属于宿主文本，在一次性迁移中清除，不与用户内容混同。用户插件、bundle 与配置继续使用官方 profile 声明。`cordis.yml` 仍为每次准备与挂载前重置的空合成根。
+
+### 补丁层的顺序规则与插件安装
+
+tools profile 的补丁层按固定顺序合成：bundle 层的 patch → 产品装配块 → 块后的用户行。Loader 的 patch 只能作用于**本层之前已经存在**的行，因此这条顺序决定了插件该怎么装：
+
+- **产品装配块**（首尾注释之间）声明工具容器必需的插件行。升级时整块刷新，块内内容不承载用户意图。
+- **块后的用户行**在上游之后应用，可以按 id 覆盖产品行的 config、或 `disabled: true` 关掉产品行。升级刷新产品块时这些行逐字保留，顺序也不变。
+- **bundle 层**位于两者之前，所以 bundle 自带的 disable 行**无法**关闭产品块插入的行；把替换型插件的 bundle 选进 `dsh.profile.bundles` 只会让替换行与产品行同时存在，造成服务重复注册。
+
+据此，tools profile 的插件装配分两类：
+
+| 情形                                       | 做法                                                                                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| 追加型插件（新增独立能力，不替换产品行）   | `ellamaka dsh plugin --profile ellamaka-tools add <包目录或包名>`，bundle 层正常生效                                          |
+| 替换型插件（替换产品已声明的行，如沙箱链） | 同样用 `ellamaka dsh plugin add` 安装包，但把 `dsh.profile.bundles` 保持为空，并在**块后**手写 disable 产品行 + insert 插件行 |
+
+替换型的典型例子是 `@wopal/dsh-sandbox-roots`：它在 tools 中替换 `sandbox`、`sandbox-policy`、`fs-sandbox` 三条 stock 行。装配写在块后，`writableRoots` 也写在该行 config 中，因此该列表归用户所有——产品块刷新不会覆盖它。
+
+补丁覆盖是**整块替换 config**，不做深合并：覆盖 `sandbox-roots-policy` 时需同时重述 `mode` 与 `workspaceRoot`。缺少被引用的插件包时容器按 fail-closed 拒绝启动并报出条目名，不会静默降级。
+
+### Tool Availability Contract
+
+Loader settlement 后，macOS/Linux 必须实际注册 `bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；Windows 使用 `pwsh` 后端与相同文件/搜索能力。缺少必需工具或必需插件等待服务、激活失败时，容器报告具体原因并拒绝发布 ready。首次挂载与配置重放共用验收。
+
+升级兼容性由真实工具调用验证：读写和编辑结果、文件搜索、shell 工作目录与输出、字符串替换、沙箱拒绝、审批、取消和必要的 PTC 执行均有回归保护。工具注册与 schema 检查是启动条件，实际执行结果是兼容验收依据。测试固定对外行为，允许上游内部插件组织变化。
+
+升级使用基础设计的单一 DSH 版本入口。依赖安装及生成物刷新后运行同一组工具回归；通过即接受该版本在已覆盖工具契约上的兼容性。失败时依据模块解析、激活或执行诊断定位实际变化，再修正受影响的标准配置或 adapter。官方真实破坏性变更由具体修复承接，不通过预设别名、源码模式猜测或多版本分支预测。
 
 ## Internal Adapter
 
-dsh-adapter 的实现放在 `packages/ellamaka-cordis/src/dsh-adapter/`，通过 `@wopal/ellamaka-cordis/dsh-adapter` 导出。opencode 在现有内部插件入口注册这个导出，不承载 adapter 实现。CLI 与 Desktop sidecar 将它和 Bridge 一起编译，不单独安装或发版。
+dsh-adapter 的实现放在 `packages/ellamaka-cordis/src/dsh-adapter/`，通过 `@wopal/ellamaka-cordis/dsh-adapter` 导出。opencode 在内部插件入口注册这个导出，CLI 与 Desktop sidecar 将它和 Bridge 一起编译分发。
 
-adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、Permission 询问和消息信息由引擎通过 PluginInput/ToolContext 交付；构建使用同一份 SDK 与 schema 实例，避免 schema 类型不一致。
+adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、Permission 询问和消息信息由引擎通过 PluginInput/ToolContext 交付；构建使用同一份 SDK 与 schema 实例，保证 schema 类型一致。
 
 | 代码边界        | 归属与变化原因                                                                                                         |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -44,9 +75,9 @@ adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、
 | Ellamaka 侧接入 | 同包内的 plugin 导出：读取有效配置、tool.provider/run_code 接入、Permission 询问、工具结果与 UI 元数据；随引擎契约维护 |
 | 用户行为参数    | settings.jsonc：沿用 dsh-adapter 参数键和空间覆盖，不随代码位置调整                                                    |
 
-两类代码都归 ellamaka-cordis，只按实际职责分文件，使用直接的类型化调用；不增加敏态/稳态框架、独立协议或版本协商。Session 外部工具授权与 SDK 注入由 Session Assembly 契约拥有。
+两类代码都归 `ellamaka-cordis`，按实际职责分文件，使用直接的类型化调用。Session 外部工具授权与 SDK 注入由 Session Assembly 契约拥有。
 
-内部插件注册在配置要求采用 DSH 后端时生效，其工厂等待共享初始化结果，再绑定工具池。内部身份固定为 `dsh-adapter`；同名旧外部条目在依赖安装、模块 import 和工厂执行之前由内部实现接管。不得先加载旧 SDK/schema 再做运行时去重。包元数据可只读识别身份；无法判明的冲突返回明确错误，不执行两个副本。新版 ontology 默认装配不声明此外部插件。原配置文件与 ontology 源码不被启动过程删除或改写。旧产品只有配合保留的旧装配声明/兼容 ontology 版本才能消费外部源码；DSH Home 保留不等于当前空间声明自动回退。
+内部插件注册在配置要求采用 DSH 后端时生效，其工厂等待共享初始化结果后再绑定工具池。内部身份固定为 `dsh-adapter`；若配置中存在同名外部插件条目，在依赖安装、模块 import 和工厂执行之前直接由内部实现接管，只读识别包元数据身份，不加载外部副本，也不改写原配置文件与 ontology 源码。无法判明的身份冲突返回明确错误。
 
 参数依旧由引擎交付 `PluginInput.pluginConfig["dsh-adapter"]`；三层 settings 合并、JSONC 写法、现有字段和内联 options fallback 均保持原契约。无需新增插件路径即可配置内部实现。示例：
 
@@ -78,7 +109,7 @@ Ellamaka 内部的 dsh-adapter 通过 tool.provider 在每次模型请求读取�
 | 权限           | 执行前复用 Ellamaka 读写与外部目录门禁；平台映射使用逻辑工具权限          |
 | 生命周期       | 实际执行交由 registry，取消、超时与清理由 provider 拥有                   |
 
-文件能力整套采用，读取观测与后续编辑共享同一后端。配置要求 DSH 后端时，adapter 必须先等待容器 ready；准备失败使相应请求明确失败，不能以空 provider 或原生后端掩盖沙箱不可用。明确关闭 DSH 采用的配置仍使用原生工具。Bun 的标准 API 兼容、模块路由与激活状态由宿主基座保证。
+文件能力整套采用，读取观测与后续编辑共享同一后端。配置要求 DSH 后端时，adapter 必须先等待容器 ready；准备阶段拿不到容器时，采用面回退到 Ellamaka 原生工具，会话保持可用，宿主通过 health 与界面提示说明沙箱不可用。容器在 ready 后失效时，请求继续 fail closed。明确关闭 DSH 采用的配置同样使用原生工具。Bun 的标准 API 兼容、模块路由与激活状态由宿主基座保证。
 
 ## Session Facade
 

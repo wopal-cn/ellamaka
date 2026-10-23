@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
+import { DSH_CLOSURE_VERSION } from "./closure-version"
 import {
   buildDshRuntimeManifest,
   canonicalSerialize,
@@ -14,6 +15,7 @@ import {
 function makeManifest(overrides: Partial<DshRuntimeManifestV1> = {}): DshRuntimeManifestV1 {
   const base: DshRuntimeManifestV1 = {
     schema: "ellamaka.dsh-runtime/v1",
+    closureVersion: 1,
     bridgeAbi: 1,
     dependencies: { "@deepseek-ai/dsh": "0.1.1-rc.2" },
     fingerprint: "sha512-placeholder",
@@ -53,6 +55,16 @@ describe("parseDshRuntimeManifest", () => {
     delete (bad as Partial<DshRuntimeManifestV1>).bridgeAbi
     expect(() => parseDshRuntimeManifest(JSON.stringify(bad))).toThrow(/bridgeAbi|bridge/i)
   })
+
+  test("requires a positive integer closureVersion", () => {
+    const missing = makeManifest()
+    delete (missing as Partial<DshRuntimeManifestV1>).closureVersion
+    expect(() => parseDshRuntimeManifest(JSON.stringify(missing))).toThrow(/closureVersion/)
+    expect(() => parseDshRuntimeManifest(JSON.stringify(makeManifest({ closureVersion: 0 })))).toThrow(/closureVersion/)
+    expect(() => parseDshRuntimeManifest(JSON.stringify(makeManifest({ closureVersion: 1.5 })))).toThrow(
+      /closureVersion/,
+    )
+  })
 })
 
 // --- fingerprint ------------------------------------------------------------
@@ -66,9 +78,13 @@ describe("computeManifestFingerprint", () => {
 
   test("changes when dependencies change", () => {
     const a = computeManifestFingerprint(makeManifest())
-    const b = computeManifestFingerprint(
-      makeManifest({ dependencies: { "@deepseek-ai/dsh": "0.2.0" } }),
-    )
+    const b = computeManifestFingerprint(makeManifest({ dependencies: { "@deepseek-ai/dsh": "0.2.0" } }))
+    expect(a).not.toBe(b)
+  })
+
+  test("changes when closureVersion changes", () => {
+    const a = computeManifestFingerprint(makeManifest({ closureVersion: 1 }))
+    const b = computeManifestFingerprint(makeManifest({ closureVersion: 2 }))
     expect(a).not.toBe(b)
   })
 
@@ -87,6 +103,14 @@ describe("computeManifestFingerprint", () => {
 // --- buildDshRuntimeManifest ------------------------------------------------
 
 describe("buildDshRuntimeManifest", () => {
+  test("carries the source closureVersion independently of product release metadata", () => {
+    const pkg = { ...PKG, version: "99.0.0-beta.1", channel: "beta" }
+    const m = buildDshRuntimeManifest(pkg)
+    expect(Number.isInteger(DSH_CLOSURE_VERSION)).toBe(true)
+    expect(DSH_CLOSURE_VERSION).toBeGreaterThan(0)
+    expect(m.closureVersion).toBe(DSH_CLOSURE_VERSION)
+  })
+
   test("carries the exact DSH direct dependency versions", () => {
     const m = buildDshRuntimeManifest(PKG)
     expect(m.dependencies["@deepseek-ai/dsh"]).toBe("0.1.1-rc.2")

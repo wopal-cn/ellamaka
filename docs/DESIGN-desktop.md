@@ -109,7 +109,7 @@ Desktop sidecar 是 **随 Desktop 打包、由 Desktop 管生命周期的 Ellama
 
 Electron Main 只负责 sidecar 的进程生命周期、随机本地端口、本地认证、重启与退出。Ellamaka Runtime 负责 HTTP/SSE/WebSocket、Session、PTY 与 Core activation；WopalSpace integration layer 在同一 Server composition 上挂载 Setup/Onboarding HTTP projection。
 
-Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 正常启动；sidecar 同时检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 准备当前 Desktop build 需要的运行资源。DSH 等附加能力处于 `PREPARING/DEGRADED` 时只影响对应能力，不阻断已经可用的 native Runtime。
+Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。sidecar 再检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源。DSH 等附加能力处于 `PREPARING/DEGRADED` 时只影响对应能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
 
 Renderer 连接同一个 Server：Setup/Onboarding 与 Runtime/WopalSpace 平台能力通过 `@wopal/ellamaka-sdk/http`，Workbench 产品专用 projection/use case 通过 `ellamaka-app` 的 private BFF client。Desktop Main 不维护第二套 Setup 状态机，也不负责产品安装。
 
@@ -124,15 +124,21 @@ PTY Service 是 PTY 生命周期的权威所有者。最后一个 WebSocket subs
 ```text
 Electron Main
   -> start packaged Ellamaka Server
-  -> wait Server health
-  -> sidecar CorePreparation(current embedded build)
-       -> Ready: activate required DSH capabilities
-       -> Degraded: keep native Runtime + diagnosis
+  -> wait Server health (listener + native Runtime + WopalSpace API)
+  -> create and show the window
   -> Renderer connects through public SDK + app-private BFF client
   -> WopalSpace setup.plan decides /onboarding vs /workbench
+sidecar (background)
+  -> CorePreparation(current embedded build)
+       -> Ready: activate required DSH capabilities
+       -> Degraded: keep native Runtime + diagnosis
   -> Space materialized
        -> CorePreparation(instance(directory)) for plugin dependencies
 ```
+
+DSH 的准备进度与终态通过 `/global/health` 和 `core.preparation` 事件送达 Renderer。窗口与原生会话从不等待 DSH。
+
+无版本 Home 的接管由 Desktop 入口在窗口可用之后确认一次。确认面是 Desktop 的窗口级对话框，不是 Onboarding 步骤；Setup 不驱动 CorePreparation。确认后由 sidecar 在排他锁下接管 Home，再挂载 DSH。拒绝则保持 DSH degraded，应用继续可用；Home 未被接管期间，下次启动会再次出现同一确认。
 
 Core readiness 不是是否展示 Onboarding 的唯一条件。Renderer 依据 Setup state 和 machine facts 进入配置阶段或运行阶段。Desktop Main 不读取 `onboarding.json` 推断 Core，也不实现 closure materializer、Home backup 或 plugin dependency installer。
 

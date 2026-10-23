@@ -8,8 +8,19 @@ import { createServer, type Server } from "node:http"
 import { once } from "node:events"
 import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
-import { bootDshWeb, migrateToolsProfileApprovalPatch, mountDshWeb, mountDshTools } from "../src/dsh-web"
-import { createDshRuntimeApi } from "../src/runtime/loader"
+import { bootDshWeb, mountDshWeb, mountDshTools } from "../src/dsh-web"
+import { createDshRuntimeApi, createPackageDshRuntimeApi, type DshRuntimeApi } from "../src/runtime/loader"
+import { appendBundle, readProfileManifest, withProfileManifestWrite } from "../src/plugins/profile-manifest"
+import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
+
+/** Read the tool names registered on a mounted container (typed guard, no `any`). */
+function readToolNames(ctx: Context): string[] {
+  const tools: unknown = ctx.get("tools")
+  if (typeof tools !== "object" || tools === null || !("schemas" in tools) || typeof tools.schemas !== "function") {
+    throw new Error("mounted container exposes no tools.schemas()")
+  }
+  return tools.schemas().map((schema: { name: string }) => schema.name)
+}
 
 /** Attach a VirtualWebServer to a raw server and return its base URL. */
 async function attachAndListen(webServer: { attach(server: Server): void }) {
@@ -95,6 +106,37 @@ function makeSessionFake(id: string, cwd: string, seeded: { type: string; data: 
 }
 
 /**
+ * Wrap the real runtime so one profile reports a selected bundle as skipped.
+ * Everything except `loadProfile` delegates to the real closure, keeping the
+ * test at the container boundary instead of mocking the skip semantics.
+ */
+function runtimeWithSkippedBundle(
+  profileName: "web" | "ellamaka-tools",
+  packageName: string,
+  reason: string,
+): DshRuntimeApi {
+  const base = createPackageDshRuntimeApi()
+  return {
+    ...base,
+    appBoot: {
+      ...base.appBoot,
+      loadProfile: (...args: Parameters<typeof base.appBoot.loadProfile>) => {
+        const loaded = base.appBoot.loadProfile(...args)
+        if (args[1] !== profileName) return loaded
+        return {
+          ...loaded,
+          layers: loaded.layers.filter((layer) => layer.packageName !== packageName),
+          skippedBundles: [
+            ...loaded.skippedBundles.filter((bundle) => bundle.packageName !== packageName),
+            { packageName, reason },
+          ],
+        }
+      },
+    },
+  }
+}
+
+/**
  * Mount the dsh web engine virtually: the official web profile registers its
  * routes on a VirtualWebServer instead of a second listening socket (final
  * scheme, DESIGN-dsh-base.md). Uses a temp DSH_HOME so the test never touches
@@ -104,6 +146,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb activates the web profile without creating a listening socket", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, {
       home,
       port: 4097,
@@ -170,6 +213,14 @@ describe("dsh web engine", () => {
       const desktopPnpm = ctx.get("desktopPnpm") as { runPlugin?: unknown } | undefined
       expect(desktopPnpm).toBeDefined()
       expect(typeof desktopPnpm!.runPlugin).toBe("function")
+
+      // The market's post-install acknowledgement is served by the container
+      // that owns the composition. With the web container in its own child
+      // process the host cannot answer this bridge, so the mount binds it
+      // itself — an unbound bridge would answer "watcher is unavailable" and
+      // push the market onto its own temporary loader tree.
+      const activation = await host.pluginActivation!.activate()
+      expect(activation).toEqual({ ok: true })
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()
@@ -184,6 +235,7 @@ describe("dsh web engine", () => {
     const anchor = req.resolve("@deepseek-ai/dsh/package.json")
     const runtime = createDshRuntimeApi(anchor)
     const ctx = new runtime.cordis.Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 0, installAnchor: anchor, runtime })
 
     try {
@@ -199,6 +251,90 @@ describe("dsh web engine", () => {
     }
   }, 30_000)
 
+  test("a skipped extension bundle keeps web ready and emits a WARN diagnostic", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-bundle-skip-"))
+    const logDir = join(home, "logs")
+    prepareDshProfiles(home)
+
+    const profileDir = join(home, "home", "profiles", "web")
+    const manifestPath = join(profileDir, "package.json")
+    const patchPath = join(profileDir, "cordis.patch.yml")
+    await withProfileManifestWrite(profileDir, (manifest) => appendBundle(manifest, "@example/incompatible-bundle"))
+    expect(readProfileManifest(profileDir).bundles).toContain("@example/incompatible-bundle")
+    const manifestBefore = readFileSync(manifestPath, "utf8")
+    const patchBefore = readFileSync(patchPath, "utf8")
+
+    const host = await bootDshWeb({
+      home,
+      port: 0,
+      logDir,
+      disablePtcRuntime: true,
+      ellamakaCommand: [process.execPath],
+    })
+    try {
+      expect(host.ctx.get("configEditor", false)).toBeDefined()
+      expect(readFileSync(manifestPath, "utf8")).toBe(manifestBefore)
+      expect(readFileSync(patchPath, "utf8")).toBe(patchBefore)
+
+      const content = readFileSync(join(logDir, "dsh-plugins-web.log"), "utf8")
+      expect(content).toContain("[WARN]")
+      expect(content).toContain("@example/incompatible-bundle")
+      expect(content).toContain("reason")
+    } finally {
+      await host.dispose()
+    }
+  }, 30_000)
+
+  test("a skipped core bundle rejects web startup with its official reason", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-core-skip-web-"))
+    prepareDshProfiles(home)
+    const ctx = new Context()
+    const runtime = runtimeWithSkippedBundle("web", "@deepseek-ai/dsh-web-app", "test-incompatible")
+
+    let error: unknown
+    try {
+      await mountDshWeb(ctx, { home, port: 0, runtime, disablePtcRuntime: true })
+    } catch (caught) {
+      error = caught
+    }
+    try {
+      expect(error).toBeInstanceOf(Error)
+      const message = error instanceof Error ? error.message : String(error)
+      expect(message).toMatch(/DSH core bundles could not load/)
+      expect(message).toContain("@deepseek-ai/dsh-web-app")
+      expect(message).toContain("test-incompatible")
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
+  test("standalone tools stays usable when the unrelated base bundle is unavailable", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-base-free-tools-"))
+    prepareDshProfiles(home)
+    const ctx = new Context()
+    const runtime = runtimeWithSkippedBundle("ellamaka-tools", "@deepseek-ai/dsh-base", "test-incompatible")
+    const host = await mountDshTools(ctx, { home, port: 0, runtime })
+    try {
+      expect(readToolNames(ctx)).toContain("bash")
+      expect(ctx.get("sessions", false)).toBeUndefined()
+    } finally {
+      await host.dispose()
+      await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
+  test("PTC binding failure rejects activation and cleans the candidate loader tree", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-ptc-fail-"))
+    prepareDshProfiles(home)
+    writeFileSync(join(home, "home", "profiles", "web", "cordis.patch.yml"), "- { id: ptc-runtime, disabled: true }\n")
+    const ctx = new Context()
+
+    await expect(mountDshWeb(ctx, { home, port: 0 })).rejects.toThrow(/PTC runtime unavailable/)
+    expect(ctx.get("webServer", false)).toBeUndefined()
+    expect(ctx.get("loader", false)).toBeUndefined()
+    await ctx.fiber.dispose()
+  }, 30_000)
+
   test("mountDshWeb with an explicit installAnchor discovers presets from that closure", async () => {
     // Packaged-CLI scheme: the anchor lives in the materialised closure under
     // the dsh home, not in the module graph (DESIGN-dsh-base.md). The preset
@@ -209,6 +345,7 @@ describe("dsh web engine", () => {
     const req = createRequire(import.meta.url)
     const anchor = req.resolve("@deepseek-ai/dsh/package.json")
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, installAnchor: anchor, disablePtcRuntime: true })
 
     try {
@@ -227,6 +364,7 @@ describe("dsh web engine", () => {
 
   test("bootDshWeb owns a fresh context and disposes it", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
+    prepareDshProfiles(home)
     const host = await bootDshWeb({ home, port: 4097, disablePtcRuntime: true })
 
     try {
@@ -247,6 +385,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb injects the iframe adapter as a real <script> node that executes", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
     try {
@@ -286,6 +425,7 @@ describe("dsh web engine", () => {
   test("mountDshWeb dispose closes upgrade sockets dispatched through the virtual webserver", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
     const { server, baseUrl } = await attachAndListen(host.webServer)
@@ -342,6 +482,7 @@ describe("dsh web engine", () => {
     const logFile = join(logDir, "dsh-plugins-web.log")
     const ctx = new Context()
     let logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR" = "WARN"
+    prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, {
       home,
       port: 4097,
@@ -387,6 +528,7 @@ describe("dsh web engine", () => {
     const logDir = join(home, "logs")
     const webCtx = new Context()
     const toolsCtx = new Context()
+    prepareDshProfiles(home)
     const webHost = await mountDshWeb(webCtx, {
       home,
       port: 4098,
@@ -395,6 +537,7 @@ describe("dsh web engine", () => {
     })
 
     try {
+      prepareDshProfiles(home)
       const toolsHost = await mountDshTools(toolsCtx, { home, port: 0, logDir })
       try {
         webCtx.logger("web-probe").warn("web-only-probe")
@@ -471,42 +614,111 @@ const homedirWritable = testHomedirWritable()
  * lightweight per-call context without live dsh sessions.
  */
 describe("dsh tools profile", () => {
-  test("approval patch migration removes only the obsolete host row", () => {
-    const input = [
-      "# user comment",
-      "- { id: user-questions, disabled: true }",
-      "- { id: approval, disabled: true }",
-      "- { id: custom-plugin, disabled: true }",
-      "",
-    ].join("\n")
+  test("mountDshTools resets a stale cordis.yml root anchor before mounting", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-tools-root-reset-"))
+    const ctx = new Context()
+    prepareDshProfiles(home)
 
-    expect(migrateToolsProfileApprovalPatch(input)).toBe(
-      [
-        "# user comment",
-        "- { id: user-questions, disabled: true }",
-        "- { id: custom-plugin, disabled: true }",
-        "",
-      ].join("\n"),
-    )
-  })
+    const profileDir = join(home, "home", "profiles", "ellamaka-tools")
+    const rootConfig = join(profileDir, "cordis.yml")
+    // Simulate a previous run's loader write-back: a composed tree left behind.
+    writeFileSync(rootConfig, "- { id: stale-plugin, name: '@example/composed-from-last-run' }\n")
 
-  test("mountDshTools migrates a persisted legacy profile and composes approval", async () => {
+    const host = await mountDshTools(ctx, { home, port: 0 })
+    try {
+      // The mount read the synthetic anchor, not the stale tree — a stale row
+      // would fail the tools container's fail-closed activation audit — and
+      // the anchor itself is the empty array the loader expects.
+      expect(readFileSync(rootConfig, "utf8")).toBe("[]\n")
+      // The mount itself is the proof: a stale composed row would fail the
+      // tools container's fail-closed activation audit.
+      expect(ctx.get("tools", false)).toBeDefined()
+    } finally {
+      await host.dispose()
+      await ctx.fiber.dispose()
+    }
+  }, 60_000)
+
+  test("mountDshWeb resets a stale cordis.yml root anchor before mounting", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-web-root-reset-"))
+    const ctx = new Context()
+    prepareDshProfiles(home)
+
+    const rootConfig = join(home, "home", "profiles", "web", "cordis.yml")
+    writeFileSync(rootConfig, "- { id: stale-plugin, name: '@example/composed-from-last-run' }\n")
+
+    const host = await mountDshWeb(ctx, {
+      home,
+      port: 0,
+      disablePtcRuntime: true,
+      ellamakaCommand: [process.execPath],
+    })
+    try {
+      expect(readFileSync(rootConfig, "utf8")).toBe("[]\n")
+      expect(ctx.get("configEditor", false)).toBeDefined()
+    } finally {
+      await host.dispose()
+      await ctx.fiber.dispose()
+    }
+  }, 60_000)
+
+  test("prepared legacy tools patch is cleaned during preparation and approval stays composed", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
+    const patchPath = join(home, "home", "profiles", "ellamaka-tools", "cordis.patch.yml")
+    const rootConfig = join(home, "home", "profiles", "ellamaka-tools", "cordis.yml")
     const seedCtx = new Context()
+    prepareDshProfiles(home)
     const seedHost = await mountDshTools(seedCtx, { home, port: 0 })
     await seedHost.dispose()
     await seedCtx.fiber.dispose()
 
-    const patchPath = join(home, "home", "profiles", "ellamaka-tools", "cordis.patch.yml")
-    const current = readFileSync(patchPath, "utf-8")
-    writeFileSync(patchPath, `${current}\n- { id: approval, disabled: true }\n# user-tail\n`)
+    // Reconstruct the actual old base-backed manifest as well as its patch.
+    const manifestPath = join(home, "home", "profiles", "ellamaka-tools", "package.json")
+    const legacyManifest = JSON.parse(readFileSync(manifestPath, "utf8"))
+    legacyManifest.dsh.profile.bundles = ["@deepseek-ai/dsh-base"]
+    writeFileSync(manifestPath, JSON.stringify(legacyManifest))
+    // An older host's static template plus rows the user appended afterwards.
+    writeFileSync(
+      patchPath,
+      [
+        "# Patch layer for the ellamaka tool-container profile.",
+        "#",
+        "# The tool container is a pure tool backend: the dsh-adapter drives its tools",
+        "- { id: session, disabled: true }",
+        "- { id: agent-loop, disabled: true }",
+        "- { id: session-checkpoint-policy, disabled: true }",
+        "- { id: session-log-deepseek, disabled: true }",
+        "",
+        "# user-tail",
+        "- { id: user-plugin-row, disabled: true }",
+        "",
+      ].join("\n"),
+    )
+    // A previous engine wrote a composed tree back into the synthetic anchor.
+    writeFileSync(rootConfig, "- { id: stale-row }\n")
 
     const ctx = new Context()
+    prepareDshProfiles(home)
+    const cleanedByPreparation = readFileSync(patchPath, "utf8")
     const host = await mountDshTools(ctx, { home, port: 0 })
     try {
-      expect(readFileSync(patchPath, "utf-8")).not.toContain("id: approval, disabled: true")
-      expect(readFileSync(patchPath, "utf-8")).toContain("# user-tail")
+      // Host-owned rows are gone; the user's own rows and comment survive.
+      expect(cleanedByPreparation).not.toContain("id: session, disabled: true")
+      expect(cleanedByPreparation).not.toContain("id: agent-loop, disabled: true")
+      expect(cleanedByPreparation).not.toContain("id: session-checkpoint-policy, disabled: true")
+      expect(cleanedByPreparation).not.toContain("id: session-log-deepseek, disabled: true")
+      expect(cleanedByPreparation).toContain("# user-tail")
+      expect(cleanedByPreparation).toContain("- { id: user-plugin-row, disabled: true }")
+      // Mounting never rewrites the user patch layer, and resets the anchor.
+      expect(readFileSync(patchPath, "utf8")).toBe(cleanedByPreparation)
+      expect(readFileSync(rootConfig, "utf8")).toBe("[]\n")
+      // The standalone declaration supplies tools without Session lifecycle.
+      expect(ctx.get("sessions", false)).toBeUndefined()
+      expect(ctx.get("agents", false)).toBeUndefined()
       expect(ctx.get("approval")).toBeDefined()
+      expect(readToolNames(ctx).sort()).toEqual(
+        ["bash", "edit", "glob", "grep", "read", "str_replace_editor", "write"].sort(),
+      )
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()
@@ -516,6 +728,7 @@ describe("dsh tools profile", () => {
   test("mountDshTools mounts the tool profile on a context and disposes cleanly", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -532,6 +745,7 @@ describe("dsh tools profile", () => {
   test("mountDshTools disables session-checkpoint-policy via the profile patch layer", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -568,6 +782,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -622,6 +837,7 @@ describe("dsh tools profile", () => {
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-readonly-ws-"))
     const target = join(workspace, "forbidden.txt")
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -655,6 +871,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-editor-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -732,6 +949,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-bash-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -832,6 +1050,7 @@ describe("dsh tools profile", () => {
   test("mountDshTools composes the approval service into the tool container", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -848,6 +1067,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-esc-ws-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -891,6 +1111,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-esc-ws2-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
@@ -918,6 +1139,7 @@ describe("dsh tools profile", () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-esc-ws3-"))
     const ctx = new Context()
+    prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {

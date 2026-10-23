@@ -8,8 +8,8 @@
  *   binds the dsh NATIVE webserver to a second loopback port — the surface
  *   the Workbench iframe embeds. The port is chosen by the caller (explicit,
  *   or `0` for an OS-assigned port).
- * - {@link mountDshTools} loads the `ellamaka-tools` profile (dsh-base with
- *   the agent-loop-only plugins disabled) with NO webserver — the pure tool
+ * - {@link mountDshTools} loads the standalone minimal `ellamaka-tools`
+ *   profile with NO webserver — the pure tool
  *   backend the dsh-adapter drives with a lightweight per-call context.
  *
  * dsh source is untouched and community plugins keep working.
@@ -19,7 +19,7 @@
 import type { Context } from "@deepseek-ai/cordis"
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
+import { existsSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 import { createCordisLogExporter, type EllamakaLogLevel } from "./log-bridge.js"
@@ -34,15 +34,13 @@ import { profileCapabilityPatches } from "./plugins/profile-capabilities.js"
 import { createProfilePackages, createProfilePluginManager } from "./plugins/plugin-metadata.js"
 import { installElectronSubprocess } from "./runtime/electron-subprocess.js"
 import { installBunPtcCompatibility } from "./runtime/bun-ptc.js"
+import { installBunSubprocessCompatibility } from "./runtime/bun-subprocess.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
-import { homePatches as makeHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
+import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
+import { applicableHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
 import type { Entry } from "@deepseek-ai/cordis-plugin-loader"
-
-/** The bundled web profile: dsh-base + dsh-web-app. */
-const WEB_PROFILE_NAME = "web"
-/** The tool-container profile: dsh-base with agent-loop plugins disabled. */
-const TOOLS_PROFILE_NAME = "ellamaka-tools"
+import type { PatchOptions } from "@deepseek-ai/cordis-plugin-include"
 
 const require = createRequire(import.meta.url)
 
@@ -65,195 +63,6 @@ export function selectUserPatchHmr(input: { isBun: boolean; loaderInternal: unkn
  * hosts assembled an anchor-relative `config/agent-presets` root by hand; rc.1
  * removed that directory and the host-side assembly with it.
  */
-
-/**
- * Default patch layer for the `ellamaka-tools` profile. Written on first
- * mount (never afterwards — user edits win), so the disable list lives in the
- * user-owned profile file, not in code.
- *
- * The tool container is a pure tool backend: the dsh-adapter drives its tools
- * with a lightweight per-call context (no live dsh sessions, no agent loops).
- * The rows below are agent-loop infrastructure — they need live sessions or
- * serve the dsh chat surface — and are disabled so the container stays
- * session-free and its tool surface stays clean. Re-enable a row only when
- * adopting the corresponding capability together with its full runtime
- * context.
- *
- * `approval` is intentionally NOT disabled: dsh's sandbox escalation
- * (`sandbox_permissions`) resolves its one-shot approval through the native
- * ApprovalService. The adapter's per-call facade satisfies the plugin's
- * runtime preconditions (open turn via turn/start..turn/end, appendable
- * events for the approval/asked + approval/decided audit pair), and the
- * adapter registers the `approval/request` answerer that bridges the ask to
- * ellamaka Permission. An absent answerer still fails closed
- * (`unavailable`), and a `never` escalation policy rejects in-service.
- */
-const TOOLS_PROFILE_PATCH = `# Patch layer for the ellamaka tool-container profile.
-#
-# The tool container is a pure tool backend: the dsh-adapter drives its tools
-# with a lightweight per-call context (no live dsh sessions, no agent loops).
-# The rows below are agent-loop infrastructure — they need live sessions or
-# serve the dsh chat surface — and are disabled so the container stays
-# session-free and its tool surface stays clean. Re-enable a row only when
-# adopting the corresponding capability together with its full runtime
-# context.
-#
-# \`approval\` is intentionally NOT disabled: dsh's sandbox escalation
-# (\`sandbox_permissions\`) resolves its one-shot approval through the native
-# ApprovalService. The adapter's per-call facade satisfies the plugin's
-# runtime preconditions (open turn via turn/start..turn/end, appendable
-# events for the approval/asked + approval/decided audit pair), and the
-# adapter registers the \`approval/request\` answerer that bridges the ask to
-# ellamaka Permission. An absent answerer still fails closed
-# (\`unavailable\`), and a \`never\` escalation policy rejects in-service.
-
-# --- session & agent-loop core ---
-# Session lifecycle belongs to ellamaka; the container must stay session-free.
-- { id: session, disabled: true }
-# Flushes the calling agent's live session before every tool call; the
-# adapter's per-call context has no live session, so this would throw.
-- { id: session-checkpoint-policy, disabled: true }
-- { id: agent, disabled: true }
-# rc.1 base row: the DeepSeek plugin inventory publishes against the agents
-# surface; the tool container carries none.
-- { id: plugin-package-inventory-deepseek, disabled: true }
-- { id: agent-loop, disabled: true }
-- { id: agent-default-model, disabled: true }
-- { id: agent-instructions, disabled: true }
-
-# --- session persistence / query / projection / telemetry ---
-- { id: session-title, disabled: true }
-- { id: session-title-llm, disabled: true }
-- { id: session-persistence-jsonl, disabled: true }
-# rc.1 base row: the DeepSeek-native session log stream needs live sessions.
-- { id: session-log-deepseek, disabled: true }
-- { id: session-query-sqlite, disabled: true }
-# \`session-projection\` stays ENABLED (it is the provider of the
-# \`sessionProjections\` service, not a session consumer): rc.1 made the
-# sandbox policy session-aware (\`sandboxMode\` is a projection), so the
-# whole sandbox chain hangs off that service. The registry stays empty
-# without session event streams, and \`stateOf\` falls back to the
-# deployment default mode — exactly the tool container's semantics.
-- { id: session-projection-cache, disabled: true }
-- { id: session-telemetry-otel, disabled: true }
-
-# --- llm runtime & credentials (no model calls in the tool container) ---
-- { id: llm, disabled: true }
-- { id: llm-retry, disabled: true }
-- { id: llm-deepseek, disabled: true }
-# rc.1 base row: DeepSeek LLM API extensions belong to the llm face.
-- { id: deepseek-llm-api-extensions, disabled: true }
-- { id: llm-pi-ai, disabled: true }
-- { id: settings, disabled: true }
-- { id: credentials, disabled: true }
-
-# --- api gateway (typert) ---
-- { id: typert, disabled: true }
-- { id: typert-loader, disabled: true }
-- { id: typert-gateway, disabled: true }
-
-# --- interactive surface (questions, permission presets) ---
-# 'approval' is ENABLED (not listed below): dsh's native escalation
-# choreography (approveEscalation) resolves 'sandbox_permissions' asks
-# through it. The per-call facade carries the open turn
-# (turn/start..turn/end from the adapter) and the audit-pair sink
-# (session.append), and the host bridges 'approval/request' to ellamaka
-# Permission — a rejected/missing answerer fails closed.
-- { id: user-questions, disabled: true }
-- { id: permission, disabled: true }
-
-# --- subagent delegation (agent-loop stack; ellamaka has native subagents) ---
-- { id: subagent, disabled: true }
-- { id: subagent-spawn-in-process, disabled: true }
-- { id: subagent-fork-in-process, disabled: true }
-- { id: tool-subagent, disabled: true }
-- { id: tool-subagent-fork, disabled: true }
-- { id: tool-subagent-control, disabled: true }
-- { id: tool-subagent-list-agents, disabled: true }
-- { id: workflow-worker-thread, disabled: true }
-- { id: tool-workflow, disabled: true }
-- { id: tool-ralph, disabled: true }
-
-# --- background jobs ---
-- { id: jobs, disabled: true }
-- { id: tool-jobs, disabled: true }
-
-# --- goals / plan mode / commands / skills ---
-- { id: goal, disabled: true }
-- { id: goal-round-driver, disabled: true }
-- { id: tool-goal, disabled: true }
-- { id: command-goal, disabled: true }
-- { id: plan-mode, disabled: true }
-- { id: commands, disabled: true }
-- { id: command-feedback, disabled: true }
-- { id: command-compact, disabled: true }
-- { id: skill, disabled: true }
-- { id: skill-filesystem, disabled: true }
-- { id: tool-skill, disabled: true }
-
-# --- compaction / token accounting ---
-- { id: compaction-basic, disabled: true }
-- { id: token-meter, disabled: true }
-- { id: tool-result-pruner, disabled: true }
-
-# --- web search (needs llm + credentials) ---
-- { id: web, disabled: true }
-- { id: web-search-deepseek, disabled: true }
-# rc.1 base row: the http fetcher is the 'web' service provider; disabled
-# with the rest of the web face.
-- { id: web-fetch-http, disabled: true }
-- { id: tool-web, disabled: true }
-
-# --- attachments / todo / reminders (agent-loop UX) ---
-- { id: attachment-local, disabled: true }
-- { id: tool-todo, disabled: true }
-- { id: repeat-tool-reminder, disabled: true }
-`
-
-// Revision 1 migration: older host-seeded tool profiles disabled approval.
-// The profile patch is otherwise user-owned and must never be overwritten, so
-// migrate only this exact obsolete host row and preserve every other byte.
-const LEGACY_APPROVAL_DISABLED_ROW = "- { id: approval, disabled: true }"
-
-export function migrateToolsProfileApprovalPatch(content: string): string {
-  const lines = content.split("\n")
-  const next = lines.filter((line) => line.trim() !== LEGACY_APPROVAL_DISABLED_ROW)
-  return next.length === lines.length ? content : next.join("\n")
-}
-
-// Revision 2 migration (rc.1): the sandbox chain became session-aware —
-// `dsh-sandbox-policy` now injects the `sessionProjections` service, so the
-// tool container must enable the `session-projection` provider (the registry
-// stays empty with no session stream and `stateOf` falls back to the
-// deployment default mode). User profiles seeded by the rc.2-era host row
-// disabled it, and rc.1 added session/agent-face base rows that must stay
-// disabled here. Like revision 1: migrate only these exact host-owned rows,
-// preserve every other byte, and never overwrite a user-owned patch.
-const LEGACY_SESSION_PROJECTION_DISABLED_ROW = "- { id: session-projection, disabled: true }"
-const RC1_TOOLS_DISABLED_ROWS = [
-  "- { id: session-log-deepseek, disabled: true }",
-  "- { id: plugin-package-inventory-deepseek, disabled: true }",
-  "- { id: session-projection-cache, disabled: true }",
-  "- { id: web-fetch-http, disabled: true }",
-  "- { id: deepseek-llm-api-extensions, disabled: true }",
-]
-
-export function migrateToolsProfileRc1Patch(content: string): string {
-  let lines = content.split("\n")
-  let changed = false
-  const withoutLegacy = lines.filter((line) => line.trim() !== LEGACY_SESSION_PROJECTION_DISABLED_ROW)
-  if (withoutLegacy.length !== lines.length) {
-    lines = withoutLegacy
-    changed = true
-  }
-  for (const row of RC1_TOOLS_DISABLED_ROWS) {
-    if (!lines.some((line) => line.trim() === row)) {
-      lines.push(row)
-      changed = true
-    }
-  }
-  return changed ? lines.join("\n") : content
-}
 
 /** A handle to a mounted dsh engine. */
 export interface DshHost {
@@ -412,6 +221,66 @@ export interface DshHostOptions {
   trustedHosts?: readonly string[]
 }
 
+/**
+ * The single place the host context crosses into the official app-boot audit
+ * signature. `Context` is nominally narrower than the upstream parameter type,
+ * so every call site would otherwise repeat the same cast.
+ */
+async function auditStartupEntries(
+  runtime: Pick<DshRuntimeApi, "appBoot">,
+  ctx: Context,
+  warn?: (line: string) => void,
+): Promise<void> {
+  await runtime.appBoot.auditStartupEntries(
+    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
+    "ellamaka",
+    warn,
+  )
+}
+
+/**
+ * Audit the settled Loader tree under the tools profile's fail-closed policy.
+ * Pending entries mean a required `inject` service is missing; the official
+ * diagnostic carries both the entry and that service name.
+ */
+export async function assertDshActivationComplete(
+  runtime: Pick<DshRuntimeApi, "appBoot">,
+  ctx: Context,
+  profileName: string,
+): Promise<void> {
+  const diagnostics: string[] = []
+  await auditStartupEntries(runtime, ctx, (line: string) => diagnostics.push(line))
+  if (diagnostics.length > 0) {
+    throw new Error(
+      `DSH ${profileName} container activation incomplete; degrading to no sandbox:\n${diagnostics.join("\n")}`,
+    )
+  }
+}
+
+/**
+ * Enforce the platform's complete adopted tool surface after Loader
+ * settlement. A silently pending plugin leaves the registry short; that is a
+ * failed mount, never a degraded ready state (DESIGN-ellamaka-tools.md
+ * Container Composition item 3).
+ */
+export function verifyDshToolsRegistered(
+  lookup: (name: string) => { schemas(): { name: string }[] } | undefined,
+): void {
+  const tools = lookup("tools")
+  const expected = [
+    "read",
+    "write",
+    "edit",
+    "glob",
+    "grep",
+    "str_replace_editor",
+    process.platform === "win32" ? "pwsh" : "bash",
+  ]
+  const names = new Set(tools?.schemas().map((schema) => schema.name))
+  const missing = expected.filter((name) => !names.has(name))
+  if (missing.length) throw new Error("DSH adopted tools unavailable: " + missing.join(", "))
+}
+
 /** Internal mount options shared by the web and base entry points. */
 type MountProfileOptions = DshHostOptions & {
   profileName: string
@@ -421,6 +290,82 @@ type MountProfileOptions = DshHostOptions & {
   requireWebServer: boolean
   /** When set, provide this VirtualWebServer instead of binding a real socket. */
   virtualWebServer?: VirtualWebServer
+  /**
+   * Startup activation-audit policy. `"audit"` keeps the official behavior:
+   * optional-entry failures warn and the container still mounts. `"fail-closed"`
+   * treats ANY inactive entry (failed or pending) as a mount failure — the
+   * container is disposed and the error carries the official diagnostic. The
+   * tools container defaults to fail-closed: it is the direct capability
+   * handoff to the host adapter, and a half-activated container would project
+   * broken tools. The web profile keeps `"audit"` (its UI surface degrades
+   * per-entry instead).
+   */
+  activationAudit?: "audit" | "fail-closed"
+}
+
+type PtcReadinessRuntime = {
+  resolve(request: {
+    program: string
+    bindings: Array<{ global: string; functions: Record<string, (args: unknown) => Promise<unknown>> }>
+    timeoutMs?: number | null
+  }): unknown
+  run(spec: unknown): Promise<{ value?: unknown; error?: { kind: string; message: string } }>
+}
+
+function isPtcReadinessRuntime(value: unknown): value is PtcReadinessRuntime {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "resolve" in value &&
+    typeof value.resolve === "function" &&
+    "run" in value &&
+    typeof value.run === "function"
+  )
+}
+
+/** Execute a real lossless-JSON binding before a profile can publish ready. */
+export async function verifyDshPtcBinding(ctx: Context): Promise<void> {
+  const candidate: unknown = ctx.get("ptcRuntime", false)
+  if (!isPtcReadinessRuntime(candidate)) throw new Error("DSH PTC runtime unavailable")
+  const ptc = candidate
+  const request = { kind: "ellamaka-readiness", nonce: 7 }
+  const spec = ptc.resolve({
+    program: "return await ellamakaReadiness.probe({ kind: 'ellamaka-readiness', nonce: 7 })",
+    bindings: [
+      {
+        global: "ellamakaReadiness",
+        functions: {
+          probe: async (input: unknown) => {
+            if (
+              typeof input !== "object" ||
+              input === null ||
+              !("kind" in input) ||
+              input.kind !== request.kind ||
+              !("nonce" in input) ||
+              input.nonce !== request.nonce
+            ) {
+              throw new Error("invalid readiness probe input")
+            }
+            return { ok: true, nonce: request.nonce }
+          },
+        },
+      },
+    ],
+    timeoutMs: 5_000,
+  })
+  const result = await ptc.run(spec)
+  if (result.error) throw new Error(`DSH PTC readiness failed (${result.error.kind}): ${result.error.message}`)
+  const value = result.value
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("ok" in value) ||
+    value.ok !== true ||
+    !("nonce" in value) ||
+    value.nonce !== request.nonce
+  ) {
+    throw new Error("DSH PTC readiness returned an invalid JSON value")
+  }
 }
 
 /**
@@ -488,7 +433,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // agree. These two still stay DISABLED until their env-resolution paths
   // are re-verified against the live env — re-enable only after confirming
   // every write lands inside the home.
-  const homePatches = makeHomePatches(homeDir)
   // The dsh installation anchor: resolve the @deepseek-ai/dsh package.json
   // from this host package so loadProfile finds the bundle layers in the
   // host's node_modules closure. Desktop packaged mode overrides it to the
@@ -499,15 +443,26 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // test fixtures); for a real materialised closure it is a no-op.
   const installAnchor = realpathSync(opts.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"))
   installBunPtcCompatibility()
+  installBunSubprocessCompatibility()
 
-  const { createRuntimeResolution, resolveProfileDir, initProfile } = runtime.appBoot
+  const { createRuntimeResolution } = runtime.appBoot
+  const coreBundles = profileName === WEB_PROFILE_NAME ? ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] : []
   const loadProfile = (...args: Parameters<typeof runtime.appBoot.loadProfile>) => {
     const loaded = runtime.appBoot.loadProfile(...args)
-    if (loaded.skippedBundles.length) {
-      throw new Error(
-        "DSH selected bundles could not load: " +
-          loaded.skippedBundles.map((bundle) => bundle.packageName + ": " + bundle.reason).join("; "),
-      )
+    const skipped = new Map(loaded.skippedBundles.map((bundle) => [bundle.packageName, bundle.reason]))
+    const loadedLayers = new Set(loaded.layers.map((layer) => layer.packageName))
+    const coreFailures = coreBundles.flatMap((packageName) => {
+      const reason = skipped.get(packageName)
+      if (reason !== undefined) return [packageName + ": " + reason]
+      if (!loadedLayers.has(packageName)) return [packageName + ": missing from loaded layers"]
+      return []
+    })
+    if (coreFailures.length > 0) {
+      throw new Error("DSH core bundles could not load: " + coreFailures.join("; "))
+    }
+    for (const { packageName, reason } of loaded.skippedBundles) {
+      if (coreBundles.includes(packageName)) continue
+      ctx.logger.warn("DSH extension bundle skipped", { packageName, reason })
     }
     return loaded
   }
@@ -550,34 +505,20 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // untouched; this only adds the user install area's links.
   // User entities are resolved from their own profile, never a sibling.
 
-  // The tool-container profile seeds its default patch layer (disable the
-  // agent-loop-only plugins) on first mount. The file is user-owned: once the
-  // user edits it (anything beyond initProfile's empty template), it is never
-  // overwritten.
-  if (profileName === TOOLS_PROFILE_NAME) {
-    const dir = resolveProfileDir(profileName, homeDir)
-    initProfile(dir, runtime.appBoot.DEFAULT_PROFILE_BUNDLES)
-    const patchPath = join(dir, runtime.appBoot.PROFILE_PATCH_FILENAME)
-    try {
-      const current = readFileSync(patchPath, "utf-8")
-      const stripped = current
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("#"))
-        .join("\n")
-        .trim()
-      if (stripped === "[]") {
-        writeFileSync(patchPath, TOOLS_PROFILE_PATCH)
-      } else {
-        const migrated = migrateToolsProfileRc1Patch(migrateToolsProfileApprovalPatch(current))
-        if (migrated !== current) writeFileSync(patchPath, migrated)
-      }
-    } catch {
-      writeFileSync(patchPath, TOOLS_PROFILE_PATCH)
-    }
-  }
+  // Profile files are prepared before activation under exclusive Home ownership.
+  // A running container is verification-only and must never backfill them.
+  assertDshProfileResourcesReady(dshRoot, profileName)
 
   // Load the profile (bundle layers + user patch layer).
   const profile = loadProfile("ellamaka", profileName, installAnchor, homeDir)
+  // Home rows target entries by id. The standalone tools composition contains
+  // only the entries it declares, so host rows for dsh-base services are not
+  // applied there (official patch loading warns on every absent id).
+  const homePatches = applicableHomePatches(homeDir, [
+    ...profile.layers.flatMap((layer) => layer.patches as Record<string, unknown>[]),
+    ...(profile.patches as Record<string, unknown>[]),
+    ...extraPatches,
+  ])
   // The plugin layer (D-04): composed from the store — the single source of
   // truth — so boot and hot reload share one composition (D-03). Store order
   // is layer order; profiles never carry a bundles manifest for plugins.
@@ -607,14 +548,11 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   stackContext.hostPatches = (input) =>
     profileCapabilityPatches(
       profileName,
-      runtime.appBoot.composeEntries([input as Parameters<typeof runtime.appBoot.composeEntries>[0][number]]),
+      runtime.appBoot.composeEntries([input as PatchOptions[]]),
       opts.disablePtcRuntime === true,
     )
   const patches = composeFullPatchStack(stackContext)
   const rootConfig = join(profile.dir, "cordis.yml")
-  // The root config is the host-owned include: an empty entry list. The
-  // bundle + profile patch layers carry every plugin.
-  writeFileSync(rootConfig, "[]\n")
 
   // Replay the dsh boot() sequence on the host context (single container).
   ctx.baseUrl = pathToFileURL(dirname(rootConfig)).href + "/"
@@ -654,24 +592,10 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       )
     }
   }
-  const packageManager = opts.ellamakaCommand?.length
-    ? {
-        command: opts.ellamakaCommand[0]!,
-        args: [
-          ...opts.ellamakaCommand.slice(1),
-          "dsh",
-          "package-worker",
-          "--home",
-          dshRoot,
-          "--profile",
-          profileName,
-          "--install-anchor",
-          installAnchor,
-          "--",
-        ],
-        env: { ELLAMAKA_DSH: "0", WOPAL_HOME: dirname(dshRoot), DSH_HOME: homeDir },
-      }
-    : undefined
+  // The official plugin manager owns installs: its pnpm graph reads this
+  // profile's manifest directly. Ellamaka no longer injects a `packageManager`
+  // worker here — the manifest is pnpm-resolvable (local sources are `file:`),
+  // so there is one installer and one owner (DESIGN-dsh-web.md「插件安装」).
   ctx.provide("profileContext", {
     name: profileName,
     dir: profile.dir,
@@ -691,7 +615,6 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       return [...extraPatches, ...homePatches, ...(stackContext.hostPatches?.(layers) ?? [])]
     },
     telemetryDisabledEnv: "1",
-    ...(profileName === WEB_PROFILE_NAME && packageManager ? { packageManager } : {}),
   })
   const resolution = await createRuntimeResolution({ installAnchor, profile, home: homeDir })
   projectRuntimePackages(resolution)
@@ -732,58 +655,58 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // socket. The official `webserver` entry is disabled via extraPatches.
   await prepare?.(ctx)
   await installElectronSubprocess(ctx, installAnchor)
-  // When the runtime provides a REAL internal loader (Node sidecar), wrap its
-  // import with the profiles fallback (rook W-01): the internal loader
-  // resolves official closure packages but not user plugins under
-  // `profiles/node_modules`, so EVERY internal import path must end with a
-  // profiles-anchored require whose parent-walk hits the healed plugin
-  // symlinks. An unresolved name throws the original error. This runs AFTER
-  // `prepare` so an internal injected there is wrapped too, and BEFORE the
-  // root include mount below (the only consumer of internal.import).
-  // Bare package names in the patch layers (e.g. `@deepseek-ai/dsh-web-app`)
-  // must resolve against the closure the install anchor lives in, not the
-  // host module graph: a bundled host (packaged CLI bunfs, Desktop sidecar)
-  // carries no dsh packages, so the Node internal loader resolves them via
-  // this parent URL — the dsh home root, whose `node_modules/` ancestry holds
-  // the materialised closure (DESIGN-dsh-base.md). From source the same
-  // closure is materialised too (the kill switch guards its absence), so
-  // passing the base unconditionally is mode-independent.
-  const bareModuleBaseUrl = pathToFileURL(join(installAnchor, "..", "..", "..")).href + "/"
+  // Profile routing resolves every package against the closure or its owning
+  // profile before the official loader imports it. Do not select the official
+  // HostResolvedRootInclude: its Node-only override bypasses EntryTree.import
+  // and would send profile-local packages straight to the closure's loader.
+  // The root include's YAML file is a synthetic anchor, not user config: the
+  // loader writes the composed tree back into it on every mount/update. Reset
+  // it immediately before each mount so a replayed composition never stacks on
+  // top of a stale one. This targets the NEW container only — a running engine
+  // keeps its own already-parsed tree in memory.
+  writeFileSync(rootConfig, "[]\n")
   const includeEntry = await runtime.appBoot.mountRootInclude(
     ctx as unknown as Parameters<typeof runtime.appBoot.mountRootInclude>[0],
     rootConfig,
     patches as Parameters<typeof runtime.appBoot.mountRootInclude>[2],
-    bareModuleBaseUrl,
   )
   await ctx.get("loader")?.await()
   if (ctx.get("loader") === undefined || includeEntry === undefined) {
     throw new Error("ellamaka-cordis: dsh boot did not provide a loader service")
   }
-  await runtime.appBoot.auditStartupEntries(
-    ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
-    "ellamaka",
-  )
+  // Activation audit: in fail-closed mode the official optional-entry warnings
+  // are captured instead of falling through to stderr, and ANY inactive entry
+  // fails the mount (a half-activated tools container projects broken tools).
+  // The audit diagnostic text is embedded so the host surfaces the exact
+  // entries that did not activate.
+  const auditDiagnostics: string[] = []
+  const auditWarn = opts.activationAudit === "fail-closed" ? (line: string) => auditDiagnostics.push(line) : undefined
+  await auditStartupEntries(runtime, ctx, auditWarn)
+  if (opts.activationAudit === "fail-closed" && auditDiagnostics.length > 0) {
+    const loader = ctx.get("loader")
+    if (loader !== undefined) {
+      try {
+        loader.remove(includeEntry.id)
+      } catch {
+        // Best-effort; the failure below is the outcome that matters.
+      }
+    }
+    await loaderFiber.dispose().catch(() => undefined)
+    throw new Error(
+      `DSH ${profileName} container activation incomplete; degrading to no sandbox:\n${auditDiagnostics.join("\n")}`,
+    )
+  }
 
   const validate = async () => {
     await ctx.get("loader")?.await()
-    await runtime.appBoot.auditStartupEntries(
-      ctx as unknown as Parameters<typeof runtime.appBoot.auditStartupEntries>[0],
-      "ellamaka",
-    )
+    if (opts.activationAudit === "fail-closed") {
+      await assertDshActivationComplete(runtime, ctx, profileName)
+    } else {
+      await auditStartupEntries(runtime, ctx)
+    }
+    if (opts.disablePtcRuntime !== true) await verifyDshPtcBinding(ctx)
     if (profileName === TOOLS_PROFILE_NAME) {
-      const tools = ctx.get("tools") as { schemas(): { name: string }[] } | undefined
-      const expected = [
-        "read",
-        "write",
-        "edit",
-        "glob",
-        "grep",
-        "str_replace_editor",
-        process.platform === "win32" ? "pwsh" : "bash",
-      ]
-      const names = new Set(tools?.schemas().map((schema) => schema.name))
-      const missing = expected.filter((name) => !names.has(name))
-      if (missing.length) throw new Error("DSH adopted tools unavailable: " + missing.join(", "))
+      verifyDshToolsRegistered((name) => ctx.get(name, false) as { schemas(): { name: string }[] } | undefined)
       if (ctx.get("sessions", false) || ctx.get("agents", false))
         throw new Error("DSH tool profile activated Session lifecycle")
     } else {
@@ -794,7 +717,20 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       await lease[Symbol.asyncDispose]()
     }
   }
-  await validate()
+  try {
+    await validate()
+  } catch (error) {
+    const loader = ctx.get("loader")
+    if (loader !== undefined) {
+      try {
+        loader.remove(includeEntry.id)
+      } catch {
+        // Candidate cleanup is best-effort; preserve the readiness failure.
+      }
+    }
+    await loaderFiber.dispose().catch(() => undefined)
+    throw error
+  }
   const containers: DshPluginContainer[] = [
     {
       profile: profileName,
@@ -829,6 +765,19 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   for (const file of [profile.patchPath, join(profile.dir, "package.json"), join(homeDir, "cordis.patch.yml")]) {
     watchDisposers.push(await bunHmr.watchConfig(file, refresh))
   }
+  // The market's post-install acknowledgement must be answered by the
+  // container that owns the composition. With the web container in its own
+  // child process, nobody else can bind this bridge — leaving it unbound
+  // answers every `activate()` with "watcher is unavailable", so the market
+  // falls back to its own temporary loader tree (a second composition source).
+  pluginActivation?.bind(async () => {
+    try {
+      await bunHmr.runExclusive(refresh)
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
   const watchDispose = async () => {
     for (const dispose of watchDisposers) await dispose()
   }
@@ -842,7 +791,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     }
     await hmrStop()
     const loader = ctx.get("loader")
-    if (loader !== undefined) await loader.remove(includeEntry.id)
+    if (loader !== undefined) loader.remove(includeEntry.id)
     await loaderFiber.dispose()
   }
 
@@ -886,17 +835,23 @@ export async function mountDshWeb(ctx: Context, opts: DshHostOptions): Promise<D
   // Resolve home once so mountProfile and the agent-presets user root agree.
   const dshRoot = opts.home ?? join(process.env.WOPAL_HOME ?? join(homedir(), ".wopal"), "dsh")
   const virtualWebServer = new VirtualWebServer(ctx, { host: "127.0.0.1", port: opts.port, runtime })
-  const host = await mountProfile(ctx, {
-    ...opts,
-    home: dshRoot,
-    profileName: WEB_PROFILE_NAME,
-    requireWebServer: true,
-    virtualWebServer,
-    extraPatches: webExtraPatches({
-      trustedHosts: opts.trustedHosts,
-      extraPatches: opts.extraPatches,
-    }),
-  })
+  let host: Awaited<ReturnType<typeof mountProfile>>
+  try {
+    host = await mountProfile(ctx, {
+      ...opts,
+      home: dshRoot,
+      profileName: WEB_PROFILE_NAME,
+      requireWebServer: true,
+      virtualWebServer,
+      extraPatches: webExtraPatches({
+        trustedHosts: opts.trustedHosts,
+        extraPatches: opts.extraPatches,
+      }),
+    })
+  } catch (error) {
+    virtualWebServer.dispose()
+    throw error
+  }
   // Register the DSH iframe prefix adaptation as the last index tap: rewrite
   // static asset URLs to /dsh and inject the browser fetch/WebSocket/
   // EventSource adapter as a real <script> node (a bare text splice into
@@ -955,6 +910,10 @@ export async function mountDshTools(ctx: Context, opts: DshHostOptions): Promise
     ...opts,
     profileName: TOOLS_PROFILE_NAME,
     requireWebServer: false,
+    // Fail closed: the tools container IS the host-facing
+    // capability surface; optional entries failing silently would project
+    // broken tools. Any inactive entry fails the mount.
+    activationAudit: "fail-closed",
     extraPatches: toolsExtraPatches({ extraPatches: opts.extraPatches }),
   })
   return { ...host, ctx, includeEntry: host.includeEntry!, stackContext: host.stackContext! }

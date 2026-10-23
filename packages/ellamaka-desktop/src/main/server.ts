@@ -21,6 +21,7 @@ export type HealthCheck = { wait: Promise<void> }
 type SidecarMessage =
   | { type: "sqlite"; progress: SqliteMigrationProgress }
   | { type: "ready" }
+  | { type: "dshLegacyAdoptionRequired" }
   | { type: "stopped" }
   | { type: "error"; error: { message: string; stack?: string } }
 
@@ -29,6 +30,8 @@ export type SidecarLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 export type SidecarListener = {
   stop(): Promise<void>
   setLogLevel(level: SidecarLogLevel): void
+  /** Confirm the one-time adoption of an unversioned DSH Home. */
+  adoptLegacyDshHome(): void
 }
 
 export type SpawnedServer = {
@@ -45,6 +48,7 @@ const SIDECAR_OUTPUT_MAX_PER_WINDOW = 20
 type SpawnLocalServerOptions = {
   needsMigration: boolean
   onSqliteProgress?: (progress: SqliteMigrationProgress) => void
+  onDshLegacyAdoptionRequired?: () => void
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
@@ -212,8 +216,15 @@ export async function spawnLocalServer(
       if (message.type === "ready") {
         if (done) return
         done = true
-        cleanup()
+        clearTimeout(timeout)
+        child.off("exit", onExit)
+        // DSH preparation continues after readiness, so keep this listener for
+        // later adoption notices until the child exits.
         resolve()
+        return
+      }
+      if (message.type === "dshLegacyAdoptionRequired") {
+        options.onDshLegacyAdoptionRequired?.()
         return
       }
       if (message.type === "error") {
@@ -228,6 +239,7 @@ export async function spawnLocalServer(
       child.off("message", onMessage)
       child.off("exit", onExit)
     }
+    child.once("exit", () => child.off("message", onMessage))
 
     child.on("message", onMessage)
     child.on("exit", onExit)
@@ -291,6 +303,9 @@ export async function spawnLocalServer(
       },
       setLogLevel: (level: SidecarLogLevel) => {
         if (!exited) child.postMessage({ type: "setLogLevel", level })
+      },
+      adoptLegacyDshHome: () => {
+        if (!exited) child.postMessage({ type: "adoptLegacyDshHome" })
       },
     },
     health: { wait },
@@ -386,6 +401,7 @@ export function createSidecarSpawner(needsMigration: boolean): SidecarSpawnFacto
     spawnLocalServer(hostname, port, password, {
       needsMigration,
       onSqliteProgress: options.onSqliteProgress,
+      onDshLegacyAdoptionRequired: options.onDshLegacyAdoptionRequired,
       onStdout: options.onStdout,
       onStderr: options.onStderr,
       onExit: options.onExit,

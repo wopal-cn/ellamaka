@@ -17,15 +17,11 @@ describe("planLayer layer x package mapping", () => {
   })
 
   test("unit + ellamaka-app maps to test:unit", () => {
-    expect(planLayer("unit", "ellamaka-app")).toEqual([
-      { pkg: "ellamaka-app", command: ["bun", "run", "test:unit"] },
-    ])
+    expect(planLayer("unit", "ellamaka-app")).toEqual([{ pkg: "ellamaka-app", command: ["bun", "run", "test:unit"] }])
   })
 
   test("e2e + ellamaka-app maps to test:e2e", () => {
-    expect(planLayer("e2e", "ellamaka-app")).toEqual([
-      { pkg: "ellamaka-app", command: ["bun", "run", "test:e2e"] },
-    ])
+    expect(planLayer("e2e", "ellamaka-app")).toEqual([{ pkg: "ellamaka-app", command: ["bun", "run", "test:e2e"] }])
   })
 
   test("unit + ellamaka-desktop maps to test", () => {
@@ -56,6 +52,28 @@ describe("planLayer layer x package mapping", () => {
     expect(() => planLayer("e2e", "ellamaka-cordis")).toThrow(/has no e2e layer/)
   })
 
+  test("unit + ellamaka-core maps to test:unit", () => {
+    expect(planLayer("unit", "ellamaka-core")).toEqual([{ pkg: "ellamaka-core", command: ["bun", "run", "test:unit"] }])
+  })
+
+  test("unit + wopalspace maps to test:unit", () => {
+    expect(planLayer("unit", "wopalspace")).toEqual([{ pkg: "wopalspace", command: ["bun", "run", "test:unit"] }])
+  })
+
+  test("integration + wopalspace maps to test:integration", () => {
+    expect(planLayer("integration", "wopalspace")).toEqual([
+      { pkg: "wopalspace", command: ["bun", "run", "test:integration"] },
+    ])
+  })
+
+  test("integration + ellamaka-core throws (no integration layer)", () => {
+    expect(() => planLayer("integration", "ellamaka-core")).toThrow(/has no integration layer/)
+  })
+
+  test("e2e + wopalspace throws (no e2e layer)", () => {
+    expect(() => planLayer("e2e", "wopalspace")).toThrow(/has no e2e layer/)
+  })
+
   test("e2e + all maps each of the four packages to its own test:e2e command", () => {
     const commands = planLayer("e2e", "all")
     expect(commands).toEqual([
@@ -65,9 +83,16 @@ describe("planLayer layer x package mapping", () => {
     ])
   })
 
-  test("unit + all includes all four packages", () => {
+  test("unit + all includes every package with a unit layer", () => {
     const commands = planLayer("unit", "all")
-    expect(commands.map((c) => c.pkg)).toEqual(["opencode", "ellamaka-app", "ellamaka-desktop", "ellamaka-cordis"])
+    expect(commands.map((c) => c.pkg)).toEqual([
+      "opencode",
+      "ellamaka-app",
+      "ellamaka-desktop",
+      "ellamaka-cordis",
+      "ellamaka-core",
+      "wopalspace",
+    ])
   })
 
   test("integration + all filters to only packages that have an integration layer", () => {
@@ -75,6 +100,7 @@ describe("planLayer layer x package mapping", () => {
     expect(commands).toEqual([
       { pkg: "opencode", command: ["bun", "run", "test:integration"] },
       { pkg: "ellamaka-cordis", command: ["bun", "run", "test:integration"] },
+      { pkg: "wopalspace", command: ["bun", "run", "test:integration"] },
     ])
   })
 
@@ -87,10 +113,10 @@ describe("planLayer layer x package mapping", () => {
   })
 
   test("invalid layer throws", () => {
-    expect(() => planLayer("invalid" as never, "all")).toThrow(/Invalid layer/)
+    expect(() => planLayer("invalid", "all")).toThrow(/Invalid layer/)
   })
 
   test("unknown package throws a distinct unknown-package error", () => {
-    expect(() => planLayer("unit", "unknown" as never)).toThrow(/Unknown package/)
+    expect(() => planLayer("unit", "unknown")).toThrow(/Unknown package/)
   })
 })

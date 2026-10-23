@@ -42,6 +42,7 @@ find_space_root() {
 # same worktree becomes two buckets and live instances go unrecognized.
 root="$(cd "$(dirname "$(resolve "$0")")/.." && pwd -P)"
 source "$root/scripts/lib/version.sh"
+source "$root/scripts/lib/desktop-cdp.sh"
 space="$(find_space_root "$root")"
 opencode_entry="$root/packages/opencode/src/index.ts"
 opencode_dir="$root/packages/opencode"
@@ -116,7 +117,7 @@ $self stop [target]
 $self desktop [options]
   --debug [mods]    Debug mode (modules: task,rules; default: all)
   --rebuild         Rebuild sidecar bundle and re-copy icons before launch
-  --cdp-debug       Enable Chrome DevTools Protocol debugging (port 9222)
+  --cdp-debug [port] Enable Desktop DevTools Protocol debugging (default: 9222)
   Desktop runs in background. Close the Electron window or use 'stop desktop'.
   By default sidecar build is skipped (assumes dist/node/node.js is current).
   Sidecar log: $SIDECAR_LOG
@@ -513,8 +514,8 @@ choose_free_port() {
   fi
 }
 
-# Desktop keeps the strict contract: 5173 is electron-vite's fixed port and
-# 9222 is the CDP port its main process expects, so neither can move.
+# Desktop keeps 5173 fixed for electron-vite; the CDP port is whichever one
+# `desktop --cdp-debug [port]` resolved (see scripts/lib/desktop-cdp.sh).
 require_free_ports() {
   local port
   for port in "$@"; do
@@ -1182,7 +1183,7 @@ EOF
 }
 
 cmd_desktop() {
-  local CHANNEL="local" debug=false debug_modules="all" rebuild=false cdp_debug=false
+  local CHANNEL="local" debug=false debug_modules="all" rebuild=false cdp_debug=false cdp_port=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --debug)
@@ -1190,20 +1191,29 @@ cmd_desktop() {
         [[ $# -gt 1 && ! "$2" =~ ^- ]] && { debug_modules="$2"; shift 2; } || { debug_modules="all"; shift; }
         ;;
       --rebuild) rebuild=true; shift ;;
-      --cdp-debug) cdp_debug=true; shift ;;
+      --cdp-debug)
+        cdp_debug=true
+        if [[ $# -gt 1 && "$2" =~ ^[0-9]+$ ]]; then
+          cdp_port="$(desktop_cdp_resolve_port "$2")"
+          shift 2
+        else
+          cdp_port="$(desktop_cdp_resolve_port)"
+          shift
+        fi
+        ;;
       -h|--help) usage ;;
       *) echo "Unknown option: $1"; usage ;;
     esac
   done
 
   local DESKTOP_DIR="$root/packages/ellamaka-desktop"
+  # 5173 (electron-vite) is always required; the selected CDP port only
+  # when --cdp-debug. A caller may have another browser on the default 9222.
+  local -a free_ports=(5173)
+  $cdp_debug && free_ports+=("$cdp_port")
+
   require_stopped desktop || return 1
-  # 5173 (electron-vite) always required; 9222 (CDP) only when --cdp-debug.
-  if $cdp_debug; then
-    require_free_ports 5173 9222 || return 1
-  else
-    require_free_ports 5173 || return 1
-  fi
+  require_free_ports "${free_ports[@]}" || return 1
   local desktop_sidecar_port="${ELLAMAKA_PORT:-4097}"
   choose_free_port desktop-sidecar "$desktop_sidecar_port"
   desktop_sidecar_port="$SELECTED_PORT"
@@ -1238,7 +1248,12 @@ cmd_desktop() {
     desktop_env+=(ELLAMAKA_DSH_INSTALL_COMMAND="bun $root/packages/opencode/src/index.ts")
   fi
   if $cdp_debug; then
-    desktop_env+=(ELLAMAKA_DESKTOP_CDP=1)
+    # Single source of truth: the same resolved port is written to the
+    # environment that Electron reads, so the free-port check and the bind
+    # cannot drift apart.
+    while IFS= read -r line; do
+      [ -n "$line" ] && desktop_env+=("$line")
+    done < <(desktop_cdp_env_flags "$cdp_port")
   fi
   if [ -n "$WOPAL_HOME" ]; then
     desktop_env+=(WOPAL_HOME="$WOPAL_HOME")
@@ -1287,7 +1302,9 @@ cmd_desktop() {
   # listener of the desktop process is the only trustworthy source; falling
   # back to 5173 wrote wrong ports into the ledger.
   sidecar_port="-"
-  sidecar_port="$(lsof -nP -p "$(pgrep -P "$desktop_pid" 2>/dev/null | tr '\n' ',' | sed 's/,$//')" -iTCP -sTCP:LISTEN 2>/dev/null | grep -E '127\.0\.0\.1:|\[::1\]:' | grep -vE ':(5173|9222)$' | awk '{print $9}' | head -1 | sed 's/.*://')"
+  local reserved_ports="5173"
+  $cdp_debug && reserved_ports="5173|$cdp_port"
+  sidecar_port="$(lsof -nP -p "$(pgrep -P "$desktop_pid" 2>/dev/null | tr '\n' ',' | sed 's/,$//')" -iTCP -sTCP:LISTEN 2>/dev/null | grep -E '127\.0\.0\.1:|\[::1\]:' | grep -vE ":($reserved_ports)$" | awk '{print $9}' | head -1 | sed 's/.*://')"
   if [[ ! "$sidecar_port" =~ ^[1-9][0-9]*$ ]]; then
     sidecar_port="-"
   fi
@@ -1297,7 +1314,7 @@ cmd_desktop() {
   fi
   record_listener desktop-vite 5173 || true
   if $cdp_debug; then
-    record_listener desktop-devtools 9222 || true
+    record_listener desktop-devtools "$cdp_port" || true
   fi
   record_crashpads
 

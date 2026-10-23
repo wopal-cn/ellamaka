@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "@wopal/ellamaka-cordis/runtime"
 import { mountDshIfEnabled } from "@/cli/cmd/tui/dsh-mount"
+import { getDshStatus } from "@/workbench/dsh-status"
 import { seedDshClosure } from "../../../fixture/dsh-closure"
 
 const CONTAINER_KEY = "__ellamakaDshContainer"
@@ -13,6 +14,12 @@ type ToolContainer = {
     execute(exec: unknown): Promise<{ isError: boolean; content?: { type: string; text?: string }[] }>
   }
   get(name: "sessions"): { list(): unknown[] } | undefined
+}
+
+function assertToolContainer(value: unknown): asserts value is ToolContainer {
+  if (typeof value !== "object" || value === null) throw new Error("missing dsh tool container")
+  const get = Reflect.get(value, "get")
+  if (typeof get !== "function") throw new Error("invalid dsh tool container")
 }
 
 const dshHomes: string[] = []
@@ -32,11 +39,21 @@ afterEach(() => {
   }
 })
 
+describe("tui CorePreparation presentation", () => {
+  test("renders shared core.preparation events in the dedicated TUI surface", () => {
+    const app = readFileSync(join(import.meta.dir, "../../../../src/cli/cmd/tui/app.tsx"), "utf8")
+    expect(app).toContain('event.on("core.preparation"')
+    expect(app).toContain('title: "Preparing runtime"')
+  })
+})
+
 describe("tui dsh mount", () => {
   test("returns undefined when ELLAMAKA_DSH is disabled (kill switch =0)", async () => {
     process.env.ELLAMAKA_DSH = "0"
-    const handle = await mountDshIfEnabled({ wopalHome: tmpWopalHome() })
+    const wopalHome = tmpWopalHome()
+    const handle = await mountDshIfEnabled({ wopalHome })
     expect(handle).toBeUndefined()
+    expect(process.env.DSH_HOME).toBeUndefined()
     expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
   })
 
@@ -54,6 +71,7 @@ describe("tui dsh mount", () => {
     // DSH home, never fall back to ~/.dsh.
     expect(process.env.DSH_HOME).toBe(join(wopalHome, "dsh", "home"))
     await handle!.dispose()
+    expect(process.env.DSH_HOME).toBeUndefined()
   })
 
   test("mounts the tool container and executes grep without a live session", async () => {
@@ -67,8 +85,10 @@ describe("tui dsh mount", () => {
     expect(handle).toBeDefined()
 
     try {
-      const container = (globalThis as Record<string, unknown>)[CONTAINER_KEY] as ToolContainer
-      expect(container).toBeDefined()
+      const candidate = Reflect.get(globalThis, CONTAINER_KEY)
+      expect(candidate).toBeDefined()
+      assertToolContainer(candidate)
+      const container = candidate
 
       const ws = mkdtempSync(join(tmpdir(), "dsh-tui-ws-"))
       for (let i = 0; i < 400; i++) {
@@ -143,5 +163,37 @@ describe("tui dsh mount", () => {
     expect(error).toBeUndefined()
     expect(handle).toBeUndefined()
     expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
+  }, 60_000)
+
+  test("a tool container whose plugins fail to activate degrades fully to disabled", async () => {
+    process.env.ELLAMAKA_DSH = "1"
+    const wopalHome = tmpWopalHome()
+    seedDshClosure(wopalHome)
+    // Publish the managed home state BEFORE the user patch lands: the
+    // preparation service fail-closes on a non-empty home with unknown
+    // version, and this test's subject is the activation gate, not home
+    // adoption.
+    const { prepareDshHome } = await import("@wopal/ellamaka-cordis/runtime")
+    expect((await prepareDshHome({ wopalHome, closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion })).ok).toBe(
+      true,
+    )
+    // A user plugin row that can never activate: the bundle package does not
+    // exist, so the loader import fails and the entry stays inactive. The
+    // user patch layer lives in the harness-home profile area.
+    const profileDir = join(wopalHome, "dsh", "home", "profiles", "ellamaka-tools")
+    mkdirSync(profileDir, { recursive: true })
+    writeFileSync(
+      join(profileDir, "cordis.patch.yml"),
+      ["- insert:", "    - id: broken-user-plugin", "      name: no-such-dsh-plugin-package", ""].join("\n"),
+    )
+    const handle = await mountDshIfEnabled({
+      wopalHome,
+      logDir: join(wopalHome, "logs"),
+    })
+    // Full degradation: no handle, no container handle, and the DSH status is
+    // DISABLED (not "degraded" — nothing dsh remains serving).
+    expect(handle).toBeUndefined()
+    expect((globalThis as Record<string, unknown>)[CONTAINER_KEY]).toBeUndefined()
+    expect(getDshStatus()).toBe("disabled")
   }, 60_000)
 })

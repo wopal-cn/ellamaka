@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import "./contract-events"
 import { HttpApi } from "effect/unstable/httpapi"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"

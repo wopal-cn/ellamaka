@@ -42,6 +42,16 @@ export interface DshLayout {
   readonly locksDir: string
   /** `dsh/locks/materialize.lock` — cross-process materialisation mutex. */
   readonly lockFile: string
+  /** `dsh/backups` — immutable Home snapshots made before version changes. */
+  readonly backupsDir: string
+  /** `dsh/state` — Ellamaka-owned minimal Home metadata. */
+  readonly stateDir: string
+  /** `dsh/state/current.json` — active source closureVersion. */
+  readonly homeStateFile: string
+  /** `dsh/state/managed` — minimal persistent ownership marker. */
+  readonly managedMarkerFile: string
+  /** `dsh/state/home.lock` — shared runtime / exclusive version-change guard. */
+  readonly homeLockPath: string
 }
 
 /**
@@ -60,6 +70,11 @@ export function resolveDshLayout(wopalHome: string): DshLayout {
     stagingDir: join(dshHome, "staging"),
     locksDir: join(dshHome, "locks"),
     lockFile: join(dshHome, "locks", "materialize.lock"),
+    backupsDir: join(dshHome, "backups"),
+    stateDir: join(dshHome, "state"),
+    homeStateFile: join(dshHome, "state", "current.json"),
+    managedMarkerFile: join(dshHome, "state", "managed"),
+    homeLockPath: join(dshHome, "state", "home.lock"),
   }
 }
 

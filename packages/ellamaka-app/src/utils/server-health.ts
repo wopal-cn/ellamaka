@@ -13,6 +13,14 @@ export type WopalCliHealth = {
 
 export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
 
+/** Health records are keyed by the concrete connection, including sidecar generation. */
+export function resolveServerHealthKey(
+  key: ServerConnection.Key,
+  current?: ServerConnection.Any,
+): ServerConnection.Key {
+  return current ? ServerConnection.key(current) : key
+}
+
 export type ServerHealth = {
   healthy: boolean
   version?: string
@@ -109,14 +117,16 @@ export async function checkServerHealth(
       signal,
     })
       .global.health()
-      .then((x) => x.error
-        ? next(count, x.error, x.response)
-        : {
-            healthy: x.data?.healthy === true,
-            version: x.data?.version,
-            ...(x.data?.cli ? { cli: x.data.cli } : {}),
-            ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
-          })
+      .then((x) =>
+        x.error
+          ? next(count, x.error, x.response)
+          : {
+              healthy: x.data?.healthy === true,
+              version: x.data?.version,
+              ...(x.data?.cli ? { cli: x.data.cli } : {}),
+              ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
+            },
+      )
       .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())
 }
