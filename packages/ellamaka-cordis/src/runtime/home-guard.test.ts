@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync } from "node:fs"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { acquireDshHomeRuntimeAccess, prepareDshHome, readDshHomeState } from "./home-guard"
-import { acquireHomeLock, releaseHomeLock } from "./home-lock"
-import { resolveDshLayout } from "./status"
+import { acquireDshHomeRuntimeAccess, prepareDshHome, readDshHomeState } from "./home-guard.js"
+import { acquireHomeLock, releaseHomeLock } from "./home-lock.js"
+import { resolveDshLayout } from "./status.js"
 
 const roots: string[] = []
 
@@ -17,6 +17,13 @@ async function tempHome(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "ellamaka-home-guard-"))
   roots.push(root)
   return root
+}
+
+async function seedTransitionBackup(wopalHome: string, timestamp: string, suffix: string): Promise<string> {
+  const backupDir = path.join(resolveDshLayout(wopalHome).backupsDir, `${timestamp}-${suffix}`)
+  await fs.mkdir(backupDir, { recursive: true })
+  await fs.writeFile(path.join(backupDir, "seed.txt"), suffix)
+  return backupDir
 }
 
 async function waitForFile(file: string): Promise<void> {
@@ -122,7 +129,13 @@ describe("prepareDshHome", () => {
       closureVersion: 2,
       deps: {
         beforeStatePublish: () => {
-          sawBackupBeforeState = existsSync(layout.backupsDir)
+          const backups = readdirSync(layout.backupsDir)
+          const backupName = backups[0]
+          sawBackupBeforeState =
+            backups.length === 1 &&
+            backupName !== undefined &&
+            existsSync(path.join(layout.backupsDir, backupName, "home", "user-data.txt")) &&
+            existsSync(path.join(layout.backupsDir, backupName, "metadata.json"))
         },
       },
     })
@@ -135,6 +148,101 @@ describe("prepareDshHome", () => {
       closureVersion: 1,
       managed: true,
     })
+    expect(await readDshHomeState(wopalHome)).toMatchObject({ kind: "managed", closureVersion: 2 })
+  })
+
+  test("retains the newest three transition backups and leaves unrecognized entries untouched", async () => {
+    const wopalHome = await tempHome()
+    expect((await prepareDshHome({ wopalHome, closureVersion: 1 })).ok).toBe(true)
+    const layout = resolveDshLayout(wopalHome)
+
+    const oldest = await seedTransitionBackup(wopalHome, "2020-01-01T00-00-00-000Z", "100-aaaaaaaa")
+    const second = await seedTransitionBackup(wopalHome, "2020-01-02T00-00-00-000Z", "101-bbbbbbbb")
+    const third = await seedTransitionBackup(wopalHome, "2020-01-03T00-00-00-000Z", "102-cccccccc")
+    const newestOld = await seedTransitionBackup(wopalHome, "2020-01-04T00-00-00-000Z", "103-dddddddd")
+    const unknownDir = path.join(layout.backupsDir, "manual-copy")
+    const unknownFile = path.join(layout.backupsDir, "README")
+    await fs.mkdir(unknownDir)
+    await fs.writeFile(unknownFile, "keep")
+
+    const upgraded = await prepareDshHome({ wopalHome, closureVersion: 2 })
+    expect(upgraded).toMatchObject({ ok: true, homeVersion: 2, changed: true })
+    if (!upgraded.ok || !upgraded.backupDir) return
+
+    expect(existsSync(upgraded.backupDir)).toBe(true)
+    expect(existsSync(newestOld)).toBe(true)
+    expect(existsSync(third)).toBe(true)
+    expect(existsSync(second)).toBe(false)
+    expect(existsSync(oldest)).toBe(false)
+    expect(existsSync(unknownDir)).toBe(true)
+    expect(existsSync(unknownFile)).toBe(true)
+  })
+
+  test("a cleanup failure reports one bounded diagnostic without failing or rolling back the upgrade", async () => {
+    const wopalHome = await tempHome()
+    expect((await prepareDshHome({ wopalHome, closureVersion: 1 })).ok).toBe(true)
+    for (const day of ["01", "02", "03", "04"]) {
+      await seedTransitionBackup(wopalHome, `2020-01-${day}T00-00-00-000Z`, `${day}-eeeeeeee`)
+    }
+
+    const warnings: string[] = []
+    const upgraded = await prepareDshHome({
+      wopalHome,
+      closureVersion: 2,
+      deps: {
+        removeBackup: () => {
+          throw new Error("permission denied")
+        },
+        onCleanupWarning: (message) => warnings.push(message),
+      },
+    })
+
+    expect(upgraded).toMatchObject({ ok: true, homeVersion: 2, changed: true })
+    if (!upgraded.ok || !upgraded.backupDir) return
+    expect(existsSync(upgraded.backupDir)).toBe(true)
+    expect(await readDshHomeState(wopalHome)).toMatchObject({ kind: "managed", closureVersion: 2 })
+    expect(warnings).toEqual(["DSH Home backup cleanup failed; older backups were left in place."])
+  })
+
+  test("a marker publication failure skips backup pruning", async () => {
+    const wopalHome = await tempHome()
+    expect((await prepareDshHome({ wopalHome, closureVersion: 1 })).ok).toBe(true)
+    const layout = resolveDshLayout(wopalHome)
+    const oldest = await seedTransitionBackup(wopalHome, "2020-01-01T00-00-00-000Z", "100-ffffffff")
+    const second = await seedTransitionBackup(wopalHome, "2020-01-02T00-00-00-000Z", "101-11111111")
+    const third = await seedTransitionBackup(wopalHome, "2020-01-03T00-00-00-000Z", "102-22222222")
+    const fourth = await seedTransitionBackup(wopalHome, "2020-01-04T00-00-00-000Z", "103-33333333")
+
+    const failed = await prepareDshHome({
+      wopalHome,
+      closureVersion: 2,
+      deps: {
+        atomicWrite: (file, content, defaultWrite) => {
+          if (file === layout.managedMarkerFile) throw new Error("read-only filesystem")
+          defaultWrite(file, content)
+        },
+      },
+    })
+
+    expect(failed).toEqual({ ok: false, reason: "DSH_HOME_STATE_WRITE_FAILED", homeVersion: 2 })
+    expect([oldest, second, third, fourth].every((backup) => existsSync(backup))).toBe(true)
+  })
+
+  test("an older runtime refuses a newer generation without touching Home data", async () => {
+    const wopalHome = await tempHome()
+    expect((await prepareDshHome({ wopalHome, closureVersion: 2 })).ok).toBe(true)
+    const layout = resolveDshLayout(wopalHome)
+    await fs.mkdir(layout.homeDir, { recursive: true })
+    await fs.writeFile(path.join(layout.homeDir, "newer-data.txt"), "preserve")
+
+    expect(await prepareDshHome({ wopalHome, closureVersion: 1 })).toEqual({
+      ok: false,
+      reason: "DSH_HOME_NEWER_THAN_RUNTIME",
+      homeVersion: 2,
+    })
+    expect(await fs.readdir(layout.homeDir)).toEqual(["newer-data.txt"])
+    expect(await fs.readFile(path.join(layout.homeDir, "newer-data.txt"), "utf8")).toBe("preserve")
+    expect(existsSync(layout.backupsDir)).toBe(false)
     expect(await readDshHomeState(wopalHome)).toMatchObject({ kind: "managed", closureVersion: 2 })
   })
 

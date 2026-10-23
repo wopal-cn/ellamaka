@@ -4,6 +4,8 @@ linker = "hoisted"
 exact = true
 # Only install newly resolved package versions published at least 3 days ago.
 minimumReleaseAge = 259200
+# Long-lived static exceptions live here. Temporary exact engine-closure exceptions
+# are supplied dynamically by the upgrade command and must not be written back.
 minimumReleaseAgeExcludes = [
   "@deepseek-ai/cordis",
   "@deepseek-ai/cordis-plugin-hmr",

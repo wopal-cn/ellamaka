@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path"
 import { pathToFileURL } from "node:url"
+import { runBunSubprocessChildIfRequested } from "./bun-subprocess-child.js"
 
 const CHILD_MARKER = "--ellamaka-dsh-ptc-child"
 const PROVIDER_MARKER_ENV = "DSH_PTC_RUNTIME_NODE"
@@ -31,6 +32,7 @@ interface BunRuntime {
  * this role only maps the upstream fd-7 bootstrap seam onto stdin/stdout.
  */
 export async function runBunPtcChildIfRequested(): Promise<boolean> {
+  if (await runBunSubprocessChildIfRequested()) return true
   if (process.versions.bun === undefined || process.env[PROVIDER_MARKER_ENV] !== "1") return false
   const marker = process.argv.indexOf(CHILD_MARKER)
   if (marker < 0) return false

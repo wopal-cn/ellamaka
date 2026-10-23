@@ -18,6 +18,9 @@ function readProbe(stdout: string) {
 }
 
 function expectProbe(evidence: any) {
+  expect(evidence.argvOutcome).toEqual({ exitCode: 0, signal: null })
+  expect(evidence.argvText).toBe(["", "a b", "中文", "--", "--flag", "$HOME", '"quoted"', "line\nbreak", ""].join("\0"))
+  expect(evidence.nativeRunner).toBe(true)
   expect(evidence.language).toBe("typescript")
   expect(evidence.isolation).toBe("process")
   expect(evidence.typed.error).toBeUndefined()
@@ -60,13 +63,19 @@ describe("Bun PTC compatibility", () => {
 
   test("source Bun preserves TypeScript, sandbox and cancellation semantics", () => {
     const result = run(process.execPath, [fixture])
+    if (result.status !== 0)
+      throw new Error(
+        `PTC probe failed: status=${result.status} signal=${result.signal} ${result.error ?? ""}\n${result.stderr}`,
+      )
     expect(result.status).toBe(0)
-    if (result.status !== 0) throw new Error(result.stderr)
     expectProbe(readProbe(result.stdout))
   }, 60_000)
 
   test("compiled Bun re-enters the same executable as the private PTC child", async () => {
-    const out = join(mkdtempSync(join(tmpdir(), "ellamaka-bun-ptc-build-")), "ptc-probe")
+    // bwrap gives workspace-write a private /tmp; a product installed there
+    // cannot re-enter itself. /var/tmp models the visible installed binary.
+    const buildRoot = process.platform === "linux" ? "/var/tmp" : tmpdir()
+    const out = join(mkdtempSync(join(buildRoot, "ellamaka-bun-ptc-build-")), "ptc-probe")
     const build = await Bun.build({
       entrypoints: [fixture],
       format: "esm",
@@ -83,8 +92,11 @@ describe("Bun PTC compatibility", () => {
     if (!build.success) throw new Error(build.logs.map((log) => log.message).join("\n"))
 
     const result = run(out)
+    if (result.status !== 0)
+      throw new Error(
+        `PTC probe failed: status=${result.status} signal=${result.signal} ${result.error ?? ""}\n${result.stderr}`,
+      )
     expect(result.status).toBe(0)
-    if (result.status !== 0) throw new Error(result.stderr)
     expectProbe(readProbe(result.stdout))
   }, 60_000)
 })

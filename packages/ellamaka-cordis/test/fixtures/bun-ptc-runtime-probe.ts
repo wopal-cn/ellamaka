@@ -19,6 +19,20 @@ if (!(await runBunPtcChildIfRequested())) {
     const ptc = host.ctx.get("ptcRuntime")
     if (!ptc) throw new Error("ptcRuntime missing")
 
+    const subprocess = host.ctx.get("subprocess")
+    if (!subprocess) throw new Error("subprocess missing")
+    const argvProbe = subprocess.spawn({
+      argv: ["/usr/bin/printf", "%s\\0", "", "a b", "中文", "--", "--flag", "$HOME", '"quoted"', "line\nbreak"],
+      cwd: workspace,
+      stdio: { stdin: "ignore", stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } },
+      graceMs: 1_000,
+      signal: AbortSignal.timeout(5_000),
+    })
+    const argvOutcome = await argvProbe.done
+    await argvProbe.waitForExit()
+    const argvText = argvProbe.collected.stdout?.readFrom(0).text
+    const nativeRunner = process.platform !== "linux" || Reflect.get(subprocess, "linuxDeepProbePassed") === true
+
     const typed = await ptc.run(
       ptc.resolve({
         program: "const answer: number = 6 * 7; return { answer };",
@@ -86,6 +100,9 @@ if (!(await runBunPtcChildIfRequested())) {
 
     console.log(
       `__PTC_PROBE__${JSON.stringify({
+        argvOutcome,
+        argvText,
+        nativeRunner,
         language: ptc.language,
         isolation: ptc.isolation,
         typed,

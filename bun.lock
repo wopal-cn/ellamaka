@@ -168,6 +168,7 @@
         "@types/pacote": "11.1.8",
         "@types/semver": "catalog:",
         "@typescript/native-preview": "catalog:",
+        "@wopal/ellamaka-release": "workspace:*",
         "typescript": "catalog:",
       },
       "peerDependencies": {

@@ -1,0 +1,80 @@
+name: CI
+
+# Nightly + manual only. This repository deliberately does not run the test
+# suite on push or pull requests: CI minutes are limited by an explicit
+# product decision, and merges are not gated on this workflow. Packaging has
+# its own release gate in the publish workflows.
+on:
+  schedule:
+    # 18:00 UTC = 02:00 Asia/Shanghai.
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: ci-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Install, typecheck, lint and unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      # Every package that ships a `test:ci` script runs it through the
+      # existing turbo task (turbo.json already declares its JUnit output).
+      - name: Unit tests
+        run: bunx turbo run test:ci
+
+  slow:
+    name: DSH tool tests (real system sandbox)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The DSH tool tests exercise the real OS sandbox. Preparing and probing
+      # it first means a host without confinement fails here instead of the
+      # tool tests silently degrading to unconfined execution.
+      - name: Prepare and probe DSH sandbox
+        run: bash scripts/ci/prepare-dsh-sandbox.sh
+
+      - name: Run DSH tool tests
+        run: bun run --cwd packages/ellamaka-cordis test:tools

@@ -85,17 +85,19 @@ describe("publish-ellamaka-desktop workflow", () => {
     expect(cleanupYml).toContain("${ROOT}/latest/${name}.blockmap")
   })
 
-  test("gates on DSH runtime manifest and lock freshness before packaging", () => {
+  test("gates on DSH runtime manifest and lock freshness in the release gate", () => {
     // The packaged sidecar inlines generated/dsh-runtime-manifest.json at
     // bundle time; the committed manifest must match the source before
-    // packaging. The check is read-only (--check) and precedes the build.
-    expect(workflow).toContain("Verify DSH runtime manifest freshness")
+    // packaging. Both read-only checks now live in the shared Linux release
+    // gate, and the packaging matrix waits for it instead of repeating them.
+    expect(workflow).toContain("Check DSH runtime manifest")
     expect(workflow).toContain("generate-dsh-runtime-manifest.ts --check")
     expect(workflow).toContain("generate-dsh-runtime-lock.ts --check")
     const gateIdx = workflow.indexOf("generate-dsh-runtime-lock.ts --check")
     const buildIdx = workflow.indexOf("Build desktop (electron-vite)")
     expect(gateIdx).toBeGreaterThan(-1)
     expect(buildIdx).toBeGreaterThan(gateIdx)
+    expect(workflow).toContain("needs: [version, release-gate]")
   })
 
   test("publishes the plugin/SDK npm packages from the desktop release", () => {

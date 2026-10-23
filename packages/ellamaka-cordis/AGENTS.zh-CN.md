@@ -59,11 +59,19 @@ ellamaka-cordis 是随 Ellamaka CLI 和 Desktop 分发的产品 DSH Bridge。它
 - Bridge 保持 additive：新桥以新文件或 wrapper 引入，删除即完整回滚；不为容纳新桥而重构 upstream 文件。
 - Bridge 不进 closure：只随 Ellamaka 产品发布，不作为独立 registry 包、也不声明为 `$WOPAL_HOME/dsh` 的依赖。
 
+## DSH Home Generation and Upgrade
+
+- 任何能改变 `$WOPAL_HOME/dsh/home` 持久内容或目录结构的直接 writer 或间接 payload 源，都必须登记到 `src/runtime/home-generation.ts` 的 `DSH_HOME_GENERATION_INPUTS`。
+- 新增 direct fs mutation 必须登记为 generation input，或在同一模块中带有原因的 exemption。
+- DSH 升级只能从仓库根目录执行 `bun run dsh:upgrade <version>`。
+- 交付前从仓库根目录执行 `bun packages/ellamaka-cordis/script/check-dsh-home-generation.ts`。
+
 ## Testing
 
 - 对本次改动涉及的 metadata、installer、profile 或 container 边界遵循 TDD。
 - 纯 contract tests 保持确定性；真实 container/host 集成放入 integration suite。
 - 通过真实宿主路径检查打包闭包解析和 Electron utility-process 行为，源码测试不能证明这些边界。
+- 测试门禁分三层：CI 每晚/手动在 Linux 运行、发版前必须通过 Linux 关卡、本地 pre-commit 只做快检查不跑测试。
 
 ## User-Supplied Rules
 

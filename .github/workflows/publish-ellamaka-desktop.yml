@@ -43,6 +43,15 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+# Repository-level release lock. CLI and Desktop releases resolve the same
+# published generation frontier and commit immutable manifests, so the whole
+# release lifecycle is serialized: one release at a time, pending runs queue
+# without replacing each other.
+concurrency:
+  group: ellamaka-release
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   version:
     runs-on: ubuntu-latest
@@ -147,6 +156,9 @@ jobs:
             echo "matrix=${matrix}"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v6
+        with:
+          # Release builds read tags; a shallow clone loses them.
+          fetch-depth: 0
       - name: Validate version matches package.json anchor
         if: steps.version.outputs.release != ''
         run: |
@@ -161,8 +173,52 @@ jobs:
           fi
           echo "  version matches packages/ellamaka-desktop/package.json: $PKG_VERSION"
 
-  build-desktop:
+  # Packaging gate shared by both products. The step order is a contract:
+  # sandbox probe -> engine manifest -> full dependency lock -> generation
+  # check -> tool-container tests. Any non-zero exit stops the release;
+  # nothing here is allowed to continue on error or be skipped.
+  release-gate:
     needs: version
+    runs-on: ubuntu-24.04
+    if: github.repository == 'wopal-cn/ellamaka'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The generation check reads published tags and immutable manifests.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Prepare and probe DSH sandbox
+        run: bash scripts/ci/prepare-dsh-sandbox.sh
+
+      - name: Check DSH runtime manifest
+        run: bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
+
+      - name: Check DSH runtime lock
+        run: bun packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts --check
+
+      - name: Check DSH Home generation
+        run: bun packages/ellamaka-cordis/script/check-dsh-home-generation.ts
+
+      - name: Run DSH upgrade safety contracts
+        run: bun run --cwd packages/ellamaka-cordis test:contracts
+
+      - name: Run DSH tool tests
+        run: bun run --cwd packages/ellamaka-cordis test:tools
+
+  build-desktop:
+    needs: [version, release-gate]
     strategy:
       matrix:
         include: ${{ fromJSON(needs.version.outputs.matrix) }}
@@ -175,6 +231,9 @@ jobs:
       ELLAMAKA_BUILD_ID: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Release builds read tags; a shallow clone loses them.
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 
@@ -207,15 +266,6 @@ jobs:
           name: release-context
           path: release-context.json
           if-no-files-found: error
-
-      - name: Verify DSH runtime manifest freshness
-        working-directory: packages/ellamaka-desktop
-        run: |
-          # The packaged sidecar inlines generated/dsh-runtime-manifest.json at
-          # bundle time (via the opencode build); the committed manifest must
-          # match the source before packaging. Read-only check, fails on drift.
-          bun ../ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
-          bun ../ellamaka-cordis/script/generate-dsh-runtime-lock.ts --check
 
       - name: Build desktop (electron-vite)
         working-directory: packages/ellamaka-desktop
@@ -257,6 +307,9 @@ jobs:
       BUILD: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Release builds read tags; a shallow clone loses them.
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
 

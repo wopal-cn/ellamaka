@@ -59,11 +59,19 @@ Run from packages/ellamaka-cordis/.
 - Keep bridges additive: introduce a new bridge as a new file or wrapper so deleting it is a complete rollback; do not restructure upstream files to make room.
 - The Bridge stays out of the closure: it ships only with the Ellamaka product, is never published as a standalone registry package, and is never declared as a `$WOPAL_HOME/dsh` dependency.
 
+## DSH Home Generation and Upgrade
+
+- Register every direct writer or indirect payload source that can change persisted content or directory structure under `$WOPAL_HOME/dsh/home` in `DSH_HOME_GENERATION_INPUTS` in `src/runtime/home-generation.ts`.
+- Every new direct filesystem mutation must be registered as a generation input or carry a reasoned exemption in the same module.
+- Upgrade DSH only with `bun run dsh:upgrade <version>` from the repository root.
+- Before delivery, run `bun packages/ellamaka-cordis/script/check-dsh-home-generation.ts` from the repository root.
+
 ## Testing
 
 - Follow TDD at the real metadata, installer, profile, or container boundary being changed.
 - Keep pure contract tests deterministic and put real container/host integration in the integration suite.
 - Validate packaged closure resolution and Electron utility-process behavior through their host paths; source tests alone do not prove them.
+- Run the test gate at three layers: nightly/manual CI on Linux, the required Linux pre-release gate, and a local pre-commit quick check that does not run tests.
 
 ## User-Supplied Rules
 

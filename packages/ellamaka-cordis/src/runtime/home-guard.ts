@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto"
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { dirname, join } from "node:path"
 import { acquireHomeLock, releaseHomeLock, type HomeLockToken } from "./home-lock.js"
 import { resolveDshLayout } from "./status.js"
@@ -43,6 +53,10 @@ export interface HomeGuardDeps {
   atomicWrite?: (file: string, content: string, defaultWrite: (file: string, content: string) => void) => void
   /** Test seam proving backup completes before current.json changes. */
   beforeStatePublish?: () => void
+  /** Test seam for a bounded, non-fatal backup-retention diagnostic. */
+  onCleanupWarning?: (message: string) => void
+  /** Test seam for backup-retention deletion failures. */
+  removeBackup?: (destination: string, defaultRemove: (destination: string) => void) => void
 }
 
 export interface PrepareDshHomeOptions {
@@ -59,6 +73,10 @@ export interface PrepareDshHomeOptions {
 
 const DEFAULT_LOCK_TIMEOUT_MS = 1_000
 const MANAGED_MARKER = "ellamaka-managed-v1\n"
+const MAX_TRANSITION_BACKUPS = 3
+const CLEANUP_WARNING = "DSH Home backup cleanup failed; older backups were left in place."
+const TRANSITION_BACKUP_NAME_RE =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)-\d+-[0-9a-f]{8}$/
 
 /** Purely inspect Ellamaka-owned Home metadata; never creates directories. */
 export async function readDshHomeState(wopalHome: string): Promise<DshHomeState> {
@@ -212,6 +230,8 @@ async function prepareUnderExclusive(
     // intentionally fail-closed and repairable by a later exclusive prepare.
     return { ok: false, reason: "DSH_HOME_STATE_WRITE_FAILED", homeVersion: options.closureVersion }
   }
+
+  if (backupDir) pruneTransitionBackups(options, backupDir)
 
   return {
     ok: true,
@@ -379,6 +399,46 @@ function createBackup(options: PrepareDshHomeOptions, state: DshHomeState): stri
     rmSync(backupDir, { recursive: true, force: true })
     throw error
   }
+}
+
+function pruneTransitionBackups(options: PrepareDshHomeOptions, currentBackupDir: string): void {
+  try {
+    const layout = resolveDshLayout(options.wopalHome)
+    const candidates = readdirSync(layout.backupsDir, { withFileTypes: true }).flatMap((entry) => {
+      if (!entry.isDirectory()) return []
+      const match = TRANSITION_BACKUP_NAME_RE.exec(entry.name)
+      return match ? [{ name: entry.name, timePrefix: match[1] }] : []
+    })
+    candidates.sort(
+      (left, right) =>
+        right.timePrefix.localeCompare(left.timePrefix) || right.name.localeCompare(left.name),
+    )
+
+    const keep = new Set([currentBackupDir])
+    for (const candidate of candidates) {
+      if (keep.size >= MAX_TRANSITION_BACKUPS) break
+      keep.add(join(layout.backupsDir, candidate.name))
+    }
+
+    const remove = options.deps?.removeBackup
+    for (const candidate of candidates) {
+      const backupDir = join(layout.backupsDir, candidate.name)
+      if (keep.has(backupDir)) continue
+      if (remove) remove(backupDir, removeBackupDir)
+      else removeBackupDir(backupDir)
+    }
+  } catch {
+    try {
+      if (options.deps?.onCleanupWarning) options.deps.onCleanupWarning(CLEANUP_WARNING)
+      else console.warn(CLEANUP_WARNING)
+    } catch {
+      // Diagnostics must never change the upgrade result.
+    }
+  }
+}
+
+function removeBackupDir(destination: string): void {
+  rmSync(destination, { recursive: true, force: true })
 }
 
 function versionOf(state: DshHomeState): number | undefined {

@@ -159,17 +159,19 @@ describe("publish-ellamaka workflow", () => {
     expect(workflow).not.toContain("cleanup-ellamaka-releases.mjs")
   })
 
-  test("gates on DSH runtime manifest and lock freshness before packaging", () => {
+  test("gates on DSH runtime manifest and lock freshness in the release gate", () => {
     // The bundled CLI inlines generated/dsh-runtime-manifest.json at bundle
     // time; the committed manifest must match the source before packaging.
-    // The check is read-only (--check) and precedes the Build step.
-    expect(workflow).toContain("Verify DSH runtime manifest freshness")
+    // Both read-only checks now live in the shared Linux release gate, and the
+    // packaging job waits for it instead of repeating the checks.
+    expect(workflow).toContain("Check DSH runtime manifest")
     expect(workflow).toContain("bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check")
     expect(workflow).toContain("bun packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts --check")
     const gateIdx = workflow.indexOf("generate-dsh-runtime-lock.ts --check")
     const buildIdx = workflow.indexOf("- name: Build")
     expect(gateIdx).toBeGreaterThan(-1)
     expect(buildIdx).toBeGreaterThan(gateIdx)
+    expect(workflow).toContain("needs: [version, release-gate]")
   })
 
   test("publishes the plugin/SDK npm packages with the release version", () => {

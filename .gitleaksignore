@@ -3,3 +3,10 @@ afa57acfda894e0ebf3c637dd710310b705c0a2f:packages/http-recorder/test/record-repl
 afa57acfda894e0ebf3c637dd710310b705c0a2f:packages/http-recorder/test/record-replay.test.ts:generic-api-key:92
 afa57acfda894e0ebf3c637dd710310b705c0a2f:packages/http-recorder/test/record-replay.test.ts:generic-api-key:146
 afa57acfda894e0ebf3c637dd710310b705c0a2f:packages/http-recorder/test/record-replay.test.ts:gcp-api-key:71
+# Staged pre-commit scans fingerprint as file:rule:line (no commit sha), so the
+# redaction-test fixtures above need file-scoped entries as well.
+packages/http-recorder/test/record-replay.test.ts:generic-api-key:127
+packages/http-recorder/test/record-replay.test.ts:gcp-api-key:129
+packages/http-recorder/test/record-replay.test.ts:generic-api-key:150
+packages/http-recorder/test/record-replay.test.ts:generic-api-key:314
+packages/ellamaka-release/test/precommit-hook.test.ts:generic-api-key:194

@@ -1,33 +1,40 @@
 #!/bin/sh
-set -e
+set -eu
 
-# Only run typecheck if non-test TypeScript files are staged.
-# Pure test-only changes (*.test.ts) don't affect type declarations
-# and cannot introduce cross-package type errors.
-staged_ts=$(git diff --cached --name-only --diff-filter=ACM | grep '\.tsx\?$' || true)
-if [ -n "$staged_ts" ]; then
-  non_test=$(echo "$staged_ts" | grep -v '\.test\.tsx\?$' || true)
-  if [ -n "$non_test" ]; then
-    bun typecheck
-  fi
+# Fast, staged-only checks.
+#
+# Test suites live in .github/workflows/ci.yml (nightly + manual) and in the
+# release gate of the publish workflows. A pre-commit test run is a tax people
+# bypass with --no-verify, so it is gone: this hook only lints the staged code
+# and scans the staged diff for secrets. Anything that fails here fails the
+# commit — there is no escape hatch.
 
-  # Git exports repository-locator variables (GIT_DIR, GIT_INDEX_FILE, ...) to
-  # hooks. Tests build throwaway repositories in temp directories, so a leaked
-  # GIT_DIR redirects them at this checkout: false failures, and fixture
-  # `git init` / `git config` writes landing in the real repository config.
-  # Clear them so the unit layer sees the same environment as a direct run.
-  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
-  unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
+cd "$(git rev-parse --show-toplevel)"
 
-  # Any staged TypeScript (source or test) must pass the opencode unit layer.
-  # Only the opencode package runs here: the root test:unit fans out through
-  # run-tests-root.ts to app/desktop/cordis, far beyond the commit budget.
-  if ! bun run --cwd packages/opencode test:unit; then
-    echo ""
-    echo "✖ pre-commit blocked: the opencode unit layer failed."
-    echo "  The commit was rejected; no bad revision enters history."
-    echo "  Reproduce with: bun run --cwd packages/opencode test:unit"
-    echo ""
-    exit 1
-  fi
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$staged" ]; then
+  exit 0
 fi
+
+# Static check: the repository's real lint command (oxlint), limited to the
+# staged TypeScript/JavaScript files. Newline splitting keeps paths with
+# spaces intact; globbing is disabled so a path is never expanded.
+set -f
+old_ifs=$IFS
+IFS='
+'
+set --
+for file in $staged; do
+  case "$file" in
+    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs) set -- "$@" "$file" ;;
+  esac
+done
+IFS=$old_ifs
+set +f
+
+if [ "$#" -gt 0 ]; then
+  bun run lint -- "$@"
+fi
+
+# Secret scan: pinned gitleaks fetched and checksum-verified by the wrapper.
+sh scripts/ci/run-gitleaks.sh
