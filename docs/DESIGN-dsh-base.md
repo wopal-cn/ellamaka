@@ -52,7 +52,13 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 
 Ellamaka 源码维护一个递增的 `closureVersion`，CLI 与 Desktop 构建共用。当锁定的 DSH 闭包或产品自有 DSH 文件发生可能影响 Home 数据的变化时提升它。Home 兼容性仅由 `closureVersion` 判定，与 CLI/Desktop 的产品 SemVer 及发布通道解耦。
 
-代际提升由一道只读检查保证。检查以最近一个发布标签为基准，比对钉住的 DSH 版本与一组显式列出的产品自有 DSH 文件；其中任一项发生变化时，当前代数必须高于基准代数，否则检查以 `DSH_HOME_GENERATION_STALE` 失败并打印修复命令。基准不存在时检查失败，不降级为通过。这份文件清单是产品契约：新增写入 Home 数据的代码时同步登记，规则见 `packages/ellamaka-cordis/AGENTS.md`。
+代际提升由一道只读检查保证。检查把 CLI 与 Desktop 的已提交 release 放进同一个 generation frontier：只有对应 immutable versioned manifest 存在且 ReleaseIdentity 与 namespaced tag、source commit 都一致的 release 才进入集合；只有 tag、没有有效 manifest 的发布尝试不算已提交 release。每个 release 从其源码读取 `closureVersion`，没有该字段的 release 记为 generation 0；frontier 取全部已提交 release 的最大 generation。仓库没有任何可确认的已提交 release 时检查失败，不把未知历史降级成 generation 0。
+
+检查的 guarded fingerprint 由钉住的 DSH 版本和一份显式登记的 Home generation inputs 组成。generation inputs 是所有可能改变 `$WOPAL_HOME/dsh/home` 持久内容或目录结构的产品源码输入，包括直接执行文件写入的模块和被这些模块写入 Home 的间接 payload 源。比较历史 release 时使用**当前契约里的 input path 集合**投影到那个 release；某个 input 当时不存在时把稳定的 `absent` 标记计入 fingerprint，而不是把历史 release 判坏。这样新增或重命名 generation input 会自然改变 fingerprint，并要求提升 generation。当前 checkout 自己声明的 input path 若不存在则属于契约损坏，检查失败。
+
+当前 fingerprint 与 frontier generation 的已提交 release 不一致时，当前 `closureVersion` 必须严格大于 frontier；一致时当前值不得低于 frontier。若多个正数 frontier release 使用同一 generation 却具有不同 fingerprint，该 generation 已经不能作为唯一兼容边界，检查以 `DSH_HOME_GENERATION_CONFLICT` 失败，新的发布必须先提升 generation 重新收敛。
+
+generation inputs 由 `packages/ellamaka-cordis/src/runtime/home-generation.ts` 的导出常量单点维护。一个 AST 契约测试扫描 `src/` 下的生产 TypeScript（排除 `*.test.ts` 与测试 fixture）对 `node:fs`、`node:fs/promises`、`fs`、`fs/promises` 的文件系统调用：明确的只读 API 进入白名单，其余调用一律视为 mutation candidate；candidate 所在源码必须登记为 generation input，或登记为带原因的显式例外（只允许证明写入 Home 之外，或证明该写入不改变 generation 兼容语义）。named、aliased、namespace 与 default import 都要解析；未知 fs API 默认失败。该测试负责防止直接 mutation sink 漂移，不声称自动推导跨模块数据流或第三方库内部写入；通过既有 helper、payload 或第三方边界改变 Home 内容的源码仍按 generation-input 契约显式登记，长期规则见 `packages/ellamaka-cordis/AGENTS.md`。
 
 ### Materialization
 
@@ -216,7 +222,7 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 
 闭包版本变化在用户启动目标 Ellamaka 产品时处理。准备会在较新版本写入之前检查并备份 Home。若激活失败，备份保持为人工恢复材料；不尝试自动降级或恢复。
 
-代际提升在合并前由只读检查判定，在打包前由发布关卡再次判定。发布关卡属于两个产品发布流程的组成部分，位于打包之前，内容依次为：准备并探测系统沙箱、检查引擎清单、检查完整依赖清单、执行代数检查、运行工具容器回归。任一步失败即中止发布，没有跳过或放行的分支。打包作业依赖这个关卡，不再各自重复清单检查。
+代际提升在合并前由只读检查判定，在打包前由发布关卡再次判定。发布关卡属于两个产品发布流程的组成部分，位于打包之前，内容依次为：准备并探测系统沙箱、检查引擎清单、检查完整依赖清单、执行代数检查、运行工具容器回归。任一步失败即中止发布，没有跳过或放行的分支。打包作业依赖这个关卡，不再各自重复清单检查。CLI 与 Desktop 的发布 workflow 还共享同一个 repository concurrency group，`cancel-in-progress: false` 且 `queue: max`，使一个 release 从 generation 检查到 immutable manifest 提交期间不会与另一个产品 release 并发，也不会用新的等待任务替换已有等待任务；后一个 release 因而总能看到前一个已经提交的 generation frontier。
 
 仓库的测试门禁在三个位置运行，全部使用 Linux runner：每晚定时一次、手动一次、每次发布打包之前一次。日常提交只做静态检查与密钥扫描，不运行测试套件。
 

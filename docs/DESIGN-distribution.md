@@ -242,6 +242,8 @@ CLI rc 与 stable 走完全相同的 release job：同一 versioned path（`ella
 
 两个产品发布流程在打包之前共享一个 Linux 测试关卡，固定使用 `ubuntu-24.04`：准备并探测系统沙箱 → 引擎清单检查 → 完整依赖清单检查 → 代数检查 → 工具容器回归。任一步非零退出即中止发布，没有跳过或放行的分支。打包作业依赖该关卡，清单检查只在关卡内执行一次。
 
+CLI 与 Desktop 的 publish workflow 共享一个 repository-level concurrency group，`cancel-in-progress` 固定为 false，等待队列固定为 `queue: max`。锁覆盖整个 workflow，而不是只覆盖测试关卡：一个 release 从读取 generation frontier、通过关卡直到 immutable manifest 提交完成期间，另一个产品 release 不会并发进入发布流程；后续 release 排队等待，不会互相替换 pending run。这样两个独立产品仍然独立计版本，但共享的 `closureVersion` 只有一条串行发布线。
+
 CLI 发布流程（release job）：
 
 1. anchor match gate 已断言 tag 版本等于 `packages/ellamaka-cli/package.json`（[Tags 与 Channels](#tags-与-channels)）；release context 生成时校验 checkout commit、source tag 与本次 Ellamaka product/version/channel 一致。
@@ -386,7 +388,13 @@ Stable/Beta 是不同 appId/路径，可以跨 minor 共存。Actual ReleaseIden
 
 DSH closure 是产品 Runtime 的固定组成。Ellamaka 源码维护一个递增 closureVersion，CLI 和 Desktop 使用同一值；锁文件固定实际 DSH 依赖。已知会影响 Home 的闭包变更提升 closureVersion，产品 SemVer/channel 不替代该值。
 
-代际提升由发布前检查判定：以最近一个发布标签为基准，比对钉住的 DSH 版本与显式登记的、会写入 Home 的产品自有文件；任一项变化而代数未提升时，检查失败并阻止打包。发布关卡在执行打包之前运行该检查，每晚与手动的测试作业也运行它。
+代际提升由发布前检查判定。检查枚举 CLI 与 Desktop 两个 tag namespace，但只承认存在有效 immutable versioned manifest、且 ReleaseIdentity 与 tag/source commit 一致的已提交 release；failed-attempt tag 不进入 generation history。每个已提交 release 从其源码读取 `closureVersion`，没有该字段时记为 generation 0；全体已提交 release 的最大 generation 构成当前 frontier。没有任何可确认的已提交 release 时 fail closed。
+
+frontier 是共享代数边界，不比较两个产品彼此独立的 SemVer。检查比对当前 DSH 版本与 `@wopal/ellamaka-cordis` 明确登记的 Home generation inputs。历史 release 的 fingerprint 按当前 input path 契约投影；历史中尚不存在的 input 用稳定的 `absent` 标记参与 fingerprint，因此新增 input 会被识别为变化而不是把旧 release 判成不可读。当前 checkout 声明的 input 缺失则 fail closed。
+
+当前 guarded fingerprint 与 frontier generation 的 release 不一致时，当前代数必须严格高于 frontier；一致时不得低于 frontier。同一正数 frontier generation 出现两个不同 fingerprint 时，检查报告 `DSH_HOME_GENERATION_CONFLICT` 并阻止新的发布，直到源码提升到更高 generation 重新收敛。缺少 `closureVersion` 的 generation 0 只表示该已提交 release 不参与正数代际协议；一旦存在正数 frontier，后续判断只按最大已发布 generation 进行。
+
+publish workflow checkout 必须取得解析 frontier 所需的完整 history 与 tags，generation oracle 无法读取 tags、有效 manifest 或 ReleaseIdentity 时一律失败。CLI 与 Desktop 的 workflow 使用上文同一个 repository concurrency group，保证两个产品不能同时以同一个旧 frontier 发布不同的下一代闭包。
 
 备份成功后才允许较新 closure 写 Home；备份或版本状态写入失败时拒绝 DSH 启动。Home 保留最近 3 份切代备份，本次新建的那份始终保留。
 
