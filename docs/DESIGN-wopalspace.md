@@ -366,6 +366,8 @@ preview 不修改 refs；apply 使用相同判断执行。冲突不能留下半�
 
 贡献使用独立 branch/worktree，不能污染 Ontology 主工作目录；范围筛选、冲突、push 与 PR 状态必须可恢复和可诊断。
 
+本体命令面向单机个人使用。同一本体的创建、更新、恢复、撤销与同步由操作者顺序执行，执行期间保持 Git remote 配置稳定。状态文件使用原子替换保存；中断恢复依赖候选和发布记录。运行模型采用普通 Git 操作，不引入跨进程锁、租约、占用令牌或并发比较交换协议。
+
 Space 分支是内容维护入口；local main 汇集空间与上游历史；贡献分支承载一个主题、持续服务于同一个 PR。审查修复先在来源 Space 完成并验证，经 `space.sync` 汇入 local main，再发布到原贡献分支。PR 标题、正文、批准和合并使用 GitHub 的现有界面。
 
 #### Create and Update
@@ -394,7 +396,7 @@ include 为空时沿用首次贡献的全部合格路径语义；一次贡献的
 
 原子写入记录；push 前持久化候选恢复点。push 失败保留候选，重试先核对远端；远端已是候选 head 时补齐记录，无重复提交。分支已推送而创建 PR 中断时，按 head 身份查询已有 PR 后恢复，避免重复创建。abort 只撤销未发布候选，不丢弃已发布贡献。
 
-`ontology.refresh` 刷新受跟踪 PR 的 open/merged/closed 状态与远端 head；`ontology.inspect` 展示本地已知状态、发布点、来源是否有修复、远端是否出现外部提交及刷新诊断。查询失败时明确“无法刷新”；必要 fetch/PR 查询失败时 apply 终止，不能据缓存判定成功或授权清理。状态按调用查询，无后台轮询。
+`ontology.refresh` 刷新受跟踪 PR 的 open/merged/closed 状态与远端 head；`ontology.inspect` 展示本地已知状态、发布点、来源是否有修复、远端是否出现外部提交及刷新诊断。查询失败时明确“无法刷新”；必要 fetch/PR 查询失败时 apply 终止，不能据缓存判定成功或授权清理。状态按调用查询，无后台轮询。CLI 的 `ontology status` 只读本地记录并展示本次远端查询结果，不回写贡献记录。
 
 #### Return and Cleanup
 
