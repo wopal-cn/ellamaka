@@ -1,7 +1,7 @@
 # WopalSpace Application Domain
 
 > **Status**: Active
-> **Updated**: 2026-10-15
+> **Updated**: 2026-10-24
 > **Parent**: `./DESIGN.md`
 > **Scope**: private `@wopal/wopalspace` 的目标态架构、能力范围、公开契约、核心流程与状态归属
 > **Sibling DESIGNs**:
@@ -149,7 +149,7 @@ WopalSpace 的长期公开协议由本节与后续各领域章节共同定义。
 | `ontology.inspect` | `GET /wopal-space/ontologies/:name/status` | 返回本地仓库、remote topology、工作区与同步 facts；不 fetch |
 | `ontology.refresh` | `POST /wopal-space/ontologies/:name/refresh` | 受控 fetch remote refs；返回 `refreshed` 或 `unavailable`，不改本地分支/工作区 |
 | `ontology.sync` | `POST /wopal-space/ontologies/:name/sync` | `confirm:false` preview，`confirm:true` apply；返回本地与远端各阶段结果 |
-| `ontology.contribute` | `POST /wopal-space/ontologies/:name/contributions` | 输入 message/include/exclude/excludeFiles/confirm/resume/abort；返回可恢复贡献状态 |
+| `ontology.contribute` | `POST /wopal-space/ontologies/:name/contributions` | 输入 pr/message/include/exclude/excludeFiles/confirm/resume/abort；创建贡献或更新同一 PR，返回来源、范围、发布 head 与可恢复状态 |
 | `ontology.capability.list` | `GET /wopal-space/ontologies/:name/capabilities` | 返回 Ontology 完整能力池；不做 Runtime 权限过滤 |
 
 ### Space Endpoints
@@ -365,6 +365,52 @@ preview 不修改 refs；apply 使用相同判断执行。冲突不能留下半�
 ### Contribute
 
 贡献使用独立 branch/worktree，不能污染 Ontology 主工作目录；范围筛选、冲突、push 与 PR 状态必须可恢复和可诊断。
+
+Space 分支是内容维护入口；local main 汇集空间与上游历史；贡献分支承载一个主题、持续服务于同一个 PR。审查修复先在来源 Space 完成并验证，经 `space.sync` 汇入 local main，再发布到原贡献分支。PR 标题、正文、批准和合并使用 GitHub 的现有界面。
+
+#### Create and Update
+
+首次贡献固定 upstream base、sourceMain SHA 与 include/exclude 范围，在隔离候选中生成一个压缩贡献提交，普通 push 到拓扑明确的 fork remote，然后创建 PR。成功后保留本地贡献分支和贡献记录；可释放干净的临时 worktree。
+
+指定 `pr` 时更新原 PR。`pr` 接受当前 upstream 仓库的编号或完整 URL；服务校验仓库、base branch、head fork 与 head branch。更新只接受受跟踪贡献，沿用原记录的范围；修复未先从来源 Space 汇入 local main 时拒绝发布并提示先同步。message 在创建时必填，更新时可选，用于新增修复提交。`resume` / `abort` 处理未完成操作，日常 PR 更新使用 `pr`。
+
+候选以已发布贡献 head 为起点，应用“上次成功发布的 sourceMain → 当前 sourceMain”的范围内增量，向原分支追加提交。范围筛选处理新增、修改、删除及 rename 两端；范围外内容保留在来源。保留贡献分支为适配 upstream 已作的冲突解决，不以 local main 的整文件覆盖 PR 内容。空增量为 no-op。
+
+发布前重新核对远端 head 与记录；只允许普通 fast-forward push。发现外部新增提交或真实内容冲突时停止，列出差异或冲突及恢复入口；需要的外部修复先带回 Space。不能强推或自动选择 ours/theirs。push 成功后 GitHub 自动更新原 PR 的代码，结果返回原 PR URL、发布 head 和文件变化。
+
+include 为空时沿用首次贡献的全部合格路径语义；一次贡献的范围固定，主题扩展通过新贡献承载。路径过滤不能判断主题，预览由操作者核对。
+
+#### Contribution Records and Status
+
+每个本体仓库在 Git common dir 的 `wopal-contributions.json` 保存一份贡献记录，以完整 PR 身份索引多个贡献。记录归 Ontology application service，分支保存代码，GitHub 保存接受状态。
+
+| 字段组 | 内容 |
+| --- | --- |
+| PR 身份 | upstream repository、number/URL、base branch、head fork/branch |
+| 来源 | 来源 Space branch、上次成功发布的 sourceMain SHA |
+| 范围 | 固定的 include/exclude 及显式排除路径 |
+| 发布点 | 已成功发布的 contribution head SHA |
+| 恢复点 | 未完成操作的候选 head、候选 sourceMain、发布阶段与 PR 创建身份 |
+
+原子写入记录；push 前持久化候选恢复点。push 失败保留候选，重试先核对远端；远端已是候选 head 时补齐记录，无重复提交。分支已推送而创建 PR 中断时，按 head 身份查询已有 PR 后恢复，避免重复创建。abort 只撤销未发布候选，不丢弃已发布贡献。
+
+`ontology.refresh` 刷新受跟踪 PR 的 open/merged/closed 状态与远端 head；`ontology.inspect` 展示本地已知状态、发布点、来源是否有修复、远端是否出现外部提交及刷新诊断。查询失败时明确“无法刷新”；必要 fetch/PR 查询失败时 apply 终止，不能据缓存判定成功或授权清理。状态按调用查询，无后台轮询。
+
+#### Return and Cleanup
+
+PR 合并后，`ontology.sync` 通过普通 merge 接入上游真实落地历史并推送 fork main，再由 `space.sync` 对齐来源 Space。管理员选择 merge、squash 或 rebase 均使用此路径；同步成功后，上游落地提交是 local main 的祖先，本地提交继续可达。
+
+Space 与贡献分支均含最终修复时，等价内容通常可干净合并；对同一区块存在不同修改时仍可能冲突。合并先在隔离候选中完成，成功后推进真实分支，失败保留真实分支状态。
+
+只有确认 PR 已合并、其上游落地提交已进入 local main、fork main 推送成功，才能清理贡献分支和记录。Open、closed-unmerged、状态无法确认均保留，不能单凭内容相同或祖先关系删除。分支含记录之外的提交或仍被有未提交内容的 worktree 使用时保留并报告；远端分支已不存在视为已清理。
+
+#### Verification Boundaries
+
+- 同一 PR 连续两轮修复：编号和 head branch 稳定、追加提交、来源与 PR 均含修复。
+- merge / squash / rebase 回流：保留本地范围外内容，上游落地提交进入 local main 祖先链。
+- 未同步的来源修复、范围变化、外部贡献提交及真实冲突：明确拒绝，不覆盖内容。
+- push 成功后中断及 PR 创建中断：重试恢复同一候选和 PR，不重复发布。
+- PR open、closed-unmerged、fetch/查询失败及 fork push 失败：保留分支和记录。
 
 ## Space
 
