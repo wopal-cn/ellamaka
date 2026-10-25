@@ -88,7 +88,16 @@ const SUBCOMMANDS = [
 // Fixed wrap width so a developer's terminal doesn't affect snapshots.
 // yargs honors COLUMNS; CI runners typically default to 80 which produces
 // different wraps from a 200-col local terminal.
-const SNAPSHOT_ENV = { COLUMNS: "120" }
+// yargs localizes its type/default labels from the host locale, so a snapshot
+// taken on a Chinese macOS machine never matches a C-locale Linux runner.
+// Pin the child locale so the pinned help text is machine independent.
+const SNAPSHOT_ENV = {
+  COLUMNS: "120",
+  LANG: "C.UTF-8",
+  LANGUAGE: "",
+  LC_ALL: "C.UTF-8",
+  LC_MESSAGES: "C.UTF-8",
+}
 
 describe("help snapshot normalization", () => {
   test.each([

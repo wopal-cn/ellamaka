@@ -177,8 +177,18 @@ describe("tool.write", () => {
         yield* run({ filePath: filepath, content: JSON.stringify({ secret: "data" }) })
 
         if (process.platform !== "win32") {
-          const stats = yield* Effect.promise(() => fs.stat(filepath))
-          expect(stats.mode & 0o777).toBe(0o644)
+          // The default file mode follows the process umask, which differs
+          // between developer machines and CI runners. Pin it so the assertion
+          // tests our write path rather than the host default.
+          const previous = process.umask(0o022)
+          try {
+            const second = path.join(test.directory, "sensitive-pinned.json")
+            yield* run({ filePath: second, content: JSON.stringify({ secret: "data" }) })
+            const stats = yield* Effect.promise(() => fs.stat(second))
+            expect(stats.mode & 0o777).toBe(0o644)
+          } finally {
+            process.umask(previous)
+          }
         }
       }),
     )

@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { realpathSync } from "node:fs"
 import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
 import { SessionProvisioner } from "../../src/workbench/session-provisioner"
@@ -33,7 +34,8 @@ const provisionerIt = testEffect(
         check: () => Effect.succeed("healthy" as const),
       }),
       Layer.mock(SpaceRegistry.Service, {
-        getSpaces: () => Effect.succeed({ spaces: [{ id: "main", name: "main", path: "/tmp" }], refreshedAt: 0 } as never),
+        getSpaces: () =>
+          Effect.succeed({ spaces: [{ id: "main", name: "main", path: "/tmp" }], refreshedAt: 0 } as never),
       }),
       Layer.mock(SessionShare.Service, {
         create: (input) =>
@@ -59,11 +61,13 @@ const it = testEffect(
     SessionDirectoryHealth.defaultLayer,
     CliAdapter.defaultLayer,
     SpaceRegistry.defaultLayer,
-  ).pipe(Layer.provide([
-    sessionShareLayer,
-    instanceStoreLayer,
-    Layer.mock(Session.Service, { list: () => Effect.succeed([]) }),
-  ])),
+  ).pipe(
+    Layer.provide([
+      sessionShareLayer,
+      instanceStoreLayer,
+      Layer.mock(Session.Service, { list: () => Effect.succeed([]) }),
+    ]),
+  ),
 )
 
 // Legacy `spaceName` matching must use the stable space id (D-06), not the
@@ -130,7 +134,9 @@ describe("workbench-session-api", () => {
           workbench: {
             requestID: "request-1",
             payload: JSON.stringify({
-              target: { type: "space", spacePath: "/private/tmp", directory: undefined },
+              // The provisioner canonicalizes the space path; resolve it the same way
+              // so the assertion holds on every platform (/private/tmp on macOS, /tmp on Linux).
+              target: { type: "space", spacePath: realpathSync("/tmp"), directory: undefined },
               title: undefined,
               agent: undefined,
             }),
@@ -144,10 +150,13 @@ describe("workbench-session-api", () => {
     Effect.gen(function* () {
       resetCreateCapture()
       const provisioner = yield* SessionProvisioner.Service
-      const [first, second] = yield* Effect.all([
-        provisioner.provisionSpace({ spacePath: "/tmp", requestID: "request-coalesced" }),
-        provisioner.provisionSpace({ spacePath: "/tmp", requestID: "request-coalesced" }),
-      ], { concurrency: 2 })
+      const [first, second] = yield* Effect.all(
+        [
+          provisioner.provisionSpace({ spacePath: "/tmp", requestID: "request-coalesced" }),
+          provisioner.provisionSpace({ spacePath: "/tmp", requestID: "request-coalesced" }),
+        ],
+        { concurrency: 2 },
+      )
 
       expect(first.id).toBe("ses_1")
       expect(second.id).toBe("ses_1")

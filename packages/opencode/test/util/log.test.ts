@@ -195,17 +195,27 @@ it.live("first log write creates the file and cleanup runs once", () =>
     yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "tui" }))
     Log.Default.info("first line")
 
-    const next = yield* files(dir)
     // Cleanup keeps the newest 10 timestamped files, plus the new tui file.
-    expect(next.length).toBe(11)
-    expect(next).toContain(list.at(-1)!)
-    expect(next).not.toContain(list[0]!)
-    expect(next).not.toContain(list[1]!)
+    expect(yield* files(dir)).toContain(list.at(-1)!)
+    expect(yield* files(dir)).not.toContain(list[0]!)
 
-    const logFile = next.find((f) => f.startsWith("tui-"))
+    // The first record is written asynchronously; wait for the line before
+    // counting files so a slow flush cannot race the assertion.
+    let logFile: string | undefined
+    let content = ""
+    for (let i = 0; i < 100; i++) {
+      const list = yield* Effect.promise(() => fs.readdir(dir).then((files) => files.sort()))
+      logFile = list.find((f) => f.startsWith("tui-"))
+      if (logFile) {
+        content = yield* Effect.promise(() => fs.readFile(path.join(dir, logFile!), "utf8"))
+        if (content.includes("first line")) break
+      }
+      yield* Effect.sleep("10 millis")
+    }
     expect(logFile).toBeDefined()
-    const content = yield* Effect.promise(() => fs.readFile(path.join(dir, logFile!), "utf8"))
     expect(content).toContain("first line")
+    const settled = yield* files(dir)
+    expect(settled.length).toBe(11)
   }),
 )
 

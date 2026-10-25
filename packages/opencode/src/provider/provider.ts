@@ -46,25 +46,38 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   const reader = res.body.getReader()
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
-      const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-        const id = setTimeout(() => {
-          const err = new ProviderError.ResponseStreamError("SSE read timed out")
-          ctl.abort(err)
-          void reader.cancel(err)
-          reject(err)
-        }, ms)
-
-        reader.read().then(
-          (part) => {
-            clearTimeout(id)
-            resolve(part)
-          },
-          (err) => {
-            clearTimeout(id)
+      // A stalled chunk must fail the stream the caller is reading. Letting the
+      // rejection escape pull() surfaces it as an unhandled error while readers
+      // see a hung stream.
+      let part: Awaited<ReturnType<typeof reader.read>>
+      try {
+        part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+          const id = setTimeout(() => {
+            const err = new ProviderError.ResponseStreamError("SSE read timed out")
+            // Abort without a reason: passing the error here re-throws it on the
+            // shared signal and escapes as an unhandled rejection. The stream
+            // error below is what the reader observes.
+            ctl.abort()
+            void reader.cancel(err).catch(() => {})
             reject(err)
-          },
-        )
-      })
+          }, ms)
+
+          reader.read().then(
+            (part) => {
+              clearTimeout(id)
+              resolve(part)
+            },
+            (err) => {
+              clearTimeout(id)
+              reject(err)
+            },
+          )
+        })
+      } catch (error) {
+        ctrl.error(error)
+        ctrl.close()
+        return
+      }
 
       if (part.done) {
         ctrl.close()

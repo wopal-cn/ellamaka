@@ -47,7 +47,11 @@ describe("plugin.openai.ws", () => {
         url: server.wsUrl,
         headers: {},
       }),
-    ).rejects.toThrow("Expected 101 status code")
+      // The ws client reports a rejected upgrade as "Unexpected server response:
+      // <status>". Assert the surfaced rejection carries the upgrade status
+      // instead of pinning the library's exact wording, which has changed
+      // across releases.
+    ).rejects.toThrow(/Unexpected server response: 401|Expected 101 status code/)
   })
 
   test("enforces websocket send idle timeout", async () => {

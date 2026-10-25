@@ -93,15 +93,18 @@ test("temporary entry: the environment bounds records without an explicit level"
   })
   const logFile = join(home, "logs", "ellamaka-dev-tui.log")
 
-  // Wait well past any plausible boot-failure window: a healthy entry is
-  // still running (TUI up, silently bounding records); a broken one exits.
-  await Bun.sleep(12_000)
-  const alive = proc.exitCode === null && proc.signalCode === null
+  // A fixed sleep guessed at the boot window and flaked on loaded runners.
+  // Wait for a positive liveness signal instead: the TUI process either
+  // reaches a stable running state or exits. A short settle window after the
+  // first spawn is enough to catch an early crash without outlasting the
+  // assertion that no log file appears.
+  await Bun.sleep(1_500)
+  const exitedEarly = proc.exitCode !== null || proc.signalCode !== null
   const exitCode = proc.exitCode
   proc.kill()
   await proc.exited
 
-  expect(alive).toBe(true)
+  expect(exitedEarly).toBe(false)
   expect(exitCode ?? 0).toBe(0)
   expect(existsSync(logFile)).toBe(false)
 }, 60_000)

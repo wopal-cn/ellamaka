@@ -119,10 +119,13 @@ describe("util.process", () => {
       stderr: "pipe",
     }).exited.catch((err) => err)
 
-    expect(err).toBeInstanceOf(Error)
-    if (!(err instanceof Error)) throw err
-    expect(err).toMatchObject({
-      code: "ENOENT",
-    })
+    // Bun surfaces a missing binary differently per platform: Linux exits with
+    // 127 while macOS rejects with an ENOENT error. Both mean "cannot execute",
+    // so assert that outcome instead of one platform's shape.
+    if (err instanceof Error) {
+      expect(err).toMatchObject({ code: "ENOENT" })
+    } else {
+      expect(err).toBe(127)
+    }
   })
 })

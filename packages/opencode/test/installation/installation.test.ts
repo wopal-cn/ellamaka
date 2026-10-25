@@ -6,12 +6,7 @@ import { Installation } from "../../src/installation"
 import { findEllamakaArtifact } from "../../src/installation"
 import { AppProcess } from "@wopal/ellamaka-core/process"
 import { testEffect } from "../lib/effect"
-import {
-  readJsoncConfig,
-  getWorkspaceAutoupdate,
-  isUpdateChannel,
-  isUpdateAvailable,
-} from "../../src/cli/upgrade"
+import { readJsoncConfig, getWorkspaceAutoupdate, isUpdateChannel, isUpdateAvailable } from "../../src/cli/upgrade"
 import { mkdirSync, writeFileSync, rmSync } from "fs"
 import { tmpdir } from "os"
 import path from "path"
@@ -81,7 +76,14 @@ describe("findEllamakaArtifact", () => {
     artifacts: [
       { name: "ellamaka-darwin-arm64.tar.gz", os: "darwin", arch: "arm64", url: "https://a", sha256: "a" },
       { name: "ellamaka-darwin-x64.tar.gz", os: "darwin", arch: "x64", url: "https://b", sha256: "b" },
-      { name: "ellamaka-darwin-x64-baseline.tar.gz", os: "darwin", arch: "x64", variant: "baseline", url: "https://c", sha256: "c" },
+      {
+        name: "ellamaka-darwin-x64-baseline.tar.gz",
+        os: "darwin",
+        arch: "x64",
+        variant: "baseline",
+        url: "https://c",
+        sha256: "c",
+      },
       { name: "ellamaka-linux-x64.tar.gz", os: "linux", arch: "x64", url: "https://d", sha256: "d" },
       { name: "ellamaka-windows-x64.zip", os: "windows", arch: "x64", url: "https://e", sha256: "e" },
     ],
@@ -108,12 +110,15 @@ describe("readJsoncConfig", () => {
   test("parses valid JSONC with comments", () => {
     const tmp = makeTempDir()
     const filepath = path.join(tmp, "settings.jsonc")
-    writeFileSync(filepath, `{
+    writeFileSync(
+      filepath,
+      `{
       // this is a comment
       "ellamaka": {
         "autoupdate": false
       }
-    }`)
+    }`,
+    )
     const result = readJsoncConfig(filepath)
     expect(result).toEqual({ ellamaka: { autoupdate: false } })
     rmSync(tmp, { recursive: true, force: true })
@@ -217,9 +222,7 @@ describe("installation method", () => {
 describe("installation latest", () => {
   const manifest = {
     version: "2.0.0",
-    artifacts: [
-      { name: "ellamaka-darwin-arm64.tar.gz", os: "darwin", arch: "arm64", url: "https://a", sha256: "a" },
-    ],
+    artifacts: [{ name: "ellamaka-darwin-arm64.tar.gz", os: "darwin", arch: "arm64", url: "https://a", sha256: "a" }],
     checksumsUrl: "https://checksums",
   }
 
@@ -241,10 +244,26 @@ describe("installation latest", () => {
 })
 
 describe("installation upgrade", () => {
+  // The CDN serves one artifact per platform. The fixture must list every
+  // platform the suite runs on, otherwise the test only passes on the machine
+  // that happens to match the single entry.
   const manifest = {
     version: "2.0.0",
     artifacts: [
-      { name: "ellamaka-darwin-arm64.tar.gz", os: "darwin", arch: "arm64", url: "https://cd/ellamaka-darwin-arm64.tar.gz", sha256: "abc" },
+      {
+        name: "ellamaka-darwin-arm64.tar.gz",
+        os: "darwin",
+        arch: "arm64",
+        url: "https://cd/ellamaka-darwin-arm64.tar.gz",
+        sha256: "abc",
+      },
+      {
+        name: "ellamaka-linux-x64.tar.gz",
+        os: "linux",
+        arch: "x64",
+        url: "https://cd/ellamaka-linux-x64.tar.gz",
+        sha256: "abc",
+      },
     ],
     checksumsUrl: "https://checksums",
   }
