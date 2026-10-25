@@ -1,7 +1,9 @@
 /** @jsx h */
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
+import * as realRouter from "@solidjs/router"
+import * as realOnboardingContext from "../onboarding-client-context"
 
 /**
  * The `done` step owns exactly one launch action, and the shared bottom nav bar
@@ -14,12 +16,12 @@ import h from "solid-js/h"
 let DoneStep: typeof import("./done").DoneStep
 
 const navigateCalls: string[] = []
-type CompleteResult =
-  | { completed: true }
-  | { status: "failed"; error: { code: string; message: string } }
+type CompleteResult = { completed: true } | { status: "failed"; error: { code: string; message: string } }
 
 const completeMock = mock(async (): Promise<CompleteResult> => ({ completed: true }))
 const probeMock = mock(async () => ({ ready: true }))
+const realRouterExports = { ...realRouter }
+const realOnboardingContextExports = { ...realOnboardingContext }
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
@@ -161,4 +163,9 @@ describe("DoneStep health gate rejection", () => {
     dispose()
     host.remove()
   })
+})
+
+afterAll(() => {
+  mock.module("@solidjs/router", () => realRouterExports)
+  mock.module("../onboarding-client-context", () => realOnboardingContextExports)
 })

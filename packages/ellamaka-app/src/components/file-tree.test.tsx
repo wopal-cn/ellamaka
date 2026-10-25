@@ -1,4 +1,19 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
+import * as realRouter from "@solidjs/router"
+import * as realFile from "@/context/file"
+import * as realSdk from "@/context/sdk"
+import * as realCollapsible from "@wopal/ui/collapsible"
+import * as realFileIcon from "@wopal/ui/file-icon"
+import * as realIcon from "@wopal/ui/icon"
+import * as realTooltip from "@wopal/ui/tooltip"
+
+const realRouterExports = { ...realRouter }
+const realFileExports = { ...realFile }
+const realSdkExports = { ...realSdk }
+const realCollapsibleExports = { ...realCollapsible }
+const realFileIconExports = { ...realFileIcon }
+const realIconExports = { ...realIcon }
+const realTooltipExports = { ...realTooltip }
 
 let shouldListRoot: typeof import("./file-tree").shouldListRoot
 let shouldListExpanded: typeof import("./file-tree").shouldListExpanded
@@ -108,4 +123,14 @@ describe("file tree row text tokens", () => {
     expect(fileTreeRowTextClass({ ignored: false, active: true })).toBe("")
     expect(fileTreeRowTextClass({ ignored: true, active: true })).toBe("")
   })
+})
+
+afterAll(() => {
+  mock.module("@solidjs/router", () => realRouterExports)
+  mock.module("@/context/file", () => realFileExports)
+  mock.module("@/context/sdk", () => realSdkExports)
+  mock.module("@wopal/ui/collapsible", () => realCollapsibleExports)
+  mock.module("@wopal/ui/file-icon", () => realFileIconExports)
+  mock.module("@wopal/ui/icon", () => realIconExports)
+  mock.module("@wopal/ui/tooltip", () => realTooltipExports)
 })

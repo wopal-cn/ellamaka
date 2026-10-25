@@ -1,4 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import * as realPlatform from "@/context/platform"
+
+const realPlatformExports = { ...realPlatform }
 
 type PersistTestingType = typeof import("./persist").PersistTesting
 type PersistType = typeof import("./persist").Persist
@@ -164,4 +167,8 @@ describe("persist localStorage resilience", () => {
     expect(storage.getItem(`${target.storage}:${target.key}`)).toBeNull()
     expect(storage.getItem(`${target.legacyStorageNames![0]}:${target.key}`)).toBeNull()
   })
+})
+
+afterAll(() => {
+  mock.module("@/context/platform", () => realPlatformExports)
 })

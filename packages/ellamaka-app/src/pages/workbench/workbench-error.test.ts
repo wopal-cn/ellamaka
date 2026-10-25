@@ -1,5 +1,8 @@
-import { describe, it, expect, afterEach, beforeEach, mock, spyOn } from "bun:test"
+import { afterAll, describe, it, expect, afterEach, beforeEach, mock, spyOn } from "bun:test"
+import * as realToast from "@wopal/ui/toast"
 import { reportWorkbenchError, WORKBENCH_ERROR_EVENT } from "./workbench-error"
+
+const realToastExports = { ...realToast }
 
 describe("reportWorkbenchError", () => {
   let consoleErrorSpy: ReturnType<typeof spyOn>
@@ -100,4 +103,8 @@ describe("reportWorkbenchError", () => {
     expect(received).toEqual([{ operation: "load session tree", message: "Network error" }])
     expect(toastCalls).toHaveLength(0)
   })
+})
+
+afterAll(() => {
+  mock.module("@wopal/ui/toast", () => realToastExports)
 })

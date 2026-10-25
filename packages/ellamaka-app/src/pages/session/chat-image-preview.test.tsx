@@ -1,10 +1,17 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
+import * as realIcon from "@wopal/ui/icon"
+
+const realIconExports = { ...realIcon }
 
 mock.module("@wopal/ui/icon", () => ({
   Icon: () => undefined,
 }))
 
 const { adjustImagePreviewZoom, imagePreviewZoom, resolveImagePreviewFrameSize } = await import("./chat-image-preview")
+
+afterAll(() => {
+  mock.module("@wopal/ui/icon", () => realIconExports)
+})
 
 describe("ChatImagePreview", () => {
   test("changes zoom in fixed steps without exceeding its supported range", () => {
@@ -19,5 +26,4 @@ describe("ChatImagePreview", () => {
     expect(resolveImagePreviewFrameSize({ width: 600, height: 300 }, 100)).toBe(632)
     expect(resolveImagePreviewFrameSize({ width: 720, height: 540 }, 200)).toBe(760)
   })
-
 })

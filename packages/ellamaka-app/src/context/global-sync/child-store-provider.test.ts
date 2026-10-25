@@ -1,15 +1,12 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, type Owner } from "solid-js"
-import { createStore } from "solid-js/store"
 import type { NormalizedProviderListResponse } from "@wopal/ui/context"
-import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
+import { createChildStoreManager } from "./child-store"
 
-let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 const queryGroups: Array<() => { queries: Array<{ enabled?: boolean }> }> = []
 const mcpQueries: Array<() => { enabled?: boolean }> = []
 
-const child = () => createStore({} as State)
 const provider = { all: new Map(), connected: [], default: {} } satisfies NormalizedProviderListResponse
 
 const queryOptionsApi = {
@@ -32,6 +29,29 @@ const queryOptionsApi = {
   sessions: (directory: string) => ({ queryKey: [directory, "loadSessions"] as const }),
 } as unknown as QueryOptionsApi
 
+const fakePersisted: typeof import("@/utils/persist").persisted = (_target, store) => [
+  store[0],
+  store[1],
+  null,
+  Object.assign(() => true, { promise: undefined }),
+]
+
+const storeDependencies = {
+  persisted: fakePersisted,
+  useQueries: ((options: () => { queries: Array<{ enabled?: boolean }> }) => {
+    queryGroups.push(options)
+    return [
+      { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
+      { isLoading: false, data: [] },
+      { isLoading: false, data: provider },
+    ]
+  }) as unknown as typeof import("@tanstack/solid-query").useQueries,
+  useQuery: ((options: () => { enabled?: boolean }) => {
+    mcpQueries.push(options)
+    return { isLoading: false, data: {} }
+  }) as unknown as typeof import("@tanstack/solid-query").useQuery,
+}
+
 function createOwner(callback: (owner: Owner) => void) {
   return createRoot((dispose) => {
     const owner = getOwner()
@@ -41,31 +61,6 @@ function createOwner(callback: (owner: Owner) => void) {
     return dispose
   })
 }
-
-beforeAll(async () => {
-  mock.module("@/utils/persist", () => ({
-    Persist: {
-      workspace: (...parts: string[]) => parts.join(":"),
-    },
-    persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
-  }))
-  mock.module("@tanstack/solid-query", () => ({
-    useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
-      queryGroups.push(options)
-      return [
-        { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
-        { isLoading: false, data: [] },
-        { isLoading: false, data: provider },
-      ]
-    },
-    useQuery: (options: () => { enabled?: boolean }) => {
-      mcpQueries.push(options)
-      return { isLoading: false, data: {} }
-    },
-  }))
-
-  createChildStoreManager = (await import("./child-store")).createChildStoreManager
-})
 
 describe("child store provider catalog", () => {
   test("a fresh child store exposes provider_ready as false until bootstrap publishes the catalog", () => {
@@ -82,6 +77,7 @@ describe("child store provider catalog", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         global: { provider },
+        ...storeDependencies,
       })
     })
 

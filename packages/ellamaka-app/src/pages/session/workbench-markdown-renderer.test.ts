@@ -1,5 +1,7 @@
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
 import DOMPurify from "dompurify"
+import * as realMarked from "@wopal/ui/context/marked"
+import * as realI18n from "@wopal/ui/context/i18n"
 import { streamBlocks } from "./workbench-markdown-stream"
 import {
   deferredHighlight,
@@ -8,6 +10,9 @@ import {
   renderMathExpressions,
   syncMarked,
 } from "./markdown-highlight"
+
+const realMarkedExports = { ...realMarked }
+const realI18nExports = { ...realI18n }
 
 const parsed = mock((src: string) => `<p>${src}</p>`)
 
@@ -20,6 +25,11 @@ mock.module("@wopal/ui/context/i18n", () => ({
 }))
 
 const { suppressNativeMarkdownLinkStatus } = await import("./workbench-markdown-renderer")
+
+afterAll(() => {
+  mock.module("@wopal/ui/context/marked", () => realMarkedExports)
+  mock.module("@wopal/ui/context/i18n", () => realI18nExports)
+})
 
 /**
  * WorkbenchMarkdown component behavior is verified end-to-end through the

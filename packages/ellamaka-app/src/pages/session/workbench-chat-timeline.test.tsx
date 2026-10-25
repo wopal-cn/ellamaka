@@ -1,12 +1,25 @@
 /** @jsx h */
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
 import { createStore } from "solid-js/store"
 import { createComponent, createRenderEffect, createSignal, ErrorBoundary } from "solid-js"
 import type { JSX } from "solid-js"
 import type { AssistantMessage, Message, Part, ToolPart, UserMessage } from "@wopal/ellamaka-sdk/v2"
+import * as realDialog from "@wopal/ui/context/dialog"
+import * as realLanguage from "@/context/language"
+import * as realCollapsible from "@wopal/ui/collapsible"
+import * as realIcon from "@wopal/ui/icon"
+import * as realMarkdownRenderer from "./workbench-markdown-renderer"
+import * as realSync from "@/context/sync"
 import { WorkbenchChatTimeline, type WorkbenchChatTimelineProps } from "./workbench-chat-timeline"
+
+const realDialogExports = { ...realDialog }
+const realLanguageExports = { ...realLanguage }
+const realCollapsibleExports = { ...realCollapsible }
+const realIconExports = { ...realIcon }
+const realMarkdownRendererExports = { ...realMarkdownRenderer }
+const realSyncExports = { ...realSync }
 
 mock.module("./workbench-markdown-renderer", () => ({
   WorkbenchMarkdown: (props: { text: string; streaming?: boolean }) => {
@@ -53,6 +66,15 @@ mock.module("@wopal/ui/collapsible", () => ({
     },
   ),
 }))
+
+afterAll(() => {
+  mock.module("@wopal/ui/context/dialog", () => realDialogExports)
+  mock.module("@/context/language", () => realLanguageExports)
+  mock.module("@wopal/ui/collapsible", () => realCollapsibleExports)
+  mock.module("@wopal/ui/icon", () => realIconExports)
+  mock.module("./workbench-markdown-renderer", () => realMarkdownRendererExports)
+  mock.module("@/context/sync", () => realSyncExports)
+})
 
 function userMessage(id: string, opts: Partial<UserMessage> = {}): UserMessage {
   return {
@@ -200,7 +222,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -229,7 +251,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
           showReasoningSummaries: true,
         })}
@@ -259,7 +281,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
           showReasoningSummaries: false,
         })}
@@ -303,7 +325,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -342,7 +364,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -377,7 +399,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -405,7 +427,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -427,7 +449,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
         })}
       />
     ))
@@ -791,7 +813,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -836,7 +858,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -864,7 +886,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
           revert: "u2",
         })}
@@ -1163,7 +1185,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />
@@ -1196,7 +1218,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
           onVirtualizer: (handle) => {
             captured = handle as unknown as { scrollToIndex: (i: number, o?: unknown) => void }
@@ -1290,7 +1312,7 @@ describe("WorkbenchChatTimeline", () => {
     const host = mount(() => (
       <WorkbenchChatTimeline
         {...baseProps({
-          userMessages: messages.filter((m) => m.role === "user") as UserMessage[],
+          userMessages: messages.filter((m) => m.role === "user"),
           virtualize: false,
         })}
       />

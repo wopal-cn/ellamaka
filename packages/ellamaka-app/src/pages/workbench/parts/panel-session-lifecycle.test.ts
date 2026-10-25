@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { createMemo, createRoot } from "solid-js"
+import { createSessionProjection } from "../session-store"
 import {
   shouldAcceptSessionDrop,
   shouldNotifySessionRemoval,
@@ -10,6 +12,10 @@ import {
   workbenchSessionEvent,
   isSessionNotFound,
 } from "./panel-session-lifecycle"
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
 
 describe("shouldAcceptSessionDrop", () => {
   test("silently rejects drops onto a panel that already has a session", () => {
@@ -35,12 +41,18 @@ describe("sessionDropRejection", () => {
 
 describe("shouldRestoreBoundSession", () => {
   test("restores a persisted binding when its local session projection is missing", () => {
-    expect(shouldRestoreBoundSession({ slotState: "bound", boundSessionId: "ses-1", hasLocalSession: false })).toBe(true)
+    expect(shouldRestoreBoundSession({ slotState: "bound", boundSessionId: "ses-1", hasLocalSession: false })).toBe(
+      true,
+    )
   })
 
   test("does not restore empty panels or bindings that already have a local reference", () => {
-    expect(shouldRestoreBoundSession({ slotState: "empty", boundSessionId: undefined, hasLocalSession: false })).toBe(false)
-    expect(shouldRestoreBoundSession({ slotState: "bound", boundSessionId: "ses-1", hasLocalSession: true })).toBe(false)
+    expect(shouldRestoreBoundSession({ slotState: "empty", boundSessionId: undefined, hasLocalSession: false })).toBe(
+      false,
+    )
+    expect(shouldRestoreBoundSession({ slotState: "bound", boundSessionId: "ses-1", hasLocalSession: true })).toBe(
+      false,
+    )
   })
 })
 
@@ -71,27 +83,39 @@ describe("shouldNotifySessionRemoval", () => {
 
 describe("shouldSyncSessionTitle", () => {
   test("returns false for non-session.updated events", () => {
-    expect(shouldSyncSessionTitle({ type: "session.created", sessionId: "s1", title: "Hello", localTitle: "Old" })).toBe(false)
-    expect(shouldSyncSessionTitle({ type: "session.deleted", sessionId: "s1", title: "Hello", localTitle: "Old" })).toBe(false)
+    expect(
+      shouldSyncSessionTitle({ type: "session.created", sessionId: "s1", title: "Hello", localTitle: "Old" }),
+    ).toBe(false)
+    expect(
+      shouldSyncSessionTitle({ type: "session.deleted", sessionId: "s1", title: "Hello", localTitle: "Old" }),
+    ).toBe(false)
   })
 
   test("returns false when sessionId or title is missing", () => {
     expect(shouldSyncSessionTitle({ type: "session.updated", title: "Hello", localTitle: "Old" })).toBe(false)
     expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", localTitle: "Old" })).toBe(false)
-    expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "", localTitle: "Old" })).toBe(false)
+    expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "", localTitle: "Old" })).toBe(
+      false,
+    )
   })
 
   test("returns false when the session is not tracked locally", () => {
     expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "Hello" })).toBe(false)
-    expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "Hello", localTitle: undefined })).toBe(false)
+    expect(
+      shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "Hello", localTitle: undefined }),
+    ).toBe(false)
   })
 
   test("returns false when the title has not changed", () => {
-    expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "Same", localTitle: "Same" })).toBe(false)
+    expect(
+      shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "Same", localTitle: "Same" }),
+    ).toBe(false)
   })
 
   test("returns true when the title differs from the local store", () => {
-    expect(shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "New Title", localTitle: "Old Title" })).toBe(true)
+    expect(
+      shouldSyncSessionTitle({ type: "session.updated", sessionId: "s1", title: "New Title", localTitle: "Old Title" }),
+    ).toBe(true)
   })
 })
 
@@ -196,9 +220,6 @@ describe("isSessionNotFound", () => {
 
 describe("sessionProjection isolation", () => {
   test("removing an unrelated session does not invalidate memoized session identity", () => {
-    const { createSessionProjection } = require("../session-store")
-    const { createRoot, createMemo } = require("solid-js")
-
     createRoot((dispose: () => void) => {
       const projection = createSessionProjection()
       projection.writer.upsert({
@@ -222,32 +243,27 @@ describe("sessionProjection isolation", () => {
         lastActiveAt: 200,
       })
 
-      let memoRunCount = 0
       const boundSession = createMemo(
         () => {
-          memoRunCount++
           return projection.reader.getSession("s1")
         },
         undefined,
         {
           equals: (prev: unknown, next: unknown) => {
             if (prev === next) return true
-            if (!prev || !next || typeof prev !== "object" || typeof next !== "object") return false
-            const p = prev as Record<string, unknown>
-            const n = next as Record<string, unknown>
+            if (!isRecord(prev) || !isRecord(next)) return false
             return (
-              p.id === n.id &&
-              p.title === n.title &&
-              p.type === n.type &&
-              p.directoryHealth === n.directoryHealth &&
-              p.timeArchived === n.timeArchived
+              prev.id === next.id &&
+              prev.title === next.title &&
+              prev.type === next.type &&
+              prev.directoryHealth === next.directoryHealth &&
+              prev.timeArchived === next.timeArchived
             )
           },
         },
       )
 
       expect(boundSession()?.id).toBe("s1")
-      const initialRuns = memoRunCount
 
       // Remove unrelated session "s2"
       projection.writer.remove("s2")

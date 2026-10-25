@@ -1,14 +1,21 @@
 /** @jsx h */
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
 import type { JSX } from "solid-js"
 import type { AssistantMessage, Part, UserMessage } from "@wopal/ellamaka-sdk/v2"
+import * as realIcon from "@wopal/ui/icon"
 import { PromptNavigator, type PromptNavigatorProps } from "./prompt-navigator"
+
+const realIconExports = { ...realIcon }
 
 mock.module("@wopal/ui/icon", () => ({
   Icon: (props: { name: string }) => <span data-slot="chat-icon" data-icon={props.name} />,
 }))
+
+afterAll(() => {
+  mock.module("@wopal/ui/icon", () => realIconExports)
+})
 
 function userMessage(id: string, _text: string): UserMessage {
   return {

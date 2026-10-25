@@ -1,11 +1,11 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, type Owner } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { NormalizedProviderListResponse } from "@wopal/ui/context"
 import type { State } from "./types"
 import type { QueryOptionsApi } from "../server-sync"
+import { createChildStoreManager } from "./child-store"
 
-let createChildStoreManager: typeof import("./child-store").createChildStoreManager
 const queryGroups: Array<() => { queries: Array<{ enabled?: boolean }> }> = []
 const mcpQueries: Array<() => { enabled?: boolean }> = []
 
@@ -32,6 +32,31 @@ const queryOptionsApi = {
   sessions: (directory: string) => ({ queryKey: [directory, "loadSessions"] as const }),
 } as unknown as QueryOptionsApi
 
+const fakePersisted: typeof import("@/utils/persist").persisted = (_target, store) => [
+  store[0],
+  store[1],
+  null,
+  Object.assign(() => true, { promise: undefined }),
+]
+
+const storeDependencies = {
+  persisted: fakePersisted,
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- injected double stands in for the generic hook
+  useQueries: ((options: () => { queries: Array<{ enabled?: boolean }> }) => {
+    queryGroups.push(options)
+    return [
+      { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
+      { isLoading: false, data: [] },
+      { isLoading: false, data: provider },
+    ]
+  }) as unknown as typeof import("@tanstack/solid-query").useQueries,
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- injected double stands in for the generic hook
+  useQuery: ((options: () => { enabled?: boolean }) => {
+    mcpQueries.push(options)
+    return { isLoading: false, data: {} }
+  }) as unknown as typeof import("@tanstack/solid-query").useQuery,
+}
+
 function createOwner(callback: (owner: Owner) => void) {
   return createRoot((dispose) => {
     const owner = getOwner()
@@ -41,31 +66,6 @@ function createOwner(callback: (owner: Owner) => void) {
     return dispose
   })
 }
-
-beforeAll(async () => {
-  mock.module("@/utils/persist", () => ({
-    Persist: {
-      workspace: (...parts: string[]) => parts.join(":"),
-    },
-    persisted: (_target: string, store: unknown[]) => [store[0], store[1], null, () => true],
-  }))
-  mock.module("@tanstack/solid-query", () => ({
-    useQueries: (options: () => { queries: Array<{ enabled?: boolean }> }) => {
-      queryGroups.push(options)
-      return [
-        { isLoading: false, data: { state: "", config: "", worktree: "", directory: "", home: "" } },
-        { isLoading: false, data: [] },
-        { isLoading: false, data: provider },
-      ]
-    },
-    useQuery: (options: () => { enabled?: boolean }) => {
-      mcpQueries.push(options)
-      return { isLoading: false, data: {} }
-    },
-  }))
-
-  createChildStoreManager = (await import("./child-store")).createChildStoreManager
-})
 
 describe("createChildStoreManager", () => {
   test("does not evict the active directory during mark", () => {
@@ -86,6 +86,7 @@ describe("createChildStoreManager", () => {
       translate: (key) => key,
       queryOptions: queryOptionsApi,
       global: { provider },
+      ...storeDependencies,
     })
 
     Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {
@@ -117,6 +118,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         global: { provider },
+        ...storeDependencies,
       })
     })
 
@@ -150,6 +152,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         global: { provider },
+        ...storeDependencies,
       })
     })
 
@@ -192,6 +195,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         global: { provider },
+        ...storeDependencies,
       })
     })
 
@@ -229,6 +233,7 @@ describe("createChildStoreManager", () => {
         translate: (key) => key,
         queryOptions: queryOptionsApi,
         global: { provider },
+        ...storeDependencies,
       })
     })
 

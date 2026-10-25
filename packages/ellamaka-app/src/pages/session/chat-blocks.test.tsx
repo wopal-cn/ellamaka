@@ -1,11 +1,24 @@
 /** @jsx h */
-import { describe, expect, mock, test } from "bun:test"
+import { afterAll, describe, expect, mock, test } from "bun:test"
 import { render } from "solid-js/web"
 import h from "solid-js/h"
 import { createComponent, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { JSX } from "solid-js"
 import type { AssistantMessage, Part, ToolPart, UserMessage } from "@wopal/ellamaka-sdk/v2"
+import * as realDialog from "@wopal/ui/context/dialog"
+import * as realLanguage from "@/context/language"
+import * as realFile from "@wopal/ui/context/file"
+import * as realCollapsible from "@wopal/ui/collapsible"
+import * as realIcon from "@wopal/ui/icon"
+import * as realMarkdownRenderer from "./workbench-markdown-renderer"
+
+const realDialogExports = { ...realDialog }
+const realLanguageExports = { ...realLanguage }
+const realFileExports = { ...realFile }
+const realCollapsibleExports = { ...realCollapsible }
+const realIconExports = { ...realIcon }
+const realMarkdownRendererExports = { ...realMarkdownRenderer }
 
 mock.module("./workbench-markdown-renderer", () => ({
   WorkbenchMarkdown: (props: { text: string }) => <div data-slot="chat-markdown">{props.text}</div>,
@@ -103,6 +116,7 @@ mock.module("@wopal/ui/collapsible", () => ({
     },
   ),
 }))
+
 import {
   ContextInjectionBlock,
   InteractionBlock,
@@ -1190,6 +1204,15 @@ describe("SubagentActivityBlock", () => {
     expect(subtitle?.textContent).toContain("review the diff")
     host.remove()
   })
+})
+
+afterAll(() => {
+  mock.module("@wopal/ui/context/dialog", () => realDialogExports)
+  mock.module("@/context/language", () => realLanguageExports)
+  mock.module("@wopal/ui/context/file", () => realFileExports)
+  mock.module("@wopal/ui/collapsible", () => realCollapsibleExports)
+  mock.module("@wopal/ui/icon", () => realIconExports)
+  mock.module("./workbench-markdown-renderer", () => realMarkdownRendererExports)
 })
 
 describe("GenericToolBlock", () => {

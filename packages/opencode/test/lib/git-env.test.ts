@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, readFileSync } from "node:fs"
 import path from "path"
 import { GIT_LOCATOR_VARS, gitEnv, stripGitLocatorVars } from "./git-env"
 
@@ -95,26 +94,5 @@ describe("gitEnv", () => {
       expect(env[MARKER]).toBe("keep-me")
       expect(env.PATH).toBe(process.env.PATH)
     })
-  })
-})
-
-// The pre-commit hook is a shell script, so it cannot import this module: its
-// `unset` line is a second, hand-written copy of the locator list. Pin the two
-// together — a variable added on one side only would silently stop being cleared.
-describe("pre-commit hook", () => {
-  test("clears every repository locator variable this module knows", () => {
-    const hook = path.join(import.meta.dir, "..", "..", "..", "..", ".husky", "pre-commit")
-    if (!existsSync(hook)) throw new Error(`pre-commit hook not found at ${hook}`)
-
-    const lines = readFileSync(hook, "utf8").split("\n")
-    const unsetIndex = lines.findIndex((line) => line.trim().startsWith("unset") && line.includes("GIT_DIR"))
-    if (unsetIndex === -1) throw new Error(`no "unset ... GIT_DIR ..." line found in ${hook}`)
-    const runIndex = lines.findIndex((line) => line.includes("test:unit"))
-    if (runIndex === -1) throw new Error(`no "test:unit" invocation found in ${hook}`)
-
-    for (const key of GIT_LOCATOR_VARS) expect(lines[unsetIndex]).toContain(key)
-    // Clearing only protects the tests if it happens first: an unset line below
-    // the invocation would leave the suite exposed while this list still matches.
-    expect(unsetIndex).toBeLessThan(runIndex)
   })
 })

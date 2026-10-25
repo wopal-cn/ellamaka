@@ -1,7 +1,11 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
+import * as realRouter from "@solidjs/router"
+import * as realUiContext from "@wopal/ui/context"
 import type { LineComment } from "./comments"
 
+const realRouterExports = { ...realRouter }
+const realUiContextExports = { ...realUiContext }
 let createCommentSessionForTest: typeof import("./comments").createCommentSessionForTest
 
 beforeAll(async () => {
@@ -17,6 +21,11 @@ beforeAll(async () => {
   }))
   const mod = await import("./comments")
   createCommentSessionForTest = mod.createCommentSessionForTest
+})
+
+afterAll(() => {
+  mock.module("@solidjs/router", () => realRouterExports)
+  mock.module("@wopal/ui/context", () => realUiContextExports)
 })
 
 function line(file: string, id: string, time: number): LineComment {

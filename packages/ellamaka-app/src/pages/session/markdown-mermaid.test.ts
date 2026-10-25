@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import * as realMermaid from "mermaid"
+
+const realMermaidExports = { ...realMermaid }
 
 const calls: Array<{ id: string; source: string }> = []
 let svg =
@@ -17,6 +20,10 @@ mock.module("mermaid", () => ({
 }))
 
 const { deferredMermaid } = await import("./markdown-mermaid")
+
+afterAll(() => {
+  mock.module("mermaid", () => realMermaidExports)
+})
 
 function fixture(source = "flowchart LR\n  A[Start] --> B[Finish]") {
   const container = document.createElement("div")

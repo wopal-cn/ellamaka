@@ -31,7 +31,13 @@ export function createChildStoreManager(input: {
   global: {
     provider: NormalizedProviderListResponse
   }
+  persisted?: typeof persisted
+  useQueries?: typeof useQueries
+  useQuery?: typeof useQuery
 }) {
+  const persistedStore = input.persisted ?? persisted
+  const useQueriesImpl = input.useQueries ?? useQueries
+  const useQueryImpl = input.useQuery ?? useQuery
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
   const vcsCache = new Map<string, VcsCache>()
   const metaCache = new Map<string, MetaCache>()
@@ -151,7 +157,7 @@ export function createChildStoreManager(input: {
     if (key === undefined || key === null) console.error("No directory provided")
     if (!children[key]) {
       const vcs = runWithOwner(input.owner, () =>
-        persisted(
+        persistedStore(
           Persist.workspace(directory, "vcs", ["vcs.v1"]),
           createStore({ value: undefined as VcsInfo | undefined }),
         ),
@@ -161,7 +167,7 @@ export function createChildStoreManager(input: {
       vcsCache.set(key, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
-        persisted(
+        persistedStore(
           Persist.workspace(directory, "project", ["project.v1"]),
           createStore({ value: undefined as ProjectMeta | undefined }),
         ),
@@ -170,7 +176,7 @@ export function createChildStoreManager(input: {
       metaCache.set(key, { store: meta[0], setStore: meta[1], ready: meta[3] })
 
       const icon = runWithOwner(input.owner, () =>
-        persisted(
+        persistedStore(
           Persist.workspace(directory, "icon", ["icon.v1"]),
           createStore({ value: undefined as string | undefined }),
         ),
@@ -187,13 +193,13 @@ export function createChildStoreManager(input: {
 
           // Provider data is published by bootstrapDirectory into the child
           // store, so the child does not observe a providers query here.
-          const [pathQuery, lspQuery] = useQueries(() => ({
+          const [pathQuery, lspQuery] = useQueriesImpl(() => ({
             queries: [
               { ...input.queryOptions.path(key), enabled: runtimeEnabled() },
               { ...input.queryOptions.lsp(key), enabled: runtimeEnabled() },
             ],
           }))
-          const mcpQuery = useQuery(() => ({
+          const mcpQuery = useQueryImpl(() => ({
             ...input.queryOptions.mcp(key),
             enabled: mcpEnabled(),
           }))

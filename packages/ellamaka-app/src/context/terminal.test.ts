@@ -1,4 +1,9 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test"
+import * as realRouter from "@solidjs/router"
+import * as realUiContext from "@wopal/ui/context"
+
+const realRouterExports = { ...realRouter }
+const realUiContextExports = { ...realUiContext }
 
 type ServerKey = Parameters<typeof import("./terminal").getTerminalServerScope>[1]
 
@@ -23,6 +28,11 @@ beforeAll(async () => {
   getTerminalServerScope = mod.getTerminalServerScope
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
+})
+
+afterAll(() => {
+  mock.module("@solidjs/router", () => realRouterExports)
+  mock.module("@wopal/ui/context", () => realUiContextExports)
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {

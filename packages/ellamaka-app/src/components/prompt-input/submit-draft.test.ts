@@ -1,5 +1,32 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import type { Prompt } from "@/context/prompt"
+import * as realRouter from "@solidjs/router"
+import * as realClient from "@wopal/ellamaka-sdk/v2/client"
+import * as realToast from "@wopal/ui/toast"
+import * as realEncode from "@wopal/ellamaka-core/util/encode"
+import * as realLocal from "@/context/local"
+import * as realPermission from "@/context/permission"
+import * as realPrompt from "@/context/prompt"
+import * as realLayout from "@/context/layout"
+import * as realSdk from "@/context/sdk"
+import * as realSync from "@/context/sync"
+import * as realServerSync from "@/context/server-sync"
+import * as realPlatform from "@/context/platform"
+import * as realLanguage from "@/context/language"
+
+const realRouterExports = { ...realRouter }
+const realClientExports = { ...realClient }
+const realToastExports = { ...realToast }
+const realEncodeExports = { ...realEncode }
+const realLocalExports = { ...realLocal }
+const realPermissionExports = { ...realPermission }
+const realPromptExports = { ...realPrompt }
+const realLayoutExports = { ...realLayout }
+const realSdkExports = { ...realSdk }
+const realSyncExports = { ...realSync }
+const realServerSyncExports = { ...realServerSync }
+const realPlatformExports = { ...realPlatform }
+const realLanguageExports = { ...realLanguage }
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
 
@@ -139,10 +166,7 @@ beforeAll(async () => {
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
-        return [
-          { session: storedSessions[directory] },
-          () => undefined,
-        ]
+        return [{ session: storedSessions[directory] }, () => undefined]
       },
     }),
   }))
@@ -239,4 +263,20 @@ describe("prompt submit draft session adoption", () => {
     expect(navigated).toEqual(["//repo/main/session/session-1"])
     expect(promoted).toEqual([{ directory: "/repo/main", sessionID: "session-1" }])
   })
+})
+
+afterAll(() => {
+  mock.module("@solidjs/router", () => realRouterExports)
+  mock.module("@wopal/ellamaka-sdk/v2/client", () => realClientExports)
+  mock.module("@wopal/ui/toast", () => realToastExports)
+  mock.module("@wopal/ellamaka-core/util/encode", () => realEncodeExports)
+  mock.module("@/context/local", () => realLocalExports)
+  mock.module("@/context/permission", () => realPermissionExports)
+  mock.module("@/context/prompt", () => realPromptExports)
+  mock.module("@/context/layout", () => realLayoutExports)
+  mock.module("@/context/sdk", () => realSdkExports)
+  mock.module("@/context/sync", () => realSyncExports)
+  mock.module("@/context/server-sync", () => realServerSyncExports)
+  mock.module("@/context/platform", () => realPlatformExports)
+  mock.module("@/context/language", () => realLanguageExports)
 })
