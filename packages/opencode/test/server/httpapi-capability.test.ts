@@ -133,6 +133,38 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
         return { code, err: err.slice(0, 2000) }
       }).pipe(Effect.catch((error) => Effect.succeed({ code: -1, err: String(error) })))
       console.error("[capability] manual spawn:", JSON.stringify(manual))
+
+      // Keep stdin open like the MCP transport does: a fixture that exits on
+      // EOF proves nothing, so the child has to stay alive to be a valid probe.
+      const held = yield* Effect.promise(async () => {
+        const proc = Bun.spawn([process.execPath, serverPath], {
+          cwd: directory,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, MCP_FIXTURE_DIAG_DIR: diagDir },
+        })
+        const timer = setTimeout(() => proc.kill(), 8000)
+        const alive = await Promise.race([
+          proc.exited.then((code) => ({ exited: true, code })),
+          new Promise((resolve) => setTimeout(() => resolve({ exited: false, code: null }), 3000)),
+        ])
+        clearTimeout(timer)
+        proc.kill()
+        const err = await new Response(proc.stderr).text()
+        return { alive, err: err.slice(0, 2000) }
+      }).pipe(Effect.catch((error) => Effect.succeed({ alive: { exited: true, code: -1 }, err: String(error) })))
+      console.error("[capability] held spawn:", JSON.stringify(held))
+      console.error("[capability] NODE_OPTIONS:", process.env.NODE_OPTIONS)
+      console.error(
+        "[capability] cwd exists:",
+        yield* Effect.promise(() =>
+          fs
+            .stat(directory)
+            .then(() => true)
+            .catch(() => false),
+        ),
+      )
     }
     return { tools, entry }
   })
