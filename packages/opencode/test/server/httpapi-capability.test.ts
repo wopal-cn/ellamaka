@@ -60,6 +60,28 @@ const request = Effect.fnUntraced(function* (
   return { status: response.status, text }
 })
 
+/**
+ * MCP servers are launched asynchronously; the discovery route reports an empty
+ * list until the client finishes connecting and listing tools. Poll the route
+ * until the expected tools appear (bounded) so the assertion checks the settled
+ * discovery surface instead of racing process start-up.
+ */
+const waitForTool = (handler: TestHandler, directory: string, id: string) =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + 25_000
+    let last = ""
+    while (Date.now() < deadline) {
+      const response = yield* request(handler, "/tool", { directory })
+      expect(response.status).toBe(200)
+      last = response.text
+      const tools = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(response.text))
+      const found = tools.find((tool) => tool.id === id)
+      if (found) return { tools, entry: found }
+      yield* Effect.sleep("100 millis")
+    }
+    const tools = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(last || "[]"))
+    return { tools, entry: tools.find((tool) => tool.id === id) }
+  })
 const RuleCapabilities = Schema.Array(Rule.Info)
 const ToolCapabilities = Schema.Array(ToolCapabilityInfo)
 const Agents = Schema.Array(Schema.Struct({ name: Schema.String, permission: Permission.Ruleset }))
@@ -217,13 +239,9 @@ describe("capability discovery HttpApi", () => {
         const tmp = yield* TestInstance
         const handler = yield* handlerScoped
 
-        const response = yield* request(handler, "/tool", { directory: tmp.directory })
-        expect(response.status).toBe(200)
-        const tools = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(response.text))
-
         // The configured key (`fixture.server`) is preserved while the id uses
         // the same sanitized composite key MCP.tools() mounts.
-        const entry = tools.find((tool) => tool.id === "fixture_server_fixture_tool_one")
+        const { entry } = yield* waitForTool(handler, tmp.directory, "fixture_server_fixture_tool_one")
         expect(entry).toMatchObject({
           id: "fixture_server_fixture_tool_one",
           source: "mcp",
@@ -258,6 +276,7 @@ describe("capability discovery HttpApi", () => {
         const tmp = yield* TestInstance
         const handler = yield* handlerScoped
 
+        yield* waitForTool(handler, tmp.directory, "fixture_server_fixture_tool_one")
         const response = yield* request(handler, "/tool", { directory: tmp.directory })
         expect(response.status).toBe(200)
         const discovered = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(response.text)).filter(
