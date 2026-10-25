@@ -3,6 +3,7 @@
 // the child's stderr, so without this a spawn failure on CI is invisible.
 const diagDir = process.env.MCP_FIXTURE_DIAG_DIR
 if (diagDir) {
+  await import("node:fs/promises").then((fs) => fs.mkdir(diagDir, { recursive: true })).catch(() => {})
   await Bun.write(diagDir + "/started.txt", String(process.pid)).catch(() => {})
   const stderrChunks: string[] = []
   const originalWrite = process.stderr.write.bind(process.stderr)

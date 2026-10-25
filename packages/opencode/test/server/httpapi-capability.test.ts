@@ -177,6 +177,9 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
         return { alive, events, stderr: stderr.slice(0, 1000) }
       }).pipe(Effect.catch((error) => Effect.succeed({ alive: false, events: ["threw:" + String(error)], stderr: "" })))
       console.error("[capability] cross-spawn probe:", JSON.stringify(viaCrossSpawn))
+      console.error("[capability] env count:", Object.keys(process.env).length)
+      console.error("[capability] env bytes:", JSON.stringify(process.env).length)
+      console.error("[capability] env keys:", Object.keys(process.env).sort().join(","))
       console.error(
         "[capability] cwd exists:",
         yield* Effect.promise(() =>
