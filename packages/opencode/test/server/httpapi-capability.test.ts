@@ -180,6 +180,65 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
       console.error("[capability] env count:", Object.keys(process.env).length)
       console.error("[capability] env bytes:", JSON.stringify(process.env).length)
       console.error("[capability] env keys:", Object.keys(process.env).sort().join(","))
+
+      // Write to the child's stdin right after spawning it, the way the MCP
+      // client does when it sends the initialize request.
+      const writeAfterSpawn = yield* Effect.promise(async () => {
+        const { default: spawn } = await import("cross-spawn")
+        const proc = spawn(process.execPath, [serverPath], {
+          env: { ...process.env },
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: false,
+          cwd: directory,
+        })
+        let stderr = ""
+        proc.stderr?.on("data", (chunk) => (stderr += String(chunk)))
+        const events: string[] = []
+        proc.on("error", (error) => events.push("error:" + String(error)))
+        proc.on("exit", (code, signal) => events.push("exit:" + code + "/" + signal))
+        let writeError = ""
+        try {
+          proc.stdin?.write(
+            JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }) + String.fromCharCode(10),
+          )
+        } catch (error) {
+          writeError = String(error)
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        const alive = proc.exitCode === null && proc.signalCode === null
+        proc.kill()
+        return { alive, events, writeError, stderr: stderr.slice(0, 500) }
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed({ alive: false, events: ["threw:" + String(error)], writeError: "", stderr: "" }),
+        ),
+      )
+      console.error("[capability] write-after-spawn:", JSON.stringify(writeAfterSpawn))
+
+      // And the transport itself, which is the exact path the engine takes.
+      const viaTransport = yield* Effect.promise(async () => {
+        const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js")
+        const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+        const transport = new StdioClientTransport({
+          stderr: "pipe",
+          command: process.execPath,
+          args: [serverPath],
+          cwd: directory,
+          env: { ...process.env, MCP_FIXTURE_DIAG_DIR: diagDir },
+        })
+        let stderr = ""
+        transport.stderr?.on("data", (chunk) => (stderr += String(chunk)))
+        const client = new Client({ name: "probe", version: "1.0.0" })
+        try {
+          await client.connect(transport)
+          const tools = await client.listTools()
+          await client.close()
+          return { ok: true, tools: tools.tools.map((tool) => tool.name), stderr: stderr.slice(0, 500) }
+        } catch (error) {
+          return { ok: false, error: String(error), stderr: stderr.slice(0, 500) }
+        }
+      }).pipe(Effect.catch((error) => Effect.succeed({ ok: false, error: "threw:" + String(error), stderr: "" })))
+      console.error("[capability] transport probe:", JSON.stringify(viaTransport))
       console.error(
         "[capability] cwd exists:",
         yield* Effect.promise(() =>
