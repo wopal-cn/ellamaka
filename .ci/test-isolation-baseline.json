@@ -1,0 +1,3070 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/script/fixtures/src/leaky.test.ts",
+      "detail": "mock.module(./something)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@/context/file)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@/context/file)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@/context/sdk)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@/context/sdk)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/collapsible)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/collapsible)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/file-icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/file-icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/tooltip)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/file-tree.test.tsx",
+      "detail": "mock.module(@wopal/ui/tooltip)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/layout)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/layout)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/local)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/local)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/permission)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/permission)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/platform)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/platform)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/prompt)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/prompt)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/sdk)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/sdk)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/server-sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/server-sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-core/util/encode)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-core/util/encode)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-sdk/v2/client)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-sdk/v2/client)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@wopal/ui/toast)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit-draft.test.ts",
+      "detail": "mock.module(@wopal/ui/toast)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/layout)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/layout)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/local)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/local)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/permission)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/permission)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/platform)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/platform)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/prompt)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/prompt)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/sdk)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/sdk)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/server-sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/server-sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-core/util/encode)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-core/util/encode)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-sdk/v2/client)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-sdk/v2/client)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@wopal/ui/toast)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/components/prompt-input/submit.test.ts",
+      "detail": "mock.module(@wopal/ui/toast)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/comments.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/comments.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/comments.test.ts",
+      "detail": "mock.module(@wopal/ui/context)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/comments.test.ts",
+      "detail": "mock.module(@wopal/ui/context)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/terminal.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/terminal.test.ts",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/terminal.test.ts",
+      "detail": "mock.module(@wopal/ui/context)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/context/terminal.test.ts",
+      "detail": "mock.module(@wopal/ui/context)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
+      "detail": "mock.module(../onboarding-client-context)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
+      "detail": "mock.module(../onboarding-client-context)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
+      "detail": "mock.module(@solidjs/router)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(./workbench-markdown-renderer)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(./workbench-markdown-renderer)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/collapsible)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/collapsible)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/context/dialog)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/context/dialog)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/context/file)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/context/file)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-image-preview.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/chat-image-preview.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/markdown-mermaid.test.ts",
+      "detail": "mock.module(mermaid)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/markdown-mermaid.test.ts",
+      "detail": "mock.module(mermaid)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/prompt-navigator.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/prompt-navigator.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(./workbench-markdown-renderer)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(./workbench-markdown-renderer)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/language)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@/context/sync)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@wopal/ui/collapsible)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@wopal/ui/collapsible)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@wopal/ui/context/dialog)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@wopal/ui/context/dialog)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-chat-timeline.test.tsx",
+      "detail": "mock.module(@wopal/ui/icon)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-markdown-renderer.test.ts",
+      "detail": "mock.module(@wopal/ui/context/i18n)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-markdown-renderer.test.ts",
+      "detail": "mock.module(@wopal/ui/context/i18n)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-markdown-renderer.test.ts",
+      "detail": "mock.module(@wopal/ui/context/marked)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/session/workbench-markdown-renderer.test.ts",
+      "detail": "mock.module(@wopal/ui/context/marked)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/workbench/workbench-error.test.ts",
+      "detail": "mock.module(@wopal/ui/toast)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/pages/workbench/workbench-error.test.ts",
+      "detail": "mock.module(@wopal/ui/toast)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/utils/persist.test.ts",
+      "detail": "mock.module(@/context/platform)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-app/src/utils/persist.test.ts",
+      "detail": "mock.module(@/context/platform)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-cerebras.test.ts",
+      "detail": "mock.module(@ai-sdk/cerebras)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-cloudflare-ai-gateway.test.ts",
+      "detail": "mock.module(ai-gateway-provider)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-cloudflare-ai-gateway.test.ts",
+      "detail": "mock.module(ai-gateway-provider/providers/unified)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-cohere.test.ts",
+      "detail": "mock.module(@ai-sdk/cohere)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-deepinfra.test.ts",
+      "detail": "mock.module(@ai-sdk/deepinfra)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-gateway.test.ts",
+      "detail": "mock.module(@ai-sdk/gateway)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-gitlab.test.ts",
+      "detail": "mock.module(gitlab-ai-provider)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-google-vertex.test.ts",
+      "detail": "mock.module(@ai-sdk/google-vertex)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-core/test/plugin/provider-google-vertex.test.ts",
+      "detail": "mock.module(google-auth-library)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-desktop/src/main/menu.test.ts",
+      "detail": "mock.module(./desktop-menu-actions)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "mock.module(./shell-env)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "mock.module(electron-store)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/opencode/test/mcp/oauth-browser.test.ts",
+      "detail": "mock.module(open)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/opencode/test/plugin/server-headers-delivery.test.ts",
+      "detail": "mock.module(@wopal/ellamaka-core/flag/flag)"
+    },
+    {
+      "rule": "TISO001",
+      "file": "packages/opencode/test/server/httpapi-mdns.test.ts",
+      "detail": "mock.module(bonjour-service)"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/desktop-worker.test.ts",
+      "detail": "process.env.FAKE_EXIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/desktop-worker.test.ts",
+      "detail": "process.env.FAKE_EXIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/desktop-worker.test.ts",
+      "detail": "process.env.FAKE_EXIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/desktop-worker.test.ts",
+      "detail": "process.env.FAKE_EXIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/desktop-worker.test.ts",
+      "detail": "process.env.FAKE_OUTPUT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter-runtime.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter-runtime.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter-runtime.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.DSH_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.DSH_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.DSH_TELEMETRY_MODE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.DSH_TELEMETRY_MODE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.DSH_TELEMETRY_MODE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/web-child.test.ts",
+      "detail": "process.env.DSH_WEB_CHILD_READY"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-cordis/test/web-child.test.ts",
+      "detail": "process.env.DSH_WEB_CHILD_READY"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/logger-trace.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/logger-trace.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/logger-trace.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OPENCODE_CLIENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OPENCODE_CLIENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OPENCODE_CLIENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/effect/observability.test.ts",
+      "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_URL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_URL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.OPENCODE_MODELS_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env.OPENCODE_MODELS_URL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/flag.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_URL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_URL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env.ELLAMAKA_MODELS_URL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/models.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/util-log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/util-log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-core/test/util-log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/constants.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/constants.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/onboarding-gate.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/onboarding-gate.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.WOPAL_DEV"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.WOPAL_DEV"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.WOPAL_DEV"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.WOPAL_DEV"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
+      "detail": "process.env.WOPAL_DEV"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.DEBUG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.DEBUG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.OPENCODE_CLIENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.OPENCODE_EXPERIMENTAL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.OPENCODE_EXPERIMENTAL_LSP_TY"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.SOME_DESKTOP_VAR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env.SOME_DESKTOP_VAR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH_INSTALL_COMMAND"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH_INSTALL_COMMAND"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH_INSTALL_COMMAND"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH_INSTALL_COMMAND"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH_INSTALL_COMMAND"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH_INSTALL_COMMAND"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-install-command.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-log-level.test.ts",
+      "detail": "process.env.ELLAMAKA_LOG_LEVEL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/sidecar-log-level.test.ts",
+      "detail": "process.env.ELLAMAKA_LOG_LEVEL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/user-data.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/user-data.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-desktop/src/main/user-data.test.ts",
+      "detail": "process.env.WOPAL_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_BUILD_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_BUILD_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_BUILD_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_BUILD_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_BUILD_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_RELEASE_CONTEXT_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_RELEASE_CONTEXT_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_RELEASE_CONTEXT_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_RELEASE_CONTEXT_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env.ELLAMAKA_RELEASE_CONTEXT_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/build-identity.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/upstream-lock.test.ts",
+      "detail": "process.env.OPENCODE_UPSTREAM_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/ellamaka-release/test/upstream-lock.test.ts",
+      "detail": "process.env.OPENCODE_UPSTREAM_COMMIT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/http-recorder/test/record-replay.test.ts",
+      "detail": "process.env.CI"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/http-recorder/test/record-replay.test.ts",
+      "detail": "process.env.CI"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/http-recorder/test/record-replay.test.ts",
+      "detail": "process.env.CI"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/http-recorder/test/record-replay.test.ts",
+      "detail": "process.env.CI"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/http-recorder/test/record-replay.test.ts",
+      "detail": "process.env.CI"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/agent/agent.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/agent/agent.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.DSH_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/log-routing.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/network-config.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/network-config.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/network-config.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/network-config.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/network-config.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/network-config.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.OPENCODE_ZED_DB"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.OPENCODE_ZED_DB"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.OPENCODE_ZED_DB"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.ZED_TERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.ZED_TERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.ZED_TERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.ZED_TERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context-zed.test.ts",
+      "detail": "process.env.ZED_TERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.CLAUDE_CODE_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.CLAUDE_CODE_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.CLAUDE_CODE_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.CLAUDE_CODE_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.CLAUDE_CODE_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.CLAUDE_CODE_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
+      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/plugin-loader-pure.test.ts",
+      "detail": "process.env.OPENCODE_PURE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/plugin-loader-pure.test.ts",
+      "detail": "process.env.OPENCODE_PURE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/cli/tui/plugin-loader-pure.test.ts",
+      "detail": "process.env.OPENCODE_PURE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env.OPENCODE_CONSOLE_TOKEN"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env.OPENCODE_CONSOLE_TOKEN"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env.TEST_TOKEN"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env.TEST_TOKEN"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_PROJECT_CONFIG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_PROJECT_CONFIG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_PROJECT_CONFIG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/paths.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui-plugin-config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui-plugin-config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui-plugin-config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui-plugin-config.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui.test.ts",
+      "detail": "process.env.OPENCODE_TUI_CONFIG"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/tui.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/wopal-space-instance.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/wopal-space-instance.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/wopal-space-instance.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/wopal-space-instance.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/wopal-space-instance.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/config/wopal-space-instance.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env.OPENCODE_AUTH_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env.OPENCODE_EXPERIMENTAL_WORKSPACES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env.OTEL_EXPORTER_OTLP_ENDPOINT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env.OTEL_EXPORTER_OTLP_HEADERS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/file/ripgrep.test.ts",
+      "detail": "process.env.RIPGREP_CONFIG_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/file/ripgrep.test.ts",
+      "detail": "process.env.RIPGREP_CONFIG_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/file/ripgrep.test.ts",
+      "detail": "process.env.RIPGREP_CONFIG_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/fixture/git-env-isolation.test.ts",
+      "detail": "process.env.GIT_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/fixture/git-env-isolation.test.ts",
+      "detail": "process.env.GIT_INDEX_FILE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/fixture/git-env-isolation.test.ts",
+      "detail": "process.env.GIT_WORK_TREE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/fixture/git-env-isolation.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/fixture/git-env-isolation.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.GIT_ASKPASS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.OPENCODE_CALLER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.OPENCODE_CALLER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.OPENCODE_CALLER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env.TERM_PROGRAM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/ide/ide.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/lib/git-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/lib/git-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/lib/git-env.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/dsh-adapter.test.ts",
+      "detail": "process.env.ELLAMAKA_DSH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/meta.test.ts",
+      "detail": "process.env.OPENCODE_PLUGIN_META_FILE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/meta.test.ts",
+      "detail": "process.env.OPENCODE_PLUGIN_META_FILE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/meta.test.ts",
+      "detail": "process.env.OPENCODE_PLUGIN_META_FILE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/plugin/meta.test.ts",
+      "detail": "process.env.OPENCODE_PLUGIN_META_FILE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/project/worktree-remove.test.ts",
+      "detail": "process.env.PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/project/worktree-remove.test.ts",
+      "detail": "process.env.PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/amazon-bedrock.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/amazon-bedrock.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/amazon-bedrock.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/digitalocean.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/digitalocean.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/header-timeout-integration.test.ts",
+      "detail": "process.env.OPENCODE_AUTH_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/header-timeout-integration.test.ts",
+      "detail": "process.env.OPENCODE_AUTH_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/header-timeout-integration.test.ts",
+      "detail": "process.env.OPENCODE_AUTH_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/provider/provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/pty/pty-env.test.ts",
+      "detail": "process.env.COLORTERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/pty/pty-env.test.ts",
+      "detail": "process.env.COLORTERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/pty/pty-env.test.ts",
+      "detail": "process.env.COLORTERM"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_MANAGED_INSTANCE_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_MANAGED_INSTANCE_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_MANAGED_INSTANCE_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.ELLAMAKA_SERVER_USERNAME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.OPENCODE_CONFIG_CONTENT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-provider.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-ui.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/httpapi-ui.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/session-messages.test.ts",
+      "detail": "process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/session-messages.test.ts",
+      "detail": "process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/session-messages.test.ts",
+      "detail": "process.env.OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/wopal-cli-contract.test.ts",
+      "detail": "process.env.WOPAL_DEV_CLI_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/wopal-cli-contract.test.ts",
+      "detail": "process.env.WOPAL_DEV_CLI_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/server/wopal-cli-contract.test.ts",
+      "detail": "process.env.WOPAL_DEV_CLI_PATH"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "process.env.WOPAL_SPACE"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/tools-permission.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/session/tools-permission.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/shell/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/shell/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/shell/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/shell/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/skill/skill.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/skill/skill.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/shell.test.ts",
+      "detail": "process.env.SHELL"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/shell.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/shell.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/shell.test.ts",
+      "detail": "process.env[...]"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/skill.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/skill.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/skill.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/skill.test.ts",
+      "detail": "process.env.OPENCODE_TEST_HOME"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/websearch.test.ts",
+      "detail": "process.env.OPENCODE_WEBSEARCH_PROVIDER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/websearch.test.ts",
+      "detail": "process.env.OPENCODE_WEBSEARCH_PROVIDER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/websearch.test.ts",
+      "detail": "process.env.OPENCODE_WEBSEARCH_PROVIDER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/tool/websearch.test.ts",
+      "detail": "process.env.OPENCODE_WEBSEARCH_PROVIDER"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.OPENCODE_LOG_INITIALIZED_RUN_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.OPENCODE_LOG_INITIALIZED_RUN_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.OPENCODE_LOG_INITIALIZED_RUN_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.OPENCODE_RUN_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.OPENCODE_RUN_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.OPENCODE_RUN_ID"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_DEBUG_LOG_DIR"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO002",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "process.env.WOPAL_SPACE_ROOT"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-cordis/src/runtime/home-guard.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/effect/logger-trace.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/plugin-dependencies-integration.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/preparation.test.ts",
+      "detail": "delay(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/preparation.test.ts",
+      "detail": "delay(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/preparation.test.ts",
+      "detail": "delay(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/preparation.test.ts",
+      "detail": "delay(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/preparation.test.ts",
+      "detail": "delay(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/preparation.test.ts",
+      "detail": "delay(35)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/util-log.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/util/effect-flock.test.ts",
+      "detail": "sleep(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-core/test/util/flock.test.ts",
+      "detail": "sleep(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
+      "detail": "sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus-effect.test.ts",
+      "detail": "Effect.sleep(\"5 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus-integration.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"20 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"20 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/bus/bus.test.ts",
+      "detail": "Effect.sleep(\"20 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/cmd/tui/sync.test.tsx",
+      "detail": "Bun.sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/run/stream.transport.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/run/stream.transport.test.ts",
+      "detail": "Bun.sleep(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/run/stream.transport.test.ts",
+      "detail": "Bun.sleep(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/run/stream.transport.test.ts",
+      "detail": "Bun.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/temporary-entry.test.ts",
+      "detail": "Bun.sleep(300)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/temporary-entry.test.ts",
+      "detail": "Bun.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/tui/app-lifecycle.test.ts",
+      "detail": "Bun.sleep(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/tui/dialog-prompt.test.tsx",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/tui/inline-tool-wrap-snapshot.test.tsx",
+      "detail": "Bun.sleep(25)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/tui/prompt-submit-race.test.ts",
+      "detail": "Bun.sleep(opts.sessionCreateDelayMs)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/tui/use-event.test.tsx",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/cli/tui/use-event.test.tsx",
+      "detail": "Bun.sleep(30)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "Effect.sleep(\"25 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/control-plane/workspace.test.ts",
+      "detail": "Effect.sleep(\"25 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(1))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(1))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(1))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(10))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(2))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(5))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/instance-state.test.ts",
+      "detail": "Effect.sleep(Duration.millis(Math.random() * 3))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/runner.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/runner.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/effect/runner.test.ts",
+      "detail": "Effect.sleep(\"50 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/mcp/auth.test.ts",
+      "detail": "sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/permission/next.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/permission/trace.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/permission/trace.test.ts",
+      "detail": "Bun.sleep(20)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/permission/trace.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/permission/trace.test.ts",
+      "detail": "Effect.sleep(\"20 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/permission/trace.test.ts",
+      "detail": "Effect.sleep(\"20 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/project/project.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/project/vcs.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/pty/pty-session.test.ts",
+      "detail": "Effect.sleep(150)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/pty/pty-session.test.ts",
+      "detail": "Effect.sleep(150)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/pty/pty-session.test.ts",
+      "detail": "Effect.sleep(150)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/reference/reference.test.ts",
+      "detail": "Effect.sleep(\"100 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/server/httpapi-capability.test.ts",
+      "detail": "Effect.sleep(\"100 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "Bun.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/server/httpapi-listen.test.ts",
+      "detail": "Bun.sleep(200)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/server/workbench-session-api.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/server/workbench-session-api.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/processor-effect.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/processor-effect.test.ts",
+      "detail": "Effect.sleep(\"20 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "Effect.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "Effect.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "Effect.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "Effect.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/prompt.test.ts",
+      "detail": "Effect.sleep(Duration.millis(10))"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/session.test.ts",
+      "detail": "Effect.sleep(\"2 seconds\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/session/session.test.ts",
+      "detail": "Effect.sleep(\"200 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/share/share-next.test.ts",
+      "detail": "Effect.sleep(1_250)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/share/share-next.test.ts",
+      "detail": "Effect.sleep(10)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/share/share-next.test.ts",
+      "detail": "Effect.sleep(50)"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/tool/edit.test.ts",
+      "detail": "Effect.sleep(\"50 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO003",
+      "file": "packages/opencode/test/util/log.test.ts",
+      "detail": "Effect.sleep(\"10 millis\")"
+    },
+    {
+      "rule": "TISO004",
+      "file": "packages/ellamaka-cordis/src/runtime/home-guard.test.ts",
+      "detail": "Bun.spawn(\n    [\n      process.execPath,\n      path.join(import.meta.dir, \"../.."
+    },
+    {
+      "rule": "TISO004",
+      "file": "packages/ellamaka-cordis/src/runtime/lock.test.ts",
+      "detail": "Bun.spawn([\"bun\", \"run\", helper, lockPath, ...args], {\n    stdout: \"pipe\",\n    s"
+    },
+    {
+      "rule": "TISO004",
+      "file": "packages/ellamaka-desktop/src/main/desktop-cdp.test.ts",
+      "detail": "Bun.spawnSync([\"bash\", \"-c\", script, \"scripts/dev.sh\", ...args], {\n      cwd: RE"
+    },
+    {
+      "rule": "TISO004",
+      "file": "packages/ellamaka-desktop/src/main/desktop-cdp.test.ts",
+      "detail": "Bun.spawnSync([\"bash\", \"-c\", script], {\n      env: { ...process.env, ELLAMAKA_DE"
+    },
+    {
+      "rule": "TISO004",
+      "file": "packages/ellamaka-desktop/src/main/desktop-cdp.test.ts",
+      "detail": "Bun.spawnSync([\"bash\", \"-c\", script], {\n    env: { ...process.env, ELLAMAKA_DESK"
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/ellamaka-app/src/pages/onboarding/step-controller.test.ts",
+      "detail": "controller.skip()"
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/ellamaka-cordis/test/dsh-web.test.ts",
+      "detail": "test.skip(\"mountDshTools runs foreground bash under workspac"
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/cli/tui/diff-viewer-file-tree.test.tsx",
+      "detail": "test.skip(\"renders sorted hierarchical file rows\", async () "
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/file/fsmonitor.test.ts",
+      "detail": "test.skip(\"read does not start fsmonitor for git diffs\", () "
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/file/fsmonitor.test.ts",
+      "detail": "test.skip(\"status does not start fsmonitor for readonly git "
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/server/httpapi-provider.test.ts",
+      "detail": "it.instance.skip(\n    \"returns public v2 provider not found "
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/server/httpapi-sdk.test.ts",
+      "detail": "sdk.session.todo({ sessionID: parentID })"
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/server/httpapi-sync.test.ts",
+      "detail": "it.instance.skip(\n    \"returns structured validation errors\""
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/session/instruction.test.ts",
+      "detail": "test.todo(\"fetches remote instructions from config URLs via "
+    },
+    {
+      "rule": "TISO005",
+      "file": "packages/opencode/test/session/llm-native-recorded.test.ts",
+      "detail": "test.skip(`${scenario.name}: drives a tool loop to a final t"
+    },
+    {
+      "rule": "TISO006",
+      "file": "packages/opencode/test/config/tui-plugin-config.test.ts",
+      "detail": "Global.Path.config"
+    },
+    {
+      "rule": "TISO006",
+      "file": "packages/opencode/test/config/wopal-plugin-config.test.ts",
+      "detail": "Global.Path.config"
+    }
+  ]
+}

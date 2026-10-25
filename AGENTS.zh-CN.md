@@ -78,6 +78,27 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - 自动化覆盖可重复的逻辑和协议行为；手动验证只用于无法由测试观察的 GUI 或原生宿主行为。
 - 改动涉及的文件必须通过 `bunx oxlint --deny-warnings <文件>`（不得新增 warning）与 `bunx prettier --check`；改 TypeScript 必须 typecheck 通过；测试从所属包目录运行，不从仓库根。
 
+### 测试隔离铁律
+
+以下规则全仓适用，并由 `bun run check:test-isolation` 机器检查。
+原理、三种隔离模型、规则到门禁的完整对照见
+[docs/testing-isolation.md](docs/testing-isolation.md)。
+
+- 替换依赖要用**依赖注入**，不要用进程级替换。普通测试文件禁止调用 `mock.module`：Bun 的模块替换是进程级的，
+  `mock.restore()` 不撤销它，且对已经 import 的绑定也生效，会泄漏给之后加载的每个测试文件。
+  正确做法是给产品加一个接缝（service、factory、`Layer.mock`），由测试注入替身。
+- 所有进程级全局变更必须有作用域。环境变量、共享文件、共享单例必须由共享 helper 还原，
+  不能每个文件自己手写 `try/finally`。在 import 时读取 `process.env` 的库无法靠改环境变量驱动，
+  必须给它显式输入。
+- 等可观察的就绪信号，不要等固定时长。固定 sleep 不是同步手段：慢机器上超时，快机器上白等。
+- 共享文件系统状态必须有 owner。写共享路径的测试自己拥有它，只释放自己写的那部分，
+  绝不删除别的测试还在用的状态。
+- 绝不为让测试通过而削弱断言。删掉 expect、缩短观察窗口、用 retry 掩盖真实 bug，
+  是评审失败，不是修复。
+- unit 层不放真实 I/O。子进程、文件监听、真实 git、网络请求、真实时钟都属于 integration 层。
+- 任何改动测试、fixture、preload 或测试配置的提交，都必须通过 `bun run check:test-isolation`。
+  这个检查是基线门禁：新增违规一律失败；修掉的旧违规必须在同一次改动里从基线中删除。
+
 ### 手动验证入口
 
 GUI、Onboarding 与 Desktop 壳层行为的验证入口。Agent 可用 CDP 检查 Desktop，只把仍需人工观察的行为交给用户。

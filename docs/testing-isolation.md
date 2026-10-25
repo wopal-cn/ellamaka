@@ -1,0 +1,154 @@
+# 测试隔离规范（Test Isolation）
+
+本文件解释「为什么」和「怎么判」。**规则本身在根 `AGENTS.md` 的 Testing 小节**（全仓不可违反的铁律），
+机器可判定的部分在 `scripts/test-isolation/`（`bun run check:test-isolation`）。
+三处不重复同一句话：规范写 AGENTS，原理写本文，机器规则写 checker。
+
+## 背景：为什么需要这份规范
+
+过去半年 Ellamaka 的测试稳定性问题反复出现，我们用多个独立 Plan 反复修复，每次仍然复发。
+原因不是某一行代码写错，而是**测试的运行环境是进程级的，而测试的假设是文件级的**。
+
+一个 Bun 测试进程里，所有测试文件共享同一份 `process.env`、同一份模块注册表、同一份文件系统路径、
+同一批 Effect 单例与缓存。任何一处修改如果不在本文件结束时还原，污染就会流向之后加载的所有文件。
+
+最典型的形态是「本地绿、CI 红」：文件加载顺序在不同机器上不同，污染源恰好在受害者之前或之后。
+CI 上 runner 的文件顺序是稳定的，所以 CI 每次都以同样的方式失败，而本地每次都可能侥幸通过。
+
+## 历史事故分类
+
+下表是真实事故复盘，每一条都对应一个已经修过的 bug。设计任何新测试前先对照这张表。
+
+| 类别                     | 事故形态                                                                                                        | 后果                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| A 进程级模块替换污染     | Bun `mock.module` 替换共享模块；`mock.restore()` 不撤销它，且对已 import 的绑定生效                             | 后续文件拿到假的实现，CI 与本地结果不一致      |
+| B 进程级环境变量污染     | 测试写 `process.env`；Effect `ConfigProvider` 默认层在首次读取时快照 `process.env` 并缓存在 module 级 Reference | 标志位被永久固化，同进程后续文件全部读到错误值 |
+| C 进程级文件系统状态污染 | 多个 fixture 争抢同一个全局配置文件                                                                             | 先写者被后写者整段清空，断言随机失败           |
+| D 共享单例 / 进程级缓存  | Effect `ScopedCache` / `memoMap` 缓存跨文件存活；共享的 mock server 残留状态                                    | 上一个用例的残留被下一个用例计入               |
+| E 靠 sleep 掩盖竞态      | 固定 `Effect.sleep(N)` 等某个后台任务就绪                                                                       | 慢机器上超时，快机器上白等；永远不可靠         |
+| F 断言被削弱换绿灯       | 删掉一条 retention 断言；把观察窗口从 12 秒缩到 1.5 秒                                                          | 测试不再验证它声称验证的行为                   |
+| G 分层与预算失守         | 真实子进程 / fs watch / git / 网络测试混进 unit 层                                                              | unit 层超时、随机失败                          |
+| H 规则无门禁             | 规则只写在文档里                                                                                                | 几个月后同样的违规再次进入仓库                 |
+
+A-H 里的每一类都曾单独修过，又复发。区别在于：A-G 修的是**这一次的具体代码**，
+H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的是 H。
+
+## 三种隔离模型与选择规则
+
+看到一个测试要替换外部依赖时，按下面的顺序选，前面的优先。
+
+### 1. 依赖注入（默认）
+
+把依赖做成可注入的接缝，生产提供真实实现，测试注入替身。
+
+这是唯一在**同进程内**真正可靠的模型：替身的作用域就是那个 Effect layer 或那个测试文件，
+不依赖还原，也不依赖加载顺序。
+
+仓库里的现成例子：
+
+- `Layer.mock(Service, { ... })` — 覆盖一个 service 的部分方法，其余方法抛 `UnimplementedError`。
+  未被覆盖的方法如果被误调用会直接炸掉，这正是我们想要的信号。
+- `MCP.ClientFactoryService` — 引擎通过它创建 MCP client 与 transport；默认实现是真实 SDK。
+  `packages/opencode/test/mcp/` 下的测试注入自己的 client / transport 替身。
+
+**什么时候用**：替身要替换的是「任何一个其他测试也可能用到」的东西——模块、单例、共享服务、
+网络出口、文件系统路径。
+
+**代价**：产品侧要加一个接缝。这是应该付的成本：接缝一旦存在，以后所有测试都受益。
+
+### 2. 进程内修改后还原
+
+只对**改完能真正恢复原值**的东西用：
+
+- `spyOn(obj, "method")`（Bun 的 `mock.restore()` 对 spy 有效）
+- 少数几个 `process.env` 键，且**读取发生在调用时**而不是 import 时
+- fake timers
+- 每个测试独占 tmpdir 里的文件
+- 某个明确拥有的 `globalThis` 测试槽位
+
+**什么时候用**：替身只服务于本文件，且还原是可靠的。
+
+**关键限制**：**读缓存的库不能靠改环境变量**。Effect 的 `ConfigProvider` 默认层在首次读取时
+快照 `process.env` 并缓存在 module 级 Reference 上——改 `process.env` 对它无效，
+而 `mock.restore()` 也不会撤销这个快照。要让环境变量按调用时读取，
+必须显式提供一个每次新建的 provider（见 `src/server/server.ts` 的做法）。
+
+**禁止**：每个文件自己手写一套 `try/finally` 还原。还原逻辑必须收敛到一个共享 helper，
+否则一定会有人写错、忘记 await、或者在异常路径上漏掉。
+
+### 3. 独立进程
+
+有些事情在同进程内根本做不到，必须换进程：
+
+- 测试 `mock.module` 本身、或者 module loader
+- 模块在 **import 时**就读取 env / config
+- process preload / bootstrap
+- `process.exit`、signal handler、`process.chdir`
+- 无法加 DI 接缝的第三方模块替换
+- 同一个 preload 需要两套互相冲突的全局定义
+
+**怎么选**：优先问「能不能改成 DI」。只有当 import 时行为、module loader 这类场景才用独立进程。
+
+仓库里已有的例子：`packages/ellamaka-desktop/electron-mock.ts` 是**固定的 process preload**，
+它本身可以继续存在；但某个 Desktop 测试如果想把 electron 换成另一套 mock，就不能在同一个测试进程里做。
+
+## 规则与门禁的对应
+
+| 规则                                   | 门禁    | 判定方式                                                        |
+| -------------------------------------- | ------- | --------------------------------------------------------------- |
+| 普通测试不出现 `mock.module`           | TISO001 | AST 扫描，命中 baseline 外的记录即失败                          |
+| 环境变量变更必须走 scoped helper       | TISO002 | AST 扫描 `process.env.X = ...` / `delete process.env.X`         |
+| 不用固定 sleep 当同步                  | TISO003 | AST 扫描 `Effect.sleep(` / `Bun.sleep(` / `setTimeout` 作为等待 |
+| unit 层不含真实 I/O                    | TISO004 | 扫描 unit 层文件里的 subprocess / fs.watch / 网络调用           |
+| 不新增 skip/todo，禁用 .only           | TISO005 | AST 扫描 `.only` 与新增的 `.skip` / `.todo`                     |
+| 共享路径必须走 ownership-aware fixture | TISO006 | 扫描直接写 `Global.Path.*`、固定 `/tmp` 路径                    |
+| baseline 不得有 stale 条目             | TISO007 | baseline 里记录的违规在源码中已不存在即失败                     |
+| 测试不得污染进程环境                   | TISO101 | 运行时哨兵：preload 记录 env/cwd 基线，测试结束后比对           |
+
+**baseline 的维护规则**：baseline 是**精确债务清单**，每条记录「规则 + 文件 + 具体目标（模块 id / env key / API）」。
+新违规不在 baseline 里 → CI 失败。旧违规修掉后 baseline 里那条变成 stale → CI 失败，强制删掉。
+**baseline 只能缩小，不能扩大。**
+
+固定 process preload（例如 `electron-mock.ts`）不进 baseline，单独登记为合法架构例外。
+
+## 断言强度
+
+有些规则机器只能拦一部分。`.only`、新增 `.skip`、新增 `.todo` 可以自动拦；
+但「删掉一条 `expect` 是不是在削弱行为？」机器很难可靠回答。
+
+不要做一个「expect 行数不能减少」的门禁——误报会多到没人看。这条继续由实施评审负责：
+
+- 删除或改弱断言
+- 缩短观察窗口
+- 用 retry / reconnect 把真实 bug 隐掉
+
+未来若开启 PR CI，可以做一个**提示型** diff checker：发现删除 expect、降低 timeout、
+增加 retry 时标记「test strength review required」，但**不自动判失败**。
+
+## 门禁怎么跑
+
+```bash
+bun run check:test-isolation            # 仓库根，静态检查 + baseline 校验
+bun run check:test-isolation -- --fix   # 重新生成 baseline（需要人工确认每一条）
+```
+
+任何改动测试、fixture、preload 或测试配置文件的提交，都必须在本地跑过这个命令。
+
+## 分期
+
+- **P0（本次落地）**：铁律写进根 AGENTS.md；仓库级 `check:test-isolation`；
+  TISO001-TISO007 静态门禁；精确债务 baseline；现有 App 顺序隔离检查接入 CI。
+- **P1**：统一 `scopedEnv` helper 取代各文件自写的还原逻辑；
+  preload 加 env/cwd 运行时哨兵（TISO101）；存量 `mock.module` 逐步迁到 DI；
+  顺序回归泛化到全仓高风险分组。
+- **P2**：singleton / 共享 fixture 的自动 reset 检测；随机 seed 顺序回归；
+  提示型断言强度 diff checker；listener / handle / 资源泄漏哨兵。
+
+## 长期目标
+
+用两个可以量化的数字衡量进展：
+
+1. 普通测试中的 `mock.module` = 0
+2. 未通过 scoped fixture 的进程级全局变更 = 0
+
+这两个数字比「所有测试都要隔离」这种抽象规则更容易执行，也最直接覆盖过去半年反复踩的坑。

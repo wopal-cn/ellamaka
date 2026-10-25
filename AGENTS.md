@@ -77,6 +77,31 @@ Run tests from their owning package. See package rules and script help for the f
 - Automate repeatable logic and protocol checks. Reserve manual verification for GUI or native-host behavior that tests cannot observe.
 - Every changed file must pass `bunx oxlint --deny-warnings <files>` (no new warning) and `bunx prettier --check`; TypeScript changes must typecheck; run tests from the owning package directory, never from the repo root.
 
+### Test Isolation Rules
+
+These rules are repository-wide and machine-checked by `bun run check:test-isolation`.
+The reasoning, the three isolation models, and the full rule-to-gate map live in
+[docs/testing-isolation.md](docs/testing-isolation.md).
+
+- Replace a dependency by **injection**, not by process-wide replacement. Ordinary test files must not
+  call `mock.module`: Bun module mocks are process-wide, are not undone by `mock.restore()`, and apply to
+  bindings that were already imported, so they leak into every test file loaded later. Give the product a
+  seam instead (a service, a factory, `Layer.mock`) and let the test supply the double.
+- Scope every process-global mutation. Environment variables, shared files, and shared singletons must be
+  restored by a shared helper, never by a hand-written `try/finally` in each file. A library that reads
+  `process.env` at import time cannot be driven by mutating `process.env`; give it an explicit input.
+- Wait on an observable readiness signal, never on a fixed delay. A fixed sleep is not synchronization: it
+  times out on a slow machine and wastes time on a fast one.
+- Shared filesystem state needs an owner. A test that writes a shared path owns it, releases exactly what it
+  wrote, and never deletes state another test still needs.
+- Never weaken an assertion to make a suite pass. Deleting an expectation, shortening an observation window,
+  or hiding a real bug behind a retry is a review failure, not a fix.
+- Keep live I/O out of the unit layer. Subprocesses, filesystem watching, real git, network calls, and real
+  clocks belong to the integration layer.
+- Every change to a test, fixture, preload, or test configuration must pass `bun run check:test-isolation`.
+  The check is a baseline gate: a new violation fails, and a fixed violation must be removed from the
+  baseline in the same change.
+
 ### Manual Verification Entry Points
 
 GUI, onboarding, and desktop-shell behavior verification entries. An agent can check Desktop through CDP; hand off only behavior that still needs human observation.

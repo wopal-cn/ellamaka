@@ -16,6 +16,7 @@
     "build": "vite build --logLevel warn",
     "serve": "vite preview",
     "check:workbench-boundaries": "bun ./script/check-workbench-boundaries.ts",
+    "check:test-order-isolation": "bun run script/check-test-order-isolation.ts",
     "lint:workbench": "cd ../.. && find packages/ellamaka-app/src/pages/workbench -type f \\( -name '*.ts' -o -name '*.tsx' \\) -print0 | xargs -0 oxlint --deny-warnings",
     "lint:css": "stylelint \"src/**/*.css\"",
     "test": "bun run test:unit",

@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "lint": "oxlint",
+    "check:test-isolation": "bun run scripts/test-isolation/check.ts",
     "typecheck": "turbo typecheck",
     "postinstall": "bun run --cwd packages/opencode fix-node-pty",
     "prepare": "husky",
@@ -19,7 +20,8 @@
     "test:unit": "bun run packages/opencode/script/run-tests-root.ts --layer unit --package all",
     "test:integration": "bun run packages/opencode/script/run-tests-root.ts --layer integration --package all",
     "test:e2e": "bun run packages/opencode/script/run-tests-root.ts --layer e2e --package all",
-    "dsh:upgrade": "bun packages/ellamaka-cordis/script/upgrade-dsh.ts"
+    "dsh:upgrade": "bun packages/ellamaka-cordis/script/upgrade-dsh.ts",
+    "test:isolation-gate": "bun test --config /dev/null scripts/test-isolation"
   },
   "workspaces": {
     "packages": [

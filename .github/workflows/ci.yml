@@ -43,10 +43,28 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # Fast static gate: no test may add a process-wide module replacement, a
+      # bare environment mutation, a fixed-delay wait, a live I/O call in the
+      # unit layer, or a new skip/todo. Runs before the slow suites so a
+      # regression is reported in seconds rather than minutes.
+      - name: Test isolation policy
+        run: bun run check:test-isolation
+
+      # The gate has its own tests: a broken gate must fail loudly rather
+      # than silently pass everything.
+      - name: Test isolation gate tests
+        run: bun run test:isolation-gate
+
       - name: Lint
         run: bun run lint
 
-      # Every package that ships a `test:ci` script runs it through the
+      # Behavioural order check: the same suite must pass with the test files
+      # loaded forwards, backwards, and in the two-file combinations that share
+      # state. A suite that only passes in one order is order-dependent.
+      - name: Test order isolation
+        run: bun run --cwd packages/ellamaka-app check:test-order-isolation
+
+      # Every package that ships a test:ci script runs it through the
       # existing turbo task (turbo.json already declares its JUnit output).
       - name: Unit tests
         run: bunx turbo run test:ci
