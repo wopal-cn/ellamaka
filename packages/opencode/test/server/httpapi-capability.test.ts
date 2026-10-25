@@ -14,6 +14,11 @@ import { testEffect } from "../lib/effect"
 
 const context = Context.makeUnsafe<unknown>(new Map())
 
+// The engine discards the stdio child's stderr, so a spawn failure on CI is
+// invisible. The fixture records its own startup and stderr here, and the
+// failing assertion prints it.
+const diagDir = path.join(Global.Path.state, "mcp-fixture-diag")
+
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
     yield* Effect.promise(() => resetDatabase())
@@ -98,7 +103,15 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
       yield* Effect.sleep("100 millis")
     }
     const tools = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(last || "[]"))
-    return { tools, entry: tools.find((tool) => tool.id === id) }
+    const entry = tools.find((tool) => tool.id === id)
+    if (!entry) {
+      for (const name of ["started.txt", "stderr.txt", "exited.txt"]) {
+        const file = path.join(diagDir, name)
+        const content = yield* Effect.promise(() => fs.readFile(file, "utf8").catch(() => undefined))
+        if (content !== undefined) console.error("[capability] diag " + name + ":", content)
+      }
+    }
+    return { tools, entry }
   })
 const RuleCapabilities = Schema.Array(Rule.Info)
 const ToolCapabilities = Schema.Array(ToolCapabilityInfo)
@@ -286,6 +299,7 @@ describe("capability discovery HttpApi", () => {
             command: [process.execPath, path.join(import.meta.dir, "..", "fixture", "mcp-capability-server.ts")],
             enabled: true,
             timeout: 15000,
+            environment: { MCP_FIXTURE_DIAG_DIR: diagDir },
           },
         },
       },
@@ -334,6 +348,7 @@ describe("capability discovery HttpApi", () => {
             command: [process.execPath, path.join(import.meta.dir, "..", "fixture", "mcp-capability-server.ts")],
             enabled: true,
             timeout: 15000,
+            environment: { MCP_FIXTURE_DIAG_DIR: diagDir },
           },
         },
       },
