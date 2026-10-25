@@ -83,6 +83,13 @@ export type PluginInput = {
     register(type: string, adapter: WorkspaceAdapter): void
   }
   serverUrl: URL
+  /**
+   * Authorization headers for the sidecar HTTP API (`ServerAuth.headers()`).
+   * Present only when the server requires credentials; plugins that derive
+   * their own HTTP clients from `serverUrl` must attach these, otherwise every
+   * request fails with 401. Absent (`undefined`) on unauthenticated servers.
+   */
+  serverHeaders?: Record<string, string>
   $: BunShell
   wopalSpaceRoot?: string
   /**

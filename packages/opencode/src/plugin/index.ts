@@ -208,6 +208,10 @@ export const layer = Layer.effect(
           get serverUrl(): URL {
             return Server.url ?? new URL("http://localhost:4096")
           },
+          // Plugins that derive their own HTTP clients (e.g. the wopal plugin's
+          // v2 SDK client) cannot borrow the auth header from `client`'s config
+          // layer; without these every derived request fails with 401.
+          serverHeaders: ServerAuth.headers(),
           // @ts-expect-error
           $: typeof Bun === "undefined" ? undefined : Bun.$,
           ...(wopalSpaceRoot ? { wopalSpaceRoot } : {}),
