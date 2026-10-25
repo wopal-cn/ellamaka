@@ -126,7 +126,9 @@ export async function runOrderedFiles(files: string[], cwd: string) {
 export function parseExecutedOrder(output: string) {
   const found: string[] = []
   for (const line of output.split("\n")) {
-    const match = /^(src\/\S+\.test\.(?:ts|tsx)):$/.exec(line.trim())
+    // Bun prints a plain heading locally and a GitHub Actions group heading
+    // (::group::src/....test.ts:) when CI=true, so both forms are accepted.
+    const match = /^(?:::group::)?(src\/\S+\.test\.(?:ts|tsx)):(?:::endgroup::)?$/.exec(line.trim())
     if (match) found.push(match[1])
   }
   return found
