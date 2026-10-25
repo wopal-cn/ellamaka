@@ -1,5 +1,5 @@
-import { expect, mock, beforeEach } from "bun:test"
-import { Cause, Effect, Exit } from "effect"
+import { expect, beforeEach } from "bun:test"
+import { Cause, Effect, Exit, Layer } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
 
@@ -57,7 +57,7 @@ class MockStdioTransport {
   stderr: null = null
   pid = 12345
   // oxlint-disable-next-line no-useless-constructor
-  constructor(_opts: any) {}
+  constructor(_opts?: any) {}
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
@@ -69,7 +69,7 @@ class MockStdioTransport {
 
 class MockStreamableHTTP {
   // oxlint-disable-next-line no-useless-constructor
-  constructor(_url: URL, _opts?: any) {}
+  constructor(_url?: URL, _opts?: any) {}
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
@@ -82,7 +82,7 @@ class MockStreamableHTTP {
 
 class MockSSE {
   // oxlint-disable-next-line no-useless-constructor
-  constructor(_url: URL, _opts?: any) {}
+  constructor(_url?: URL, _opts?: any) {}
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
@@ -92,80 +92,72 @@ class MockSSE {
   }
 }
 
-void mock.module("@modelcontextprotocol/sdk/client/stdio.js", () => ({
-  StdioClientTransport: MockStdioTransport,
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
-  StreamableHTTPClientTransport: MockStreamableHTTP,
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
-  SSEClientTransport: MockSSE,
-}))
-
-void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
-  UnauthorizedError: class extends Error {
-    constructor() {
-      super("Unauthorized")
-    }
-  },
-}))
-
 // Mock Client that delegates to per-name MockClientState
-void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
-  Client: class MockClient {
-    _state!: MockClientState
-    transport: any
+class MockClient {
+  _state!: MockClientState
+  transport: any
 
-    constructor(_opts: any) {
-      clientCreateCount++
-    }
+  constructor(_opts: any) {
+    clientCreateCount++
+  }
 
-    async connect(transport: { start: () => Promise<void> }) {
-      this.transport = transport
-      await transport.start()
-      // After successful connect, bind to the last-created client name
-      this._state = getOrCreateClientState(lastCreatedClientName)
-    }
+  async connect(transport: { start: () => Promise<void> }) {
+    this.transport = transport
+    await transport.start()
+    // After successful connect, bind to the last-created client name
+    this._state = getOrCreateClientState(lastCreatedClientName)
+  }
 
-    setNotificationHandler(schema: unknown, handler: (...args: any[]) => any) {
-      this._state?.notificationHandlers.set(schema, handler)
-    }
+  setNotificationHandler(schema: unknown, handler: (...args: any[]) => any) {
+    this._state?.notificationHandlers.set(schema, handler)
+  }
 
-    async listTools() {
-      if (this._state) this._state.listToolsCalls++
-      if (this._state?.listToolsShouldFail) {
-        throw new Error(this._state.listToolsError)
-      }
-      return { tools: this._state?.tools ?? [] }
+  async listTools() {
+    if (this._state) this._state.listToolsCalls++
+    if (this._state?.listToolsShouldFail) {
+      throw new Error(this._state.listToolsError)
     }
+    return { tools: this._state?.tools ?? [] }
+  }
 
-    async request(request: { method: string }, schema: { parse: (value: unknown) => unknown }) {
-      if (this._state) this._state.requestCalls++
-      if (request.method === "tools/list") return schema.parse({ tools: this._state?.tools ?? [] })
-      throw new Error(`unsupported request: ${request.method}`)
-    }
+  async request(request: { method: string }, schema: { parse: (value: unknown) => unknown }) {
+    if (this._state) this._state.requestCalls++
+    if (request.method === "tools/list") return schema.parse({ tools: this._state?.tools ?? [] })
+    throw new Error("unsupported request: " + request.method)
+  }
 
-    async listPrompts() {
-      if (this._state?.listPromptsShouldFail) {
-        throw new Error("listPrompts failed")
-      }
-      return { prompts: this._state?.prompts ?? [] }
+  async listPrompts() {
+    if (this._state?.listPromptsShouldFail) {
+      throw new Error("listPrompts failed")
     }
+    return { prompts: this._state?.prompts ?? [] }
+  }
 
-    async listResources() {
-      if (this._state?.listResourcesShouldFail) {
-        throw new Error("listResources failed")
-      }
-      return { resources: this._state?.resources ?? [] }
+  async listResources() {
+    if (this._state?.listResourcesShouldFail) {
+      throw new Error("listResources failed")
     }
+    return { resources: this._state?.resources ?? [] }
+  }
 
-    async close() {
-      if (this._state) this._state.closed = true
-    }
-  },
-}))
+  async close() {
+    if (this._state) this._state.closed = true
+  }
+}
+
+// The SDK doubles are injected through the client factory instead of replacing
+// the SDK modules. Bun module mocks are process-wide and are not undone by
+// mock.restore(), so replacing the SDK here leaked these doubles into every
+// test file that loaded later.
+// oxlint-disable typescript-eslint/no-unsafe-type-assertion -- The SDK doubles stand in for
+// concrete SDK classes that the engine constructs.
+const mockClientFactory: MCPNS.ClientFactory = {
+  createClient: () => new MockClient({}) as unknown as never,
+  createStdioTransport: () => new MockStdioTransport() as unknown as never,
+  createStreamableTransport: () => new MockStreamableHTTP() as unknown as never,
+  createSseTransport: () => new MockSSE() as unknown as never,
+  isUnauthorizedError: () => false,
+}
 
 beforeEach(() => {
   clientStates.clear()
@@ -180,8 +172,24 @@ beforeEach(() => {
 // Import after mocks
 const { MCP } = await import("../../src/mcp/index")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
+const { McpAuth } = await import("../../src/mcp/auth")
+const { Bus } = await import("../../src/bus")
+const { Config } = await import("../../src/config/config")
+const { AppFileSystem } = await import("@wopal/ellamaka-core/filesystem")
+const { CrossSpawnSpawner } = await import("@wopal/ellamaka-core/cross-spawn-spawner")
 
-const it = testEffect(MCP.defaultLayer)
+// MCP.defaultLayer wires the real SDK factory, so the mock has to be provided
+// to the layer that still asks for it.
+const it = testEffect(
+  MCP.layer.pipe(
+    Layer.provide(Layer.succeed(MCP.ClientFactoryService, MCP.ClientFactoryService.of(mockClientFactory))),
+    Layer.provide(McpAuth.defaultLayer),
+    Layer.provideMerge(Bus.layer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(CrossSpawnSpawner.defaultLayer),
+    Layer.provide(AppFileSystem.defaultLayer),
+  ),
+)
 
 function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server: string) {
   if ("status" in status) return status.status

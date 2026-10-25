@@ -239,6 +239,37 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
         }
       }).pipe(Effect.catch((error) => Effect.succeed({ ok: false, error: "threw:" + String(error), stderr: "" })))
       console.error("[capability] transport probe:", JSON.stringify(viaTransport))
+
+      // The transport merges the SDK's default environment under the server
+      // environment. A minimal environment tells an environment problem apart
+      // from a transport problem.
+      const minimalEnv = yield* Effect.promise(async () => {
+        const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js")
+        const { Client } = await import("@modelcontextprotocol/sdk/client/index.js")
+        const transport = new StdioClientTransport({
+          stderr: "pipe",
+          command: process.execPath,
+          args: [serverPath],
+          cwd: directory,
+          env: {
+            PATH: process.env.PATH ?? "",
+            HOME: process.env.HOME ?? "",
+            LANG: process.env.LANG ?? "",
+          },
+        })
+        let stderr = ""
+        transport.stderr?.on("data", (chunk) => (stderr += String(chunk)))
+        const client = new Client({ name: "probe", version: "1.0.0" })
+        try {
+          await client.connect(transport)
+          const tools = await client.listTools()
+          await client.close()
+          return { ok: true, tools: tools.tools.map((tool) => tool.name), stderr: stderr.slice(0, 500) }
+        } catch (error) {
+          return { ok: false, error: String(error), stderr: stderr.slice(0, 500) }
+        }
+      }).pipe(Effect.catch((error) => Effect.succeed({ ok: false, error: "threw:" + String(error), stderr: "" })))
+      console.error("[capability] transport probe minimal env:", JSON.stringify(minimalEnv))
       console.error(
         "[capability] cwd exists:",
         yield* Effect.promise(() =>

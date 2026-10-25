@@ -1,9 +1,12 @@
 import { dynamicTool, type Tool, jsonSchema, type JSONSchema7 } from "ai"
 import { serviceUse } from "@wopal/ellamaka-core/effect/service-use"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
+import {
+  StreamableHTTPClientTransport,
+  type StreamableHTTPClientTransportOptions,
+} from "@modelcontextprotocol/sdk/client/streamableHttp.js"
+import { SSEClientTransport, type SSEClientTransportOptions } from "@modelcontextprotocol/sdk/client/sse.js"
+import { StdioClientTransport, type StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
@@ -323,12 +326,47 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/MC
 
 export const use = serviceUse(Service)
 
+/**
+ * How the MCP client and its transports are constructed.
+ *
+ * The real implementation talks to the MCP SDK. Tests override this service
+ * instead of replacing the SDK modules: Bun module mocks are process-wide and
+ * are not undone by `mock.restore()`, so a test that mocks the SDK leaks its
+ * doubles into every test file that loads later.
+ */
+export interface ClientFactory {
+  readonly createClient: (options: { name: string; version: string }) => Client
+  readonly createStdioTransport: (options: StdioServerParameters) => StdioClientTransport
+  readonly createStreamableTransport: (options: {
+    url: URL
+    options?: StreamableHTTPClientTransportOptions
+  }) => StreamableHTTPClientTransport
+  readonly createSseTransport: (options: { url: URL; options?: SSEClientTransportOptions }) => SSEClientTransport
+  readonly isUnauthorizedError: (error: unknown) => boolean
+}
+
+export class ClientFactoryService extends Context.Service<ClientFactoryService, ClientFactory>()(
+  "@opencode/MCPClientFactory",
+) {}
+
+export const clientFactoryLayer = Layer.succeed(
+  ClientFactoryService,
+  ClientFactoryService.of({
+    createClient: (options) => new Client(options),
+    createStdioTransport: (options) => new StdioClientTransport(options),
+    createStreamableTransport: (options) => new StreamableHTTPClientTransport(options.url, options.options),
+    createSseTransport: (options) => new SSEClientTransport(options.url, options.options),
+    isUnauthorizedError: (error) => error instanceof UnauthorizedError,
+  }),
+)
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const auth = yield* McpAuth.Service
     const bus = yield* Bus.Service
+    const factory = yield* ClientFactoryService
 
     type Transport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport
 
@@ -342,7 +380,7 @@ export const layer = Layer.effect(
         (t) =>
           Effect.tryPromise({
             try: () => {
-              const client = new Client({ name: "opencode", version: InstallationVersion })
+              const client = factory.createClient({ name: "opencode", version: InstallationVersion })
               return withTimeout(client.connect(t), timeout).then(() => client)
             },
             catch: (e) => (e instanceof Error ? e : new Error(String(e))),
@@ -390,16 +428,22 @@ export const layer = Layer.effect(
       const transports: Array<{ name: string; transport: TransportWithAuth }> = [
         {
           name: "StreamableHTTP",
-          transport: new StreamableHTTPClientTransport(url, {
-            authProvider,
-            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+          transport: factory.createStreamableTransport({
+            url,
+            options: {
+              authProvider,
+              requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            },
           }),
         },
         {
           name: "SSE",
-          transport: new SSEClientTransport(url, {
-            authProvider,
-            requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+          transport: factory.createSseTransport({
+            url,
+            options: {
+              authProvider,
+              requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            },
           }),
         },
       ]
@@ -413,7 +457,7 @@ export const layer = Layer.effect(
           Effect.catch((error) => {
             const lastError = error instanceof Error ? error : new Error(String(error))
             const isAuthError =
-              error instanceof UnauthorizedError || (authProvider && lastError.message.includes("OAuth"))
+              factory.isUnauthorizedError(error) || (authProvider && lastError.message.includes("OAuth"))
 
             if (isAuthError) {
               log.warn("mcp server requires authentication", { key, transport: name })
@@ -475,7 +519,7 @@ export const layer = Layer.effect(
     ) {
       const [cmd, ...args] = mcp.command
       const cwd = yield* InstanceState.directory
-      const transport = new StdioClientTransport({
+      const transport = factory.createStdioTransport({
         stderr: "pipe",
         command: cmd,
         args,
@@ -487,9 +531,15 @@ export const layer = Layer.effect(
         },
       })
       // Stderr is often a third-party server's progress stream. Drain it so
-      // the pipe cannot block the child, but do not duplicate arbitrary,
-      // potentially sensitive output into the Ellamaka server log.
-      transport.stderr?.on("data", () => {})
+      // the pipe cannot block the child, and keep only a short prefix: a server
+      // that cannot start explains itself there (missing module, bad flag,
+      // failed sandbox), and without it a failed connect is reported as a bare
+      // transport error with no cause.
+      const stderrTail: string[] = []
+      transport.stderr?.on("data", (chunk: unknown) => {
+        if (stderrTail.length >= 20) return
+        stderrTail.push(String(chunk))
+      })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       return yield* connectTransport(transport, connectTimeout).pipe(
@@ -499,7 +549,13 @@ export const layer = Layer.effect(
         })),
         Effect.catch((error): Effect.Effect<{ client: MCPClient | undefined; status: Status }> => {
           const msg = error instanceof Error ? error.message : String(error)
-          log.error("local mcp startup failed", { key, command: mcp.command, cwd, error: msg })
+          log.error("local mcp startup failed", {
+            key,
+            command: mcp.command,
+            cwd,
+            error: msg,
+            stderr: stderrTail.join("").trim().slice(0, 2000) || undefined,
+          })
           return Effect.succeed({ client: undefined, status: { status: "failed", error: msg } })
         }),
       )
@@ -869,11 +925,11 @@ export const layer = Layer.effect(
         auth,
       )
 
-      const transport = new StreamableHTTPClientTransport(url, { authProvider })
+      const transport = factory.createStreamableTransport({ url, options: { authProvider } })
 
       return yield* Effect.tryPromise({
         try: () => {
-          const client = new Client({ name: "opencode", version: InstallationVersion })
+          const client = factory.createClient({ name: "opencode", version: InstallationVersion })
           return client
             .connect(transport)
             .then(() => ({ authorizationUrl: "", oauthState, client }) satisfies AuthResult)
@@ -881,7 +937,7 @@ export const layer = Layer.effect(
         catch: (error) => error,
       }).pipe(
         Effect.catch((error) => {
-          if (error instanceof UnauthorizedError && capturedUrl) {
+          if (factory.isUnauthorizedError(error) && capturedUrl) {
             pendingOAuthTransports.set(mcpName, transport)
             return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult)
           }
@@ -1023,6 +1079,7 @@ export type AuthStatus = "authenticated" | "expired" | "not_authenticated"
 // --- Per-service runtime ---
 
 export const defaultLayer = layer.pipe(
+  Layer.provide(clientFactoryLayer),
   Layer.provide(McpAuth.defaultLayer),
   Layer.provide(Bus.layer),
   Layer.provide(Config.defaultLayer),

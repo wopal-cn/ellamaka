@@ -41,61 +41,63 @@ const transportCalls: Array<{
   options: { authProvider?: unknown }
 }> = []
 
-// Mock the transport constructors
-void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
-  StreamableHTTPClientTransport: class MockStreamableHTTP {
-    url: string
-    authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
-    constructor(url: URL, options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> } }) {
-      this.url = url.toString()
-      this.authProvider = options?.authProvider
-      transportCalls.push({
-        type: "streamable",
-        url: url.toString(),
-        options: options ?? {},
-      })
+// The SDK doubles are injected through the client factory instead of replacing
+// the SDK modules. Bun module mocks are process-wide and are not undone by
+// mock.restore(), so replacing the SDK here leaked these doubles into every
+// test file that loaded later.
+class MockStreamableHTTP {
+  url: string
+  authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
+  constructor(url?: URL, options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> } }) {
+    this.url = url!.toString()
+    this.authProvider = options?.authProvider
+    transportCalls.push({
+      type: "streamable",
+      url: url!.toString(),
+      options: options ?? {},
+    })
+  }
+  async start() {
+    // Simulate OAuth redirect by calling the authProvider's redirectToAuthorization
+    if (this.authProvider?.redirectToAuthorization) {
+      await this.authProvider.redirectToAuthorization(new URL("https://auth.example.com/authorize?client_id=test"))
     }
-    async start() {
-      // Simulate OAuth redirect by calling the authProvider's redirectToAuthorization
-      if (this.authProvider?.redirectToAuthorization) {
-        await this.authProvider.redirectToAuthorization(new URL("https://auth.example.com/authorize?client_id=test"))
-      }
-      throw new MockUnauthorizedError()
-    }
-    async finishAuth(_code: string) {
-      // Mock successful auth completion
-    }
-  },
-}))
+    throw new MockUnauthorizedError()
+  }
+  async finishAuth(_code: string) {
+    // Mock successful auth completion
+  }
+}
 
-void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
-  SSEClientTransport: class MockSSE {
-    constructor(url: URL) {
-      transportCalls.push({
-        type: "sse",
-        url: url.toString(),
-        options: {},
-      })
-    }
-    async start() {
-      throw new Error("Mock SSE transport cannot connect")
-    }
-  },
-}))
+class MockSSE {
+  constructor(url?: URL) {
+    transportCalls.push({
+      type: "sse",
+      url: url!.toString(),
+      options: {},
+    })
+  }
+  async start() {
+    throw new Error("Mock SSE transport cannot connect")
+  }
+}
 
-// Mock the MCP SDK Client to trigger OAuth flow
-void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
-  Client: class MockClient {
-    async connect(transport: { start: () => Promise<void> }) {
-      await transport.start()
-    }
-  },
-}))
+class MockClient {
+  async connect(transport: { start: () => Promise<void> }) {
+    await transport.start()
+  }
+}
 
-// Mock UnauthorizedError in the auth module
-void mock.module("@modelcontextprotocol/sdk/client/auth.js", () => ({
-  UnauthorizedError: MockUnauthorizedError,
-}))
+// oxlint-disable typescript-eslint/no-unsafe-type-assertion -- The SDK doubles stand in for
+// concrete SDK classes that the engine constructs.
+const mockClientFactory: MCPNS.ClientFactory = {
+  createClient: () => new MockClient() as unknown as never,
+  createStdioTransport: () => new MockSSE() as unknown as never,
+  createStreamableTransport: (options) =>
+    new MockStreamableHTTP(options.url, options.options as unknown as never) as unknown as never,
+  createSseTransport: (options) => new MockSSE(options.url) as unknown as never,
+  isUnauthorizedError: (error) => error instanceof MockUnauthorizedError,
+}
 
 beforeEach(() => {
   openShouldFail = false
@@ -119,6 +121,7 @@ const mcpTest = testEffect(
     Layer.provide(Config.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Layer.succeed(MCP.ClientFactoryService, MCP.ClientFactoryService.of(mockClientFactory))),
   ),
 )
 const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
