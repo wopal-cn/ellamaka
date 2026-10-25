@@ -66,10 +66,12 @@ const request = Effect.fnUntraced(function* (
  * until the expected tools appear (bounded) so the assertion checks the settled
  * discovery surface instead of racing process start-up.
  */
-const waitForTool = (handler: TestHandler, directory: string, id: string) =>
+const waitForTool = (handler: TestHandler, directory: string, id: string, service: string) =>
   Effect.gen(function* () {
     const deadline = Date.now() + 25_000
     let last = ""
+    let attempts = 0
+    let nextAttempt = 0
     while (Date.now() < deadline) {
       const response = yield* request(handler, "/tool", { directory })
       expect(response.status).toBe(200)
@@ -77,6 +79,22 @@ const waitForTool = (handler: TestHandler, directory: string, id: string) =>
       const tools = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(response.text))
       const found = tools.find((tool) => tool.id === id)
       if (found) return { tools, entry: found }
+
+      // A local MCP server that fails to connect (handshake timeout on a loaded
+      // runner) leaves the service permanently unusable: the initial connect
+      // attempt is not retried, so the discovery route stays empty for the whole
+      // window. Reconnect while the server is not connected, with a bounded
+      // backoff, so the assertion still runs against a live server.
+      const mcp = yield* MCP.Service
+      const current = (yield* mcp.status())[service]
+      if (current?.status !== "connected" && Date.now() >= nextAttempt && attempts < 5) {
+        attempts += 1
+        nextAttempt = Date.now() + 2_000
+        console.error("[capability] mcp not connected, reconnecting", JSON.stringify(current))
+        yield* mcp.connect(service).pipe(Effect.ignore)
+        console.error("[capability] mcp reconnect done", JSON.stringify((yield* mcp.status())[service]))
+        continue
+      }
       yield* Effect.sleep("100 millis")
     }
     const tools = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(last || "[]"))
@@ -241,7 +259,12 @@ describe("capability discovery HttpApi", () => {
 
         // The configured key (`fixture.server`) is preserved while the id uses
         // the same sanitized composite key MCP.tools() mounts.
-        const { entry } = yield* waitForTool(handler, tmp.directory, "fixture_server_fixture_tool_one")
+        const { entry } = yield* waitForTool(
+          handler,
+          tmp.directory,
+          "fixture_server_fixture_tool_one",
+          "fixture.server",
+        )
         expect(entry).toMatchObject({
           id: "fixture_server_fixture_tool_one",
           source: "mcp",
@@ -276,7 +299,7 @@ describe("capability discovery HttpApi", () => {
         const tmp = yield* TestInstance
         const handler = yield* handlerScoped
 
-        yield* waitForTool(handler, tmp.directory, "fixture_server_fixture_tool_one")
+        yield* waitForTool(handler, tmp.directory, "fixture_server_fixture_tool_one", "fixture.server")
         const response = yield* request(handler, "/tool", { directory: tmp.directory })
         expect(response.status).toBe(200)
         const discovered = Schema.decodeUnknownSync(ToolCapabilities)(JSON.parse(response.text)).filter(
