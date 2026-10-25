@@ -156,6 +156,27 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
       }).pipe(Effect.catch((error) => Effect.succeed({ alive: { exited: true, code: -1 }, err: String(error) })))
       console.error("[capability] held spawn:", JSON.stringify(held))
       console.error("[capability] NODE_OPTIONS:", process.env.NODE_OPTIONS)
+
+      // The transport spawns through cross-spawn, so probe that exact path.
+      const viaCrossSpawn = yield* Effect.promise(async () => {
+        const { default: spawn } = await import("cross-spawn")
+        const proc = spawn(process.execPath, [serverPath], {
+          env: { ...process.env },
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: false,
+          cwd: directory,
+        })
+        let stderr = ""
+        proc.stderr?.on("data", (chunk) => (stderr += String(chunk)))
+        const events: string[] = []
+        proc.on("error", (error) => events.push("error:" + String(error)))
+        proc.on("exit", (code, signal) => events.push("exit:" + code + "/" + signal))
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        const alive = proc.exitCode === null && proc.signalCode === null
+        proc.kill()
+        return { alive, events, stderr: stderr.slice(0, 1000) }
+      }).pipe(Effect.catch((error) => Effect.succeed({ alive: false, events: ["threw:" + String(error)], stderr: "" })))
+      console.error("[capability] cross-spawn probe:", JSON.stringify(viaCrossSpawn))
       console.error(
         "[capability] cwd exists:",
         yield* Effect.promise(() =>
