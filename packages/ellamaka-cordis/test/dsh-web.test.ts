@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -942,15 +942,17 @@ describe("dsh tools profile", () => {
   // - `danger-full-access` (the adapter's "sandbox off" mapping, DESIGN
   //   §4.10) lets the same tool write outside the workspace. It never
   //   depends on the OS sandbox backend, so it ALWAYS runs; its external
-  //   write lands in homedir, which requires the test harness itself to be
-  //   homedir-writable (an unconfined child inherits the harness's sandbox
-  //   posture), so only that final assertion pair adapts.
+  //   write lands in the `~/tmp/tests` scratch dir under homedir, which
+  //   requires the test harness itself to be homedir-writable (an
+  //   unconfined child inherits the harness's sandbox posture), so only
+  //   that final assertion pair adapts.
   const bashSandboxBody = async (mode: "workspace-write" | "danger-full-access") => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
     const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-bash-ws-"))
     const ctx = new Context()
     prepareDshProfiles(home)
     const host = await mountDshTools(ctx, { home, port: 0 })
+    let outsidePath: string | undefined
 
     try {
       const tools = ctx.get("tools") as {
@@ -987,11 +989,21 @@ describe("dsh tools profile", () => {
       ).toBe(false)
       expect(readFileSync(allowed, "utf-8")).toBe("bash-ok")
 
-      // homedir is used (not /tmp) because dsh's `workspace-write` sandbox
-      // allows host /tmp but denies homedir — so the external write probe is
-      // only denied under `workspace-write` and only allowed under
-      // `danger-full-access`.
-      const outsidePath = join(homedir(), `.dsh-tools-bash-${mode}-${Date.now()}.txt`)
+      // The probe lives under homedir's `~/tmp/tests` scratch dir (not /tmp)
+      // because dsh's `workspace-write` sandbox allows host /tmp and
+      // os.tmpdir() but denies everything else outside the workspace — so the
+      // external write probe is only denied under `workspace-write` and only
+      // allowed under `danger-full-access`. `~/tmp/tests` keeps the home root
+      // itself free of test residue, and the probe file is always removed in
+      // `finally`.
+      outsidePath = join(homedir(), "tmp", "tests", `.dsh-tools-bash-${mode}-${Date.now()}.txt`)
+      try {
+        mkdirSync(dirname(outsidePath), { recursive: true })
+      } catch {
+        // A harness that denies homedir writes cannot create the dir either;
+        // the probe below then fails on the missing dir instead of EPERM,
+        // which the `!homedirWritable` branch accounts for.
+      }
       const result = await execute({
         command: `printf outside > "${outsidePath}"`,
         description: "Write outside the workspace",
@@ -1010,14 +1022,16 @@ describe("dsh tools profile", () => {
         // outcome — a failed redirect is exit code 1 on stderr, NOT a tool
         // error and NOT a `workspace-write` confinement denial — so assert
         // exactly that: the command ran unconfined and failed on the
-        // environment's EPERM. The mode mapping itself stays fully verified.
+        // environment (EPERM when the scratch dir exists, ENOENT where the
+        // harness could not create it). The mode mapping stays fully verified.
         expect(result.isError).toBe(false)
         const text = (result.content ?? []).map((block) => block.text ?? "").join("\n")
-        expect(text).toContain("Operation not permitted")
+        expect(text).toMatch(/Operation not permitted|No such file or directory/)
         expect(text).not.toContain("[sandbox: file access denied under workspace-write mode]")
         expect(existsSync(outsidePath)).toBe(false)
       }
     } finally {
+      if (outsidePath && existsSync(outsidePath)) rmSync(outsidePath, { force: true })
       await host.dispose()
       await ctx.fiber.dispose()
     }
