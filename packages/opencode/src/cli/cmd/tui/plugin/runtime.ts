@@ -34,14 +34,13 @@ import { Global } from "@wopal/ellamaka-core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
 import { Flock } from "@wopal/ellamaka-core/util/flock"
-import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { internalTuiPlugins, type InternalTuiPlugin } from "./internal"
 import { setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
 import { ConfigPlugin } from "@/config/plugin"
 import { createCommandShim } from "./command-shim"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Effect } from "effect"
+import { ConfigProvider, Effect, Layer } from "effect"
 
 ensureRuntimePluginSupport({ additional: keymapRuntimeModules })
 
@@ -109,6 +108,7 @@ const ScopedKeymapMethods = new Set<PropertyKey>([
 type RuntimeState = {
   directory: string
   api: Api
+  meta_file?: string
   dispose?: () => void
   slots: HostSlots
   plugins: PluginEntry[]
@@ -249,6 +249,7 @@ function createThemeInstaller(
   root: string,
   spec: string,
   plugin: PluginEntry,
+  metaFile?: string,
 ): TuiTheme["install"] {
   return async (file) => {
     const src = Filesystem.resolveFilePath(root, file)
@@ -258,10 +259,9 @@ function createThemeInstaller(
       path.basename(source_dir) === "config" && path.basename(path.dirname(source_dir)) === ".wopal"
         ? path.dirname(source_dir)
         : undefined
-    const local_dir =
-      wopal_dir
-        ? path.join(wopal_dir, "config", "themes")
-        : path.basename(source_dir) === ".opencode"
+    const local_dir = wopal_dir
+      ? path.join(wopal_dir, "config", "themes")
+      : path.basename(source_dir) === ".opencode"
         ? path.join(source_dir, "themes")
         : path.join(source_dir, ".opencode", "themes")
     const dest_dir = meta.scope === "local" ? local_dir : path.join(Global.Path.config, "themes")
@@ -279,7 +279,7 @@ function createThemeInstaller(
     await Flock.withLock(`tui-theme:${dest}`, async () => {
       const save = async () => {
         plugin.themes[name] = info
-        await PluginMeta.setTheme(plugin.id, name, info).catch((error) => {
+        await PluginMeta.setTheme(plugin.id, name, info, metaFile).catch((error) => {
           log.warn("failed to track tui plugin theme", {
             path: spec,
             id: plugin.id,
@@ -401,10 +401,10 @@ async function readThemeFiles(spec: string, pkg?: PluginPackage) {
     })
 }
 
-async function syncPluginThemes(plugin: PluginEntry) {
+async function syncPluginThemes(plugin: PluginEntry, metaFile?: string) {
   if (!plugin.load.theme_files.length) return
   if (plugin.meta.state === "same") return
-  const install = createThemeInstaller(plugin.load.origin, plugin.load.plugin_root, plugin.load.spec, plugin)
+  const install = createThemeInstaller(plugin.load.origin, plugin.load.plugin_root, plugin.load.spec, plugin, metaFile)
   for (const file of plugin.load.theme_files) {
     await install(file).catch((error) => {
       warn("failed to sync tui plugin oc-themes", { path: plugin.load.spec, id: plugin.id, theme: file, error })
@@ -545,7 +545,7 @@ async function activatePluginEntry(state: RuntimeState, plugin: PluginEntry, per
   const api = pluginApi(state, plugin, scope, plugin.id)
   const ok = await Promise.resolve()
     .then(async () => {
-      await syncPluginThemes(plugin)
+      await syncPluginThemes(plugin, state.meta_file)
       await plugin.plugin(api, plugin.load.options, plugin.meta)
       return true
     })
@@ -604,7 +604,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
   }
 
   const theme: TuiPluginApi["theme"] = Object.assign(Object.create(api.theme), {
-    install: createThemeInstaller(load.origin, load.plugin_root, load.spec, plugin),
+    install: createThemeInstaller(load.origin, load.plugin_root, load.spec, plugin, runtime.meta_file),
   })
 
   const event: TuiPluginApi["event"] = {
@@ -804,6 +804,7 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
       target: item.target,
       id: item.id,
     })),
+    state.meta_file,
   ).catch((error) => {
     log.warn("failed to track tui plugins", { error })
     return undefined
@@ -1027,6 +1028,7 @@ export async function init(input: {
   config: TuiConfig.Resolved
   dispose?: () => void
   disposeTimeoutMs?: number
+  environment?: { pure?: boolean; metaFile?: string }
 }) {
   const cwd = process.cwd()
   if (loaded) {
@@ -1077,13 +1079,20 @@ export async function dispose() {
   state.dispose?.()
 }
 
-async function load(input: { api: Api; config: TuiConfig.Resolved; dispose?: () => void; disposeTimeoutMs?: number }) {
+async function load(input: {
+  api: Api
+  config: TuiConfig.Resolved
+  dispose?: () => void
+  disposeTimeoutMs?: number
+  environment?: { pure?: boolean; metaFile?: string }
+}) {
   const { api, config } = input
   const cwd = process.cwd()
   const slots = setupSlots(api)
   const next: RuntimeState = {
     directory: cwd,
     api,
+    meta_file: input.environment?.metaFile,
     dispose: input.dispose,
     slots,
     plugins: [],
@@ -1093,13 +1102,19 @@ async function load(input: { api: Api; config: TuiConfig.Resolved; dispose?: () 
   }
   runtime = next
   try {
+    // Install a fresh `ConfigProvider` per load so `RuntimeFlags` reads reflect the
+    // current `process.env`. Effect's default `ConfigProvider` snapshots
+    // `process.env` on first read and caches the result on a module-singleton
+    // Reference, so without this override a later `OPENCODE_PURE` change (or a
+    // test that toggles it) would be ignored for the rest of the process.
     const flags = await Effect.runPromise(
       Effect.gen(function* () {
         return yield* RuntimeFlags.Service
-      }).pipe(Effect.provide(RuntimeFlags.defaultLayer)),
+      }).pipe(Effect.provide(Layer.provide(RuntimeFlags.defaultLayer, ConfigProvider.layer(ConfigProvider.fromEnv())))),
     )
-    const records = Flag.OPENCODE_PURE ? [] : (config.plugin_origins ?? [])
-    if (Flag.OPENCODE_PURE && config.plugin_origins?.length) {
+    const pure = input.environment?.pure ?? flags.pure
+    const records = pure ? [] : (config.plugin_origins ?? [])
+    if (pure && config.plugin_origins?.length) {
       log.info("skipping external tui plugins in pure mode", { count: config.plugin_origins.length })
     }
 

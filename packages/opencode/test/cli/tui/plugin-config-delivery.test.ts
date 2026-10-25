@@ -51,7 +51,7 @@ async function runDelivery(opts?: Parameters<typeof createTuiPluginApi>[0]) {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const metaFile = path.join(tmp.path, "plugin-meta.json")
   const wait = spyOn(TuiConfig, "waitForDependencies").mockResolvedValue()
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
@@ -62,13 +62,13 @@ async function runDelivery(opts?: Parameters<typeof createTuiPluginApi>[0]) {
         plugin: [tmp.extra.spec],
         plugin_origins: [{ spec: tmp.extra.spec, scope: "local", source: path.join(tmp.path, "tui.json") }],
       }),
+      environment: { metaFile },
     })
     return await delivered(tmp.extra.marker)
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 }
 

@@ -363,10 +363,8 @@ const toolRoundtrip = (
 const driveToolLoop = (scenario: RecordedScenario) =>
   Effect.gen(function* () {
     const model = yield* Effect.promise(() => loadFixture(scenario.providerID, scenario.modelID))
-    yield* writeConfig(scenario, model)
-    yield* Effect.acquireRelease(
-      Effect.void,
-      () => Effect.promise(() => removeGlobalTestConfig()),
+    yield* Effect.acquireRelease(writeConfig(scenario, model), (owner) =>
+      Effect.promise(() => removeGlobalTestConfig(owner)),
     )
 
     const stableID = scenario.stableID ?? scenario.providerID

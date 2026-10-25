@@ -37,7 +37,7 @@ async function runTemporary(args: string[], extraEnv: Record<string, string>) {
       CI: "1",
       ...probeEnv(home, extraEnv),
     },
-    stdout: "ignore",
+    stdout: "pipe",
     stderr: "ignore",
     stdin: "ignore",
   })
@@ -87,24 +87,35 @@ test("temporary entry: the environment bounds records without an explicit level"
       CI: "1",
       ...probeEnv(home, { ELLAMAKA_LOG_LEVEL: "ERROR" }),
     },
-    stdout: "ignore",
+    stdout: "pipe",
     stderr: "ignore",
     stdin: "ignore",
   })
   const logFile = join(home, "logs", "ellamaka-dev-tui.log")
 
-  // A fixed sleep guessed at the boot window and flaked on loaded runners.
-  // Wait for a positive liveness signal instead: the TUI process either
-  // reaches a stable running state or exits. A short settle window after the
-  // first spawn is enough to catch an early crash without outlasting the
-  // assertion that no log file appears.
-  await Bun.sleep(1_500)
-  const exitedEarly = proc.exitCode !== null || proc.signalCode !== null
-  const exitCode = proc.exitCode
+  // The renderer enters the alternate screen only after the TUI is mounted.
+  // Wait on that actual output boundary; the deadline is only a failure backstop.
+  const decoder = new TextDecoder()
+  let output = ""
+  const read = (async () => {
+    const reader = proc.stdout!.getReader()
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) return
+      output += decoder.decode(value, { stream: true })
+    }
+  })()
+  const readyMarker = "\u001b[?1049h"
+  const deadline = Date.now() + 30_000
+  while (!output.includes(readyMarker) && Date.now() < deadline && proc.exitCode === null && proc.signalCode === null) {
+    await Bun.sleep(50)
+  }
+  const ready = output.includes(readyMarker)
   proc.kill()
   await proc.exited
+  await read.catch(() => undefined)
 
-  expect(exitedEarly).toBe(false)
-  expect(exitCode ?? 0).toBe(0)
+  expect(ready, output.slice(-500)).toBe(true)
+  expect(proc.exitCode ?? 0).toBe(0)
   expect(existsSync(logFile)).toBe(false)
 }, 60_000)

@@ -84,14 +84,54 @@ async function stop(dir: string) {
 // redirected by test/preload.ts, so writes here never touch production config.
 const globalSettingsFile = path.join(Global.Path.config, "settings.jsonc")
 
-// Write a bare config (no ellamaka wrapper) to the global settings path that the
-// engine actually loads. Idempotent cleanup deletes the file when the fixture scope ends.
-export function writeGlobalTestConfig(config: Partial<Config.Info>) {
-  return fs.writeFile(globalSettingsFile, JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }))
+// The latest active fixture owns the entire file. Releasing it restores the
+// previous fixture; never combine unrelated fixtures' providers or plugins.
+type ConfigPatch = Partial<Config.Info>
+const configOwners = new Map<symbol, ConfigPatch>()
+const configLock = Semaphore.makeUnsafe(1)
+
+function updateGlobalTestConfig(update: () => void) {
+  return Effect.runPromise(
+    configLock.withPermit(
+      Effect.promise(async () => {
+        const previous = new Map(configOwners)
+        update()
+        try {
+          const config = Array.from(configOwners.values()).at(-1)
+          if (!config) {
+            await fs.rm(globalSettingsFile, { force: true })
+            return
+          }
+          await fs.mkdir(Global.Path.config, { recursive: true })
+          const temporary = `${globalSettingsFile}.tmp-${process.pid}`
+          try {
+            await fs.writeFile(temporary, JSON.stringify({ $schema: "https://opencode.ai/config.json", ...config }))
+            await fs.rename(temporary, globalSettingsFile)
+          } finally {
+            await fs.rm(temporary, { force: true }).catch(() => undefined)
+          }
+        } catch (error) {
+          configOwners.clear()
+          for (const [owner, config] of previous) configOwners.set(owner, config)
+          throw error
+        }
+      }),
+    ),
+  )
 }
 
-export function removeGlobalTestConfig() {
-  return fs.rm(globalSettingsFile, { force: true }).catch(() => undefined)
+// Write a bare config (no ellamaka wrapper) to the global settings path that the
+// engine actually loads. Returns an owner handle for removeGlobalTestConfig.
+export async function writeGlobalTestConfig(config: ConfigPatch) {
+  const owner = Symbol("global-test-config")
+  await updateGlobalTestConfig(() => configOwners.set(owner, config))
+  return owner
+}
+
+export function removeGlobalTestConfig(owner: symbol) {
+  return updateGlobalTestConfig(() => {
+    configOwners.delete(owner)
+  })
 }
 
 // The Config layer caches the global config forever
@@ -128,10 +168,9 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
     await $`git config user.name "Test"`.cwd(dirpath).env(git).quiet()
     await $`git commit --allow-empty -m "root commit ${dirpath}"`.cwd(dirpath).env(git).quiet()
   }
-  let wroteConfig = false
+  let configOwner: symbol | undefined
   if (options?.config) {
-    await writeGlobalTestConfig(options.config)
-    wroteConfig = true
+    configOwner = await writeGlobalTestConfig(options.config)
     // The server's Config layer caches the global config forever on the shared
     // memoMap. Invalidate it so the next read (e.g. through the shared
     // Server.Default webHandler) picks up the config just written.
@@ -142,8 +181,8 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
   try {
     extra = await options?.init?.(realpath)
   } catch (err) {
-    if (wroteConfig) {
-      await removeGlobalTestConfig()
+    if (configOwner) {
+      await removeGlobalTestConfig(configOwner)
       await invalidateGlobalConfig()
     }
     throw err
@@ -154,8 +193,8 @@ export async function tmpdir<T>(options?: TmpDirOptions<T>) {
         await options?.dispose?.(realpath)
       } finally {
         if (options?.git) await stop(realpath).catch(() => undefined)
-        if (wroteConfig) {
-          await removeGlobalTestConfig()
+        if (configOwner) {
+          await removeGlobalTestConfig(configOwner)
           await invalidateGlobalConfig()
         }
         await clean(realpath).catch(() => undefined)
@@ -178,12 +217,12 @@ export function tmpdirScoped(options?: {
     yield* Effect.promise(() => fs.mkdir(dirpath, { recursive: true }))
     const dir = sanitizePath(yield* Effect.promise(() => fs.realpath(dirpath)))
 
-    let wroteConfig = false
+    let configOwner: symbol | undefined
     yield* Effect.addFinalizer(() =>
       Effect.promise(async () => {
         if (options?.git) await stop(dir).catch(() => undefined)
-        if (wroteConfig) {
-          await removeGlobalTestConfig()
+        if (configOwner) {
+          await removeGlobalTestConfig(configOwner)
           await invalidateGlobalConfig()
         }
         await clean(dir).catch(() => undefined)
@@ -206,8 +245,7 @@ export function tmpdirScoped(options?: {
 
     if (options?.config) {
       const resolved = typeof options.config === "function" ? options.config() : options.config
-      yield* Effect.promise(() => writeGlobalTestConfig(resolved))
-      wroteConfig = true
+      configOwner = yield* Effect.promise(() => writeGlobalTestConfig(resolved))
       // Invalidate the shared Config cache so the next read picks up the
       // config just written (see tmpdir above).
       yield* Effect.promise(() => invalidateGlobalConfig())

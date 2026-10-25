@@ -216,6 +216,7 @@ it.live("first log write creates the file and cleanup runs once", () =>
     expect(content).toContain("first line")
     const settled = yield* files(dir)
     expect(settled.length).toBe(11)
+    expect(settled).not.toContain(list[1])
   }),
 )
 

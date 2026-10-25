@@ -9,7 +9,9 @@ import { TuiConfig } from "../../../src/cli/cmd/tui/config/tui"
 
 const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
 
-test("skips external tui plugins in pure mode", async () => {
+test("skips external tui plugins when the runtime flag is pure", async () => {
+  const pure = process.env.OPENCODE_PURE
+  process.env.OPENCODE_PURE = "1"
   await using tmp = await tmpdir({
     init: async (dir) => {
       const file = path.join(dir, "plugin.ts")
@@ -33,11 +35,6 @@ test("skips external tui plugins in pure mode", async () => {
     },
   })
 
-  const pure = process.env.OPENCODE_PURE
-  const meta = process.env.OPENCODE_PLUGIN_META_FILE
-  process.env.OPENCODE_PURE = "1"
-  process.env.OPENCODE_PLUGIN_META_FILE = tmp.extra.meta
-
   const config = createTuiResolvedConfig({
     plugin: [[tmp.extra.spec, { marker: tmp.extra.marker }]],
     plugin_origins: [
@@ -52,21 +49,17 @@ test("skips external tui plugins in pure mode", async () => {
   const cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
 
   try {
-    await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
+    await TuiPluginRuntime.init({
+      api: createTuiPluginApi(),
+      config,
+      environment: { metaFile: tmp.extra.meta },
+    })
     await expect(fs.readFile(tmp.extra.marker, "utf8")).rejects.toThrow()
   } finally {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    if (pure === undefined) {
-      delete process.env.OPENCODE_PURE
-    } else {
-      process.env.OPENCODE_PURE = pure
-    }
-    if (meta === undefined) {
-      delete process.env.OPENCODE_PLUGIN_META_FILE
-    } else {
-      process.env.OPENCODE_PLUGIN_META_FILE = meta
-    }
+    if (pure === undefined) delete process.env.OPENCODE_PURE
+    else process.env.OPENCODE_PURE = pure
   }
 })

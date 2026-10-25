@@ -45,8 +45,8 @@ type Store = Record<string, Entry>
 type Core = Omit<Entry, "first_time" | "last_time" | "time_changed" | "load_count" | "fingerprint" | "themes">
 type Row = Touch & { core: Core }
 
-function storePath() {
-  return Flag.OPENCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
+function storePath(file?: string) {
+  return file ?? Flag.OPENCODE_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
 }
 
 function lock(file: string) {
@@ -139,9 +139,8 @@ function next(prev: Entry | undefined, core: Core, now: number): { state: State;
   }
 }
 
-export async function touchMany(items: Touch[]): Promise<Array<{ state: State; entry: Entry }>> {
+export async function touchMany(items: Touch[], file = storePath()): Promise<Array<{ state: State; entry: Entry }>> {
   if (!items.length) return []
-  const file = storePath()
   const rows = await Promise.all(items.map((item) => row(item)))
 
   return Flock.withLock(lock(file), async () => {
@@ -158,16 +157,20 @@ export async function touchMany(items: Touch[]): Promise<Array<{ state: State; e
   })
 }
 
-export async function touch(spec: string, target: string, id: string): Promise<{ state: State; entry: Entry }> {
-  return touchMany([{ spec, target, id }]).then((item) => {
+export async function touch(
+  spec: string,
+  target: string,
+  id: string,
+  file = storePath(),
+): Promise<{ state: State; entry: Entry }> {
+  return touchMany([{ spec, target, id }], file).then((item) => {
     const hit = item[0]
     if (hit) return hit
     throw new Error("Failed to touch plugin metadata.")
   })
 }
 
-export async function setTheme(id: string, name: string, theme: Theme): Promise<void> {
-  const file = storePath()
+export async function setTheme(id: string, name: string, theme: Theme, file = storePath()): Promise<void> {
   await Flock.withLock(lock(file), async () => {
     const store = await read(file)
     const entry = store[id]
@@ -180,8 +183,7 @@ export async function setTheme(id: string, name: string, theme: Theme): Promise<
   })
 }
 
-export async function list(): Promise<Store> {
-  const file = storePath()
+export async function list(file = storePath()): Promise<Store> {
   return Flock.withLock(lock(file), async () => read(file))
 }
 

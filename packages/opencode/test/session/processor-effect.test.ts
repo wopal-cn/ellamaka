@@ -479,7 +479,7 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
     ({ dir, llm }) =>
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
-
+        yield* llm.reset
         yield* llm.error(400, { error: { message: "no_kv_space" } })
 
         const chat = yield* session.create({})

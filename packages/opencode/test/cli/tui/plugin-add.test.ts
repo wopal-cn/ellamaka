@@ -31,7 +31,7 @@ test("adds tui plugin at runtime from spec", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const metaFile = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [],
   })
@@ -42,6 +42,7 @@ test("adds tui plugin at runtime from spec", async () => {
     await TuiPluginRuntime.init({
       api: createTuiPluginApi(),
       config,
+      environment: { metaFile },
     })
 
     await expect(TuiPluginRuntime.addPlugin(tmp.extra.spec)).resolves.toBe(true)
@@ -58,7 +59,6 @@ test("adds tui plugin at runtime from spec", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
 
@@ -73,7 +73,7 @@ test("retries runtime add for file plugins after dependency wait", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const metaFile = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [],
   })
@@ -95,6 +95,7 @@ test("retries runtime add for file plugins after dependency wait", async () => {
     await TuiPluginRuntime.init({
       api: createTuiPluginApi(),
       config,
+      environment: { metaFile },
     })
 
     await expect(TuiPluginRuntime.addPlugin(tmp.extra.spec)).resolves.toBe(true)
@@ -105,6 +106,5 @@ test("retries runtime add for file plugins after dependency wait", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })

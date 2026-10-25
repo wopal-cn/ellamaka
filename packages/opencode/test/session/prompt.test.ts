@@ -304,16 +304,16 @@ const ensureDir = Effect.fn("test.ensureDir")(function* (dir: string) {
 })
 
 const writeConfig = Effect.fn("test.writeConfig")(function* (config: Partial<Config.Info>) {
-  yield* Effect.promise(() => writeGlobalTestConfig(config))
+  return yield* Effect.promise(() => writeGlobalTestConfig(config))
 })
 
 const useServerConfig = Effect.fn("test.useServerConfig")(function* (config: (url: string) => Partial<Config.Info>) {
   const { directory: dir } = yield* TestInstance
   const llm = yield* TestLLMServer
-  yield* writeConfig(config(llm.url))
-  return yield* Effect.acquireRelease(Effect.succeed({ dir, llm }), () =>
-    Effect.promise(() => removeGlobalTestConfig()),
+  yield* Effect.acquireRelease(writeConfig(config(llm.url)), (owner) =>
+    Effect.promise(() => removeGlobalTestConfig(owner)),
   )
+  return { dir, llm }
 })
 
 // Wait for a session's runner to enter a busy state. SessionStatus is flipped to

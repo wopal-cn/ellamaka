@@ -50,7 +50,7 @@ test("installs plugin without loading it", async () => {
     },
   })
 
-  process.env.OPENCODE_PLUGIN_META_FILE = path.join(tmp.path, "plugin-meta.json")
+  const metaFile = path.join(tmp.path, "plugin-meta.json")
   const config = createTuiResolvedConfig({
     plugin: [],
   })
@@ -68,7 +68,7 @@ test("installs plugin without loading it", async () => {
   })
 
   try {
-    await TuiPluginRuntime.init({ api, config })
+    await TuiPluginRuntime.init({ api, config, environment: { metaFile } })
     const out = await TuiPluginRuntime.installPlugin(tmp.extra.spec)
     expect(out).toMatchObject({
       ok: true,
@@ -82,6 +82,5 @@ test("installs plugin without loading it", async () => {
     await TuiPluginRuntime.dispose()
     cwd.mockRestore()
     wait.mockRestore()
-    delete process.env.OPENCODE_PLUGIN_META_FILE
   }
 })
