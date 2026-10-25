@@ -71,6 +71,8 @@ const request = Effect.fnUntraced(function* (
  * until the expected tools appear (bounded) so the assertion checks the settled
  * discovery surface instead of racing process start-up.
  */
+const serverPath = path.join(import.meta.dir, "..", "fixture", "mcp-capability-server.ts")
+
 const waitForTool = (handler: TestHandler, directory: string, id: string, service: string) =>
   Effect.gen(function* () {
     const deadline = Date.now() + 25_000
@@ -110,6 +112,27 @@ const waitForTool = (handler: TestHandler, directory: string, id: string, servic
         const content = yield* Effect.promise(() => fs.readFile(file, "utf8").catch(() => undefined))
         if (content !== undefined) console.error("[capability] diag " + name + ":", content)
       }
+      console.error("[capability] execPath:", process.execPath)
+      console.error("[capability] argv0:", process.argv[0])
+      console.error("[capability] serverPath:", serverPath)
+      console.error(
+        "[capability] serverExists:",
+        yield* Effect.promise(() =>
+          fs
+            .stat(serverPath)
+            .then(() => true)
+            .catch(() => false),
+        ),
+      )
+      const manual = yield* Effect.promise(async () => {
+        const proc = Bun.spawn([process.execPath, serverPath], { cwd: directory, stdout: "pipe", stderr: "pipe" })
+        const timer = setTimeout(() => proc.kill(), 8000)
+        const code = await proc.exited
+        clearTimeout(timer)
+        const err = await new Response(proc.stderr).text()
+        return { code, err: err.slice(0, 2000) }
+      }).pipe(Effect.catch((error) => Effect.succeed({ code: -1, err: String(error) })))
+      console.error("[capability] manual spawn:", JSON.stringify(manual))
     }
     return { tools, entry }
   })
