@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -16,7 +16,6 @@ type ToolContainer = {
     execute(exec: unknown): Promise<{ isError: boolean; error?: unknown; content?: { type: string; text?: string }[] }>
   }
   get(name: "sessions"): { list(): unknown[] } | undefined
-  get(name: "subprocess"): { spawn(spec: { argv: string[] }): { done: Promise<unknown> } }
 }
 
 function assertToolContainer(value: unknown): asserts value is ToolContainer {
@@ -104,28 +103,6 @@ describe("tui dsh mount", () => {
       }
 
       const tools = container.get("tools")
-      // Retain the real provider path, but preserve nested launch failures in
-      // the assertion: the tool's public error otherwise hides error.cause.
-      const subprocess = container.get("subprocess")
-      const spawn = subprocess.spawn.bind(subprocess)
-      const failures: unknown[] = []
-      using _spawn = spyOn(subprocess, "spawn").mockImplementation((spec) => {
-        try {
-          const observed =
-            process.platform === "linux"
-              ? {
-                  ...spec,
-                  argv: ["/bin/sh", "-c", 'cat /proc/$$/fdinfo/1 >&2; exec "$@"', "grep-fd-probe", ...spec.argv],
-                }
-              : spec
-          const handle = spawn(observed)
-          void handle.done.catch((error) => failures.push(error))
-          return handle
-        } catch (error) {
-          failures.push(error)
-          throw error
-        }
-      })
       const facade = { session: { header: { id: `tui-${Date.now()}`, cwd: ws } } }
       const result = await tools.execute({
         callId: "tui-mount-call",
@@ -135,7 +112,7 @@ describe("tui dsh mount", () => {
         agent: facade,
       })
       const text = (result.content ?? []).map((b) => b.text ?? "").join("\n")
-      expect(result.isError, inspect({ error: result.error, text, failures }, { depth: 5 })).toBe(false)
+      expect(result.isError, inspect({ error: result.error, text }, { depth: 5 })).toBe(false)
       expect(text).toContain("250 of 400")
 
       const sessions = container.get("sessions")

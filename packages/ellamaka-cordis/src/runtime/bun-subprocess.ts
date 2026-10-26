@@ -8,6 +8,29 @@ const SUBPROCESS_FILTER = /[\\/]@deepseek-ai[\\/]dsh-subprocess-local[\\/]lib[\\
 const REPLACEMENT =
   'import { getSystemErrorName, inspect } from "node:util";\n' +
   "const getSystemErrorMessage = (code) => getSystemErrorName(code);"
+const EXECVE_CALL =
+  "\t\tnativeExecve(file, [...argv, null], [...Object.entries(env).map(([key, value]) => `${key}=${value}`), null]);"
+
+/** Bun initializes stdout/stderr as nonblocking. An execve target is an
+ * ordinary program: restore blocking stdio before replacing the runtime,
+ * while preserving all other descriptor flags and the control descriptor.
+ */
+export function rewriteSubprocessStdioFlags(source: string): string {
+  const first = source.indexOf(EXECVE_CALL)
+  if (first < 0 || first !== source.lastIndexOf(EXECVE_CALL))
+    throw new Error("ellamaka-cordis: DSH subprocess execve stdio seam changed")
+  return source.replace(
+    EXECVE_CALL,
+    [
+      "\t\tfor (const fd of STANDARD_FILE_DESCRIPTORS) {",
+      "\t\t\tconst flags = nativeFcntl(fd, 3, 0); // F_GETFL",
+      '\t\t\tif (flags === -1) throw systemError(koffi.errno(), "fcntl");',
+      '\t\t\tif ((flags & 2048) !== 0 && nativeFcntl(fd, 4, flags & ~2048) === -1) throw systemError(koffi.errno(), "fcntl"); // F_SETFL, O_NONBLOCK',
+      "\t\t}",
+      EXECVE_CALL,
+    ].join("\n"),
+  )
+}
 
 interface BunPluginBuilder {
   onLoad(
@@ -74,7 +97,7 @@ export function installBunSubprocessCompatibility(): void {
         loader: "js",
       }))
       builder.onLoad({ filter: SUBPROCESS_FILTER }, async ({ path }) => ({
-        contents: rewriteSubprocessUtilImport(await bun.file(path).text()),
+        contents: rewriteSubprocessStdioFlags(rewriteSubprocessUtilImport(await bun.file(path).text())),
         loader: "js",
       }))
     },

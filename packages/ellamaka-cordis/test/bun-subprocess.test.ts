@@ -4,13 +4,27 @@ import { mkdtempSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { rewriteSubprocessScopeArgs, rewriteSubprocessUtilImport } from "../src/runtime/bun-subprocess"
+import {
+  rewriteSubprocessScopeArgs,
+  rewriteSubprocessStdioFlags,
+  rewriteSubprocessUtilImport,
+} from "../src/runtime/bun-subprocess"
 
 const OFFICIAL =
   'import { getSystemErrorMessage, getSystemErrorName, inspect } from "node:util";\n' +
   "const detail = getSystemErrorMessage(uvError);"
 
 describe("Bun subprocess compatibility", () => {
+  test("normalizes stdio at the exact native execve boundary and rejects drift", () => {
+    const seam =
+      "\t\tnativeExecve(file, [...argv, null], [...Object.entries(env).map(([key, value]) => `${key}=${value}`), null]);"
+    const rewritten = rewriteSubprocessStdioFlags(seam)
+    expect(rewritten).toContain("for (const fd of STANDARD_FILE_DESCRIPTORS)")
+    expect(rewritten).toContain("flags & ~2048")
+    expect(rewritten.endsWith(seam)).toBe(true)
+    expect(() => rewriteSubprocessStdioFlags("changed upstream")).toThrow("stdio seam changed")
+    expect(() => rewriteSubprocessStdioFlags(seam + "\n" + seam)).toThrow("stdio seam changed")
+  })
   test("replaces the Node-only named import with an equivalent local helper", () => {
     const rewritten = rewriteSubprocessUtilImport(OFFICIAL)
     expect(rewritten).toContain('import { getSystemErrorName, inspect } from "node:util";')

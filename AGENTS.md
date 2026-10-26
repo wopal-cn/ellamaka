@@ -109,6 +109,8 @@ The reasoning, the three isolation models, and the full rule-to-gate map live in
   Any failed run fails the verification group; a successful rerun does not establish the root cause.
 - When changing test layers or entry points, compare the executed files and preserve existing CI coverage.
   Dispose each test's containers, child processes, and temporary directories on exceptional paths too.
+- Cross-runtime or host subprocess tests must cover inherited stream semantics, pipe backpressure, and
+  cancellation cleanup. A successful small-output command does not prove the process boundary correct.
 
 ### Manual Verification Entry Points
 
