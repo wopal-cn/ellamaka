@@ -22,6 +22,7 @@
 | `withdraw-release.sh` | 整版撤回已发布版本 |
 | `dev.sh` | 本地开发服务器（tui / serve / desktop） |
 | `scalar-doc.ts` | Scalar API 文档调试 |
+| `dsh-migrate-home.sh` | DSH home 布局一次性迁移 |
 
 ## 构建与发布
 
@@ -97,8 +98,19 @@ bun run scripts/scalar-doc.ts
 
 在独立端口提供 Scalar UI，并把 API 请求代理到 ellamaka，支持 "Try it out" 调试。默认 `http://localhost:4100`，代理到 `http://127.0.0.1:4097`。
 
-## 共享库
+## 迁移
 
+### `dsh-migrate-home.sh` — DSH home 布局一次性迁移
+
+```bash
+./scripts/dsh-migrate-home.sh
+```
+
+把旧布局搬进 official-layout DSH home（`$WOPAL_HOME/dsh/state/` → `home/`，
+`profiles/` → `home/profiles/`）。幂等：已完成则 no-op，中断后可续跑。
+迁移前用 `lsof +D` 检查是否有 bun/node/ellamaka 进程占用旧目录，有则直接退出。
+
+## 共享库
 ### `lib/version.sh` — 版本解析
 
 被 `build.sh` / `dev.sh` / `release-cli.sh` / `release-desktop.sh` 等 source 的共享函数库：
