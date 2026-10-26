@@ -30,6 +30,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 | packages/ellamaka-app/ | Browser/Desktop 共用的 Onboarding/Workbench 界面，以及 Official App BFF contract/client 的 owner |
 | packages/ellamaka-desktop/ | Electron 原生壳层与 Server sidecar 生命周期 |
 | packages/ellamaka-release/ | CLI/Desktop 产品构建、identity 与发布 |
+| scripts/ | 只放面向用户的便利脚本：构建、开发、发布。每个脚本必须在 `scripts/README.md` 登记。CI 门禁、测试工具等代码归属于拥有它的 package。 |
 
 快速判断边界时保留以下事实：
 

@@ -6,7 +6,9 @@
  * same file would match the single recorded entry and go unnoticed.
  */
 
-export type RuleId = string
+import type { RuleId } from "./rules"
+
+export type { RuleId }
 
 export type BaselineEntry = {
   rule: RuleId

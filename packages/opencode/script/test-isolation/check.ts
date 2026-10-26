@@ -78,7 +78,7 @@ function rebuildBaseline(baseline: Baseline, violations: Violation[]): Baseline 
 }
 
 async function main() {
-  const root = path.resolve(import.meta.dir, "..", "..")
+  const root = path.resolve(import.meta.dir, "..", "..", "..", "..")
   const fix = process.argv.includes("--fix")
   // A one-off migration: the baseline may only grow when a reviewer explicitly
   // asks for it and reviews every new entry. Ordinary runs never grow it.
@@ -95,7 +95,7 @@ async function main() {
   const violations: Violation[] = []
   for (const file of files) {
     const source = await readFile(path.join(root, file), "utf8")
-    violations.push(...scanSource(file, source, { root, relative: (value) => value }))
+    violations.push(...scanSource(file, source, { root }))
   }
 
   const baseline = await readBaseline(root)

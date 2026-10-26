@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { baselineSize, compareBaseline, entryKey, splitEntryKey, type Baseline } from "./baseline"
+import { baselineSize, compareBaseline, entryKey, splitEntryKey, type Baseline, type RuleId } from "./baseline"
 
-function baselineOf(entries: Array<{ rule: string; file: string; detail: string; count?: number }>): Baseline {
+function baselineOf(entries: Array<{ rule: RuleId; file: string; detail: string; count?: number }>): Baseline {
   return { version: 1, entries: entries.map((entry) => ({ count: 1, ...entry })) }
 }
 

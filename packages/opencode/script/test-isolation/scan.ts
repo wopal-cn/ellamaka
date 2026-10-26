@@ -386,12 +386,13 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
     if (ts.isCallExpression(node)) {
       const callee = node.expression
       const calleeMember = ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined
+      const isBunWrite = ts.isPropertyAccessExpression(callee) && calleeMember === "write" && isBunOwner(callee)
       const isWrite =
         calleeMember === "writeFile" ||
         calleeMember === "writeFileSync" ||
         calleeMember === "mkdir" ||
         calleeMember === "mkdirSync" ||
-        (calleeMember === "write" && isBunOwner(callee))
+        isBunWrite
       if (isWrite) {
         const first = node.arguments[0]
         const shared = sharedPathTarget(first)

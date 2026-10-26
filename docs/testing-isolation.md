@@ -1,7 +1,7 @@
 # 测试隔离规范（Test Isolation）
 
 本文件解释「为什么」和「怎么判」。**规则本身在根 `AGENTS.md` 的 Testing 小节**（全仓不可违反的铁律），
-机器可判定的部分在 `scripts/test-isolation/`（`bun run check:test-isolation`）。
+机器可判定的部分在 `packages/opencode/script/test-isolation/`（`bun run check:test-isolation`）。
 三处不重复同一句话：规范写 AGENTS，原理写本文，机器规则写 checker。
 
 ## 背景：为什么需要这份规范
@@ -118,7 +118,7 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 
 **integration 边界不是手写白名单**：`INTEGRATION_ROOTS` / `INTEGRATION_FILES` 的内容必须与真实 runner 配置一致
 （`packages/opencode/script/run-tests.ts` 的 `INTEGRATION_DIRS`、各包 `package.json` 的 `test:integration`）。
-`scripts/test-isolation/policy.test.ts` 每次跑门禁都会比对，任何一边改了另一边没跟上就会失败。
+`packages/opencode/script/test-isolation/policy.test.ts` 每次跑门禁都会比对，任何一边改了另一边没跟上就会失败。
 这样「某个包的整个 `test/` 目录被当成 integration 而整片豁免检查」这类弱化不会悄悄发生。
 
 固定 process preload（例如 `electron-mock.ts`）不进 baseline，单独登记为合法架构例外。

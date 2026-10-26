@@ -2,6 +2,27 @@
 
 本目录集中了 ellamaka 的构建、开发、发布与上游合并工具。所有脚本基于脚本自身位置解析项目根，因此**可在任意 worktree 内执行**，产物落在当前 worktree 的 `dist/` 等目录，不污染 main。
 
+
+## 目录边界
+
+本目录**只放面向用户使用的便利脚本**：构建、开发、发布、调试四类。
+
+- 新增脚本必须在下表登记，并补齐对应小节说明（做什么、怎么调、有什么前提）。
+- CI 门禁、测试检查器、跨包工具这类代码**不放这里**，放在拥有该能力的 package 内。
+  例如测试分层 runner 与测试隔离门禁在 `packages/opencode/script/`。
+- `ci/` 与 `lib/` 是上述脚本的内部实现，不对外承诺接口。
+
+## 脚本索引
+
+| 脚本 | 用途 |
+|------|------|
+| `build.sh` | 构建 CLI / Desktop |
+| `release-cli.sh` | CLI 一步发布（推断 → bump → tag → push） |
+| `release-desktop.sh` | Desktop 一步发布 |
+| `withdraw-release.sh` | 整版撤回已发布版本 |
+| `dev.sh` | 本地开发服务器（tui / serve / desktop） |
+| `scalar-doc.ts` | Scalar API 文档调试 |
+
 ## 构建与发布
 
 ### `build.sh` — 编译 CLI / Desktop

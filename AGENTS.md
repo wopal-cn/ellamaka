@@ -30,6 +30,7 @@ Ellamaka combines Runtime, a Server composition host, the private WopalSpace app
 | packages/ellamaka-app/ | Shared Browser/Desktop Onboarding and Workbench UI plus ownership of the Official App BFF contract/client |
 | packages/ellamaka-desktop/ | Electron shell and Server sidecar lifecycle |
 | packages/ellamaka-release/ | CLI/Desktop product builds, identity, and release |
+| scripts/ | User-facing convenience scripts only: build, dev, release. Every script must be registered in `scripts/README.md`. CI gates, test harnesses, and other tooling belong to the package that owns them. |
 
 Keep these boundaries in mind when choosing an owner:
 

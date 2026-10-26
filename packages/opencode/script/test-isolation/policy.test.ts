@@ -3,7 +3,7 @@ import { readFileSync, statSync } from "node:fs"
 import path from "node:path"
 import { INTEGRATION_FILES, INTEGRATION_ROOTS } from "./rules"
 
-const repoRoot = path.resolve(import.meta.dir, "..", "..")
+const repoRoot = path.resolve(import.meta.dir, "..", "..", "..", "..")
 
 function read(relative: string) {
   return readFileSync(path.join(repoRoot, relative), "utf8")
