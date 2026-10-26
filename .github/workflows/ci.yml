@@ -55,15 +55,6 @@ jobs:
       - name: Test isolation gate tests
         run: bun run test:isolation-gate
 
-      - name: Lint
-        run: bun run lint
-
-      # Behavioural order check: the same suite must pass with the test files
-      # loaded forwards, backwards, and in the two-file combinations that share
-      # state. A suite that only passes in one order is order-dependent.
-      - name: Test order isolation
-        run: bun run --cwd packages/ellamaka-app check:test-order-isolation
-
       # Each invocation starts with a cold module/provider cache. Every run
       # must pass; this is a regression check, never a retry-until-green.
       - name: DSH grep cold-process regression
@@ -73,6 +64,15 @@ jobs:
             echo "DSH grep cold process $attempt/8"
             bun test test/cli/cmd/tui/dsh-mount.test.ts -t 'executes grep' || exit 1
           done
+
+      - name: Lint
+        run: bun run lint
+
+      # Behavioural order check: the same suite must pass with the test files
+      # loaded forwards, backwards, and in the two-file combinations that share
+      # state. A suite that only passes in one order is order-dependent.
+      - name: Test order isolation
+        run: bun run --cwd packages/ellamaka-app check:test-order-isolation
 
       # Every package that ships a test:ci script runs it through the
       # existing turbo task (turbo.json already declares its JUnit output).

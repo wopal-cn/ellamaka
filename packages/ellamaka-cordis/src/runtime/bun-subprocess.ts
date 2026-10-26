@@ -93,10 +93,7 @@ export function installBunSubprocessCompatibility(): void {
     name: "ellamaka-dsh-subprocess-compat",
     setup(builder) {
       builder.onLoad({ filter: SCOPE_FILTER }, async ({ path }) => ({
-        contents: rewriteSubprocessScopeArgs(await bun.file(path).text()).replace(
-          'const containmentMode = this.selectContainmentMode("ordinary");',
-          'const containmentMode = this.selectContainmentMode("ordinary"); console.error("DSH probe containment", containmentMode);',
-        ),
+        contents: rewriteSubprocessScopeArgs(await bun.file(path).text()),
         loader: "js",
       }))
       builder.onLoad({ filter: SUBPROCESS_FILTER }, async ({ path }) => ({

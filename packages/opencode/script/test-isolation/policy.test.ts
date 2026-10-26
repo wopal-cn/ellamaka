@@ -41,3 +41,16 @@ test("every listed integration file exists", () => {
     expect(statSync(path.join(repoRoot, file)).isFile()).toBe(true)
   }
 })
+
+test("cordis excludes every declared integration file from its unit command", () => {
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Repository-owned manifest, only scripts is read.
+  const manifest = JSON.parse(read("packages/ellamaka-cordis/package.json")) as { scripts: Record<string, string> }
+  const command = manifest.scripts["test:unit"] ?? ""
+  const pattern = /--path-ignore-patterns\s+['"]([^'"]+)['"]/.exec(command)?.[1]
+  expect(pattern).toBeDefined()
+  const ignored = new Bun.Glob(pattern!)
+  const prefix = "packages/ellamaka-cordis/"
+  for (const file of INTEGRATION_FILES.filter((file) => file.startsWith(prefix))) {
+    expect(ignored.match(file.slice(prefix.length)), file).toBe(true)
+  }
+})

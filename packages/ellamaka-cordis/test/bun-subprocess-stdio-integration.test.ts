@@ -30,6 +30,7 @@ if (process.platform === "linux") {
         ],
         {
           env: { PATH: "/usr/bin:/bin", DSH_SUBPROCESS_RUNNER: request },
+          cwd: join(import.meta.dir, "../../opencode"),
           encoding: "utf8",
           timeout: 10_000,
         },
