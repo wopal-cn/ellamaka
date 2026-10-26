@@ -40,6 +40,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Trace DSH grep file access
+        working-directory: packages/opencode
+        run: |
+          command -v strace || sudo apt-get install -y strace
+          mkdir -p .artifacts/grep
+          set +e
+          strace -f -e trace=openat,fcntl,read,mmap -e raw=read -o .artifacts/grep/syscalls.log \
+            bun test test/cli/cmd/tui/dsh-mount.test.ts -t 'executes grep'
+          result=$?
+          grep -E 'dsh-tui-ws-|EAGAIN|F_SETLEASE' .artifacts/grep/syscalls.log | tail -80
+          exit "$result"
+
       - name: Typecheck
         run: bun run typecheck
 
