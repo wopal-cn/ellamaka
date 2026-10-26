@@ -105,7 +105,7 @@ describe("tui dsh mount", () => {
         agent: facade,
       })
       const text = (result.content ?? []).map((b) => b.text ?? "").join("\n")
-      expect(result.isError).toBe(false)
+      expect(result.isError, text).toBe(false)
       expect(text).toContain("250 of 400")
 
       const sessions = container.get("sessions")
