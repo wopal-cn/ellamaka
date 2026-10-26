@@ -1,4 +1,4 @@
-import { expect, describe, afterEach, test } from "bun:test"
+import { expect, describe, test, spyOn } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
@@ -11,6 +11,8 @@ import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { TestInstance, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import fs from "fs/promises"
+import { Filesystem } from "@/util/filesystem"
+import { loadWopalSpaceSettingsFiles } from "@/config/wopal-space-settings"
 
 const it = testEffect(Layer.mergeAll(Config.defaultLayer, AppFileSystem.defaultLayer))
 const winIt = process.platform === "win32" ? it.instance : it.instance.skip
@@ -293,19 +295,21 @@ it.instance("continues loading tui config when legacy source cannot be stripped"
       const source = path.join(test.directory, "opencode.json")
       yield* fs.writeJson(source, { theme: "readonly-theme" })
 
-      yield* Effect.acquireUseRelease(
-        fs.chmod(source, 0o444),
-        () =>
-          Effect.gen(function* () {
-            const config = yield* getTuiConfig(test.directory)
-            expect(config.theme).toBe("readonly-theme")
-            expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
+      yield* Effect.gen(function* () {
+        // chmod is not a denial when tests run as root. Inject the actual
+        // write failure, and dispose the spy even when an assertion fails.
+        const write = Filesystem.write
+        using _deniedWrite = spyOn(Filesystem, "write").mockImplementation((file, content, mode) => {
+          if (file === source) return Promise.reject(Object.assign(new Error("read-only fixture"), { code: "EACCES" }))
+          return write(file, content, mode)
+        })
+        const config = yield* getTuiConfig(test.directory)
+        expect(config.theme).toBe("readonly-theme")
+        expect(yield* fs.existsSafe(path.join(test.directory, "tui.json"))).toBe(true)
 
-            const server = JSON.parse(yield* fs.readFileString(source))
-            expect(server.theme).toBe("readonly-theme")
-          }),
-        () => fs.chmod(source, 0o644).pipe(Effect.ignore),
-      )
+        const server = JSON.parse(yield* fs.readFileString(source))
+        expect(server.theme).toBe("readonly-theme")
+      })
     }),
   ),
 )
@@ -477,9 +481,7 @@ it.instance("resolves keybind lookup from canonical keybinds", () =>
       expect(config.keybinds.get("which-key.layout.toggle")?.[0]?.key).toBe("ctrl+alt+shift+k")
       expect(config.keybinds.get("which-key.pending.toggle")?.[0]?.key).toBe("ctrl+alt+shift+p")
       expect(config.keybinds.get("which-key.group.next")?.[0]?.key).toBe("ctrl+alt+right,ctrl+alt+]")
-      expect((config.keybinds.get("which-key.toggle")?.[0] as { desc?: unknown } | undefined)?.desc).toBe(
-        "Toggle which-key panel",
-      )
+      expect(config.keybinds.get("which-key.toggle")?.[0]).toHaveProperty("desc", "Toggle which-key panel")
       expect(config.keybinds.get("prompt.editor")?.[0]?.key).toBe("ctrl+e")
       expect(config.keybinds.get("prompt.autocomplete.next")?.[0]?.key).toBe("ctrl+j")
       expect(config.keybinds.get("dialog.prompt.submit")?.[0]?.key).toBe("ctrl+s")
@@ -705,10 +707,7 @@ it.instance("loads project tui.json", () =>
     Effect.gen(function* () {
       const fs = yield* AppFileSystem.Service
       const test = yield* TestInstance
-      yield* fs.writeWithDirs(
-        path.join(test.directory, "tui.json"),
-        JSON.stringify({ diff_style: "stacked" }, null, 2),
-      )
+      yield* fs.writeWithDirs(path.join(test.directory, "tui.json"), JSON.stringify({ diff_style: "stacked" }, null, 2))
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.diff_style).toBe("stacked")
@@ -872,8 +871,6 @@ it.instance("missing tui.json - silently treated as empty (ENOENT path)", () =>
 )
 
 describe("WopalSpace TUI config loading", () => {
-  const { loadWopalSpaceSettingsFiles } = require("../../src/config/wopal-space-settings") as typeof import("../../src/config/wopal-space-settings")
-
   test("loads TUI settings from the detected space", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, ".wopal", "config"), { recursive: true })

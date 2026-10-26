@@ -80,9 +80,6 @@ function rebuildBaseline(baseline: Baseline, violations: Violation[]): Baseline 
 async function main() {
   const root = path.resolve(import.meta.dir, "..", "..", "..", "..")
   const fix = process.argv.includes("--fix")
-  // A one-off migration: the baseline may only grow when a reviewer explicitly
-  // asks for it and reviews every new entry. Ordinary runs never grow it.
-  const allowGrowth = process.argv.includes("--allow-growth")
   const files: string[] = []
   for (const scanRoot of SCAN_ROOTS) {
     const absolute = path.join(root, scanRoot)
@@ -110,20 +107,13 @@ async function main() {
     const next = rebuildBaseline(baseline, violations)
     const before = baselineSize(baseline)
     const after = baselineSize(next)
-    if (after > before && !allowGrowth) {
+    if (comparison.fresh.length > 0) {
       process.stdout.write("refusing to grow the baseline: " + before + " -> " + after + " violations" + NL)
       process.stdout.write("the baseline may only shrink; fix the new violations instead of recording them." + NL)
-      process.stdout.write("if this is a rule review that legitimately uncovers existing debt," + NL)
-      process.stdout.write("rerun with --allow-growth and review every added entry." + NL)
       process.exit(1)
     }
     await writeBaseline(root, next)
     process.stdout.write("baseline rewritten: " + next.entries.length + " entries, " + after + " violations" + NL)
-    if (after > before) {
-      process.stdout.write(
-        "MIGRATION: the baseline grew by " + (after - before) + " violations; this needs review in the commit." + NL,
-      )
-    }
     return
   }
 

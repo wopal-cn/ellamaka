@@ -64,6 +64,16 @@ jobs:
       - name: Test order isolation
         run: bun run --cwd packages/ellamaka-app check:test-order-isolation
 
+      # Each invocation starts with a cold module/provider cache. Every run
+      # must pass; this is a regression check, never a retry-until-green.
+      - name: DSH grep cold-process regression
+        working-directory: packages/opencode
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8; do
+            echo "DSH grep cold process $attempt/8"
+            bun test test/cli/cmd/tui/dsh-mount.test.ts -t 'executes grep' || exit 1
+          done
+
       # Every package that ships a test:ci script runs it through the
       # existing turbo task (turbo.json already declares its JUnit output).
       - name: Unit tests

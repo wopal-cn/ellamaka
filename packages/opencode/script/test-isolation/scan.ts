@@ -36,20 +36,12 @@ export function isIntegrationLayer(relative: string) {
 }
 
 /**
- * A file may replace modules when it is a shared fixture or an approved
- * process preload. Those files own their mocks for every consumer by design.
- */
-/**
- * A file may replace modules when it is an approved process preload, or when it
- * is a sample fixture that a gate test consumes.
- *
- * A fixture under fixtures/ is data for a checker, not a test the suite runs,
- * so it may replace modules on purpose. That exemption is keyed on the
- * directory, never on a file name that merely looks like a test.
+ * Exceptions are exact paths. A fixture directory may also contain executable
+ * tests; exempting the entire directory would hide new module pollution.
  */
 function mayReplaceModules(relative: string) {
   if (ALLOWED_MODULE_REPLACERS.includes(relative)) return true
-  return /(?:^|\/)(?:fixtures?)\//.test(relative)
+  return relative === "packages/ellamaka-app/script/fixtures/src/leaky.test.ts"
 }
 
 function textOf(source: ts.SourceFile, node: ts.Node) {

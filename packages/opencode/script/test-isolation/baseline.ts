@@ -69,13 +69,17 @@ export function compareBaseline(baseline: Baseline, violations: string[]): Compa
   for (const [key, count] of current) {
     const covered = allowed.get(key) ?? 0
     for (let index = covered; index < count; index += 1) fresh.push(key)
-    allowed.set(key, Math.max(0, covered - count))
   }
 
-  // An entry is stale only when its target disappeared completely. A file that
-  // still has one of five recorded violations is not stale: shrinking further
-  // is a separate step, not a gate failure.
-  const stale = baseline.entries.filter((entry) => (current.get(entryKey(entry)) ?? 0) === 0)
+  // Retired occurrences must be removed immediately. Otherwise the spare
+  // allowance silently admits a later regression with the same target.
+  const stale: BaselineEntry[] = []
+  for (const [key, count] of allowed) {
+    const retired = count - (current.get(key) ?? 0)
+    if (retired <= 0) continue
+    const entry = baseline.entries.find((entry) => entryKey(entry) === key)!
+    stale.push({ ...entry, count: retired })
+  }
 
   return { fresh, stale, baselined: violations.length - fresh.length }
 }

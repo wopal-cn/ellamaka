@@ -1,19 +1,22 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
+import { inspect } from "node:util"
 import { DEFAULT_DSH_RUNTIME_MANIFEST } from "@wopal/ellamaka-cordis/runtime"
 import { mountDshIfEnabled } from "@/cli/cmd/tui/dsh-mount"
 import { getDshStatus } from "@/workbench/dsh-status"
 import { seedDshClosure } from "../../../fixture/dsh-closure"
+import { scopedEnv } from "../../../fixture/process-env"
 
 const CONTAINER_KEY = "__ellamakaDshContainer"
 
 type ToolContainer = {
   get(name: "tools"): {
-    execute(exec: unknown): Promise<{ isError: boolean; content?: { type: string; text?: string }[] }>
+    execute(exec: unknown): Promise<{ isError: boolean; error?: unknown; content?: { type: string; text?: string }[] }>
   }
   get(name: "sessions"): { list(): unknown[] } | undefined
+  get(name: "subprocess"): { spawn(spec: unknown): { done: Promise<unknown> } }
 }
 
 function assertToolContainer(value: unknown): asserts value is ToolContainer {
@@ -23,6 +26,11 @@ function assertToolContainer(value: unknown): asserts value is ToolContainer {
 }
 
 const dshHomes: string[] = []
+let environment: Disposable
+
+beforeEach(() => {
+  environment = scopedEnv({ ELLAMAKA_DSH: undefined, DSH_HOME: undefined })
+})
 
 function tmpWopalHome(): string {
   const dir = mkdtempSync(join(tmpdir(), "dsh-tui-wopal-"))
@@ -31,8 +39,7 @@ function tmpWopalHome(): string {
 }
 
 afterEach(() => {
-  delete process.env.ELLAMAKA_DSH
-  delete process.env.DSH_HOME
+  environment[Symbol.dispose]()
   delete (globalThis as Record<string, unknown>)[CONTAINER_KEY]
   for (const dir of dshHomes.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
@@ -91,11 +98,22 @@ describe("tui dsh mount", () => {
       const container = candidate
 
       const ws = mkdtempSync(join(tmpdir(), "dsh-tui-ws-"))
+      dshHomes.push(ws)
       for (let i = 0; i < 400; i++) {
         writeFileSync(join(ws, `f${i}.txt`), `needle line ${i}\n`)
       }
 
       const tools = container.get("tools")
+      // Retain the real provider path, but preserve nested launch failures in
+      // the assertion: the tool's public error otherwise hides error.cause.
+      const subprocess = container.get("subprocess")
+      const spawn = subprocess.spawn.bind(subprocess)
+      const failures: unknown[] = []
+      using _spawn = spyOn(subprocess, "spawn").mockImplementation((spec) => {
+        const handle = spawn(spec)
+        void handle.done.catch((error) => failures.push(error))
+        return handle
+      })
       const facade = { session: { header: { id: `tui-${Date.now()}`, cwd: ws } } }
       const result = await tools.execute({
         callId: "tui-mount-call",
@@ -105,7 +123,7 @@ describe("tui dsh mount", () => {
         agent: facade,
       })
       const text = (result.content ?? []).map((b) => b.text ?? "").join("\n")
-      expect(result.isError, text).toBe(false)
+      expect(result.isError, inspect({ error: result.error, text, failures }, { depth: 5 })).toBe(false)
       expect(text).toContain("250 of 400")
 
       const sessions = container.get("sessions")

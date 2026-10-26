@@ -81,7 +81,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 
 ### 测试隔离铁律
 
-以下规则全仓适用，并由 `bun run check:test-isolation` 机器检查。
+以下规则全仓适用；`bun run check:test-isolation` 检查其中可静态识别的违规，其余由行为测试与实施评审验证。
 原理、三种隔离模型、规则到门禁的完整对照见
 [docs/testing-isolation.md](docs/testing-isolation.md)。
 
@@ -99,6 +99,9 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - unit 层不放真实 I/O。子进程、文件监听、真实 git、网络请求、真实时钟都属于 integration 层。
 - 任何改动测试、fixture、preload 或测试配置的提交，都必须通过 `bun run check:test-isolation`。
   这个检查是基线门禁：新增违规一律失败；修掉的旧违规必须在同一次改动里从基线中删除。
+- 错误路径必须由测试明确触发，并断言具体错误与原状态；不要假定权限位、用户身份、外部服务或已有缓存会制造预期故障。
+- 偶发失败修复必须验证原失败场景、冷进程与组合运行。验证组任一次失败都算失败，不能以重跑成功代替根因证据。
+- 调整测试分层或入口必须核对实际执行文件，保持原有 CI 覆盖；每个用例的容器、子进程和临时目录在异常路径也必须完成清理。
 
 ### 手动验证入口
 

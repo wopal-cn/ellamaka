@@ -39,12 +39,21 @@ test("TISO007 reports a baseline entry whose target disappeared", () => {
   expect(comparison.fresh).toEqual([])
 })
 
-test("a partially fixed target is not stale yet", () => {
+test("a partially fixed target must shrink its recorded allowance", () => {
   const key = entryKey({ rule: "TISO002", file: "a.test.ts", detail: "process.env.X" })
   const baseline = baselineOf([{ rule: "TISO002", file: "a.test.ts", detail: "process.env.X", count: 5 }])
   const comparison = compareBaseline(baseline, [key])
-  expect(comparison.stale).toEqual([])
+  expect(comparison.stale).toEqual([expect.objectContaining({ count: 4 })])
   expect(comparison.fresh).toEqual([])
+})
+
+test("removing old debt cannot pay for a new violation", () => {
+  const baseline = baselineOf([{ rule: "TISO002", file: "a.test.ts", detail: "process.env.X", count: 2 }])
+  const comparison = compareBaseline(baseline, [
+    entryKey({ rule: "TISO002", file: "a.test.ts", detail: "process.env.Y" }),
+  ])
+  expect(comparison.fresh).toHaveLength(1)
+  expect(comparison.stale).toEqual([expect.objectContaining({ detail: "process.env.X", count: 2 })])
 })
 
 test("an older baseline that repeats one key is read as a count", () => {

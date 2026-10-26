@@ -110,11 +110,10 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 
 - 新违规不在 baseline 里 → CI 失败。
 - 同一目标比 baseline 记的次数更多 → 多出来的算新违规，CI 失败。
-- 旧违规整条消失 → baseline 里那条变成 stale，CI 失败，强制删掉。
-- **baseline 只能缩小，不能扩大。** `--fix` 默认在条目变多时直接拒绝写入。
+- 旧违规减少或消失 → 多余次数变成 stale，CI 失败，必须同步扣除，不能留给后续违规使用。
+- **baseline 只能逐个目标缩小，不能扩大。** `--fix` 逐条比较目标与次数；即使总数下降，只要出现新目标或某个目标次数增加，也拒绝写入。
 
-唯一允许扩大的通道是 `--fix --allow-growth`，只用于「规则本身被加强或补全后，一次性看见历史存量」的迁移提交。
-用它的时候必须在提交信息里说明新增条目的来源，并逐条确认它们确实是改规则之前就存在的问题，而不是这次新写出来的。
+没有自动接纳新违规的开关。历史存量清单不是合格证明；静态规则也不能证明不存在运行时竞态。
 
 **integration 边界不是手写白名单**：`INTEGRATION_ROOTS` / `INTEGRATION_FILES` 的内容必须与真实 runner 配置一致
 （`packages/opencode/script/run-tests.ts` 的 `INTEGRATION_DIRS`、各包 `package.json` 的 `test:integration`）。
@@ -122,6 +121,17 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 这样「某个包的整个 `test/` 目录被当成 integration 而整片豁免检查」这类弱化不会悄悄发生。
 
 固定 process preload（例如 `electron-mock.ts`）不进 baseline，单独登记为合法架构例外。
+故意含违规的扫描器样本也必须精确登记到文件，不能因为目录叫 `fixture` 就整体豁免。
+
+## 故障模拟与稳定性验证
+
+- **故障由测试明确控制。** 验证拒绝写入时，在文件系统 service 或可恢复的写入 spy 上注入 `EACCES`，保留真实调用链；不要仅靠 `chmod 0444` 假定会拒绝写入。root、Windows ACL 与挂载策略会改变结果。权限位本身是被测对象时，单独验证权限位，并明确执行身份与平台前提。
+- **先证明走到了目标错误路径。** 不只断言“失败了”，还检查具体错误和原数据未被修改，防止因别的异常碰巧通过。spy 用 `using` 恢复；Effect 依赖用 scoped layer/service 注入。
+- **环境必须恢复原值。** OpenCode 可用 `test/fixture/process-env.ts` 的 `scopedEnv`；值不存在和空字符串要分别恢复。禁止并发测试共享这些进程级变更；import 时读取或带缓存的依赖用 DI / 独立进程。
+- **资源先停止再清理。** 在 `finally` / async disposal 中等待容器、watcher、server 和子进程结束，再删除各自的临时目录。断言失败也必须走同一清理路径。
+- **偶发失败不能用一次绿灯关闭。** 先保留原命令、提交、失败信息，区分单文件与组合、冷进程与复用缓存、不同文件顺序。建立能触发原缺陷的回归用例；验证组中任一次失败都判失败，不能挑选成功结果。
+- **分层不减少覆盖。** 调整 unit/integration 执行入口时，要核对改动前后实际执行的文件；移出的用例必须在对应 CI 层执行，不能通过少跑测试获得绿灯。当前 OpenCode `test:ci` 仍保留完整扫描。
+- **失败信息必须够定位。** 工具失败断言附带错误内容与底层 cause；测试 fixture 不含真实凭证。缓存、权限、子进程和网络等环境前提必须显式验证，不能依赖开发机已有状态。
 
 ## 断言强度
 
@@ -141,8 +151,7 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 
 ```bash
 bun run check:test-isolation                         # 仓库根，静态检查 + baseline 校验
-bun run check:test-isolation -- --fix                 # 重新生成 baseline（只能缩小）
-bun run check:test-isolation -- --fix --allow-growth  # 一次性迁移：规则加强后纳入历史存量
+bun run check:test-isolation -- --fix                 # 逐条扣除已修复的违规（禁止接纳新违规）
 ```
 
 任何改动测试、fixture、preload 或测试配置文件的提交，都必须在本地跑过这个命令。

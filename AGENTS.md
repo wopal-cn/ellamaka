@@ -80,7 +80,8 @@ Run tests from their owning package. See package rules and script help for the f
 
 ### Test Isolation Rules
 
-These rules are repository-wide and machine-checked by `bun run check:test-isolation`.
+These rules apply repository-wide. `bun run check:test-isolation` checks statically detectable violations;
+behavioral tests and implementation review verify the remaining obligations.
 The reasoning, the three isolation models, and the full rule-to-gate map live in
 [docs/testing-isolation.md](docs/testing-isolation.md).
 
@@ -102,6 +103,12 @@ The reasoning, the three isolation models, and the full rule-to-gate map live in
 - Every change to a test, fixture, preload, or test configuration must pass `bun run check:test-isolation`.
   The check is a baseline gate: a new violation fails, and a fixed violation must be removed from the
   baseline in the same change.
+- Trigger error paths explicitly and assert the specific error and preserved state. Do not assume permissions,
+  user identity, external services, or existing caches will produce the intended failure.
+- A flaky-test fix must verify the original failure scenario, cold processes, and combined execution.
+  Any failed run fails the verification group; a successful rerun does not establish the root cause.
+- When changing test layers or entry points, compare the executed files and preserve existing CI coverage.
+  Dispose each test's containers, child processes, and temporary directories on exceptional paths too.
 
 ### Manual Verification Entry Points
 

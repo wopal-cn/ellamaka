@@ -27,6 +27,12 @@ test("TISO001 accepts a fixture sample that a gate test consumes", () => {
   expect(violations).toEqual([])
 })
 
+test("TISO001 does not exempt ordinary tests merely placed in a fixture directory", () => {
+  expect(rulesOf("packages/opencode/test/fixture/leak.test.ts", 'mock.module("shared", () => ({}))')).toEqual([
+    "TISO001",
+  ])
+})
+
 test("TISO002 reports an environment mutation and names the key", () => {
   const violations = scan("packages/ellamaka-app/src/example.test.ts", ['process.env.OPENCODE_PURE = "1"'].join("\n"))
   expect(violations).toEqual([expect.objectContaining({ rule: "TISO002", detail: "process.env.OPENCODE_PURE" })])

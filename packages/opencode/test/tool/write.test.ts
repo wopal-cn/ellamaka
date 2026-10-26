@@ -1,5 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
@@ -264,9 +264,21 @@ describe("tool.write", () => {
         const test = yield* TestInstance
         const readonlyPath = path.join(test.directory, "readonly.txt")
         yield* Effect.promise(() => fs.writeFile(readonlyPath, "test", "utf-8"))
-        yield* Effect.promise(() => fs.chmod(readonlyPath, 0o444))
-        const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(Effect.exit)
+        const filesystem = yield* AppFileSystem.Service
+        // Exercise error propagation independently of root/ACL/host permissions.
+        const exit = yield* run({ filePath: readonlyPath, content: "new content" }).pipe(
+          Effect.provideService(AppFileSystem.Service, {
+            ...filesystem,
+            writeWithDirs: (file, content, mode) =>
+              file === readonlyPath
+                ? Effect.fail(new Error("EACCES: write denied by fixture"))
+                : filesystem.writeWithDirs(file, content, mode),
+          }),
+          Effect.exit,
+        )
         expect(exit._tag).toBe("Failure")
+        if (exit._tag === "Failure") expect(Cause.pretty(exit.cause)).toContain("EACCES")
+        expect(yield* Effect.promise(() => fs.readFile(readonlyPath, "utf8"))).toBe("test")
       }),
     )
   })

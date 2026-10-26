@@ -730,14 +730,8 @@
     {
       "rule": "TISO002",
       "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
-      "detail": "process.env.DSH_HOME",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
       "detail": "process.env.ELLAMAKA_DSH",
-      "count": 7
+      "count": 6
     },
     {
       "rule": "TISO002",
