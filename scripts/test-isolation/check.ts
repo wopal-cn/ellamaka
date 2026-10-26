@@ -15,15 +15,12 @@ import { readdir, readFile, writeFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { RULES, type RuleId } from "./rules"
 import { scanSource, violationKey, type Violation } from "./scan"
+import { baselineSize, compareBaseline, entryKey, type Baseline } from "./baseline"
 
 const BASELINE_PATH = ".ci/test-isolation-baseline.json"
-const SCAN_ROOTS = ["packages"]
+const SCAN_ROOTS = ["packages", "scripts"]
+const NL = "\n"
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".artifacts", "coverage", "e2e", "build"])
-
-type Baseline = {
-  version: number
-  entries: Array<{ rule: RuleId; file: string; detail: string }>
-}
 
 async function collectTestFiles(root: string, current: string, out: string[] = []) {
   const entries = await readdir(current, { withFileTypes: true })
@@ -64,9 +61,28 @@ async function writeBaseline(root: string, baseline: Baseline) {
   await writeFile(file, JSON.stringify(sorted, null, 2) + "\n")
 }
 
+/** Rebuild the baseline from the current violations, keeping one entry per target. */
+function rebuildBaseline(baseline: Baseline, violations: Violation[]): Baseline {
+  const counts = new Map<string, { rule: RuleId; file: string; detail: string; count: number }>()
+  for (const violation of violations) {
+    const record = { rule: violation.rule, file: violation.file, detail: violation.detail }
+    const key = entryKey(record)
+    const existing = counts.get(key)
+    if (existing) {
+      existing.count += 1
+      continue
+    }
+    counts.set(key, { ...record, count: 1 })
+  }
+  return { version: baseline.version, entries: [...counts.values()] }
+}
+
 async function main() {
   const root = path.resolve(import.meta.dir, "..", "..")
   const fix = process.argv.includes("--fix")
+  // A one-off migration: the baseline may only grow when a reviewer explicitly
+  // asks for it and reviews every new entry. Ordinary runs never grow it.
+  const allowGrowth = process.argv.includes("--allow-growth")
   const files: string[] = []
   for (const scanRoot of SCAN_ROOTS) {
     const absolute = path.join(root, scanRoot)
@@ -83,23 +99,31 @@ async function main() {
   }
 
   const baseline = await readBaseline(root)
-  const known = new Set(baseline.entries.map((entry) => entry.rule + "|" + entry.file + "|" + entry.detail))
-  const current = new Set(violations.map(violationKey))
-
-  const fresh = violations.filter((violation) => !known.has(violationKey(violation)))
-  const stale = baseline.entries.filter((entry) => !current.has(entry.rule + "|" + entry.file + "|" + entry.detail))
+  const comparison = compareBaseline(
+    baseline,
+    violations.map((violation) => violationKey(violation)),
+  )
+  const fresh = comparison.fresh
+  const freshViolations = violations.filter((violation) => fresh.includes(violationKey(violation)))
 
   if (fix) {
-    const next: Baseline = {
-      version: baseline.version,
-      entries: violations.map((violation) => ({
-        rule: violation.rule,
-        file: violation.file,
-        detail: violation.detail,
-      })),
+    const next = rebuildBaseline(baseline, violations)
+    const before = baselineSize(baseline)
+    const after = baselineSize(next)
+    if (after > before && !allowGrowth) {
+      process.stdout.write("refusing to grow the baseline: " + before + " -> " + after + " violations" + NL)
+      process.stdout.write("the baseline may only shrink; fix the new violations instead of recording them." + NL)
+      process.stdout.write("if this is a rule review that legitimately uncovers existing debt," + NL)
+      process.stdout.write("rerun with --allow-growth and review every added entry." + NL)
+      process.exit(1)
     }
     await writeBaseline(root, next)
-    process.stdout.write("baseline rewritten: " + next.entries.length + " entries\n")
+    process.stdout.write("baseline rewritten: " + next.entries.length + " entries, " + after + " violations" + NL)
+    if (after > before) {
+      process.stdout.write(
+        "MIGRATION: the baseline grew by " + (after - before) + " violations; this needs review in the commit." + NL,
+      )
+    }
     return
   }
 
@@ -108,7 +132,7 @@ async function main() {
   if (fresh.length > 0) {
     failed = true
     process.stdout.write("\nNEW test isolation violations (" + fresh.length + "):\n")
-    for (const violation of fresh) {
+    for (const violation of freshViolations) {
       const rule = RULES[violation.rule]
       process.stdout.write("\n  " + violation.rule + "  " + violation.file + ":" + violation.line + "\n")
       process.stdout.write("    " + rule.title + "\n")
@@ -116,10 +140,10 @@ async function main() {
     }
   }
 
-  if (stale.length > 0) {
+  if (comparison.stale.length > 0) {
     failed = true
-    process.stdout.write("\nSTALE baseline entries (" + stale.length + "):\n")
-    for (const entry of stale) {
+    process.stdout.write("\nSTALE baseline entries (" + comparison.stale.length + "):\n")
+    for (const entry of comparison.stale) {
       const rule = RULES[entry.rule]
       process.stdout.write("\n  " + entry.rule + "  " + entry.file + "\n")
       process.stdout.write("    " + rule.title + "\n")
@@ -133,11 +157,11 @@ async function main() {
       " test files, " +
       violations.length +
       " violations (" +
-      (violations.length - fresh.length) +
+      comparison.baselined +
       " baselined, " +
-      fresh.length +
+      freshViolations.length +
       " new, " +
-      stale.length +
+      comparison.stale.length +
       " stale)\n",
   )
 

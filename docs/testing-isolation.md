@@ -105,9 +105,21 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 | baseline 不得有 stale 条目             | TISO007 | baseline 里记录的违规在源码中已不存在即失败                     |
 | 测试不得污染进程环境                   | TISO101 | 运行时哨兵：preload 记录 env/cwd 基线，测试结束后比对           |
 
-**baseline 的维护规则**：baseline 是**精确债务清单**，每条记录「规则 + 文件 + 具体目标（模块 id / env key / API）」。
-新违规不在 baseline 里 → CI 失败。旧违规修掉后 baseline 里那条变成 stale → CI 失败，强制删掉。
-**baseline 只能缩小，不能扩大。**
+**baseline 的维护规则**：baseline 是**精确债务清单**，每条记录「规则 + 文件 + 具体目标（模块 id / env key / API）+ 出现次数」。
+出现次数是必需的：同一个文件里第二条完全相同的违规如果没有计数，就会匹配上只记录了一次的条目而被漏掉。
+
+- 新违规不在 baseline 里 → CI 失败。
+- 同一目标比 baseline 记的次数更多 → 多出来的算新违规，CI 失败。
+- 旧违规整条消失 → baseline 里那条变成 stale，CI 失败，强制删掉。
+- **baseline 只能缩小，不能扩大。** `--fix` 默认在条目变多时直接拒绝写入。
+
+唯一允许扩大的通道是 `--fix --allow-growth`，只用于「规则本身被加强或补全后，一次性看见历史存量」的迁移提交。
+用它的时候必须在提交信息里说明新增条目的来源，并逐条确认它们确实是改规则之前就存在的问题，而不是这次新写出来的。
+
+**integration 边界不是手写白名单**：`INTEGRATION_ROOTS` / `INTEGRATION_FILES` 的内容必须与真实 runner 配置一致
+（`packages/opencode/script/run-tests.ts` 的 `INTEGRATION_DIRS`、各包 `package.json` 的 `test:integration`）。
+`scripts/test-isolation/policy.test.ts` 每次跑门禁都会比对，任何一边改了另一边没跟上就会失败。
+这样「某个包的整个 `test/` 目录被当成 integration 而整片豁免检查」这类弱化不会悄悄发生。
 
 固定 process preload（例如 `electron-mock.ts`）不进 baseline，单独登记为合法架构例外。
 
@@ -128,8 +140,9 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 ## 门禁怎么跑
 
 ```bash
-bun run check:test-isolation            # 仓库根，静态检查 + baseline 校验
-bun run check:test-isolation -- --fix   # 重新生成 baseline（需要人工确认每一条）
+bun run check:test-isolation                         # 仓库根，静态检查 + baseline 校验
+bun run check:test-isolation -- --fix                 # 重新生成 baseline（只能缩小）
+bun run check:test-isolation -- --fix --allow-growth  # 一次性迁移：规则加强后纳入历史存量
 ```
 
 任何改动测试、fixture、preload 或测试配置文件的提交，都必须在本地跑过这个命令。
@@ -137,8 +150,10 @@ bun run check:test-isolation -- --fix   # 重新生成 baseline（需要人工�
 ## 分期
 
 - **P0（本次落地）**：铁律写进根 AGENTS.md；仓库级 `check:test-isolation`；
-  TISO001-TISO007 静态门禁；精确债务 baseline；现有 App 顺序隔离检查接入 CI。
-- **P1**：统一 `scopedEnv` helper 取代各文件自写的还原逻辑；
+  TISO001-TISO007 静态门禁（含计数 baseline、stale 检测、边界漂移守护）；现有 App 顺序隔离检查接入 CI。
+  规则补全后一次性看见的历史存量（31 个 unit 层 live-I/O 测试）已如实记入 baseline，属于 P1 迁移对象。
+- **P1**：把已记入 baseline 的 unit 层 live-I/O 测试迁到 integration 层（或改造为 DI）；
+  统一 `scopedEnv` helper 取代各文件自写的还原逻辑；
   preload 加 env/cwd 运行时哨兵（TISO101）；存量 `mock.module` 逐步迁到 DI；
   顺序回归泛化到全仓高风险分组。
 - **P2**：singleton / 共享 fixture 的自动 reset 检测；随机 seed 顺序回归；

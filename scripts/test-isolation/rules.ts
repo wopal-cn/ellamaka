@@ -85,21 +85,20 @@ export const RULES: Record<RuleId, Rule> = {
 export const ALLOWED_MODULE_REPLACERS = ["packages/ellamaka-desktop/electron-mock.ts"]
 
 /**
- * Directories whose tests are the integration layer rather than the unit layer.
+ * The integration boundary, derived from the real runner configuration.
  *
- * A package that keeps its tests under `test/` (rather than beside the
- * sources in `src/`) is already the integration layer: those suites drive
- * real processes, real git and real sandboxes.
+ * The gate must never keep its own opinion about which tests are integration
+ * tests: a hand-written allowlist silently drifts and starts exempting unit
+ * tests. Every entry below is copied from a source of truth that CI runs:
+ *
+ *   packages/opencode/script/run-tests.ts -> INTEGRATION_DIRS
+ *   packages/ellamaka-cordis/package.json -> test:integration file list
+ *
+ * The -integration.test.ts and -e2e.test.ts suffixes are layer markers and need
+ * no entry here. scan.test.ts asserts this list still matches the runner
+ * configuration, so drift fails the gate instead of weakening it.
  */
 export const INTEGRATION_ROOTS = [
-  "packages/ellamaka-cordis/test",
-  "packages/ellamaka-core/test",
-  "packages/ellamaka-release/test",
-  "packages/http-recorder/test",
-  "packages/ellamaka-brand/test",
-  "packages/llm/test",
-  "packages/wopalspace/test",
-  "packages/ellamaka-onboarding/test",
   "packages/ellamaka-desktop/e2e",
   "packages/opencode/test/server",
   "packages/opencode/test/session",
@@ -116,4 +115,15 @@ export const INTEGRATION_ROOTS = [
   "packages/opencode/test/mcp",
   "packages/opencode/test/lsp",
   "packages/opencode/test/publish-smoke",
+]
+
+/**
+ * Individual test files that a package runs as integration while the rest of
+ * its test directory stays unit. Listed per package.json test:integration.
+ */
+export const INTEGRATION_FILES = [
+  "packages/ellamaka-cordis/test/plugins-runtime.test.ts",
+  "packages/ellamaka-cordis/test/dsh-web.test.ts",
+  "packages/ellamaka-cordis/test/bun-ptc-runtime.test.ts",
+  "packages/ellamaka-cordis/test/dsh-adapter-runtime.test.ts",
 ]

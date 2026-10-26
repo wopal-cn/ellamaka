@@ -8,7 +8,7 @@
  */
 
 import ts from "typescript"
-import { ALLOWED_MODULE_REPLACERS, INTEGRATION_ROOTS, type RuleId } from "./rules"
+import { ALLOWED_MODULE_REPLACERS, INTEGRATION_FILES, INTEGRATION_ROOTS, type RuleId } from "./rules"
 
 export type Violation = {
   rule: RuleId
@@ -24,15 +24,14 @@ export type ScannerOptions = {
 
 const TEST_FILE = /\.test\.(?:ts|tsx)$/
 
-/** Files that define a shared fixture or preload rather than a test case. */
-const FIXTURE_LIKE = /(?:^|\/)(?:fixture|fixtures|preload|setup|helpers?)\//
-
 export function isTestFile(relative: string) {
   return TEST_FILE.test(relative)
 }
 
 export function isIntegrationLayer(relative: string) {
   if (/-integration\.test\.(?:ts|tsx)$/.test(relative)) return true
+  if (/-e2e\.test\.(?:ts|tsx)$/.test(relative)) return true
+  if (INTEGRATION_FILES.includes(relative)) return true
   return INTEGRATION_ROOTS.some((root) => relative.startsWith(root + "/"))
 }
 
@@ -40,12 +39,17 @@ export function isIntegrationLayer(relative: string) {
  * A file may replace modules when it is a shared fixture or an approved
  * process preload. Those files own their mocks for every consumer by design.
  */
+/**
+ * A file may replace modules when it is an approved process preload, or when it
+ * is a sample fixture that a gate test consumes.
+ *
+ * A fixture under fixtures/ is data for a checker, not a test the suite runs,
+ * so it may replace modules on purpose. That exemption is keyed on the
+ * directory, never on a file name that merely looks like a test.
+ */
 function mayReplaceModules(relative: string) {
   if (ALLOWED_MODULE_REPLACERS.includes(relative)) return true
-  if (!FIXTURE_LIKE.test(relative)) return false
-  // A fixture still has to be referenced by the package that preloads it; the
-  // preload file itself is the only one allowed to replace modules.
-  return /preload\.(?:ts|tsx)$/.test(relative)
+  return /(?:^|\/)(?:fixtures?)\//.test(relative)
 }
 
 function textOf(source: ts.SourceFile, node: ts.Node) {
@@ -170,15 +174,65 @@ function isBuiltinSleep(node: ts.CallExpression) {
 
 const LIVE_IO_CALLS = new Set(["spawn", "spawnSync", "execSync", "exec", "watch", "createServer", "listen"])
 
-function isLiveIoCall(node: ts.CallExpression) {
+/** The node:child_process entry points that start a real OS process. */
+const CHILD_PROCESS_CALLS = new Set(["exec", "execSync", "execFile", "execFileSync", "spawn", "spawnSync", "fork"])
+
+/** How this file names the child_process API and the network entry points. */
+type LiveIoBindings = {
+  /** Local identifiers imported from node:child_process. */
+  childProcessFunctions: Set<string>
+  /** Local aliases for a namespace import of node:child_process. */
+  childProcessNamespaces: Set<string>
+}
+
+/**
+ * Read the import bindings once per file.
+ *
+ * A call is live I/O because of what the identifier was imported from, not
+ * because of its spelling: a locally defined spawn() is not a subprocess.
+ */
+function collectLiveIoBindings(source: ts.SourceFile): LiveIoBindings {
+  const childProcessFunctions = new Set<string>()
+  const childProcessNamespaces = new Set<string>()
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement)) continue
+    const specifier = statement.moduleSpecifier
+    if (!ts.isStringLiteralLike(specifier)) continue
+    if (specifier.text !== "node:child_process" && specifier.text !== "child_process") continue
+    const bindings = statement.importClause?.namedBindings
+    if (!bindings) continue
+    if (ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        const imported = element.propertyName ? element.propertyName.text : element.name.text
+        if (CHILD_PROCESS_CALLS.has(imported)) childProcessFunctions.add(element.name.text)
+      }
+      continue
+    }
+    if (ts.isNamespaceImport(bindings)) childProcessNamespaces.add(bindings.name.text)
+  }
+  return { childProcessFunctions, childProcessNamespaces }
+}
+
+function isLiveIoCall(node: ts.CallExpression, bindings: LiveIoBindings) {
   const callee = node.expression
+  // A bare call: fetch(), or a child_process function imported by name.
+  if (ts.isIdentifier(callee)) {
+    if (callee.text === "fetch") return true
+    return bindings.childProcessFunctions.has(callee.text)
+  }
   if (!ts.isPropertyAccessExpression(callee)) return false
   const owner = callee.expression
   const ownerName = ts.isIdentifier(owner) ? owner.text : undefined
-  if (ownerName === "Bun" && LIVE_IO_CALLS.has(callee.name.text)) return true
-  if (ownerName === "fs" && callee.name.text === "watch") return true
-  if (ownerName === "fs" && callee.name.text === "watchFile") return true
-  if (ownerName === "node:fs" && callee.name.text === "watch") return true
+  if (ownerName && bindings.childProcessNamespaces.has(ownerName)) {
+    return CHILD_PROCESS_CALLS.has(callee.name.text)
+  }
+  if (ownerName === "Bun") {
+    if (LIVE_IO_CALLS.has(callee.name.text)) return true
+    // Bun.$ runs a shell command.
+    if (callee.name.text === "$") return true
+    return false
+  }
+  if (ownerName === "fs" && (callee.name.text === "watch" || callee.name.text === "watchFile")) return true
   return false
 }
 
@@ -203,6 +257,62 @@ function globalPathMember(node: ts.Node | undefined): string | undefined {
   return "Global.Path." + node.name.text
 }
 
+/**
+ * A bun:test control call.
+ *
+ * The owner has to be the test API itself (test, it, describe, or the runner
+ * wrappers the packages use). A product method that shares the name is not a
+ * test control.
+ */
+function isTestControlCall(node: ts.CallExpression) {
+  const callee = node.expression
+  if (!ts.isPropertyAccessExpression(callee)) return false
+  const member = callee.name.text
+  if (member !== "only" && member !== "skip" && member !== "todo") return false
+  const owner = callee.expression
+  if (!ts.isIdentifier(owner)) return false
+  return TEST_CONTROL_OWNERS.has(owner.text)
+}
+
+/** The identifiers that introduce a bun:test control. */
+const TEST_CONTROL_OWNERS = new Set(["test", "it", "describe", "bench", "suite", "testIf", "itIf", "describeIf"])
+
+/** setTimeout(callback, ms) and setInterval(callback, ms). */
+function isTimerCall(node: ts.CallExpression) {
+  const callee = node.expression
+  if (!ts.isIdentifier(callee)) return false
+  return callee.text === "setTimeout" || callee.text === "setInterval"
+}
+
+/** True when the owner of a member expression is the Bun global. */
+function isBunOwner(callee: ts.PropertyAccessExpression) {
+  return ts.isIdentifier(callee.expression) && callee.expression.text === "Bun"
+}
+
+/**
+ * The shared path a write targets, if any.
+ *
+ * Global.Path.config, Global.Path.config + "/x", and
+ * path.join(Global.Path.config, "x") all name the same kind of shared state.
+ */
+function sharedPathTarget(node: ts.Node | undefined): string | undefined {
+  if (!node) return undefined
+  const direct = globalPathMember(node)
+  if (direct) return direct
+  if (!ts.isCallExpression(node)) return undefined
+  const callee = node.expression
+  if (!ts.isPropertyAccessExpression(callee)) return undefined
+  if (callee.name.text !== "join") return undefined
+  const owner = callee.expression
+  if (!ts.isIdentifier(owner)) return undefined
+  if (owner.text !== "path" && owner.text !== "Path") return undefined
+  for (const argument of node.arguments) {
+    const found = globalPathMember(argument)
+    if (found) return found
+  }
+  return undefined
+}
+
 export function scanSource(relative: string, sourceText: string, _options: ScannerOptions): Violation[] {
   const violations: Violation[] = []
   if (!isTestFile(relative)) return violations
@@ -210,6 +320,7 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
   const canReplaceModules = mayReplaceModules(relative)
 
   const source = ts.createSourceFile(relative, sourceText, ts.ScriptTarget.Latest, true)
+  const liveIoBindings = collectLiveIoBindings(source)
   const lineOf = (node: ts.Node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1
 
   const report = (rule: RuleId, node: ts.Node, detail: string) => {
@@ -219,7 +330,6 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression
-      const calleeMember = ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined
 
       // TISO001 - mock.module
       // The callee is either the bare identifier "mock" (bun:test mock.module is
@@ -238,20 +348,20 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
       }
 
       // TISO003 - fixed delay
-      if (isFixedWaitCall(node) || isEffectSleep(node) || isBuiltinSleep(node)) {
+      if (isFixedWaitCall(node) || isEffectSleep(node) || isBuiltinSleep(node) || isTimerCall(node)) {
         if (waitsForTime(node)) report("TISO003", node, textOf(source, node).slice(0, 80))
       }
 
       // TISO004 - live I/O in the unit layer
-      if (!isIntegration && isLiveIoCall(node)) {
+      if (!isIntegration && isLiveIoCall(node, liveIoBindings)) {
         report("TISO004", node, textOf(source, node).slice(0, 80))
       }
 
       // TISO005 - .only / .skip / .todo
-      if (calleeMember === "only") {
-        report("TISO005", node, textOf(source, node).slice(0, 60))
-      }
-      if (calleeMember === "skip" || calleeMember === "todo") {
+      // Only the bun:test API counts. A product method that happens to be named
+      // skip or todo (controller.skip(), sdk.session.todo()) is not a test
+      // control and must not be reported.
+      if (isTestControlCall(node)) {
         report("TISO005", node, textOf(source, node).slice(0, 60))
       }
     }
@@ -276,9 +386,15 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
     if (ts.isCallExpression(node)) {
       const callee = node.expression
       const calleeMember = ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined
-      if (calleeMember === "writeFile" || calleeMember === "writeFileSync" || calleeMember === "mkdir") {
+      const isWrite =
+        calleeMember === "writeFile" ||
+        calleeMember === "writeFileSync" ||
+        calleeMember === "mkdir" ||
+        calleeMember === "mkdirSync" ||
+        (calleeMember === "write" && isBunOwner(callee))
+      if (isWrite) {
         const first = node.arguments[0]
-        const shared = globalPathMember(first)
+        const shared = sharedPathTarget(first)
         if (shared) report("TISO006", node, shared)
         if (first && ts.isStringLiteralLike(first) && first.text.startsWith("/tmp/")) {
           report("TISO006", node, first.text)
