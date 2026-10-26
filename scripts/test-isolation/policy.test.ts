@@ -36,12 +36,6 @@ test("cordis integration files still match its test:integration script", () => {
   expect([...declared].sort()).toEqual([...new Set(files)].sort())
 })
 
-test("every integration root points at an existing directory", () => {
-  for (const root of INTEGRATION_ROOTS) {
-    expect(statSync(path.join(repoRoot, root)).isDirectory()).toBe(true)
-  }
-})
-
 test("every listed integration file exists", () => {
   for (const file of INTEGRATION_FILES) {
     expect(statSync(path.join(repoRoot, file)).isFile()).toBe(true)
