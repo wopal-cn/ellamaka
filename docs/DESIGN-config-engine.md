@@ -31,7 +31,7 @@ Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wop
 
 ### Active Narrow Contract: DSH Web
 
-`wopal.dsh.web.enabled` 是产品层 Web surface 开关，不是 DSH native profile 配置，因此不经过 DshConfigProvider，也不投影到 `cordis.patch.yml`。它只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，默认 `true`，Space 层不能覆盖。`GET /config-v2` 返回该 effective fact；受控 `PATCH /config-v2` 只允许 global scope 写这个键，并返回 `restart-required`。具体正式契约以主 `DESIGN.md#config-surface`、`DESIGN-dsh-web.md#enablement` 与 `DESIGN-wopalspace.md#product-settings` 为准。
+`wopal.dsh.web.enabled` 是产品层 Web surface 开关，不是 DSH native profile 配置，因此不经过 DshConfigProvider，也不投影到 `cordis.patch.yml`。它只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，默认 `true`，Space 层不能覆盖。Tools profile 的进程级启用事实只来自 `ELLAMAKA_DSH_TOOLS`。`GET /config-v2` 返回 Web effective fact；受控 `PATCH /config-v2` 只允许 global scope 写这个键，并返回 `restart-required`。具体正式契约以主 `DESIGN.md#config-surface`、`DESIGN-dsh-web.md#enablement` 与 `DESIGN-wopalspace.md#product-settings` 为准。
 
 ## Reading: User Global + Space Override
 

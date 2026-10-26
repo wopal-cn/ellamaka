@@ -332,10 +332,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const shell = createMemo(() => motion(1 - buttonsSpring()))
   const control = createMemo(() => ({ height: "28px", ...buttons() }))
 
-  // Sandbox tri-state control: visible only for dock composers when all three
-  // hold — the DSH kill switch is open (`ELLAMAKA_DSH` not `0`), the DSH runtime
-  // is actually `ready` (not degraded), and the instance-level (directory)
-  // effective config loads the dsh-adapter plugin. The mode is a PER-SESSION
+  // Sandbox tri-state control: visible only for dock composers when the Tools
+  // runtime is `ready` and the instance-level effective config enables the
+  // dsh-adapter sandbox. The mode is a PER-SESSION
   // choice kept in browser storage; its default comes from
   // `effective.wopal.pluginConfig["dsh-adapter"].sandbox` when the session has no explicit choice.
   // The choice rides on the prompt payload (`sandboxMode`);

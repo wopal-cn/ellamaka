@@ -107,6 +107,8 @@ App BFF 的 schema 可以生成 `ellamaka-app` 内部 client；它与公开 SDK 
 
 DSH Web 与 Ellamaka Native Assistant 是两个独立表面。General 继续承载 Ellamaka 通用会话；DSH Web 启用时，顶栏额外派生一个固定 DSH Tab。DSH Tab 不是 `SpaceScope`，不创建 General task 或 Space directory instance，也不进入 Space 的 Panel 布局模型。
 
+Workbench 不读取 DSH 进程环境变量。Web Tab 的存在与内容只消费 `/global/health.dsh.web`，Tools 采用状态只消费 `/global/health.dsh.tools` 与当前 Space 的 `pluginConfig`；持久化 Web 开关只通过 `config-v2` 读取和写入 `wopal.dsh.web.enabled`。
+
 DSH Tab 的存在与内容由 Runtime `dsh.web` 状态驱动：
 
 | `dsh.web` | Workbench 行为 |

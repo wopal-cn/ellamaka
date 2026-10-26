@@ -139,6 +139,8 @@ private `@wopal/wopalspace` 提供受控的 canonical settings writer，供 Serv
 - Server 的 `config-v2` handler 组合 Runtime effective read 与这个 writer；Workbench 不直接读写配置文件。
 - 写入结果返回 `restart-required`。运行中的 Server/sidecar 继续使用启动时解析出的 Web profile 意图，直到用户重启。
 
+DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.web.enabled`，Tools 只认当前进程的 `ELLAMAKA_DSH_TOOLS`。
+
 更广泛的 global/space 配置编辑、来源解释、reset-key、schema catalog 与 DSH native projection 属于统一 Config Plane 的后续范围，不由这个窄 writer 推断或提前实现。
 
 ### Setup Endpoints
