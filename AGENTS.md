@@ -105,6 +105,11 @@ The reasoning, the three isolation models, and the full rule-to-gate map live in
   baseline in the same change.
 - Trigger error paths explicitly and assert the specific error and preserved state. Do not assume permissions,
   user identity, external services, or existing caches will produce the intended failure.
+- Gate a probe in the same place you act on it. When a test decides between branches by testing an
+  environment (writability, mount, sandbox root), the real operation must use that same directory or
+  resource, so a symlink, mount, or overlay cannot make the decision and the action disagree. If the
+  environment makes the intended rule unobservable, assert the rule that does apply for that environment;
+  skipping the assertion hides the regression.
 - A flaky-test fix must verify the original failure scenario, cold processes, and combined execution.
   Any failed run fails the verification group; a successful rerun does not establish the root cause.
 - When changing test layers or entry points, compare the executed files and preserve existing CI coverage.
