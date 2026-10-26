@@ -62,14 +62,14 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - 明确异步任务与子进程的 owner；取消和退出必须等待 owner 所拥有资源完成清理。
 - 临时验证使用隔离 Home、profile、仓库和凭证；不得改写用户真实运行环境。隔离 Home 由 `WOPAL_HOME` 选择（如 `WOPAL_HOME=/path/to/tmp/home`），不是 `HOME`——只设 `HOME` 不会重定向产品路径；启动任何真实进程前，先从其早期输出核对所打印路径全部落在隔离 Home 内。
 - 定制边界（针对 upstream 文件）：新能力优先放新文件，upstream 文件只保留最少的 import 与调用注入点；定制分支用早返回 guard，避免与主线重叠；需要 upstream 内部能力时优先 callback/闭包注入，不暴露 upstream Service 类型；复用逻辑抽共享 helper，不复制大段 upstream 流程；不得对 upstream 文件做无关格式化、import 重排、依赖或对象键重排；`.gitattributes` 不添加 merge 策略驱动，冲突显式逐文件解决。
-- DSH 与 Bridge：`$WOPAL_HOME` 根目录禁止 `pnpm install` / `bun install`（pnpm 会爬到 workspace 根，摧毁 Bun 管理的依赖拓扑）；引擎运行期间，进程外的任何写操作都不得触碰 `$WOPAL_HOME/dsh/home/profiles/`（连"内容相同"的幂等写也会与引擎竞态）；`ELLAMAKA_DSH` 是唯一 enable switch；Bridge 只随 Ellamaka 产品发布，不单独发包、也不作为 `$WOPAL_HOME/dsh` 的依赖；tool container 不创建 dsh session，只传每次调用所需的最小上下文；插件"安装一次、按 profile 激活"，同一进程不并行两个版本。
+- DSH 与 Bridge：`$WOPAL_HOME` 根目录禁止 `pnpm install` / `bun install`（pnpm 会爬到 workspace 根，摧毁 Bun 管理的依赖拓扑）；引擎运行期间，进程外的任何写操作都不得触碰 `$WOPAL_HOME/dsh/home/profiles/`（连"内容相同"的幂等写也会与引擎竞态）；`wopal.dsh.web.enabled` 是仅全局生效的 Web profile 开关，`ELLAMAKA_DSH_TOOLS` 是进程级 Tools profile 开关，Space 的 `wopal.pluginConfig.dsh-adapter.sandbox.enabled` 只决定是否采用该 backend，不启停 profile；Bridge 只随 Ellamaka 产品发布，不单独发包、也不作为 `$WOPAL_HOME/dsh` 的依赖；tool container 不创建 dsh session，只传每次调用所需的最小上下文；插件"安装一次、按 profile 激活"，同一进程不并行两个版本。
 - WopalSpace 集成边界：Setup、Ontology 与基础 Space 业务只在 private WopalSpace 服务内实现一次，并通过 Public Platform SDK 暴露；Product 管理、Evolution、Skill 生命周期与调度继续由 Wopal CLI 拥有。Ellamaka 不依赖 Wopal CLI 的命令处理、共享 schema 包或最低 CLI 版本。Session provisioning 只接受已注册 Space 与安全的相对目录，目录失败不删除 Session。
 - 接口与 SDK：新端点先定领域 owner 与 Root/Instance 归属，走 `HttpApiGroup`。可复用 Runtime/WopalSpace operation 进入 Public Platform contract/公开 SDK；只服务官方 App 的 projection/use case 进入 App BFF 私有 contract，不得进入公开 `/doc` 或 SDK exports。每份 contract 的重生成都必须“全有全无”，同时核对类型和运行时参数映射；生成物一律不手改。
 - 权限规则：agent frontmatter 不声明 `"*": allow` 一类通配，只写显式收窄；合并求值是 LAST-wins，显式规则必须排在通配之后。改完用 `GET /agent` 复核合并后的实际规则顺序。能力发现列表不等于授权结果。
 - 发布纪律：release build 入口是 CLI 二进制的唯一打包点；不引入 Wopal CLI 版本下限或发布顺序依赖。CLI 与 Desktop 独立更新；Desktop UI 改动必须在原生 Windows 上验证（macOS 构建不算数）；release workflow 只用 Node 24-native 官方 action，新增/升级 action 前检查其 `runs.using` 为 `node24`；已提交发布不可变，整版撤回流程见 DESIGN-distribution。
 - 日志：由 ellamaka-core 的结构化 logger 统一路由和脱敏，插件只用内置 `ctx.logger`（不 `console.log`、不自建 logger）。必须记：生命周期变化、错误与异常（含降级路径）、关键决策。不得记：循环内逐条、成功路径例行、可从上下文推出的信息。循环要聚合成一条摘要；上下文放结构化字段而非拼进消息；`catch` 不得吞异常。默认 INFO，DEBUG 用于诊断，TRACE 按类别显式开启。任何日志都不得记录凭证、prompt/消息正文、工具参数、命令、路径或无界子进程输出。分级、路由与文件细则见 DESIGN-logging。
 - 排障：放大日志用 `--log-level` / `--trace <类别>`，不要往代码里加临时日志；显式 `--log-level` 覆盖 `--trace` 提升。日志定位（角色分域目录、dev scope、DSH 文件）见 DESIGN-logging。
-- 启动与进度：只报告真实执行的阶段，有真实总量才给计数/百分比，长阶段发心跳；进度走 stderr 或专用 UI，机器 stdout 保持纯净。`ELLAMAKA_DSH=0` 报告一次 skipped 且零 DSH 文件/网络/mount 副作用。
+- 启动与进度：只报告真实执行的阶段，有真实总量才给计数/百分比，长阶段发心跳；进度走 stderr 或专用 UI，机器 stdout 保持纯净。`wopal.dsh.web.enabled=false` 且 `ELLAMAKA_DSH_TOOLS=0` 时报告跳过 DSH preparation，并保持零 DSH 文件/网络/mount 副作用。Tools profile 加载失败可以保留 Native Tools；一旦 Tools 已 ready 且当前 Space 采用 `dsh-adapter`，沙箱或工具执行失败必须原样失败，严禁改用 Native Tools 重试。
 
 ## Testing
 

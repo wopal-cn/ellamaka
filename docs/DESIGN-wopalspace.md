@@ -1,7 +1,7 @@
 # WopalSpace Application Domain
 
 > **Status**: Active
-> **Updated**: 2026-10-25
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Scope**: private `@wopal/wopalspace` 的目标态架构、能力范围、公开契约、核心流程与状态归属
 > **Sibling DESIGNs**:
@@ -16,7 +16,7 @@
 
 `@wopal/wopalspace` 是 Ellamaka monorepo 内部的 private WopalSpace 应用层 package。
 
-它集中实现 Setup、Ontology、Space 三组共享业务，使 GUI、Workbench、Wopal CLI 和自动化调用看到同一套业务规则。它不对 npm 消费者发布；公开调用统一通过 `@wopal/ellamaka-sdk`。
+它集中实现 Setup、Ontology、Space，以及少量已正式注册的 Wopal 产品设置写入，使 GUI、Workbench、Wopal CLI 和自动化调用看到同一套业务规则。它不对 npm 消费者发布；公开调用统一通过 `@wopal/ellamaka-sdk`。
 
 本文只描述目标态，不描述迁移步骤。
 
@@ -27,6 +27,7 @@
 | Setup | 首次初始化、初始化状态、初始化计划，以及 Home/Ontology/Space/credential 的共享初始化业务 |
 | Ontology | Ontology 仓库安装、复用、检查、同步、贡献和能力池查询 |
 | Space | Space 定位、注册、初始化/修复、装配物化、状态、同步和能力选择 |
+| Product Settings | 受 schema 约束的 Wopal 产品级 canonical setting 写入；当前正式键为全局 `wopal.dsh.web.enabled` |
 
 以下能力不属于 `@wopal/wopalspace`：
 
@@ -35,7 +36,7 @@
 - Wopal CLI 的参数解析、交互提示、输出格式、machine envelope 和退出码；
 - Ellamaka Runtime 的 Session、Agent、PTY、Tool 和 effective capability discovery；
 - Core Preparation 内部的 DSH、plugin dependency、preflight 机制；
-- 完整 Config Plane；
+- 通用多 key / 多作用域 Config Plane、DSH native 配置投影与 schema catalog；
 - 任意文件系统、Shell 或进程执行 API。
 
 ## Architecture
@@ -125,6 +126,20 @@ WopalSpace 的长期公开协议由本节与后续各领域章节共同定义。
 - HTTP operation 解释 Server 所在机器的路径与 `$WOPAL_HOME`；trusted-local transport 使用 Worker 注入的本机上下文。调用参数不能替换宿主根目录或获得任意文件系统能力。
 - path-bearing operation 在读写前执行规范化、registered-root/realpath confinement 与 Git target validation。
 - secret 只进入需要它的执行调用，不出现在 plan、持久状态、事件、日志或错误详情。
+
+### Product Settings
+
+private `@wopal/wopalspace` 提供受控的 canonical settings writer，供 Server composition 写入已经由 Active DESIGN 注册的 Wopal 产品设置。它不是任意 JSONC 编辑器，也不是通用 Config Plane。
+
+当前正式注册的唯一键是 `wopal.dsh.web.enabled`：
+
+- 作用域固定为用户全局 `$WOPAL_HOME/config/settings.jsonc`；默认值 `true`。
+- Space `settings.jsonc` 与 `settings.local.jsonc` 不参与这个键的覆盖，也不能成为它的写入目标。
+- writer 在持久化前校验 key、scope 与 value，原子发布修改，并保留 JSONC 注释、未知字段和同文件内其他配置。
+- Server 的 `config-v2` handler 组合 Runtime effective read 与这个 writer；Workbench 不直接读写配置文件。
+- 写入结果返回 `restart-required`。运行中的 Server/sidecar 继续使用启动时解析出的 Web profile 意图，直到用户重启。
+
+更广泛的 global/space 配置编辑、来源解释、reset-key、schema catalog 与 DSH native projection 属于统一 Config Plane 的后续范围，不由这个窄 writer 推断或提前实现。
 
 ### Setup Endpoints
 

@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-22
+> **Updated**: 2026-10-26
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -10,7 +10,7 @@
 > - `./DESIGN-wopalspace.md` — private `@wopal/wopalspace` application capabilities、API、领域逻辑与 Core integration boundary
 > - `./DESIGN-desktop.md` — 官方桌面应用架构
 > - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
-> - `./DESIGN-dsh-base.md` — dsh 融合基础：文件领地、依赖闭包、热加载
+> - `./DESIGN-dsh-base.md` — dsh 集成基础：文件领地、依赖闭包、Profile 生命周期
 > - `./DESIGN-dsh-web.md` — Web profile：插件供应链与当前 iframe 承载
 > - `./DESIGN-dsh-custumize.md` — Proposed，空间皮肤/独立 DSH 标签/实验 profile，后续细化，不属本轮实施
 > - `./DESIGN-ellamaka-sdk.md` — 统一公开 SDK、OpenAPI 3.1、HTTP 与本机 Worker transport
@@ -84,11 +84,11 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | 构建与发布                           | 品牌注入、平台矩阵、构建接口                                                                                                                                                                                  | [Release Backbone](./DESIGN-distribution.md#release-backbone)                                     |
 | Web UI 产品化                        | `packages/ellamaka-app` 作为官方 Web 工作台形态                                                                                                                                                               | [Web UI 与 ellamaka-app](#web-ui-与-ellamaka-app)、[DESIGN-workbench.md](./DESIGN-workbench.md)   |
 | Runtime API 与 SDK                   | `@wopal/ellamaka-sdk` 是唯一公开 SDK；同一 OpenAPI/client 同时暴露 Runtime 与 WopalSpace API，HTTP 与 trusted-local Worker 只是不同 transport | [Runtime API 与 SDK 契约](#runtime-api-与-sdk-契约) |
-| DSH 双引擎融合                       | 进程内运行 dsh 引擎，双容器共用单端口；工具能力经投影进入 ellamaka 工具管道                                                                                                                                   | [DSH 双引擎融合](#dsh-双引擎融合)                                                                 |
+| DSH 双核心集成                       | DSH Web 作为独立用户核心由 Workbench 承载；`ellamaka-tools` 作为 Ellamaka 内部集成 profile，把 DSH 工具能力投影进按 Space 配置的工具管道                                                                         | [DSH 双核心集成](#dsh-双核心集成)                                                                 |
 | Core Preparation                     | `@wopal/ellamaka-core` 按当前实际产品/build 或 Space instance 计算 readiness；哪个产品启动就准备哪个产品，不做跨产品 prewarm | [Core Readiness and Preparation](#core-readiness-and-preparation) |
-| DSH Home、closure 备份与启动生命周期 | `$WOPAL_HOME/dsh/home` 永久固定；closure/Home/profile 由 Core Preparation 的 DSH steps 编排；`ELLAMAKA_DSH=0` 只跳过 DSH branch                                                                               | [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)               |
+| DSH Home、closure 备份与启动生命周期 | `$WOPAL_HOME/dsh/home` 永久固定；closure/Home 由 Core Preparation 统一保护，Web 与 Tools profile 独立决定是否准备/激活                                                                                         | [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)               |
 | 运行时重载                           | 单元化 ReloadController 与两级重载协议                                                                                                                                                                        | [Unified Reload & Lifecycle](#unified-reload--lifecycle)                                          |
-| 引擎配置消费                         | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经共享配置服务                                                                                                                          | [Config Read Surface](#config-read-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
+| 引擎配置消费                         | 三层配置读取、插件配置合并与整表交付；`config-v2` 读面由引擎直答，写入经共享配置服务                                                                                                                          | [Config Surface](#config-surface)、[DESIGN-config-engine.md](./DESIGN-config-engine.md) |
 | 能力发现层                           | 发现层与运行时过滤层分离；GET `/skill`、`/rule`、`/tool` 返回完整列表，不碰权限过滤                                                                                                                           | [Capability Discovery Layer](#capability-discovery-layer)                                         |
 | Session 能力边界                     | 保留静态 config/agent 权限与持久 session permission；可选 plugin runtime rules 只在单次 permission ask 前临时叠加，不改 run loop/Permission Service 持久状态                                                  | [Session Capability Contract](#session-capability-contract)                                       |
 | Runtime Context Contribution         | 插件通过 messages.transform 在 retained history 尾部追加本次请求的临时上下文；动态 Skill catalog 等运行态信息不改 system/tool 前缀                                                                            | [Runtime Context Contribution](#runtime-context-contribution)                                     |
@@ -176,15 +176,24 @@ WopalSpace 模式下配置加载优先级（低→高）：
 
 非 WopalSpace 模式下，能力扫描在 OpenCode 生态目录（`.opencode/`、`~/.opencode/`、`~/.config/opencode/`）之后叠加 `$WOPAL_HOME/` 全局能力，后者最后加载并覆盖同名能力。`$WOPAL_HOME/config/` 是纯配置目录，不参与能力扫描。
 
-### Config Read Surface
+### Config Surface
 
-Workbench 经引擎 HTTP 读面获取生效配置，供权限选择器等界面消费。读面由引擎从自己的加载状态直答，不经 CLI；既有 `/config` 端点维持运行时视图，不扩展。
+Workbench 经引擎 HTTP 配置面获取生效配置，供权限选择器与产品设置消费。读面由引擎从自己的加载状态直答，不经 CLI；既有 `/config` 端点维持 Ellamaka 运行时视图，不扩展。`config-v2` 的持久写入调用 private `@wopal/wopalspace` 的受控 settings writer，HTTP handler 不直接编辑 JSONC。
 
 ```typescript
 // 读——引擎直接从自己的加载状态回答，不走 CLI
 HttpApiEndpoint.get("configGet", "/config-v2", {
   query: WorkspaceRoutingQuery,
   success: described(ConfigV2ReadResponse, "Effective configuration read surface"),
+})
+
+HttpApiEndpoint.patch("configUpdate", "/config-v2", {
+  query: WorkspaceRoutingQuery,
+  payload: {
+    target: "global",
+    updates: [{ key: "wopal.dsh.web.enabled", value: boolean }],
+  },
+  success: { changed: boolean, apply: "restart-required" },
 })
 ```
 
@@ -197,6 +206,9 @@ HttpApiEndpoint.get("configGet", "/config-v2", {
       /* 实例合并后的引擎配置，与 /config 同源同值 */
     },
     "wopal": {
+      "dsh": {
+        "web": { "enabled": true },
+      },
       "pluginConfig": {
         /* 三层合并后的插件行为配置表 */
       },
@@ -205,10 +217,12 @@ HttpApiEndpoint.get("configGet", "/config-v2", {
 }
 ```
 
-- 端点挂实例作用域中间件（Instance Context + Workspace Routing + Authorization），两种运行模式通用；非 WopalSpace 实例返回空段，响应形状不变。
-- `effective.ellamaka` 与 `/config` 同源同值（`$VAR` 已在加载时代换）；`effective.wopal.pluginConfig` 为三层文件镜像，`$VAR` 不代换，引用解析发生在消费方插件内部。
-- 权限选择器：显示条件为 dock 变体 + DSH `ready`（状态自 `/global/health`）+ 内置 dsh-adapter 生效 + `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true`；默认模式取 `sandbox.mode`。
-- 配置写入（`PATCH` / `reset-key` 调用共享服务）与设置面板的完整契约由 [DESIGN-config-engine.md](./DESIGN-config-engine.md) 承载。
+- 端点挂实例作用域中间件（Instance Context + Workspace Routing + Authorization），两种运行模式通用。`effective.wopal.dsh.web.enabled` 始终来自用户全局 `$WOPAL_HOME/config/settings.jsonc`，缺省为 `true`，不读取 Space override；`effective.wopal.pluginConfig` 继续按当前 Instance 的配置链求值。
+- `effective.ellamaka` 与 `/config` 同源同值（`$VAR` 已在加载时代换）；`effective.wopal.pluginConfig` 为配置文件镜像，`$VAR` 不代换，引用解析发生在消费方插件内部。
+- `PATCH /config-v2` 当前只接受 `target="global"` 的 `wopal.dsh.web.enabled` 布尔写入。writer 保留 JSONC 注释、未知字段与其他 Wopal 配置；不支持的 key 或 Space target 明确拒绝。成功写入只改变下次 Server/sidecar 启动的 Web profile 意图，因此返回 `restart-required`。
+- DSH Web Tab 的运行时显隐只认 `/global/health.dsh.web`，不直接把磁盘修改伪装成已生效 runtime 状态。Workbench Settings 可以在写入后提示并触发现有的 Local Server 重启入口。
+- 沙箱选择器只在 `dsh.tools=ready` 且 `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true` 时提供 DSH 模式；默认模式取 `sandbox.mode`。Tools profile 加载失败时使用 Native Tools，单次 DSH 工具调用失败不改变 profile 状态或触发 Native 重试。
+- 更广泛的多 key、global/space mutation、来源标签、reset-key 与 DSH native 配置投影仍由 [DESIGN-config-engine.md](./DESIGN-config-engine.md) 的 Draft 方向承载，不属于这个窄写面。
 
 ### External Capability Directories
 
@@ -418,7 +432,18 @@ Wopal-managed serve 的 Runtime health 回显启动时注入的 `managedInstance
 
 Space instance 只有在 `.wopal` 物化后才准备 path-plugin dependencies。`space.init` 主动准备；Runtime 第一次激活该 Space 时 `inspect(instance)` 并保留 fallback。Instance failure 只影响该 Space。
 
-DSH Preparation 与 Runtime Activation 分离：CorePreparation 负责 closure/Home/profile ready；真正产品入口再 `mountDshWeb/mountDshTools`。Server 不分成 Bootstrap/Full 两套 Runtime，某项附加能力 PREPARING/DEGRADED 只影响该能力。
+DSH Preparation 与 Runtime Activation 分离：CorePreparation 负责共享 closure/Home 与本次实际请求的 profile 准备；真正产品入口再独立执行 `mountDshWeb` / `mountDshTools`。Web profile 是否请求由全局 `wopal.dsh.web.enabled` 决定，Tools profile 是否请求只由进程环境 `ELLAMAKA_DSH_TOOLS` 决定。Server 不分成 Bootstrap/Full 两套 Runtime，某个 profile 的 PREPARING/DEGRADED 只影响该 profile。
+
+`/global/health` 的 DSH 状态按 profile 分开表达：
+
+```ts
+dsh: {
+  web: "disabled" | "preparing" | "ready" | "degraded"
+  tools: "disabled" | "preparing" | "ready" | "degraded"
+}
+```
+
+`web` 只描述 DSH Web profile 是否可以提供 Workbench 界面；`tools` 只描述 `ellamaka-tools` profile 是否已经成功加载并可以供 `dsh-adapter` 采用。单次工具执行的 sandbox deny、approval deny、参数错误、超时或 provider 错误都是调用结果，不改变 `tools` profile 的 ready 状态，也不得触发 Native Tool 重试。
 
 独立 `ellamaka dsh init` 不属于目标态；DSH preparation 统一由真正需要 DSH 的产品入口按需完成。
 
@@ -456,11 +481,13 @@ PluginInput 通过可选 `wopalSpaceRoot` 字段接收当前 instance 的空间�
 
 DSH 容器装配与融合细则见 [DESIGN-dsh-base.md](./DESIGN-dsh-base.md)。
 
-## DSH 双引擎融合
+## DSH 双核心集成
 
-ellamaka 的 Runtime host 承载 dsh 引擎，容器可在宿主或受管子进程中运行，生命周期由该 host 拥有。融合的目的是获得沙箱执行、插件生态与动态装载能力，同时保持 ellamaka 的会话所有权与对外契约不变。
+Ellamaka 与 DSH 是两个独立核心。DSH Web profile 拥有自己的界面、会话、账本与 agent-loop；Ellamaka 拥有自己的 Session、Agent、Tool 与 Workbench。两者可以由同一个 Runtime host 承载并共用公开监听端口，但生命周期、启用意图和运行状态分别表达。
 
-DSH v0.2 由 Bridge 接入。$WOPAL_HOME/dsh/home 是唯一 Active Home。CLI/Desktop 使用同一 closureVersion；同版本可并发持有 shared Home lock。切换到较新版本前必须取得 exclusive Home lock 并完成 backup；旧版本面对更新 Home 时 fail closed。DSH closure、Home backup 与 profile preparation 由当前产品的 CorePreparation 执行，ELLAMAKA_DSH=0 跳过 DSH steps。基本 Home 版本保护见 [基础设计](./DESIGN-dsh-base.md)。
+`ellamaka-tools` 是两核之间的特例集成面：它是 DSH 提供的 session-free 工具 profile，但由 Ellamaka 进程加载，并通过内置 `dsh-adapter` 投影到 Ellamaka ToolRegistry。DSH Web 不依赖这个投影；Ellamaka Native Tools 也不依赖 DSH Web。
+
+DSH v0.2 由 Bridge 接入。$WOPAL_HOME/dsh/home 是唯一 Active Home。CLI/Desktop 使用同一 closureVersion；同版本可并发持有 shared Home lock。切换到较新版本前必须取得 exclusive Home lock 并完成 backup；旧版本面对更新 Home 时 fail closed。DSH closure 与 Home safety 由当前产品的 CorePreparation 统一执行，随后只准备和激活本次实际启用的 profile。基本 Home 版本保护见 [基础设计](./DESIGN-dsh-base.md)。
 
 ### 双容器模型
 
@@ -489,18 +516,18 @@ ellamaka Runtime host（唯一公开监听端口）
 
 **两个容器必须分离**：Web 界面需要 dsh 的完整 agent-loop 语义（会话账本、检查点、完整插件集）；工具采用只需要工具本体与最小调用上下文。同一个容器无法同时满足两种装配——检查点插件会强制刷新调用方的活动会话。
 
-**统一 Core 生命周期**：Ellamaka Core 的 preparation API 固定为 `CorePreparation.inspect(target)` 与 `CorePreparation.prepare(request, options)`；target 分为 `host` 和 `instance(directory)`。Host canonical steps 为 `dsh.closure → dsh.home → dsh.profiles`、`plugins.global-deps`、`host.preflight`；WopalSpace instance 另外执行 `plugins.instance-deps → instance.preflight`。Runtime Activation 独立于 Preparation，按 capability 的 READY facts 激活；DSH 挂载还必须在 Home lock 保护下重新核验 closureVersion。
+**统一 Core 生命周期**：Ellamaka Core 的 preparation API 固定为 `CorePreparation.inspect(target)` 与 `CorePreparation.prepare(request, options)`；target 分为 `host` 和 `instance(directory)`。Host 对 DSH 先准备共享 `closure → home`，再按产品启动时解析出的启用意图准备 `web`、`ellamaka-tools` 或两者；WopalSpace instance 另外执行 `plugins.instance-deps → instance.preflight`。Runtime Activation 独立于 Preparation，按各 profile 的 READY facts 激活；DSH 挂载还必须在 Home lock 保护下重新核验 closureVersion。
 
 | 入口 | Preparation | Activation |
 | --- | --- | --- |
-| CLI `serve` / `web` | 检查/准备当前 CLI build 需要的 Runtime resources | Ready 后挂载该入口需要的 DSH Web/Tools；失败只降级 DSH 能力 |
-| Desktop sidecar | 检查/准备当前 embedded sidecar build | Ready 后挂载 Desktop 所需 DSH 能力 |
-| 默认 TUI | 检查/准备当前 build；Space plugin 另按 instance 检查 | Ready capability 挂载；失败时原生 TUI 可继续 |
+| CLI `serve` / `web` | 检查/准备当前 CLI build 需要的 Runtime resources；Web 读取全局设置，Tools 读取进程环境 | 两个 profile 独立激活；任一个加载失败不撤销另一个 |
+| Desktop sidecar | 检查/准备当前 embedded sidecar build；Web 读取全局设置，Tools 读取进程环境 | 两个 profile 独立激活并独立回报 health |
+| 默认 TUI | 仅按 `ELLAMAKA_DSH_TOOLS` 检查/准备 Tools；Space plugin 另按 instance 检查 | Tools profile 加载失败时 TUI 使用 Native Tools；加载成功后调用失败不回退 |
 | directory instance | `.wopal` 物化后主动准备，首次使用时 fallback | instance Ready 后加载 path plugins |
 | `ellamaka run` | DSH 永久跳过 | 纯 native Core，不探测/复用/挂载任何 DSH |
 | `run --attach` | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载 | 使用远端 Runtime |
 
-`ELLAMAKA_DSH=0` 时不创建 DSH 目录、不下载 closure、不备份或改写 Home、不挂载 DSH 容器，但 global/instance plugin dependency steps 仍按 target 执行。Preparation 状态、代码级 service/progress contract 见 [Core Readiness and Preparation](#core-readiness-and-preparation)；closure-change backup 与固定 Home 细节见 [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
+`wopal.dsh.web.enabled` 只控制 Web profile，默认 `true`，只从 `$WOPAL_HOME/config/settings.jsonc` 读取；Space settings 不覆盖它。`ELLAMAKA_DSH_TOOLS=0` 只禁止当前 Ellamaka 进程准备和加载 `ellamaka-tools` profile；未设置时默认允许 Tools。只有 Web disabled 且 Tools disabled 时，当前入口才完全跳过 DSH closure/Home/profile 准备。Preparation 状态、代码级 service/progress contract 见 [Core Readiness and Preparation](#core-readiness-and-preparation)；closure-change backup 与固定 Home 细节见 [Closure and Startup Lifecycle](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
 ### 采用范围
 

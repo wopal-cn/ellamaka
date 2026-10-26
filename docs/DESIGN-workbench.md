@@ -1,7 +1,7 @@
 # Ellamaka Workbench 设计规范
 
 > **Status**: Active
-> **Updated**: 2026-10-15
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 >
 > 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
@@ -23,6 +23,7 @@ Ellamaka Workbench 是 `packages/ellamaka-app` 的运行阶段界面；同一个
 **核心概念**：
 
 - **Space（空间）** 是 Workbench 的核心管理对象。每个 Space 拥有独立的标签页、面板排版、终端实例、对话状态和布局偏好。
+- **DSH** 是独立的产品表面，不是 Space，也不替换 General/Assistant。全局启用 DSH Web 时，Workbench 顶栏提供固定 DSH Tab；它承载 DSH 自己的 Web 会话域。
 - **对话界面** 包含两种核心内容模式：**TUI**（终端用户界面）与 **Chat**（聊天对话）。
 - **布局设计** 不提供独立的 Split（分屏）模式，Split 融入为一种多面板水平排版布局状态。
 - **Split Terminal** 是面板内底部的辅助终端区域，不是独立面板，不能承载 Chat 会话，但拥有独立的状态保持。
@@ -101,6 +102,27 @@ App BFF 的私有 HTTP contract 固定为：
 Session status/summary 直接消费 Runtime public operation；Space files/list/read 直接消费 WopalSpace public operation。
 
 App BFF 的 schema 可以生成 `ellamaka-app` 内部 client；它与公开 SDK 使用不同 publication boundary。平台领域 DTO 仍以 Runtime/WopalSpace contract 为唯一来源，BFF 只定义自己的 projection DTO。
+
+### DSH 独立产品表面
+
+DSH Web 与 Ellamaka Native Assistant 是两个独立表面。General 继续承载 Ellamaka 通用会话；DSH Web 启用时，顶栏额外派生一个固定 DSH Tab。DSH Tab 不是 `SpaceScope`，不创建 General task 或 Space directory instance，也不进入 Space 的 Panel 布局模型。
+
+DSH Tab 的存在与内容由 Runtime `dsh.web` 状态驱动：
+
+| `dsh.web` | Workbench 行为 |
+| --- | --- |
+| `disabled` | 不呈现 DSH Tab |
+| `preparing` | 呈现固定 DSH Tab；内容显示“正在启动 DSH…”等准备态，不显示 Assistant 代替它 |
+| `ready` | 呈现 DSH Tab，并在当前 sidecar generation ready 后取得 `app.workbench.dshEntry`、加载 iframe |
+| `degraded` | 保留 DSH Tab，显示 DSH 不可用与诊断入口；不自动切换到 Assistant |
+
+`WorkbenchRuntime` 是 Renderer 中 `dsh.web` / `dsh.tools` 的运行时事实所有者。它组合 `/global/health`、host `core.preparation` invalidation 与周期 health 探测，并对 Server identity/generation 做 stale-response 防护。`core.preparation` 只提示“需要重新读取 health”；事件自身的 `READY` 不代表 Web profile 已完成挂载。
+
+sidecar 重启时，`preparing`、暂时缺失 health、超时或传输失败属于未知/过渡状态，不删除上一个 generation 已知存在的 DSH Tab。新 generation 明确返回 `disabled` 才移除 Tab；返回 `ready` 后才切换 iframe 到新入口。这样启动和重启过程中都不会出现 Assistant 先显示、随后被 DSH 自动替换的界面跳变。
+
+DSH iframe 首次建立后在当前 Renderer 生命周期内 keep-alive。Tab 切换只改变可见性；当前 generation 未 `ready` 时不请求新的 dshEntry，也不通过 tokenless `/dsh/` fallback 提前加载。401 自愈只对已经 ready 的当前 generation 生效，并保持同一失败 episode 最多一次尝试。
+
+DSH Web 的全局设置、默认值和 `restart-required` 生效语义由 [Web profile 设计](./DESIGN-dsh-web.md#enablement) 定义。Workbench Settings 只是该 canonical setting 的编辑入口，不把 DSH Web 开关保存到 Renderer `localStorage`。
 
 ---
 
@@ -593,7 +615,7 @@ Workbench 不再把布局、服务端会话和运行时资源塞进一个控制�
 
 - **WorkbenchStore** (`workbench-store.ts`)：唯一持久化布局所有者，保存 Display、Space Tab、Panel 布局、活动 Panel、`boundSessionId`、Split Terminal 设置和 PTY 重连提示；只做同步纯状态变更。
 - **View Store adapter** (`view-store.tsx`)：负责水合、`localStorage` 写入和短暂 UI 消息；不是第二个领域 Store，不能拥有 SDK、PTY、router、Dialog 或 Toast 副作用。
-- **Workbench Runtime** (`workbench-runtime.tsx`)：在首次连接完成后组合 HTTP health 与 SSE 连接状态，表达 `online | degraded | recovering | offline`。`degraded` 表示 HTTP 仍可用但事件流正在重连，保留可写能力并显示状态；断线不清空已加载数据；从非 online 回到 online 时递增恢复代次，Space Store 与 Session Tree 各刷新一次。
+- **Workbench Runtime** (`workbench-runtime.tsx`)：在首次连接完成后组合 HTTP health 与 SSE 连接状态，表达 `online | degraded | recovering | offline`，并收敛当前 sidecar generation 的 `dsh.web` / `dsh.tools`。`degraded` 表示 HTTP 仍可用但事件流正在重连，保留可写能力并显示状态；断线不清空已加载数据；从非 online 回到 online 时递增恢复代次，Space Store 与 Session Tree 各刷新一次。DSH 的 live Server facts 不进入 View Store 或持久化布局。
 - **WorkbenchActions** (`workbench-actions.ts` / `workbench-actions-ports.ts`)：唯一跨所有者事务入口。创建、装载、替换、fork、解绑、关闭 Panel/Space、PTY 创建、PTY 断连恢复都先由 Action 分配 generation，再执行资源副作用，最后一次性提交布局或 Projection。`createWorkbenchActions` 是纯逻辑函数；`WorkbenchActionsProvider` 为每个 Workbench provider tree 创建独立实例，禁止模块级缓存跨 server、重挂载或多实例复用。runtime gate 是写操作的唯一保护边界，离线时返回 typed `offline` 结果。port 构造逻辑（`buildStorePort`/`buildPtyPort`/`buildSessionPort`）提取到 `workbench-actions-ports.ts`，store port 由 `view-store.tsx` 暴露的 `wb` 直接实现。
 - **Session Projection** (`session-store.tsx`)：只在内存中保存服务端会话的只读投影。Action 的服务端响应和 Shell/SessionTree 的 SSE 对账是唯一 writer；组件、Dialog、命令和持久化层只能读取。
 - **Directory SDK/sync**：插件、MCP、LSP 和配置按规范化 directory 缓存，不持久化。Panel 使用该 Panel 的 directory；TopBar 与 StatusPopover 通过活动 `SpaceScope` 和活动 Panel selector 获得同一 directory。
@@ -748,6 +770,7 @@ Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.del
 - `workbench`：统一的 Workbench 状态快照。使用 `localStorage` 持久化，确保关 Tab 重开时布局保持。包含显示设置、已打开与已 Pin 的 Space Tabs、当前激活 Space Path、每个 Space 的 Panel 布局、Session 绑定、Split Terminal 配置和 PTY ID 重连提示。
 - **Tab Pin (钉住) 规约**：
   - `General (日常对话)` Tab 固定钉住，不允许被关闭（UI 屏蔽关闭按钮，Store 层拦截删除请求）。
+  - DSH Web 启用时，DSH Tab 由 Runtime 状态派生并固定钉住，不作为用户可关闭/持久化的 Space Tab。DSH 被全局设置关闭并在重启后生效时，该 Tab 随 `dsh.web=disabled` 消失。
   - 物理项目 Space Tabs 支持用户自主 Pin 钉住。已 Pin 的 Tab 不允许关闭，必须解除 Pin 钉住后方可关闭。
   - 在 Desktop 桌面端，**已钉住的 Tab 拦截并禁止使用 `Cmd + W` 快捷键关闭**。
 
@@ -780,6 +803,8 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
   - **交互式诊断 Popover**：点击居中按钮展开顶部 Popover，倒序渲染全部活动消息。
   - **可恢复与清除机制**：每个条目呈现图标、文本、时间戳及来源；携带重试句柄的条目提供异步重试（成功后自动剔除）；支持单条目关闭与一键全部清除。
 - **右区（服务器状态与控制）**：与左区以左边框分隔，呈现在线指示器与服务器名称。
+
+状态中心的 Plugins 页以当前 Instance 的真实采用结果显示内置 `dsh-adapter`。`dsh.tools=ready` 且当前 Space 的 `wopal.pluginConfig.dsh-adapter.sandbox.enabled=true` 时显示为已启用；Tools profile 被环境禁用、加载失败，或当前 Space 没有启用 sandbox 时显示“未启用”。单次 DSH 工具调用失败不改变插件启用状态。
 
 ### 浏览器生命周期与单 Tab 互斥
 

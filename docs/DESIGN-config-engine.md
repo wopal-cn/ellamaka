@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Draft
-> **Updated**: 2026-10-13
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -9,13 +9,13 @@
 > - `../../../projects/wopal-cli/docs/DESIGN-config-cli.md` — CLI 呈现与 SDK 消费
 > - `../../../.wopal/docs/DESIGN-assembly.md` — 本体装配：空间 `settings.jsonc` 的分发契约
 >
-> **Scope**: Phase 3 Draft；研究 Ellamaka/DSH 双引擎如何消费统一 canonical settings，并保留各自 native apply lifecycle。当前实现 Plan 不交付本设计。
+> **Scope**: Phase 3 Draft；研究 Ellamaka/DSH 双核心如何消费统一 canonical settings，并保留各自 native apply lifecycle。当前 #265 只实现主设计已正式冻结的 `wopal.dsh.web.enabled` 窄写面，不提前交付本 Draft 的完整 Config Plane。
 
 ---
 
 ## What This Owns
 
-> **Deferred**：本文整体仍是 Phase 3 Draft。当前 SDK / Runtime Foundation 实施不得新增 Config Plane、统一 DSH 配置投影或新的 config mutation API；现有读面只按当前已经批准的契约维护。
+> **Deferred**：本文整体仍是 Phase 3 Draft。主设计已经单独冻结 `wopal.dsh.web.enabled` 的全局读写契约和 `restart-required` 语义；除这个窄写面外，当前实施不得提前新增通用 Config Plane、统一 DSH native 配置投影、reset-key 或任意 key mutation。
 
 Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wopalspace` 的 `config` module，并通过统一公开 `@wopal/ellamaka-sdk` 提供消费面：Wopal CLI 使用 `/local` 的 `config.*` methods，Browser/Workbench 使用 `/http`。Config Plane 的业务 owner 仍是 private `@wopal/wopalspace/config`，SDK package 统一不代表领域 owner 合并。
 
@@ -27,6 +27,11 @@ Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wop
 4. Workbench 如何通过 Ellamaka HTTP 观察同一个 Config Plane，而不是复制业务规则。
 
 ---
+
+
+### Active Narrow Contract: DSH Web
+
+`wopal.dsh.web.enabled` 是产品层 Web surface 开关，不是 DSH native profile 配置，因此不经过 DshConfigProvider，也不投影到 `cordis.patch.yml`。它只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，默认 `true`，Space 层不能覆盖。`GET /config-v2` 返回该 effective fact；受控 `PATCH /config-v2` 只允许 global scope 写这个键，并返回 `restart-required`。具体正式契约以主 `DESIGN.md#config-surface`、`DESIGN-dsh-web.md#enablement` 与 `DESIGN-wopalspace.md#product-settings` 为准。
 
 ## Reading: User Global + Space Override
 
@@ -146,7 +151,7 @@ HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
 
 ### Read Surface
 
-> **P2 先行 · 读面简版**：`GET /config-v2` 首版（`effective.ellamaka` + `effective.wopal.pluginConfig`，供权限选择器消费）现载于主设计 `./DESIGN.md`「Config Read Surface」，由 P2 计划 `enhance-config-read-surface` 实施；本文档定稿（P3 细节设计）时将这部分迁入，并补齐逐项来源、`tui` 段与写面（`PATCH` / `reset-key`）、面板的完整契约。
+> **Active 窄面**：主设计已经冻结 `GET /config-v2` 的 `effective.ellamaka`、`effective.wopal.pluginConfig`、`effective.wopal.dsh.web.enabled`，以及仅写 `wopal.dsh.web.enabled` 的 global `PATCH`。本 Draft 继续研究逐项来源、`tui`、通用 global/space mutation、reset-key 与完整设置面板。
 
 `GET /config-v2` 覆盖三层继承链上的三个设置段：`ellamaka`、`wopal`、`tui`。`spaces` / `ontologies` 注册表走各自命令与既有读取通道，不进入本端点。返回形态：
 
@@ -157,7 +162,7 @@ HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
       /* 实例合并后的引擎配置 */
     },
     "wopal": {
-      /* pluginConfig、logging */
+      /* global-only dsh.web.enabled + pluginConfig、logging */
     },
     "tui": {
       /* 终端偏好 */
@@ -171,7 +176,7 @@ HttpApiEndpoint.post("configResetKey", "/config-v2/reset-key", {
 
 - `effective` 是引擎合并链的结果值。`ellamaka` 段与既有 `/config` 同源同语义（`$VAR` 在加载时已代换）；`wopal` / `tui` 段为文件镜像（`$VAR` 不代换，引用解析发生在消费方插件内部）。
 - `sources` 是叶键级的点路径 → 来源层标注，值 ∈ `global` / `space` / `space-local`；缺省值不占键，数组类键按整键标注。面板的"继承自全局 / 本地覆写 / 恢复继承"标签以此渲染。
-- 分工：`/config` 维持运行时视图且不扩展；`/config-v2` 是配置的编辑视图，面板与后续配置功能统一消费它。权限选择器读 `effective.wopal.pluginConfig["dsh-adapter"].sandbox` 判断显示与默认模式，内部 adapter 的可用性由产品注册与真实 DSH ready 决定，不依赖外部装配路径。
+- 分工：`/config` 维持运行时视图且不扩展；`/config-v2` 是配置的编辑视图，面板与后续配置功能统一消费它。权限选择器读 `effective.wopal.pluginConfig["dsh-adapter"].sandbox` 判断显示与默认模式，内部 adapter 的可用性由产品注册与真实 `dsh.tools=ready` 决定，不依赖外部装配路径。
 
 写入链路使用同一 private 业务实现：
 
@@ -199,6 +204,8 @@ Wopal CLI
 ## Settings Panel
 
 面板顶部一个作用域切换：**用户全局设置 | 空间设置**。选全局 → 写全局层；选空间 → 写空间本地层。界面上不存在"编辑空间 settings.jsonc"的入口——那是本体维护人员的 Git 工作流，不是设置面板的事。
+
+DSH Web 是一个明确例外：`wopal.dsh.web.enabled` 只属于用户全局设置，因此该行在“空间设置”作用域中不可编辑，也没有 Space override/恢复继承语义。修改后面板显示“需要重启 Local Server 才能生效”，Desktop 可复用现有 Restart Local Server 动作。这个开关不控制 `ellamaka-tools`，也不控制 Space 的 `dsh-adapter.sandbox.enabled`。
 
 工作台里现有的沙箱模式切换辅助函数依赖插件条目的内联 options。条目零内联之后它不再有可达调用点，但函数本身保留：它表达的是「这个空间默认用哪种沙箱模式」这条产品意图，后续设置面板要提供空间级默认值时会复用同一语义。确认无引用后可以清理，不在本次改动范围内。
 
@@ -240,6 +247,7 @@ Wopal CLI
 
 本节只记录 Phase 3 目标，不承诺当前实现已经具备统一热更新。
 
+- `wopal.dsh.web.enabled`：正式契约固定返回 `restart-required`；运行中的 Web profile 不因 settings 文件修改被即时挂载/卸载。
 - Ellamaka：Config Reconciler 根据字段能力返回 `live | reload | restart-required`；未明确证明可 live 的字段默认走现有 reload/dispose 安全路径。
 - DSH：provider 不自行判断如何重启 plugin，而是调用 DSH native Settings/ConfigEditor，让 HMR/Loader 根据 schema 与 lifecycle 完成 volatile update 或 remount；无法在线完成的变更向上返回 restart-required。
 - `wopal.pluginConfig` / `tui`：继续由各自真实 consumer 决定 apply 方式，Phase 3 再统一对外呈现的 apply outcome。

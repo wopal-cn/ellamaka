@@ -1,15 +1,17 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-22
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
-> - `./DESIGN-dsh-base.md` — DSH 融合基础、依赖闭包与 Profile 生命周期
+> - `./DESIGN-dsh-base.md` — DSH 集成基础、依赖闭包与 Profile 生命周期
 >
 > **Scope**: DSH v0.2 的工具采用、内置 adapter、容器装配、审批与沙箱兼容。
 
 Ellamaka 通过 `ellamaka-tools` profile 获得工具执行后端。容器装配在进程内共享，空间配置决定是否采用沙箱投影。工具容器使用最小调用外观，Ellamaka 拥有持久 Session、权限与消息。
+
+Tools profile 是 Ellamaka 与 DSH 的内部集成能力，不属于 DSH Web 的界面开关。当前进程只由 `ELLAMAKA_DSH_TOOLS` 控制是否准备和加载该 profile：精确值 `0` 表示禁用，未设置或其他值表示允许。Workbench Settings 不写这个环境变量，也不按 Space 启停进程级 Tools profile。
 
 ## Capability Adoption
 
@@ -77,7 +79,7 @@ adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、
 
 两类代码都归 `ellamaka-cordis`，按实际职责分文件，使用直接的类型化调用。Session 外部工具授权与 SDK 注入由 Session Assembly 契约拥有。
 
-内部插件注册在配置要求采用 DSH 后端时生效，其工厂等待共享初始化结果后再绑定工具池。内部身份固定为 `dsh-adapter`；若配置中存在同名外部插件条目，在依赖安装、模块 import 和工厂执行之前直接由内部实现接管，只读识别包元数据身份，不加载外部副本，也不改写原配置文件与 ontology 源码。无法判明的身份冲突返回明确错误。
+内部插件注册在配置要求采用 DSH 后端时生效。它读取当前进程的 Tools profile 加载结果：profile 已 `ready` 时绑定工具池；profile 被环境变量禁用或本次加载失败时不接管工具，Ellamaka 保持 Native Tools。内部身份固定为 `dsh-adapter`；若配置中存在同名外部插件条目，在依赖安装、模块 import 和工厂执行之前直接由内部实现接管，只读识别包元数据身份，不加载外部副本，也不改写原配置文件与 ontology 源码。无法判明的身份冲突返回明确错误。
 
 参数依旧由引擎交付 `PluginInput.pluginConfig["dsh-adapter"]`；三层 settings 合并、JSONC 写法、现有字段和内联 options fallback 均保持原契约。无需新增插件路径即可配置内部实现。示例：
 
@@ -109,7 +111,13 @@ Ellamaka 内部的 dsh-adapter 通过 tool.provider 在每次模型请求读取�
 | 权限           | 执行前复用 Ellamaka 读写与外部目录门禁；平台映射使用逻辑工具权限          |
 | 生命周期       | 实际执行交由 registry，取消、超时与清理由 provider 拥有                   |
 
-文件能力整套采用，读取观测与后续编辑共享同一后端。配置要求 DSH 后端时，adapter 必须先等待容器 ready；准备阶段拿不到容器时，采用面回退到 Ellamaka 原生工具，会话保持可用，宿主通过 health 与界面提示说明沙箱不可用。容器在 ready 后失效时，请求继续 fail closed。明确关闭 DSH 采用的配置同样使用原生工具。Bun 的标准 API 兼容、模块路由与激活状态由宿主基座保证。
+文件能力整套采用，读取观测与后续编辑共享同一后端。这里严格区分 **profile 加载失败** 与 **工具调用失败**：
+
+- Tools profile 被 `ELLAMAKA_DSH_TOOLS=0` 禁用，或本次启动在发布 `ready` 前加载失败：adapter 不启用，当前 Space 使用 Ellamaka Native Tools。
+- Tools profile 已 `ready`，且当前 Space 的 `sandbox.enabled=true`：adapter 接管采用表中的工具。之后的 sandbox 拒绝、approval 拒绝、参数错误、超时、工具/provider 执行错误都直接作为本次 DSH 调用失败返回；不得用同名 Native Tool 重试，也不得把一次调用错误改写成 profile 加载失败。
+- 已发布的容器随后整体失效：当前已进入 DSH 调用路径的请求继续 fail closed。宿主只有在明确的新 profile 加载周期中重新判定 `dsh.tools`，不能用单次工具异常触发 backend 切换。
+
+Bun 的标准 API 兼容、模块路由与激活状态由宿主基座保证。
 
 ## Session Facade
 
@@ -137,11 +145,13 @@ escalation=never 为外观写入 approval/policy，审批服务在询问前拒�
 
 ## Configuration and UI
 
-进程级容器与空间级投影分离。用户级、空间公共、空间私有的 pluginConfig 经引擎合并，adapter 校验 dsh-adapter 条目。
+进程级容器与空间级投影分离。`ELLAMAKA_DSH_TOOLS` 只决定当前进程有没有 Tools backend；用户级、空间公共、空间私有的 `pluginConfig` 经引擎合并，adapter 再按当前 Instance 校验 `dsh-adapter` 条目。一个 Server 内的不同 Space 可以独立选择是否采用同一进程级 Tools backend。
 
 sandbox.enabled=true 时采用完整工具集，mode 的空间默认为 read-only 或 workspace-write；缺失或 false 时使用 Ellamaka 原生工具。消息级选择可以表达 read-only、workspace-write 和 full-access，并转换为 provider 的模式词汇。
 
-Workbench 的选择器依据实际 DSH ready 与有效 sandbox 配置显示；内部实现的存在由产品保证，显示不依赖外部插件路径条目。选择随消息保存与继承，权限、外观事件和工具执行使用相同输入事实。
+Workbench 的选择器依据 `dsh.tools=ready` 与当前 Space 的有效 sandbox 配置显示；内部实现的存在由产品保证，显示不依赖外部插件路径条目。选择随消息保存与继承，权限、外观事件和工具执行使用相同输入事实。
+
+Workbench 的 Plugins 状态页始终用当前 Space 的真实采用结果表达 `dsh-adapter`：只有 `dsh.tools=ready` 且 `sandbox.enabled=true` 时显示为已启用；Tools profile 被环境禁用、加载失败，或当前 Space 没有启用 sandbox 时显示“未启用”。这个状态描述 backend 是否被采用，不根据某一次工具调用成功或失败改变。
 
 ## Platform Enforcement
 

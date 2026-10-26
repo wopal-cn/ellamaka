@@ -1,7 +1,7 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-15
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -109,7 +109,7 @@ Desktop sidecar 是 **随 Desktop 打包、由 Desktop 管生命周期的 Ellama
 
 Electron Main 只负责 sidecar 的进程生命周期、随机本地端口、本地认证、重启与退出。Ellamaka Runtime 负责 HTTP/SSE/WebSocket、Session、PTY 与 Core activation；WopalSpace integration layer 在同一 Server composition 上挂载 Setup/Onboarding HTTP projection。
 
-Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。sidecar 再检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源。DSH 等附加能力处于 `PREPARING/DEGRADED` 时只影响对应能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
+Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。sidecar 再检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源。DSH Web 与 Tools 是两个独立 profile：Web 是否请求由全局 `wopal.dsh.web.enabled` 决定，Tools 是否请求由 sidecar 进程的 `ELLAMAKA_DSH_TOOLS` 决定。任一 profile 处于 `PREPARING/DEGRADED` 时只影响自身能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
 
 Renderer 连接同一个 Server：Setup/Onboarding 与 Runtime/WopalSpace 平台能力通过 `@wopal/ellamaka-sdk/http`，Workbench 产品专用 projection/use case 通过 `ellamaka-app` 的 private BFF client。Desktop Main 不维护第二套 Setup 状态机，也不负责产品安装。
 
@@ -129,20 +129,26 @@ Electron Main
   -> Renderer connects through public SDK + app-private BFF client
   -> WopalSpace setup.plan decides /onboarding vs /workbench
 sidecar (background)
-  -> CorePreparation(current embedded build)
-       -> Ready: activate required DSH capabilities
-       -> Degraded: keep native Runtime + diagnosis
+  -> resolve DSH profile intent
+       -> Web: $WOPAL_HOME/config/settings.jsonc -> wopal.dsh.web.enabled
+       -> Tools: ELLAMAKA_DSH_TOOLS
+  -> CorePreparation(current embedded build, requested profiles)
+       -> shared closure/Home once
+       -> prepare requested Web / Tools independently
+  -> activate each prepared profile independently
+       -> Web failure: keep native Runtime + Tools state unchanged
+       -> Tools load failure: keep native Runtime/Native Tools + Web state unchanged
   -> Space materialized
        -> CorePreparation(instance(directory)) for plugin dependencies
 ```
 
-DSH 的准备进度与终态通过 `/global/health` 和 `core.preparation` 事件送达 Renderer。窗口与原生会话从不等待 DSH。
+DSH 的准备进度通过 `core.preparation` 送达 Renderer，profile 终态通过 `/global/health.dsh.web` 与 `/global/health.dsh.tools` 分开表达。Workbench 的 DSH Tab 只消费 `web` 状态，当前 Space 的 `dsh-adapter` 采用只消费 `tools` 状态与该 Space 的 pluginConfig。窗口与原生会话从不等待 DSH。
 
 无版本 Home 的接管由 Desktop 入口在窗口可用之后确认一次。确认面是 Desktop 的窗口级对话框，不是 Onboarding 步骤；Setup 不驱动 CorePreparation。确认后由 sidecar 在排他锁下接管 Home，再挂载 DSH。拒绝则保持 DSH degraded，应用继续可用；Home 未被接管期间，下次启动会再次出现同一确认。
 
 Core readiness 不是是否展示 Onboarding 的唯一条件。Renderer 依据 Setup state 和 machine facts 进入配置阶段或运行阶段。Desktop Main 不读取 `onboarding.json` 推断 Core，也不实现 closure materializer、Home backup 或 plugin dependency installer。
 
-Desktop build 自己的 embedded Core Runtime Descriptor 决定 DSH manifest/fingerprint 与所需 resources；Renderer/request 不能覆盖这些值。
+Desktop build 自己的 embedded Core Runtime Descriptor 决定 DSH manifest/fingerprint 与可用 resources；启动时的全局 Web setting 与 Tools 环境变量只决定本次需要激活哪些 profile。Renderer/request 不能覆盖 descriptor，也不能用 Space 配置启停进程级 profile。
 
 ### Product Inventory and Component Status
 

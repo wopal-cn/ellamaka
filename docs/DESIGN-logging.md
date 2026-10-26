@@ -1,7 +1,7 @@
 # Ellamaka — Logging Architecture
 
 > **Status**: Active
-> **Updated**: 2026-10-10
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`（产品架构；空间运行态 `logs/` 的归属）
 > **Sibling DESIGNs**:
@@ -150,7 +150,7 @@ DSH 插件的 severity 不被照抄：插件用 `error` 表示“调用方 agent
 - DSH 记录跟随统一解析出的生效级别（见 Level Resolution 节），不做文件级或组件级独立定级；DSH 内部不再有等级映射。
 - `dsh-runtime.log` 记录宿主级 runtime 管理（物化、加载、profile 装配）；`dsh-plugins-<profile>.log` 按 profile 拆分插件诊断（`web`、`ellamaka-tools`，未来新增 profile 自动获得独立文件）。每个文件独立有界（容量上限、滚动备份、重复抑制），位于全局域 `$WOPAL_HOME/logs/`。
 - DSH runtime 记录按关注度分级：物化的开始与完成、依赖安装、降级与失败是 `INFO`——它们是需要事后关注的运行时状态变化；阶段轨迹（resolve / inspect / lock / stage / verify / activate / load）与插件例行为 `DEBUG`。默认 `INFO` 下，首次安装或依赖变更留下物化记录，缓存命中的例行启动保持安静；需要完整轨迹时把级别提升到 `DEBUG`。
-- `ELLAMAKA_DSH=0` 不创建任何 DSH 文件；终端镜像仅在 `--print-logs` 时开启。
+- `wopal.dsh.web.enabled=false` 且 `ELLAMAKA_DSH_TOOLS=0` 时当前入口不请求任何 DSH profile，因此不创建 DSH 日志文件；只关闭其中一个 profile 时，另一个 profile 的 runtime/plugin 记录仍按自身生命周期输出。终端镜像仅在 `--print-logs` 时开启。
 
 ## Wopal Plugin Records
 

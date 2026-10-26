@@ -1,15 +1,15 @@
 # DSH Customization Proposal
 
 > **Status**: Proposed
-> **Updated**: 2026-10-14
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
-> **Scope**: DSH 空间皮肤、独立标签、实验 profile 与前端插件定制的后续设计方向
+> **Scope**: DSH 空间皮肤、实验 profile 与前端插件定制的后续设计方向
 
 ## Proposal Boundary
 
 本文是后续讨论稿，尚未闭环。字段、命令形状、进程/注册模型与扩展接口均为候选方案，必须在固定 DSH 版本上验证后再定稿；不进入当前 Runtime Foundation、统一 SDK 或 CLI consumer Plan 的实现目标。
 
-正式产品当前继续使用 Active Web 设计的双容器、单一公开端口和既有 iframe 承载。实验实例不能共享正式 Active Home，也不能成为 Home 回滚目标。
+正式产品当前使用 Active Web 设计的独立固定 DSH Tab、双 profile 与单一公开端口；本提案不再拥有核心 DSH Tab 或 Web 开关的设计权，只研究其上的实验 profile 与界面扩展。实验实例不能共享正式 Active Home，也不能成为 Home 回滚目标。
 
 ## 空间皮肤插件
 
@@ -36,26 +36,19 @@ Workbench 顶栏的空间类型扩展为三类：
 | **DSH**          | `dsh`              | dsh web profile，完整界面         | ellamaka serve 进程 |
 | **实验 profile** | `dsh-profile:<id>` | 指定闭包与指定 profile 的隔离实例 | 独立进程            |
 
-- 助理与 DSH 各自独立开关、独立持久化激活状态，互不遮蔽。
+- 助理与 DSH 的基础表面关系由 Active Workbench/Web 设计定义：DSH 是独立固定 Tab，不遮蔽 General/Assistant。
 - 实验 profile 是注册式实体：一个实验 profile 对应一个独立进程与一个空间标签，携带独立入口地址与健康状态。
 - 工具容器保持同进程，不作为独立空间呈现。它服务于工具投影，不是用户可见空间。
 
 ### 配置模型
 
-dsh 相关配置采用两层模型：
+核心 DSH Web 开关已经由 Active 设计固定为用户全局 `wopal.dsh.web.enabled`；`ellamaka-tools` profile 只由 `ELLAMAKA_DSH_TOOLS` 控制，Space 的 `wopal.pluginConfig.dsh-adapter` 只决定工具采用。这些基础配置不属于本提案。
 
-| 层         | 位置                           | 作用                                          |
-| ---------- | ------------------------------ | --------------------------------------------- |
-| 默认值     | 空间配置的 `ellamaka.dsh.*` 域 | 定义各空间的启停默认值与实验 profile 注册清单 |
-| 运行时覆盖 | 设置面板与持久化存储           | 用户界面内修改，立即生效并持久化              |
-
-合并逻辑：面板有值用面板值，未设置回落配置文件默认值。
-
-`ELLAMAKA_DSH=0` 仍然保留为硬禁用路径，环境变量显式设置时优先于配置。这保证配置损坏时仍有自愈手段。
+实验 profile 的注册、默认启用与界面配置仍是待定设计；在明确独立进程身份、Home、认证与生命周期之前，不复用核心 Web/Tools 的配置键，也不引入 `ellamaka.dsh.*` 第二份真相。
 
 ### 进程拓扑
 
-多个 `serve`、Desktop、TUI 与纯 native `run` 同时存在是 Core 产品要求；`run` 不参与 DSH profile 挂载或 Home 使用。同一 closure generation 下，各入口按自身正常职责直接挂载所需的官方 profile；Ellamaka 不选举 Home owner、不建立 single-owner hosting、不通过 proxy 共享 Web profile，也不为 `web` / `ellamaka-tools` 增加宿主级 writer lock。部分 DSH plugin/backend 可能尚未提供完整的跨进程一致性保证，因此多个 DSH-enabled 实例共享同一 Home 仍存在上游并发风险；该风险与直接运行多个官方 DSH 实例相同，是当前接受的已知限制。用户希望避免该风险时，可自行只保留一个 DSH-enabled 实例，并对其他实例设置 `ELLAMAKA_DSH=0`。
+多个 `serve`、Desktop、TUI 与纯 native `run` 同时存在是 Core 产品要求；`run` 不参与 DSH profile 挂载或 Home 使用。同一 closure generation 下，各入口按自身正常职责直接挂载所需的官方 profile；Ellamaka 不选举 Home owner、不建立 single-owner hosting、不通过 proxy 共享 Web profile，也不为 `web` / `ellamaka-tools` 增加宿主级 writer lock。部分 DSH plugin/backend 可能尚未提供完整的跨进程一致性保证，因此多个 DSH-enabled 实例共享同一 Home 仍存在上游并发风险；该风险与直接运行多个官方 DSH 实例相同，是当前接受的已知限制。用户希望避免该风险时，可自行只保留一个实际启用 DSH profile 的正式实例；核心 Web 与 Tools 分别按 Active 设计的独立启用事实关闭。
 
 **核心容器由同一 Runtime host 拥有**。Web 与 tools 使用独立 Cordis context；Web 的冷重建可使用受管子进程，tools 保持 session-free backend。它们与用户独立启动的实验进程是不同生命周期边界，不通过共享 Web Home owner 解决上游并发问题。
 
@@ -76,7 +69,7 @@ Runtime Manager 当前只物化宿主锁定的版本集。实验 profile 需要�
 
 ### 前端机制
 
-- **标签模型**：助理、DSH、实验 profile 在顶栏并排；可见性从布尔派生改为按空间标识派生；激活空间决定呈现哪个表面。
+- **标签模型**：Active Workbench 已提供 General/Assistant 与固定 DSH Tab；本提案只把实验 profile 作为额外注册式 Tab 加入同一顶栏，激活 Tab 决定呈现哪个表面。
 - **保活 iframe 池**：每个 dsh 类空间持有一个保活 iframe，切换标签只切显示不重载，会话状态保留。
 - **健康指示**：复用现有的按服务器健康探针机制，实验进程状态映射到空间标签指示。
 - **信号绑定**：从单一的引擎挂载状态扩展为「引擎挂载态加实验空间清单」两类信号。
@@ -114,7 +107,7 @@ dsh 前端插件体系与 Workbench 是两套框架，组件经 Web Component �
 ## Open Questions
 
 - 固定 DSH 版本实际提供哪些稳定主题/插槽扩展接口；皮肤配置如何获取、校验和隔离失败？
-- 助理/DSH/实验标签的状态、持久化、导航与远端 Server 切换如何一致？
+- 实验 profile 标签的状态、持久化、导航与远端 Server 切换如何接入既有 General/DSH 基础 Tab？
 - 实验 profile 的注册/认证/健康/退出由谁负责，地址与凭证如何保存？
 - 指定历史 closure 的 manifest/lock 从何取得，Bridge 不兼容时如何明确拒绝，而非承诺任意历史版本都能运行？
 - iframe 池的资源上限与关闭语义；实验进程不可用时怎样保留布局并给出诊断？

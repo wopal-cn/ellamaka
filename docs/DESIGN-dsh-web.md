@@ -1,11 +1,11 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-22
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
-> - `./DESIGN-dsh-base.md` — DSH 融合基础、依赖闭包与 Profile 生命周期
+> - `./DESIGN-dsh-base.md` — DSH 集成基础、依赖闭包与 Profile 生命周期
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile 的装配与投影
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 
@@ -149,25 +149,46 @@ dsh/agents-presets/
 1. **能力包与 Profile 职责分离**：本体仓库（`dsh/`）仅维护跨版本的声明式预设包（`dsh/agents-presets`）与扩展插件包（`dsh/plugins/*`），不维护 `web` 或 `ellamaka-tools` 的 profile 基线目录。
 2. **Profile 初始化**：CorePreparation（`dsh.profiles` 步骤）在固定核心 Home `$WOPAL_HOME/dsh/home/profiles/<profile>/` 使用官方文件格式准备 profile：Web 使用官方模板，tools 使用产品最小插件声明。每次准备与启动前将合成根锚点 `cordis.yml` 重置为 `[]\n`。已有用户声明文件保持不变。
 3. **预设与插件安装**：WopalSpace Onboarding 或插件管理命令在用户启用相关增强时，通过官方 `pluginManager` 流水线将本体仓库提供的 `@wopal/dsh-presets` 及扩展插件以 `file:` 本地包快照方式安装到 `web` profile，保持本地目录物理独立。
-4. **准备与激活**：`serve`、Desktop 与默认 TUI 共用 CorePreparation；`ellamaka run` 固定跳过 DSH。Runtime 使用统一 `closureVersion` 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Core READY 后各入口才按需挂载 `web` 或 `ellamaka-tools`；`ELLAMAKA_DSH=0` 时整个 DSH 分支跳过。细节归 [DSH 基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
+4. **准备与激活**：`serve`、Desktop 与默认 TUI 共用 CorePreparation；`ellamaka run` 固定跳过 DSH。Runtime 使用统一 `closureVersion` 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Web 与 Tools 只按各自启用事实请求 profile；两者都关闭时整个 DSH 分支跳过。细节归 [DSH 基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
 ## Core Profile Hosting
 
 核心 Web 与工具由同一产品 Runtime host 拥有；Web 冷重建遵循主设计的 Unified Reload，tools 默认在宿主进程内。两个 profile 使用各自 Cordis context，工具容器保持 session-free，不作为独立的用户空间。
 
-多个 `serve`、Desktop、TUI 与纯 native `run` 同时存在是 Core 产品要求；`run` 不参与 DSH profile 挂载或 Home 使用。同一 closureVersion 下，各入口按自身正常职责直接挂载所需的官方 profile；Ellamaka 不选举 Home owner、不建立 single-owner hosting、不通过 proxy 共享 Web profile，也不为 `web` / `ellamaka-tools` 增加宿主级 writer lock。部分 DSH plugin/backend 可能尚未提供完整的跨进程一致性保证，因此多个 DSH-enabled 实例共享同一 Home 仍存在上游并发风险；该风险与直接运行多个官方 DSH 实例相同，是当前接受的已知限制。用户希望避免该风险时，可自行只保留一个 DSH-enabled 实例，并对其他实例设置 `ELLAMAKA_DSH=0`。
+多个 `serve`、Desktop、TUI 与纯 native `run` 同时存在是 Core 产品要求；`run` 不参与 DSH profile 挂载或 Home 使用。同一 closureVersion 下，各入口按自身正常职责直接挂载所需的官方 profile；Ellamaka 不选举 Home owner、不建立 single-owner hosting、不通过 proxy 共享 Web profile，也不为 `web` / `ellamaka-tools` 增加宿主级 writer lock。部分 DSH plugin/backend 可能尚未提供完整的跨进程一致性保证，因此多个 DSH-enabled 实例共享同一 Home 仍存在上游并发风险；该风险与直接运行多个官方 DSH 实例相同，是当前接受的已知限制。用户希望避免该风险时，可自行只保留一个实际启用 DSH profile 的实例；Web 与 Tools 分别使用各自的启用事实关闭。
 
 **核心容器由同一 Runtime host 拥有**。Web 与 tools 使用独立 Cordis context；Web 的冷重建可使用受管子进程，tools 保持 session-free backend。它们与用户独立启动的实验进程是不同生命周期边界，不通过共享 Web Home owner 解决上游并发问题。
 
 ## Workbench Integration
 
+### Enablement
+
+DSH Web 是独立于 Ellamaka Native Assistant 的用户界面核心。是否为当前 Server/sidecar 启动 Web profile 由 Wopal 全局设置 `wopal.dsh.web.enabled` 决定：
+
+```jsonc
+{
+  "wopal": {
+    "dsh": {
+      "web": { "enabled": true },
+    },
+  },
+}
+```
+
+该键只从 `$WOPAL_HOME/config/settings.jsonc` 读取，默认值为 `true`。Space 的 `settings.jsonc` / `settings.local.jsonc` 不覆盖这个值，因为同一个 Server/sidecar 只承载一个 Web profile。Workbench Settings 通过统一 `config-v2` 设置接口修改这个全局事实；首个版本返回 `restart-required`，运行中的 Web profile 不因磁盘值变化被即时挂载或卸载。重启后，Runtime health 的 `dsh.web` 反映新的生效状态。
+
+这个开关只管理 Web profile。`ellamaka-tools` profile 由 Ellamaka 进程自己的环境开关管理，Space 是否采用 DSH 沙箱工具由 `wopal.pluginConfig.dsh-adapter` 决定；三者互不代替。
+
 ### Hosting Model
 
-DSH iframe 在 [Workbench](./DESIGN-workbench.md) 的助理标签中承载完整 DSH 界面。DSH 开启且当前激活通用空间时显示 iframe；关闭 DSH 时显示原生通用会话。
+DSH iframe 在 [Workbench](./DESIGN-workbench.md) 中拥有独立的固定 DSH Tab，不再替换 General/Assistant 内容。Runtime 的 `dsh.web` 是这个 Tab 的运行时事实：`disabled` 时不显示 DSH Tab；`preparing` 时 Tab 已存在并显示启动状态；`ready` 后加载完整 DSH iframe；`degraded` 时保留 DSH Tab 并显示不可用/诊断状态。
 
-- iframe 与原生工作区持久挂载，切换只改变可见性，不重载会话。
+- DSH Tab 与原生工作区相互独立。用户切换 Tab 只改变可见性，不把一个表面自动替换成另一个。
+- Web profile 启用时，Workbench 从首次得到 `preparing`/`ready`/`degraded` 意图起稳定保留 DSH Tab；sidecar 重启的中间未知状态不把它闪退成 Assistant。
+- iframe 只在当前 sidecar generation 的 `dsh.web=ready` 后请求受控入口并设置有效 `src`。新 generation 未 ready 前不请求新的入口，也不通过 `/dsh/` fallback 抢跑。
+- iframe 首次成功加载后保持 keep-alive；Tab 切换不重载 DSH 会话。sidecar generation 变化后，等新 generation `ready` 再更新入口。
 - iframe 覆盖内容区，DSH 自带侧栏。
-- 独立 DSH 标签、实验 profile、空间皮肤与跨框架插件定制归 [Proposed 定制方向](./DESIGN-dsh-custumize.md)。
+- 实验 profile、空间皮肤与跨框架插件定制归 [Proposed 定制方向](./DESIGN-dsh-custumize.md)。
 
 ### Iframe Origin Derivation
 

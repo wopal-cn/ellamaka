@@ -1,7 +1,7 @@
-# DSH 融合基础设计
+# DSH 集成基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-23
+> **Updated**: 2026-10-26
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -9,7 +9,7 @@
 >
 > **Scope**: DSH v0.2 的运行资源、固定 Home 基本防护、切代前备份与 profile 生命周期。
 
-Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 DSH、准备环境、挂载两个 profile、适配 Bun/Electron 执行差异，以及把 DSH 工具接到 Ellamaka。实际工具注册、PTC 程序执行和沙箱实现由 DSH 提供。
+Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 DSH、准备共享 closure/Home、按入口需要独立挂载 `web` 与 `ellamaka-tools` profile、适配 Bun/Electron 执行差异，以及把 Tools profile 接到 Ellamaka。实际工具注册、PTC 程序执行和沙箱实现由 DSH 提供。
 
 内部 dsh-adapter 也在这个包中；opencode 只注册插件和提供引擎回调，不保存另一份 DSH 适配代码。CLI 用 Bun，Desktop 用产品自带的 Electron utilityProcess，二者编译同一份 Bridge 源码。
 
@@ -64,22 +64,24 @@ generation inputs 由 `packages/ellamaka-cordis/src/runtime/home-generation.ts` 
 
 在读写 Home 之前，先在 `$WOPAL_HOME/dsh/staging` 物化并校验产品固定的 DSH 依赖闭包，通过包完整性检查后再就位到 `$WOPAL_HOME/dsh/closures/<fingerprint>`。指纹相同的完整闭包直接复用。下载、解包或必需包校验失败时，在触碰 Home 之前终止准备。
 
-`ELLAMAKA_DSH=0` 在 DSH 专属环境设置、文件访问、网络访问、物化与 profile 挂载之前短路。
+入口先解析两个独立启用事实：`wopal.dsh.web.enabled` 决定是否需要 Web profile，`ELLAMAKA_DSH_TOOLS` 决定是否需要 `ellamaka-tools` profile。两者都关闭时，在 DSH 专属环境设置、文件访问、网络访问、物化与 profile 挂载之前短路。
 
 ### Loading and Status
 
 从产品的 install anchor 解析 DSH 运行时 API，使 Bridge 与 DSH 包使用同一份已安装闭包。
 
+每个 profile 独立使用同一组状态：
+
 | 状态 | 含义 |
 |---|---|
-| disabled | 用户明确关闭了 DSH |
-| preparing | 当前产品正在物化或准备它的 DSH 资源 |
-| ready | 该入口所需的 DSH 能力已通过激活检查 |
-| degraded | DSH 不可用；原生 Ellamaka 保持可用 |
+| disabled | 该 profile 未被当前入口请求 |
+| preparing | 该 profile 所需的共享资源或自身装配仍在准备 |
+| ready | 该 profile 已通过加载与激活检查，可以发布自身能力 |
+| degraded | 该 profile 本次加载不可用；另一个 profile 与原生 Ellamaka 按各自状态继续工作 |
 
-通过 Runtime health 暴露稳定的失败原因、当前构建的 closureVersion 与已记录的 Home 版本（可得时）。不要让消费方直接检查 Home 状态。只有在所请求的 profile 通过激活检查之后，才发布 DSH 路由、工具与句柄。
+Runtime health 分别暴露 `dsh.web` 与 `dsh.tools`，并携带稳定失败原因、当前构建的 closureVersion 与已记录的 Home 版本（可得时）。不要让消费方直接检查 Home 状态。只有在所请求的 profile 通过加载与激活检查之后，才发布对应路由、工具或句柄。
 
-准备阶段失败不阻断原生 Runtime 与模型会话，涵盖等待接管的历史 Home、闭包失败、Home 被占用与缓存损坏。DSH 工具面回退到原生工具，宿主通过 health 与入口自身的反馈呈现稳定原因，绝不让会话失去可用工具。同一进程内稍后才挂载 DSH 的入口（例如操作员确认接管后的 Desktop），在下一次请求时切到沙箱工具；只在启动时挂载一次的入口（例如 TUI 与 serve），保持原生工具直到重启。profile 已 ready 之后容器才失效的情况，沿用既有的 fail-closed 请求语义。
+共享 closure/Home 准备失败只使当前请求的 DSH profile 进入 `degraded`，不阻断原生 Runtime 与模型会话。Web profile 加载失败只影响 DSH Web 界面；Tools profile 在**加载阶段**失败时，`dsh-adapter` 不启用，Ellamaka 继续提供 Native Tools。Tools profile 一旦发布 `ready` 且当前 Space 启用了 adapter，工具调用固定走 DSH；此后的 sandbox 拒绝、approval 拒绝、参数错误、超时或工具/provider 错误直接作为本次调用失败返回，绝不改用 Native Tool 重试。已发布的 Tools 容器随后失效时继续沿用 fail-closed 请求语义，宿主生命周期可以在明确的新加载周期中重新判定 profile 状态。
 
 ### Compiled Runtime
 
@@ -167,7 +169,7 @@ Bun 的 PTC 兼容同样限制在确定的宿主差异上。主进程通过 Bun 
 
 ### Core State and Preparation Integration
 
-Core Preparation 提供 DSH 闭包、Home 与 profile 步骤。产品入口准备自己需要的 DSH 资源，然后激活所请求的 profile。`ELLAMAKA_DSH=0` 跳过全部 DSH 准备。
+Core Preparation 提供共享 DSH closure/Home 与按需 profile 步骤。产品入口先解析启用意图，再只准备自己需要的 profile：Web 由全局 `wopal.dsh.web.enabled` 决定，Tools 由当前进程的 `ELLAMAKA_DSH_TOOLS` 决定。两个 profile 都未请求时跳过全部 DSH 准备；任一 profile 被请求时，共享 closure/Home 只准备一次。
 
 Home 检查与版本变化使用唯一的 Home 锁。进程只要可能访问 Home，就持有共享锁。版本变化必须取得排他锁，因此旧 DSH 进程仍在使用 Home 时无法进行。
 
@@ -205,9 +207,9 @@ DSH 步骤发送 `@wopal/ellamaka-core` 的统一 `CorePreparationEvent`，不�
 
 | 入口 | Preparation | Runtime Activation |
 | --- | --- | --- |
-| `ellamaka serve` / `web` | 读取当前 CLI build descriptor；Ready 则 fast path，否则 prepare | Ready 后挂载该入口需要的 DSH Web/Tools；失败时 native Runtime 保持可用 |
-| Desktop | 读取当前 embedded sidecar descriptor；Ready 则 fast path，否则 prepare | Ready 后挂载 Desktop 所需 DSH 能力 |
-| 默认 TUI | 读取当前 build descriptor；需要时 prepare | Ready 后挂载该入口需要的 DSH tools；失败时原生 TUI 保持可用 |
+| `ellamaka serve` / `web` | 读取当前 CLI build descriptor；按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个 |
+| Desktop | 读取当前 embedded sidecar descriptor；按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；窗口不等待任一 profile |
+| 默认 TUI | 读取当前 build descriptor；仅在 `ELLAMAKA_DSH_TOOLS` 允许时准备 Tools | Tools 加载成功后由 Space adapter 采用；加载失败时 Native Tools 保持可用 |
 | `wopal setup` | 自身不执行 DSH Preparation；它启动/reuse 的 `ellamaka serve` 按 `serve` 行处理当前 build | 打开 Web Onboarding |
 | `ellamaka run` | 永久跳过 DSH 分支 | 纯 Ellamaka Core；不探测、复用或挂载 DSH |
 | `run --attach` | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载 | 使用远端 Runtime |
@@ -237,7 +239,7 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 | Home version guard | 唯一的共享/排他锁、closure 版本检查、较新版本写入前备份 |
 | ProfileRuntime | 产品自有 profile/plugin 的装配、审计、replay/release |
 | Runtime Activator | 在持有共享 Home 锁的前提下激活已准备好的 profile |
-| internal dsh-adapter | DSH 工具 ready 后接入 Ellamaka；沙箱不可用时回退原生工具并可观测 |
+| internal dsh-adapter | Tools profile `ready` 且当前 Space 配置采用时接入 Ellamaka；profile 加载失败时保持 Native Tools，已采用后的调用失败不回退 |
 | Runtime startup caller | 未 READY 时调用 `CorePreparation.prepare(host)` 兜底；不复制 DSH mechanics |
 
 ## Persistent Data
@@ -246,7 +248,7 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 
 用户 preset 采用目标 DSH 的标准 bundle 声明与官方 YAML 方言；来源的生成文件和实际配置都保留。用户插件使用 profile 的固定依赖声明；官方解析层按当前 closure 重建，第三方兼容性按实际包声明和 Loader 诊断检查。不兼容实体不能通过沿用 revision/source 链接继续执行。closure-change backup 不冻结用户自行修改的外部插件源码或外部服务；内部 adapter 的匹配由产品制品保证。
 
-Ellamaka 的 `settings.jsonc` 和三层 `wopal.pluginConfig` 仍是内部 adapter 行为配置来源，不写入 DSH profile 代替它。职责与字段归 [工具容器设计](./DESIGN-ellamaka-tools.md#internal-adapter) 与主设计的 [既有配置读面](./DESIGN.md#config-read-surface)。
+Ellamaka 的 `settings.jsonc` 和三层 `wopal.pluginConfig` 仍是内部 adapter 行为配置来源，不写入 DSH profile 代替它。职责与字段归 [工具容器设计](./DESIGN-ellamaka-tools.md#internal-adapter) 与主设计的 [配置面](./DESIGN.md#config-surface)。
 
 Active Home 与 closure-change backup 按原敏感级别保存；失败信息只记录 backup 标识、相对路径和错误 code。用户编辑、复制配置或外部工具副作用不自动重放。
 
