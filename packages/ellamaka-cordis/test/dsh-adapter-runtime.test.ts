@@ -15,9 +15,9 @@ test("built-in adapter preserves installed schemas and runs the real session-fre
   const host = await bootDshTools({ home, port: 0 })
   const globals = globalThis as Record<string, unknown>
   const previous = globals.__ellamakaDshContainer
-  const enabled = process.env.ELLAMAKA_DSH
+  const enabled = process.env.ELLAMAKA_DSH_TOOLS
   globals.__ellamakaDshContainer = host.ctx
-  process.env.ELLAMAKA_DSH = "1"
+  process.env.ELLAMAKA_DSH_TOOLS = "1"
   const hook = await dshAdapter({
     directory: workspace,
     worktree: workspace,
@@ -115,8 +115,8 @@ test("built-in adapter preserves installed schemas and runs the real session-fre
   } finally {
     await hook.dispose?.()
     globals.__ellamakaDshContainer = previous
-    if (enabled === undefined) delete process.env.ELLAMAKA_DSH
-    else process.env.ELLAMAKA_DSH = enabled
+    if (enabled === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
+    else process.env.ELLAMAKA_DSH_TOOLS = enabled
     await host.dispose()
   }
 }, 60_000)

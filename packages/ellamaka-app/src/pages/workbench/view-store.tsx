@@ -9,6 +9,7 @@ import {
   PERSISTED_DEFAULTS,
   type PersistedWorkbench,
   type WorkbenchSessionBinding,
+  type WopalSpace,
 } from "./workbench-store"
 import { scopeFromTab, type SpaceScope } from "./workbench-scope"
 import { selectActiveWorkbenchContext } from "./active-workbench-context"
@@ -113,10 +114,9 @@ export function initWorkbenchState() {
   const [refreshVersion, setRefreshVersion] = createSignal(0)
   const [persistentHint, setPersistentHintValue] = createSignal("")
   const [statusMessage, setStatusMessageValue] = createSignal("")
-  // DSH availability mirrors the server-side `ELLAMAKA_DSH` kill switch as
-  // reported by /global/health (`dsh` field). Undefined until the first
-  // health probe resolves.
-  const [dshEnabled, setDshEnabled] = createSignal<boolean | undefined>(undefined)
+  // DSH selection is transient UI navigation, not a persisted Runtime fact.
+  // The actual Web availability/status lives in WorkbenchRuntime.
+  const [dshSelected, setDshSelected] = createSignal(false)
   let persistentHintTimer: ReturnType<typeof setTimeout> | undefined
   let statusMessageTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -309,13 +309,28 @@ export function initWorkbenchState() {
     get activeSpaceName() {
       return workbench.activeSpaceName
     },
-    openTab: workbench.openTab,
+    openTab(space: WopalSpace) {
+      setDshSelected(false)
+      workbench.openTab(space)
+    },
     closeTab: workbench.closeTab,
     closeOtherTabs: workbench.closeOtherTabs,
     closeRightTabs: workbench.closeRightTabs,
     pinTab: workbench.pinTab,
     unpinTab: workbench.unpinTab,
-    setActive: workbench.setActive,
+    setActive(path: string) {
+      setDshSelected(false)
+      workbench.setActive(path)
+    },
+    get dshSelected() {
+      return dshSelected()
+    },
+    selectDsh() {
+      setDshSelected(true)
+    },
+    clearDshSelection() {
+      setDshSelected(false)
+    },
     validateTabs: workbench.validateTabs,
     get statusMessage() {
       return statusMessage()
@@ -325,18 +340,6 @@ export function initWorkbenchState() {
       return persistentHint()
     },
     setPersistentHint,
-    get dshEnabled() {
-      return dshEnabled()
-    },
-    setDshEnabled,
-    // DSH replaces the Assistant (general) tab content when enabled. Derived
-    // from the active tab path so the tab highlight, click semantics, and
-    // persistence (activeTabPath is persisted) stay truthful — no separate
-    // visibility signal to desynchronize (DESIGN-dsh-poc §10).
-    get dshVisible() {
-      if (!dshEnabled()) return false
-      return (workbench.activeTabPath ?? GENERAL_TAB_PATH) === GENERAL_TAB_PATH
-    },
     get diagnostics() {
       return diagnosticsList()
     },
@@ -350,7 +353,8 @@ export function initWorkbenchState() {
   }
 
   if (typeof window !== "undefined") {
-    ;(window as any).__workbenchState = state
+    const debugWindow: Window & { __workbenchState?: typeof state } = window
+    debugWindow.__workbenchState = state
   }
 
   return state

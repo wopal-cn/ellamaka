@@ -63,11 +63,16 @@ declare module "virtual:opencode-server" {
     print?: boolean
     env?: Record<string, string | undefined>
     legacyAdoptionConfirmed?: boolean
+    profiles?: readonly ("web" | "ellamaka-tools")[]
   }
 
   export const prepareDshHost: (options: DshHostPreparationOptions) => Promise<{
     status: "disabled" | "prepared" | "degraded"
     preparation?: { reason?: string }
+  }>
+  export const prepareDshProfiles: (options: DshHostPreparationOptions) => Promise<{
+    web: { status: "disabled" | "prepared" | "degraded"; preparation?: { reason?: string } }
+    tools: { status: "disabled" | "prepared" | "degraded"; preparation?: { reason?: string } }
   }>
   export interface DshHomeRuntimeLease {
     readonly mode: "shared"
@@ -86,6 +91,14 @@ declare module "virtual:opencode-server" {
   export type DshLogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
   export const toDshLogLevel: (level: string | undefined) => DshLogLevel
   export const DEFAULT_DSH_RUNTIME_MANIFEST: DshRuntimeManifest
+  export const resolveDshProfileIntent: (
+    wopalHome: string,
+    env?: Record<string, string | undefined>,
+  ) => Promise<{
+    web: boolean
+    tools: boolean
+    profiles: readonly ("web" | "ellamaka-tools")[]
+  }>
   export const resolveInstallAnchor: (wopalHome: string, manifest: DshRuntimeManifest) => DshInstallAnchor
   export const createDshRuntimeApi: (installAnchor: string) => DshRuntimeApi
 
@@ -186,7 +199,7 @@ declare module "virtual:opencode-server" {
     stop(): Promise<void>
   }
   /** Publish the DSH runtime terminal status for `/global/health`. */
-  export const setDshStatus: (status: DshRuntimeStatus) => void
+  export const setDshStatus: (profile: "web" | "tools", status: DshRuntimeStatus) => void
   /** Publish (or clear with `() => undefined`) the authenticated entry getter. */
   export const setDshUrlGetter: (get: () => string | undefined) => void
 }

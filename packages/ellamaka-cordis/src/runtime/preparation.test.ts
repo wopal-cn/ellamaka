@@ -33,13 +33,13 @@ const MANIFEST: DshRuntimeManifestV1 = {
   fingerprint: "sha256:9e1ee84dfdd992bf9ebb37c7506f13bc17b87158d02783c2b1b24fd25a32cda7",
 }
 
-function contributors(home: string, env: Record<string, string | undefined> = {}) {
+function contributors(home: string, profiles: readonly ("web" | "ellamaka-tools")[] = ["web", "ellamaka-tools"]) {
   return createDshPreparationContributors({
     wopalHome: home,
     logFile: join(home, "logs", "dsh.log"),
     manifest: MANIFEST,
     closureVersion: MANIFEST.closureVersion,
-    env,
+    profiles,
   })
 }
 
@@ -53,6 +53,26 @@ function context() {
 describe("DSH CorePreparation contributors", () => {
   test("exports the three host preparation steps in stable order", () => {
     expect(contributors(tmpHome()).map((item) => item.step)).toEqual(["dsh.closure", "dsh.home", "dsh.profiles"])
+  })
+
+  test("prepares only the requested web profile", async () => {
+    const home = tmpHome()
+    const profile = contributors(home, ["web"]).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(existsSync(join(layout.profileDir, "web", "package.json"))).toBe(true)
+    expect(existsSync(join(layout.profileDir, "ellamaka-tools", "package.json"))).toBe(false)
+  })
+
+  test("prepares only the requested tools profile", async () => {
+    const home = tmpHome()
+    const profile = contributors(home, ["ellamaka-tools"]).find((item) => item.step === "dsh.profiles")!
+    const layout = resolveDshLayout(home)
+    expect((await prepareDshHome({ wopalHome: home, closureVersion: MANIFEST.closureVersion })).ok).toBe(true)
+    expect((await profile.prepare({ kind: "host" }, context())).state).toBe("READY")
+    expect(existsSync(join(layout.profileDir, "web", "package.json"))).toBe(false)
+    expect(existsSync(join(layout.profileDir, "ellamaka-tools", "package.json"))).toBe(true)
   })
 
   test("profile preparation is pure on inspect, creates host resources once, and preserves user declarations", async () => {
@@ -457,7 +477,7 @@ describe("DSH CorePreparation contributors", () => {
   test("disabled contributors short-circuit without touching the DSH territory", async () => {
     const home = tmpHome()
     const layout = resolveDshLayout(home)
-    const all = contributors(home, { ELLAMAKA_DSH: "0" })
+    const all = contributors(home, [])
     for (const contributor of all) {
       expect((await contributor.inspect({ kind: "host" })).state).toBe("READY")
       expect((await contributor.prepare({ kind: "host" }, context())).state).toBe("READY")

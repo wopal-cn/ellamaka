@@ -14,18 +14,7 @@ import { usePermission } from "@/context/permission"
 import { usePlatform, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
-import {
-  monoDefault,
-  monoFontFamily,
-  monoInput,
-  sansDefault,
-  sansFontFamily,
-  sansInput,
-  terminalDefault,
-  terminalFontFamily,
-  terminalInput,
-  useSettings,
-} from "@/context/settings"
+import { useSettings } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { SettingsList } from "./settings-list"
@@ -90,6 +79,7 @@ export const SettingsGeneral: Component = () => {
 
   const [store, setStore] = createStore({
     checking: false,
+    dshWebSaving: false,
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
@@ -177,6 +167,54 @@ export const SettingsGeneral: Component = () => {
   const serverSync = useServerSync()
   const globalSdk = useServerSDK()
 
+  const [dshWebEnabled, { mutate: setDshWebEnabledLocal }] = createResource(
+    () =>
+      globalSdk.client.config
+        .configGet()
+        .then((response) => response.data?.effective.wopal.dsh.web.enabled ?? true)
+        .catch(() => true),
+    { initialValue: true },
+  )
+
+  const setDshWebEnabled = (enabled: boolean) => {
+    if (store.dshWebSaving || dshWebEnabled() === enabled) return
+    setStore("dshWebSaving", true)
+    void globalSdk.client.config
+      .configUpdate({
+        target: "global",
+        updates: [{ key: "wopal.dsh.web.enabled", value: enabled }],
+      })
+      .then((response) => {
+        if (response.error) throw response.error
+        setDshWebEnabledLocal(enabled)
+        const actions = platform.runDesktopMenuAction
+          ? [
+              {
+                label: language.t("settings.general.dshWeb.restartNow"),
+                onClick: async () => {
+                  await platform.runDesktopMenuAction?.("app.restartSidecar")
+                },
+              },
+              { label: language.t("toast.update.action.notYet"), onClick: "dismiss" as const },
+            ]
+          : [{ label: language.t("toast.update.action.notYet"), onClick: "dismiss" as const }]
+        showToast({
+          persistent: true,
+          variant: "success",
+          title: language.t("settings.general.dshWeb.saved"),
+          description: language.t("settings.general.dshWeb.restartRequired"),
+          actions,
+        })
+      })
+      .catch((error: unknown) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        })
+      })
+      .finally(() => setStore("dshWebSaving", false))
+  }
+
   const [shells] = createResource(
     () =>
       globalSdk.client.pty
@@ -187,7 +225,7 @@ export const SettingsGeneral: Component = () => {
   )
 
   const [displayBackend, { refetch: refetchDisplayBackend }] = createResource(
-    () => (linux() && platform.getDisplayBackend ? true : false),
+    () => linux(),
     () => Promise.resolve(platform.getDisplayBackend?.() ?? null).catch(() => null as DisplayBackend | null),
     { initialValue: null as DisplayBackend | null },
   )
@@ -253,10 +291,6 @@ export const SettingsGeneral: Component = () => {
 
   const noneSound = { id: "none", label: "sound.option.none" } as const
   const soundOptions = [noneSound, ...SOUND_OPTIONS]
-  const mono = () => monoInput(settings.appearance.font())
-  const sans = () => sansInput(settings.appearance.uiFont())
-  const terminal = () => terminalInput(settings.appearance.terminalFont())
-
   const soundSelectProps = (
     enabled: () => boolean,
     current: () => string,
@@ -329,13 +363,22 @@ export const SettingsGeneral: Component = () => {
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              serverSync.updateConfig({ shell: option.value })
+              void serverSync.updateConfig({ shell: option.value })
             }}
             variant="secondary"
             size="small"
             triggerVariant="settings"
             triggerStyle={{ "min-width": "180px" }}
           />
+        </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.dshWeb.title")}
+          description={language.t("settings.general.dshWeb.description")}
+        >
+          <div data-action="settings-dsh-web">
+            <Switch checked={dshWebEnabled()} disabled={store.dshWebSaving} onChange={setDshWebEnabled} />
+          </div>
         </SettingsRow>
 
         <SettingsRow
@@ -406,7 +449,7 @@ export const SettingsGeneral: Component = () => {
             label={(o) => o.label}
             onSelect={(option) => option && theme.setColorScheme(option.value)}
             onHighlight={(option) => {
-              if (!option) return
+              if (!option) return () => {}
               theme.previewColorScheme(option.value)
               return () => theme.cancelPreview()
             }}
@@ -432,7 +475,7 @@ export const SettingsGeneral: Component = () => {
               theme.setTheme(option.id)
             }}
             onHighlight={(option) => {
-              if (!option) return
+              if (!option) return () => {}
               theme.previewTheme(option.id)
               return () => theme.cancelPreview()
             }}

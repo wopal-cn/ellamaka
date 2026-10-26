@@ -140,7 +140,7 @@ export function initializeDshRuntime(options: InitializeDshOptions): Promise<Dsh
   const fingerprint = options.manifest.fingerprint ?? ""
 
   // 1. Gate — disabled short-circuits before ANY filesystem access and before
-  // any log output: the logger is constructed lazily, so `ELLAMAKA_DSH=0`
+  // any log output: the logger is constructed lazily, so `ELLAMAKA_DSH_TOOLS=0`
   // creates no log file, no parent directory and writes nothing to stderr
   // (B-02). Returning `"disabled"` silently keeps the binding "disabled → no
   // file access, no dsh stage output" strict.

@@ -67,13 +67,13 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
     logFile: join(wopalHome, "logs", "dsh-runtime.log"),
     entry: "serve",
     manifest,
-    // The runtime manager gates on `ELLAMAKA_DSH` from its `env` (defaults to
-    // process.env). A dev shell can carry `ELLAMAKA_DSH=0` (e.g. injected by
+    // The runtime manager gates on `ELLAMAKA_DSH_TOOLS` from its `env` (defaults to
+    // process.env). A dev shell can carry `ELLAMAKA_DSH_TOOLS=0` (e.g. injected by
     // the wopal desktop launcher), which would flip every case here to
     // `disabled` before any closure work. Pin the flag explicitly so this
     // integration suite always exercises the real mount, regardless of the
     // ambient environment.
-    env: { ...process.env, ELLAMAKA_DSH: "1" },
+    env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
   })
   expect(status).toBe("ready")
   const resolved = resolveInstallAnchor(wopalHome, manifest)
@@ -119,8 +119,10 @@ async function dshCookie(dsh: { authenticatedPath: string }, base: string): Prom
   const res = await fetch(base + dsh.authenticatedPath, { redirect: "manual" })
   expect(res.status).toBe(303)
   const setCookie = res.headers.get("set-cookie")
-  expect(setCookie).toBeTruthy()
-  return setCookie!.split(";")[0]!
+  if (!setCookie) throw new Error("DSH launch-token exchange did not set a cookie")
+  const cookie = setCookie.split(";")[0]
+  if (!cookie) throw new Error("DSH launch-token exchange returned an empty cookie")
+  return cookie
 }
 
 /** HTML-attribute URLs in the DSH index are entity-encoded (`&amp;`). */

@@ -5,11 +5,11 @@ import { dshAdapter, DshAdapterError, trackDshToolsInitialization } from "../src
 
 const globals = globalThis as Record<string, unknown>
 const previous = globals.__ellamakaDshContainer
-const enabled = process.env.ELLAMAKA_DSH
+const enabled = process.env.ELLAMAKA_DSH_TOOLS
 afterEach(() => {
   globals.__ellamakaDshContainer = previous
-  if (enabled === undefined) delete process.env.ELLAMAKA_DSH
-  else process.env.ELLAMAKA_DSH = enabled
+  if (enabled === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
+  else process.env.ELLAMAKA_DSH_TOOLS = enabled
 })
 
 function input(config: Record<string, unknown> = { sandbox: { enabled: true } }): Parameters<typeof dshAdapter>[0] {
@@ -105,7 +105,7 @@ describe("built-in dsh adapter", () => {
   })
   test("required instances wait for the host's shared initialization before binding tools", async () => {
     delete globals.__ellamakaDshContainer
-    process.env.ELLAMAKA_DSH = "1"
+    process.env.ELLAMAKA_DSH_TOOLS = "1"
     const ready = Promise.withResolvers<void>()
     void trackDshToolsInitialization(ready.promise)
     const pending = dshAdapter(input())
@@ -122,12 +122,12 @@ describe("built-in dsh adapter", () => {
       },
     }
     expect(await dshAdapter(input({ sandbox: { enabled: false } }))).toEqual({})
-    process.env.ELLAMAKA_DSH = "0"
+    process.env.ELLAMAKA_DSH_TOOLS = "0"
     expect(await dshAdapter(input())).toEqual({})
   })
 
   test("missing container falls back to native tools instead of failing the session", async () => {
-    process.env.ELLAMAKA_DSH = "1"
+    process.env.ELLAMAKA_DSH_TOOLS = "1"
     delete globals.__ellamakaDshContainer
     const missing = await dshAdapter(input())
     expect(await projected(missing)).toEqual({})
@@ -137,8 +137,34 @@ describe("built-in dsh adapter", () => {
     expect(await projected(incomplete)).toEqual({})
   })
 
+  test("a ready DSH tool failure never retries the native tool", async () => {
+    const pool = container()
+    pool.run(async () => {
+      throw new Error("dsh read failed")
+    })
+    const hook = await dshAdapter(input())
+    let nativeCalls = 0
+    const output: { tools: Record<string, ToolDefinition> } = {
+      tools: {
+        read: {
+          description: "native read",
+          args: {},
+          execute: async () => {
+            nativeCalls += 1
+            return { output: "native", title: "read", metadata: {} }
+          },
+        },
+      },
+    }
+    await hook["tool.provider"]?.({ providerID: "test", modelID: "test" }, output)
+    await expect(output.tools.read.execute({ filePath: "a" }, context())).rejects.toThrow("dsh read failed")
+    expect(nativeCalls).toBe(0)
+    expect(pool.calls).toHaveLength(1)
+    await hook.dispose?.()
+  })
+
   test("adopts a container that appears after preparation", async () => {
-    process.env.ELLAMAKA_DSH = "1"
+    process.env.ELLAMAKA_DSH_TOOLS = "1"
     delete globals.__ellamakaDshContainer
     const hook = await dshAdapter(input())
     expect(await projected(hook)).toEqual({})

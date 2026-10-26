@@ -1,10 +1,13 @@
 /** @jsx h */
-import { createResource, type JSX } from "solid-js"
+import { Show, createEffect, createResource, createSignal, type JSX } from "solid-js"
 import h from "solid-js/h"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
+import { resolveServerHealthKey } from "@/utils/server-health"
 import { useWorkbenchState } from "./view-store"
+import { useWorkbenchRuntime } from "./workbench-runtime"
 
 /**
  * Loopback hosts are the same physical server under different names
@@ -140,6 +143,7 @@ export function selfHealDshIframe(
 export function createDsh401Healer(input: {
   getFrame: () => HTMLIFrameElement | undefined
   refetchEntry: () => Promise<string | undefined>
+  canAttempt?: () => boolean
 }): (body: string | null | undefined) => void {
   let attempted = false
   return (body) => {
@@ -149,9 +153,11 @@ export function createDsh401Healer(input: {
       return
     }
     if (attempted) return
-    attempted = true
+    if (input.canAttempt && !input.canAttempt()) return
     const frame = input.getFrame()
-    if (frame) selfHealDshIframe(frame, input.refetchEntry)
+    if (!frame) return
+    attempted = true
+    selfHealDshIframe(frame, input.refetchEntry)
   }
 }
 
@@ -183,22 +189,35 @@ export function dshSurfaceStyle(visible: boolean): { display: string } {
   return { display: visible ? "contents" : "none" }
 }
 
+type DshEntry = { key: string; url?: string }
+
+export function selectDshEntryForGeneration(
+  generation: string | undefined,
+  latest: DshEntry | null | undefined,
+  cached: DshEntry | null | undefined,
+): DshEntry | undefined {
+  if (!generation) return undefined
+  if (latest?.key === generation) return latest
+  return cached?.key === generation ? cached : undefined
+}
+
 /**
- * The DSH surface replaces the Assistant (general) tab content. The iframe is
- * mounted once and kept alive (visibility toggle only) so DSH session state
- * survives tab switches, mirroring the Space Keep-Alive invariant. It covers
- * the full content area below the titlebar, including the SpaceRail — the DSH
- * UI ships its own sidebar.
+ * Independent DSH surface. General/Space content remains mounted underneath;
+ * selecting the fixed DSH tab only changes which surface is visible.
  */
 export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   const wb = useWorkbenchState()
+  const runtime = useWorkbenchRuntime()
   const server = useServer()
   const sdk = useServerSDK()
   const platform = usePlatform()
-  const [entry, { refetch }] = createResource(
-    () => wb.dshVisible,
-    (visible) => (visible ? sdk.client.workbench.dshUrl() : undefined),
-  )
+  const language = useLanguage()
+  const [iframeSrc, setIframeSrc] = createSignal<string>()
+  const readyGeneration = () => (runtime.dshWebReady ? resolveServerHealthKey(server.key, server.current) : undefined)
+  const [entry, { refetch }] = createResource(readyGeneration, async (key) => {
+    const response = await sdk.client.workbench.dshUrl()
+    return { key, url: response.data?.url }
+  })
   // The packaged desktop renderer lives on the privileged `oc://renderer`
   // origin, where Chromium refuses WebSocket URLs; the DSH realtime channel
   // needs WebSocket, so the iframe targets the main-process standard-HTTP
@@ -208,8 +227,21 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
     if (globalThis.location?.protocol === "oc:") return platform.dshProxyOrigin
     return globalThis.location?.origin
   }
-  const src = () => dshIframeSrc(server.current?.http.url, entry()?.data?.url, pageOrigin())
-  const visible = () => wb.dshVisible
+  createEffect(() => {
+    if (!runtime.dshWebReady) return
+    const current = entry()
+    if (!current || current.key !== readyGeneration() || entry.loading) return
+    setIframeSrc(dshIframeSrc(server.current?.http.url, current.url, pageOrigin()))
+  })
+
+  createEffect(() => {
+    if (runtime.dshWeb !== "disabled") return
+    if (wb.dshSelected) wb.clearDshSelection()
+  })
+
+  const iframeVisible = () => wb.dshSelected && runtime.dshWeb === "ready" && runtime.dshWebReady
+  const startingVisible = () =>
+    wb.dshSelected && runtime.dshWeb !== "degraded" && runtime.dshWeb !== "disabled" && !runtime.dshWebReady
   // auth-fix-2 self-heal: a keep-alive iframe never reloads on tab switches,
   // so a stale cookie (expiry or engine restart) would otherwise show the
   // bare 401 page forever. The episode gate allows one attempt per failure
@@ -219,9 +251,14 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   let iframeEl: HTMLIFrameElement | undefined
   const heal = createDsh401Healer({
     getFrame: () => iframeEl,
+    canAttempt: () => runtime.dshWebReady,
     refetchEntry: async () => {
-      await refetch()
-      return healTargetUrl(server.current?.http.url, entry()?.data?.url, pageOrigin())
+      if (!runtime.dshWebReady) return undefined
+      const latest = await refetch()
+      const generation = readyGeneration()
+      const candidate = selectDshEntryForGeneration(generation, latest, entry())
+      if (!candidate) return undefined
+      return healTargetUrl(server.current?.http.url, candidate.url, pageOrigin())
     },
   })
   const onLoad = () => {
@@ -238,12 +275,25 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   }
   return (
     <>
-      <div style={dshSurfaceStyle(visible())}>
+      <div style={dshSurfaceStyle(iframeVisible())}>
         <div ref={(el) => (iframeEl = el?.querySelector?.('iframe[title="DSH"]') ?? undefined)} class="contents">
-          <DshIframe src={src()} onLoad={onLoad} />
+          <DshIframe src={iframeSrc()} onLoad={onLoad} />
         </div>
       </div>
-      <div style={dshSurfaceStyle(!visible())}>{props.children}</div>
+      <Show when={startingVisible()}>
+        <div class="flex min-h-0 flex-1 items-center justify-center bg-v2-background-bg-deep text-v2-text-text-muted">
+          <div class="text-13-medium">{language.t("workbench.dsh.starting")}</div>
+        </div>
+      </Show>
+      <Show when={wb.dshSelected && runtime.dshWeb === "degraded"}>
+        <div class="flex min-h-0 flex-1 items-center justify-center bg-v2-background-bg-deep text-v2-text-text-muted">
+          <div class="text-center">
+            <div class="text-14-medium text-v2-text-text-strong">{language.t("workbench.dsh.unavailable")}</div>
+            <div class="mt-1 text-12-regular">{language.t("workbench.dsh.diagnosticsHint")}</div>
+          </div>
+        </div>
+      </Show>
+      <div style={dshSurfaceStyle(!wb.dshSelected)}>{props.children}</div>
     </>
   )
 }

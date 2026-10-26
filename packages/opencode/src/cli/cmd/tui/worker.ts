@@ -52,7 +52,7 @@ GlobalBus.on("event", (event) => {
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
 
 // Optional dsh tool container (single-process, no webserver). The unified
-// Runtime Manager gates on `ELLAMAKA_DSH` internally (`=0` → disabled with
+// Runtime Manager gates on `ELLAMAKA_DSH_TOOLS` (`=0` → tools disabled with
 // zero file access) and mounts the ellamaka-tools profile onto a process-level
 // cordis hub, exposing the container so the dsh-adapter plugin can project
 // container tools into ellamaka's ToolRegistry. `disabled`/`degraded` never

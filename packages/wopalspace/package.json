@@ -14,6 +14,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
+  },
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",

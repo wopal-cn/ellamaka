@@ -16,8 +16,9 @@ import { createDependencyRebuildGate } from "@wopal/ellamaka-cordis/plugins/rebu
 import { profileDirOf } from "@wopal/ellamaka-cordis/plugins/compose"
 import { setDshUrlGetter } from "@/workbench/dsh-url"
 import { setDshStatus } from "@/workbench/dsh-status"
-import { prepareDshHost, writeCorePreparationProgress } from "@/core/preparation"
+import { prepareDshProfiles, writeCorePreparationProgress } from "@/core/preparation"
 import { emitRuntimeReloaded } from "@/server/runtime-reload"
+import { resolveDshProfileIntent } from "@/config/wopal-product-settings"
 
 /**
  * The DSH connection-fence authorities derived from the user's CORS trust
@@ -204,7 +205,7 @@ function resolveEllamakaCommand(): string[] {
  * `tui/dsh-mount.ts`.
  *
  * Assembly (DESIGN-dsh-base.md):
- * 1. Product CorePreparation runs first and owns the `ELLAMAKA_DSH=0` zero-access gate.
+ * 1. Product CorePreparation runs first and owns the `Web disabled + ELLAMAKA_DSH_TOOLS=0` zero-access gate.
  * 2. `READY` → resolve the install anchor for the manifest's fingerprint,
  *    load the six official DSH modules from the closure via
  *    `createDshRuntimeApi`, and mount web + tool containers with that runtime
@@ -224,31 +225,29 @@ async function mountDshEngineImpl(
   opts: DshEngineMountOptions = {},
 ): Promise<DshEngineHandle | undefined> {
   const wopalHome = opts.wopalHome ?? Global.Path.wopalHome
-  // The plugin-log directory (per-profile files derive inside the mount); the
-  // runtime manager keeps its single dedicated file.
   const logDir = opts.logDir ?? Global.Path.log
   const runtimeLogFile = opts.runtimeLogFile ?? join(logDir, "dsh-runtime.log")
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
+  const intent = await resolveDshProfileIntent(wopalHome)
 
-  const preparation = await prepareDshHost({
+  const preparation = await prepareDshProfiles({
     wopalHome,
     runtimeLogFile,
     logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
     onProgress: writeCorePreparationProgress,
+    profiles: intent.profiles,
   })
-  if (preparation.status !== "prepared") return undefined
+  if (preparation.web.status !== "prepared" && preparation.tools.status !== "prepared") return undefined
 
-  // Runtime admission is separate from preparation. Hold this shared lease
-  // for the whole lifetime of every in-process DSH Home consumer so a newer
-  // closure cannot switch Home underneath live containers.
   const homeAccess = await acquireDshHomeRuntimeAccess({
     wopalHome,
     closureVersion: manifest.closureVersion,
   })
   if (!homeAccess.ok) {
-    setDshStatus("degraded")
+    if (intent.web) setDshStatus("web", "degraded")
+    if (intent.tools) setDshStatus("tools", "degraded")
     Log.Default.error("dsh home access denied", {
       reason: homeAccess.reason,
       homeVersion: homeAccess.homeVersion,
@@ -257,9 +256,6 @@ async function mountDshEngineImpl(
     return undefined
   }
 
-  // The environment mutation is deliberately after the manager kill-switch
-  // and Home admission. ELLAMAKA_DSH=0 therefore performs zero DSH-specific
-  // environment setup, filesystem access, network access or mounting.
   const previousDshHome = process.env.DSH_HOME
   const activeDshHome = join(home, "home")
   process.env.DSH_HOME = activeDshHome
@@ -270,226 +266,208 @@ async function mountDshEngineImpl(
   }
 
   const anchor = resolveInstallAnchor(wopalHome, manifest)
+  let runtime: ReturnType<typeof createDshRuntimeApi>
+  try {
+    runtime = createDshRuntimeApi(anchor.path)
+  } catch (error) {
+    if (intent.web) setDshStatus("web", "degraded")
+    if (intent.tools) setDshStatus("tools", "degraded")
+    restoreDshHome()
+    await homeAccess.lease.release()
+    Log.Default.error("dsh runtime load failed", { error: error instanceof Error ? error.message : String(error) })
+    return undefined
+  }
 
-  // Degrade boundary (B-06): a closure whose module exports are broken must
-  // never crash the CLI host. Load the closure runtime, then init+mount; any
-  // failure is logged (structured), partial resources are disposed, and the
-  // host keeps running with no dsh. Never process.exit here.
-  // The web container lives in the child process (DESIGN 隔离边界); only the
-  // in-process tools container keeps a hub.
   type DshModule = typeof import("@wopal/ellamaka-cordis/dsh-web")
   type DshHubCtx = Parameters<DshModule["mountDshTools"]>[0]
   type DshHub = { ctx: DshHubCtx; dispose(): Promise<void> }
+  type ToolsHost = Awaited<ReturnType<DshModule["mountDshTools"]>>
   let toolsHub: DshHub | undefined
+  let toolsHost: ToolsHost | undefined
   let unmountDsh: (() => void) | undefined
   let webReloader: import("@wopal/ellamaka-cordis/runtime/web-cold-reload").DshWebColdReload | undefined
-  try {
-    const runtime = createDshRuntimeApi(anchor.path)
-    const { mountDshTools } = await import("@wopal/ellamaka-cordis/dsh-web")
-    const { DshWebColdReload } = await import("@wopal/ellamaka-cordis/runtime/web-cold-reload")
-    const { spawnDetachedWebChild, spawnWebChildContainer, webChildArgs } = await import("./dsh-web-child")
-    // The closure-resolved context is injected so the hub NEVER falls back to
-    // the host package closure, which packaged builds do not carry (B-01).
-    // The tools hub keeps its in-process context; the WEB container no longer
-    // mounts in-process — its context lives in the child.
-    toolsHub = new (await import("@wopal/ellamaka-cordis")).CordisHub(null, {
-      context: new runtime.cordis.Context(),
-    })
+  let pluginService:
+    | { replay(): Promise<{ ok: true } | { ok: false; error: string }>; stop(): Promise<void> }
+    | undefined
 
-    // The web container runs in a NEW managed child process (DESIGN 隔离边界:
-    // in-process remount reuses URL-cached modules, so only a new process
-    // boundary adopts new code). The host keeps the listening socket; the
-    // stable mount forwards `/dsh` to whichever child generation is live.
-    // The child acquires its own shared Home lease for its lifetime.
-    const childCommand = webChildArgs(resolveEllamakaCommand(), {
-      home,
-      port: 0,
-      installAnchor: anchor.path,
-      logDir,
-      // The fence allowlist is a HOST decision (CORS settings + the server's
-      // own serving authorities). The web container owns that fence inside the
-      // child, so the decision has to travel with the spawn — without it a
-      // wildcard bind rejects the very address the browser dials.
-      trustedHosts: trustedDshAuthorities(
-        { hostname: server.hostname, port: server.port },
-        opts.cors ?? [],
-        localDshInterfaceAddresses(),
-      ),
-    })
-    // The Workbench iframe enters the DSH surface through the official rc.1
-    // browser-auth launch token. The web container runs in the child, so the
-    // child reports its browser-auth entry query on the ready line
-    // (`authPath` = `/?token=…`): the official fence only mints a cookie for a
-    // first visit CARRYING the token, and re-mints per Host authority, so the
-    // parent composes `<origin>/dsh/?token=…` per request. Before the child
-    // reported the token the iframe pointed at the bare mount and every visit
-    // 401'd ("reopen the URL printed by dsh web").
-    let dshAuthQuery = ""
-    const reloader = new DshWebColdReload({
-      build: async () => {
-        const container = await spawnWebChildContainer({
-          spawn: () =>
-            spawnDetachedWebChild(childCommand, {
-              ...Object.fromEntries(
-                Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
-              ),
-              ELLAMAKA_DSH: "1",
-            }),
-          port: 0,
-          home,
-          readyTimeoutMs: 120_000,
-        })
-        // The child's launch token is process-scoped and re-reported on every
-        // rebuild, so each new generation refreshes the iframe entry.
-        dshAuthQuery = container.authPath ?? ""
-        return { container, publish: () => {} }
-      },
-      logger: {
-        info: (message, extra) => Log.Default.info(message, extra),
-        warn: (message, extra) => Log.Default.warn(message, extra),
-        error: (message, extra) => Log.Default.error(message, extra),
-      },
-      // Plan Task 9 Interface: only a PUBLISHED generation emits
-      // runtime.reloaded — a failed rebuild publishes no fake revision.
-      onRebuilt: (result) => {
-        if (result.ok) emitRuntimeReloaded("dsh:web")
-      },
-    })
-    webReloader = reloader
-    await reloader.ensureBuilt()
-    const requestHandler = reloader.requestHandler()
-    const upgradeHandler = reloader.upgradeHandler()
-    const mountPath = "/dsh" as const
-    unmountDsh = server.mountNodeRoute({
-      prefix: mountPath,
-      // auth-fix-3: the dsh mount brings its own complete browser-auth
-      // (launch-token → signed cookie fence inside the child), so it declares
-      // "self" on the host auth stack it bypasses.
-      auth: "self",
-      request: (req, res) => {
-        requestHandler(req, res)
-      },
-      upgrade: (req, socket, head) => upgradeHandler(req, socket, head),
-    })
-    // The Workbench iframe enters the DSH surface through the official rc.1
-    // browser-auth launch token. With the web container in the child, the
-    // entry URL is the mount root: the child mints its launch token through
-    // its own connection service and the first `/dsh/` visit redirects to the
-    // token exchange through the proxy (fail-closed 401 fence verified in the
-    // child tests). The origin is resolved PER REQUEST from the Host header.
-    setDshUrlGetter((requestHost) => {
-      try {
-        const origin = routableDshOrigin(server.hostname, server.port, requestHost)
-        // authPath is child-root relative (`/?token=…`): strip its leading "/"
-        // before appending to the mount root so the composed entry stays
-        // `/dsh/?token=…` (never a doubled slash).
-        return new URL(`${mountPath}/${dshAuthQuery.replace(/^\//, "")}`, origin).toString()
-      } catch {
-        return undefined
-      }
-    })
-    Log.Default.info("dsh web engine mounted", { mountPath, revision: reloader.revision })
-
-    const toolsHost = await mountDshTools(toolsHub.ctx, {
-      home,
-      port: 0,
-      logDir,
-      logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
-      installAnchor: anchor.path,
-      runtime,
-    })
-    toolsHub.ctx.logger("dsh-tools").info("tool container mounted")
-    ;(globalThis as Record<string, unknown>).__ellamakaDshContainer = toolsHub.ctx
-
-    // Plugin Runtime Service (D-02): the server process watches the plugin
-    // store and replays include patches into the containers when CLI-side
-    // installs change it. With the web container in a child process, the web
-    // unit's composition replay is a CHILD REBUILD (the child owns its module
-    // graph); the tools unit replays in-process as before. A degraded watcher
-    // never breaks the engine. The container logger is injected so
-    // store/replay failures land in the dsh-plugins log with structure
-    // (rook W-02).
-    let pluginService:
-      | { replay(): Promise<{ ok: true } | { ok: false; error: string }>; stop(): Promise<void> }
-      | undefined
+  const mountWeb = async () => {
+    if (!(intent.web && preparation.web.status === "prepared")) return
     try {
-      const { startDshPluginService } = await import("@wopal/ellamaka-cordis/plugins/runtime")
-      const watcherLog = toolsHub.ctx.logger("dsh-plugins")
-      pluginService = startDshPluginService({
+      const { DshWebColdReload } = await import("@wopal/ellamaka-cordis/runtime/web-cold-reload")
+      const { spawnDetachedWebChild, spawnWebChildContainer, webChildArgs } = await import("./dsh-web-child")
+      const childCommand = webChildArgs(resolveEllamakaCommand(), {
         home,
-        containers: [
-          {
-            profile: "ellamaka-tools",
-            ctx: toolsHub.ctx,
-            includeEntry: toolsHost.includeEntry,
-            stackContext: toolsHost.stackContext,
-          },
-          {
-            // The web container lives in the child process: a composition
-            // change is applied IN PLACE there (its own watcher replays the
-            // patch stack), so the host must NOT rebuild — a rebuild drops
-            // every live WebSocket and the iframe reconnects for a config
-            // edit. Only a DEPENDENCY change needs a fresh module graph
-            // (DESIGN 两级重载: hot replay vs cold reload).
-            profile: "web",
-            includeEntry: { id: "web-child", update: async () => {} },
-            rebuild: createDependencyRebuildGate({
-              profileDir: profileDirOf(home, "web"),
-              rebuild: () => reloader.rebuild(),
-            }),
-          },
-        ],
+        port: 0,
+        installAnchor: anchor.path,
+        logDir,
+        trustedHosts: trustedDshAuthorities(
+          { hostname: server.hostname, port: server.port },
+          opts.cors ?? [],
+          localDshInterfaceAddresses(),
+        ),
+      })
+      let dshAuthQuery = ""
+      const reloader = new DshWebColdReload({
+        build: async () => {
+          const container = await spawnWebChildContainer({
+            spawn: () =>
+              spawnDetachedWebChild(
+                childCommand,
+                Object.fromEntries(
+                  Object.entries(process.env).filter(
+                    (entry): entry is [string, string] => typeof entry[1] === "string",
+                  ),
+                ),
+              ),
+            port: 0,
+            home,
+            readyTimeoutMs: 120_000,
+          })
+          dshAuthQuery = container.authPath ?? ""
+          return { container, publish: () => {} }
+        },
         logger: {
-          info: (message, extra) => watcherLog.info(message, extra),
-          warn: (message, extra) => watcherLog.warn(message, extra),
-          error: (message, extra) => watcherLog.error(message, extra),
+          info: (message, extra) => Log.Default.info(message, extra),
+          warn: (message, extra) => Log.Default.warn(message, extra),
+          error: (message, extra) => Log.Default.error(message, extra),
+        },
+        onRebuilt: (result) => {
+          if (result.ok) emitRuntimeReloaded("dsh:web")
         },
       })
+      webReloader = reloader
+      await reloader.ensureBuilt()
+      const requestHandler = reloader.requestHandler()
+      const upgradeHandler = reloader.upgradeHandler()
+      const mountPath = "/dsh" as const
+      unmountDsh = server.mountNodeRoute({
+        prefix: mountPath,
+        auth: "self",
+        request: (req, res) => {
+          void requestHandler(req, res)
+        },
+        upgrade: (req, socket, head) => {
+          upgradeHandler(req, socket, head)
+        },
+      })
+      setDshUrlGetter((requestHost) => {
+        try {
+          const origin = routableDshOrigin(server.hostname, server.port, requestHost)
+          return new URL(`${mountPath}/${dshAuthQuery.replace(/^\//, "")}`, origin).toString()
+        } catch {
+          return undefined
+        }
+      })
+      setDshStatus("web", "ready")
+      Log.Default.info("dsh web engine mounted", { mountPath, revision: reloader.revision })
     } catch (error) {
-      toolsHub.ctx.logger("dsh-plugins").warn("plugin runtime service failed to start", {
+      setDshStatus("web", "degraded")
+      setDshUrlGetter(() => undefined)
+      unmountDsh?.()
+      await webReloader?.dispose().catch(() => {})
+      webReloader = undefined
+      unmountDsh = undefined
+      Log.Default.error("dsh web profile load failed", {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+  }
 
-    setDshStatus("ready")
-    return {
-      mountPath,
-      dispose: async () => {
-        try {
-          // The web child (and its Home lease) dies with the controller's
-          // disposal; the in-process tools container disposes after.
-          setDshUrlGetter(() => undefined)
-          setDshStatus("disabled")
-          delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
-          unmountDsh?.()
-          await pluginService?.stop()
-          await reloader.dispose()
-          await toolsHost.dispose()
-          await toolsHub?.dispose()
-        } finally {
-          restoreDshHome()
-          await homeAccess.lease.release()
-        }
-      },
-    }
-  } catch (error) {
-    setDshStatus("degraded")
-    setDshUrlGetter(() => undefined)
-    // Never crash the host: log, dispose partial resources, and continue
-    // without dsh (B-06).
-    Log.Default.error("dsh engine mount failed", {
-      error: error instanceof Error ? error.message : String(error),
-    })
+  const mountTools = async () => {
+    if (!(intent.tools && preparation.tools.status === "prepared")) return
     try {
-      unmountDsh?.()
-      await webReloader?.dispose()
-      await toolsHub?.dispose()
-    } catch {
-      // Best-effort partial disposal; the host continues regardless.
+      const { CordisHub } = await import("@wopal/ellamaka-cordis")
+      const { mountDshTools } = await import("@wopal/ellamaka-cordis/dsh-web")
+      toolsHub = new CordisHub(null, { context: new runtime.cordis.Context() })
+      toolsHost = await mountDshTools(toolsHub.ctx, {
+        home,
+        port: 0,
+        logDir,
+        logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
+        installAnchor: anchor.path,
+        runtime,
+      })
+      ;(globalThis as Record<string, unknown>).__ellamakaDshContainer = toolsHub.ctx
+      setDshStatus("tools", "ready")
+      toolsHub.ctx.logger("dsh-tools").info("tool container mounted")
+    } catch (error) {
+      setDshStatus("tools", "degraded")
+      delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+      await toolsHost?.dispose().catch(() => {})
+      await toolsHub?.dispose().catch(() => {})
+      toolsHost = undefined
+      toolsHub = undefined
+      Log.Default.error("dsh tools profile load failed; native tools remain available", {
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
-    delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+  }
+
+  await Promise.all([mountWeb(), mountTools()])
+
+  if (webReloader || (toolsHub && toolsHost)) {
+    try {
+      const { startDshPluginService } = await import("@wopal/ellamaka-cordis/plugins/runtime")
+      type Container = Parameters<typeof startDshPluginService>[0]["containers"][number]
+      const containers: Container[] = []
+      if (toolsHub && toolsHost) {
+        containers.push({
+          profile: "ellamaka-tools",
+          ctx: toolsHub.ctx,
+          includeEntry: toolsHost.includeEntry,
+          stackContext: toolsHost.stackContext,
+        })
+      }
+      if (webReloader) {
+        const reloader = webReloader
+        containers.push({
+          profile: "web",
+          includeEntry: { id: "web-child", update: async () => {} },
+          rebuild: createDependencyRebuildGate({
+            profileDir: profileDirOf(home, "web"),
+            rebuild: () => reloader.rebuild(),
+          }),
+        })
+      }
+      pluginService = startDshPluginService({
+        home,
+        containers,
+        logger: {
+          info: (message, extra) => Log.Default.info(message, extra),
+          warn: (message, extra) => Log.Default.warn(message, extra),
+          error: (message, extra) => Log.Default.error(message, extra),
+        },
+      })
+    } catch (error) {
+      Log.Default.warn("dsh plugin runtime service failed to start", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  if (!webReloader && !toolsHub) {
     restoreDshHome()
     await homeAccess.lease.release()
     return undefined
+  }
+
+  return {
+    mountPath: "/dsh",
+    dispose: async () => {
+      try {
+        if (intent.web) setDshStatus("web", "disabled")
+        if (intent.tools) setDshStatus("tools", "disabled")
+        setDshUrlGetter(() => undefined)
+        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
+        unmountDsh?.()
+        await pluginService?.stop()
+        await webReloader?.dispose()
+        await toolsHost?.dispose()
+        await toolsHub?.dispose()
+      } finally {
+        restoreDshHome()
+        await homeAccess.lease.release()
+      }
+    },
   }
 }

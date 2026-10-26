@@ -122,6 +122,7 @@ function captureThrown(request: () => Promise<unknown>) {
   return call(async () => {
     try {
       await request()
+      return undefined
     } catch (error) {
       return error
     }
@@ -260,6 +261,7 @@ httpapiInstance(
       expect(Object.keys(body)).toEqual(["effective"])
       expect(Object.keys(record(body.effective)).sort()).toEqual(["ellamaka", "wopal"])
       expect(record(body.effective).ellamaka).toEqual(current.data)
+      expect(record(record(record(body.effective).wopal).dsh).web).toEqual({ enabled: true })
       expect(record(record(record(body.effective).wopal).pluginConfig)["dsh-adapter"]).toEqual({
         global: true,
         space: true,
@@ -283,7 +285,54 @@ httpapiInstance(
       expect(Object.keys(body)).toEqual(["effective"])
       expect(Object.keys(record(body.effective)).sort()).toEqual(["ellamaka", "wopal"])
       expect(record(body.effective).ellamaka).toEqual(current.data)
+      expect(record(record(record(body.effective).wopal).dsh).web).toEqual({ enabled: true })
       expect(record(record(body.effective).wopal).pluginConfig).toEqual({})
+    }),
+)
+
+httpapiInstance(
+  "updates the global DSH Web setting through config-v2 and reports restart-required",
+  { serverPath: "raw" },
+  ({ sdk }) =>
+    Effect.gen(function* () {
+      const updated = yield* capture(() =>
+        sdk.config.configUpdate({
+          target: "global",
+          updates: [{ key: "wopal.dsh.web.enabled", value: false }],
+        }),
+      )
+      expect(updated.status).toBe(200)
+      expect(updated.data).toEqual({ changed: true, apply: "restart-required" })
+      const read = yield* capture(() => sdk.config.configGet())
+      expect(record(record(record(record(read.data).effective).wopal).dsh).web).toEqual({ enabled: false })
+    }),
+)
+
+httpapiInstance(
+  "rejects config-v2 writes outside the registered global DSH Web key",
+  { serverPath: "raw" },
+  ({ directory }) =>
+    Effect.gen(function* () {
+      const patch = (payload: unknown) =>
+        call(() =>
+          serverFetch("raw")(
+            new Request(`http://localhost/config-v2?directory=${encodeURIComponent(directory)}`, {
+              method: "PATCH",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(payload),
+            }),
+          ),
+        )
+      const spaceTarget = yield* patch({
+        target: "space",
+        updates: [{ key: "wopal.dsh.web.enabled", value: false }],
+      })
+      const unknownKey = yield* patch({
+        target: "global",
+        updates: [{ key: "wopal.unknown", value: false }],
+      })
+      expect(spaceTarget.status).toBe(400)
+      expect(unknownKey.status).toBe(400)
     }),
 )
 
@@ -496,9 +545,9 @@ describe("HttpApi SDK", () => {
           requiredVersion: MIN_WOPAL_CLI_VERSION,
         },
       })
-      // `dsh` exposes the DSH runtime terminal status (Issue #221): no mount in
-      // this test process means the holder defaults to `disabled`.
-      expect(health.data?.dsh).toBe("disabled")
+      // Web and Tools have independent runtime status; no mount in this test
+      // process means both holders default to disabled.
+      expect(health.data?.dsh).toEqual({ web: "disabled", tools: "disabled" })
       expect(yield* firstEvent((signal) => sdk.global.event({ signal }))).toMatchObject({
         payload: { type: "server.connected" },
       })
@@ -580,9 +629,9 @@ describe("HttpApi SDK", () => {
         // throwOnError path: SDK wraps the body in a real Error with the
         // server's message, with the original parsed body preserved under
         // `.cause.body`.
-        expect(thrown).toBeInstanceOf(Error)
-        expect((thrown as Error).message).toBe(expected.data.message)
-        expect(((thrown as Error).cause as { body: unknown }).body).toEqual(expected)
+        if (!(thrown instanceof Error)) throw new Error("throwOnError did not throw an Error")
+        expect(thrown.message).toBe(expected.data.message)
+        expect(record(thrown.cause).body).toEqual(expected)
         return {
           status: missing.status,
           error: missing.error,

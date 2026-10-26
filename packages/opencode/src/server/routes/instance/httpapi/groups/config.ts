@@ -12,9 +12,25 @@ const ConfigV2ReadResponse = Schema.Struct({
   effective: Schema.Struct({
     ellamaka: Config.Info,
     wopal: Schema.Struct({
+      dsh: Schema.Struct({
+        web: Schema.Struct({ enabled: Schema.Boolean }),
+      }),
       pluginConfig: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)),
     }),
   }),
+})
+const ConfigV2UpdatePayload = Schema.Struct({
+  target: Schema.Literal("global"),
+  updates: Schema.Array(
+    Schema.Struct({
+      key: Schema.Literal("wopal.dsh.web.enabled"),
+      value: Schema.Boolean,
+    }),
+  ),
+})
+const ConfigV2UpdateResult = Schema.Struct({
+  changed: Schema.Boolean,
+  apply: Schema.Literal("restart-required"),
 })
 
 export const ConfigApi = HttpApi.make("config")
@@ -40,6 +56,18 @@ export const ConfigApi = HttpApi.make("config")
             summary: "Get effective configuration",
             description:
               "Read the loaded engine configuration and merged Wopal plugin configuration for this instance.",
+          }),
+        ),
+        HttpApiEndpoint.patch("configUpdate", "/config-v2", {
+          query: WorkspaceRoutingQuery,
+          payload: ConfigV2UpdatePayload,
+          success: described(ConfigV2UpdateResult, "Update a registered Wopal product setting"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.configUpdate",
+            summary: "Update Wopal product configuration",
+            description: "Update the global DSH Web surface setting. The change requires a server restart.",
           }),
         ),
         HttpApiEndpoint.patch("update", root, {

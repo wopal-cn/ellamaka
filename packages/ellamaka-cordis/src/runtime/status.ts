@@ -95,12 +95,16 @@ export function homeProfilesDirOf(dshRoot: string): string {
 }
 
 /**
- * Gate on `ELLAMAKA_DSH`. Only the exact value `0` disables DSH; unset or any
- * other value enables it (DESIGN §3.4.4).
+ * Gate the Ellamaka-owned tools integration on `ELLAMAKA_DSH_TOOLS`.
+ * Only the exact value `0` disables the tools profile; unset or any other
+ * value enables it.
  */
-export function isDshEnabled(env: Record<string, string | undefined>): boolean {
-  return env["ELLAMAKA_DSH"] !== "0"
+export function isDshToolsEnabled(env: Record<string, string | undefined>): boolean {
+  return env["ELLAMAKA_DSH_TOOLS"] !== "0"
 }
+
+/** @deprecated Use profile-specific intent; retained for the legacy manager API. */
+export const isDshEnabled = isDshToolsEnabled
 
 /**
  * Closure directory name: the manifest sha256 digest's first 12 hex chars.

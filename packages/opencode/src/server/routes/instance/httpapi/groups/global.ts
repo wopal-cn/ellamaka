@@ -13,7 +13,10 @@ const GlobalHealth = Schema.Struct({
   version: Schema.String,
   cli: CliHealthSchema,
   managedInstanceId: Schema.optional(Schema.String),
-  dsh: Schema.optional(Schema.Literals(["disabled", "preparing", "ready", "degraded"])),
+  dsh: Schema.Struct({
+    web: Schema.Literals(["disabled", "preparing", "ready", "degraded"]),
+    tools: Schema.Literals(["disabled", "preparing", "ready", "degraded"]),
+  }),
   dshRuntime: Schema.optional(
     Schema.Struct({
       closureVersion: Schema.Number,

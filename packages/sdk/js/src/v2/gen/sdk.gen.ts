@@ -24,6 +24,8 @@ import type {
   Config as Config3,
   ConfigConfigGetErrors,
   ConfigConfigGetResponses,
+  ConfigConfigUpdateErrors,
+  ConfigConfigUpdateResponses,
   ConfigGetErrors,
   ConfigGetResponses,
   ConfigProvidersErrors,
@@ -1114,6 +1116,48 @@ export class Config2 extends HeyApiClient {
       url: "/config-v2",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update Wopal product configuration
+   *
+   * Update the global DSH Web surface setting. The change requires a server restart.
+   */
+  public configUpdate<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      target?: "global"
+      updates?: Array<{
+        key: "wopal.dsh.web.enabled"
+        value: boolean
+      }>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "target" },
+            { in: "body", key: "updates" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<ConfigConfigUpdateResponses, ConfigConfigUpdateErrors, ThrowOnError>({
+      url: "/config-v2",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

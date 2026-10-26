@@ -4,7 +4,6 @@ import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
-import { mountDshEngine } from "./dsh-mount"
 
 /**
  * The ready-to-open Workbench URL. With a server password configured, the
@@ -51,10 +50,10 @@ export const ServeCommand = effectCmd({
 
     // Optional dsh engine (single-process, dual-container, DESIGN-dsh-base.md
     // §2.1/§2.2). The unified Runtime Manager (in dsh-mount.ts, shared with the
-    // `web` command) gates on `ELLAMAKA_DSH` itself — `=0` → disabled with zero
+    // `web` command) uses the global Web setting plus `ELLAMAKA_DSH_TOOLS`; when both are disabled there is zero
     // file access — and `disabled`/`degraded` never block the server. The
     // dynamic import keeps the dsh closure out of the desktop sidecar bundle —
-    // only ELLAMAKA_DSH-enabled CLI runs load it.
+    // only DSH-profile-enabled CLI runs load it.
     {
       const { mountDshEngine: engine } = yield* Effect.promise(() => import("./dsh-mount"))
       const handle = yield* Effect.promise(() => engine(server, { cors: opts.cors }))

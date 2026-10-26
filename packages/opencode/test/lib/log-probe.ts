@@ -37,7 +37,7 @@ export function probeEnv(wopalHome: string, extra: Record<string, string> = {}):
     HOME: process.env.HOME ?? "",
     WOPAL_HOME: wopalHome,
     OPENCODE_PURE: "1",
-    ELLAMAKA_DSH: "0",
+    ELLAMAKA_DSH_TOOLS: "0",
     ELLAMAKA_DISABLE_AUTOUPDATE: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",
     OPENCODE_AUTH_CONTENT: "{}",

@@ -25,6 +25,7 @@ export { createDshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export type { DshRuntimeApi } from "@wopal/ellamaka-cordis/runtime/loader"
 export { bootDshWeb, bootDshTools } from "@wopal/ellamaka-cordis/dsh-web"
 export { trackDshToolsInitialization } from "@wopal/ellamaka-cordis/dsh-adapter/host"
+export { readDshWebEnabled, resolveDshProfileIntent } from "@/config/wopal-product-settings"
 export type { DshWebHost, DshToolsHost } from "@wopal/ellamaka-cordis/dsh-web"
 export { startDshPluginService } from "@wopal/ellamaka-cordis/plugins/runtime"
 export type {
@@ -61,4 +62,4 @@ export { setDshUrlGetter } from "@/workbench/dsh-url"
 // with a runtime fact in Desktop mode too.
 export { setDshStatus } from "@/workbench/dsh-status"
 export type { DshRuntimeStatus } from "@/workbench/dsh-status"
-export { prepareDshHost, getCorePreparationHealth } from "@/core/preparation"
+export { prepareDshHost, prepareDshProfiles, getCorePreparationHealth } from "@/core/preparation"

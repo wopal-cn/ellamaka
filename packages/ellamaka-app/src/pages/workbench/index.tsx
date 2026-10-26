@@ -31,7 +31,6 @@ import { WorkbenchSingletonGuard } from "./singleton-guard"
 import { useWorkbenchCommands } from "./use-workbench-commands"
 import { WorkbenchActionsProvider, useWorkbenchActions } from "./workbench-actions"
 import { WorkbenchRuntimeProvider, useWorkbenchRuntime } from "./workbench-runtime"
-import { WorkbenchDshFlagBinding } from "./workbench-dsh-flag-binding"
 import { WorkbenchPromptRegistryProvider } from "./workbench-prompt-registry"
 import { WorkbenchSidecarCleanupBinding } from "./workbench-sidecar-cleanup"
 import { SessionActivityProvider } from "@/context/session-activity-context"
@@ -40,7 +39,7 @@ import { WorkbenchSessionDeepLink } from "./workbench-session-deep-link"
 import { DshSurface } from "./dsh-surface"
 import { WorkbenchSurfaceProvider } from "./workbench-surface-context"
 import { ViewRegistryProvider, useViewRegistry, registerDefaultViews } from "./view-registry"
-import { reportWorkbenchError, type WorkbenchErrorDetail, WORKBENCH_ERROR_EVENT } from "./workbench-error"
+import { reportWorkbenchError, WORKBENCH_ERROR_EVENT } from "./workbench-error"
 import { CliRepairDialog } from "./parts/cli-repair-dialog"
 import { useCommand } from "@/context/command"
 import { useDialog } from "@wopal/ui/context/dialog"
@@ -253,7 +252,11 @@ function WorkbenchShell() {
 
   onMount(() => {
     const onError = (event: Event) => {
-      const detail = (event as CustomEvent<WorkbenchErrorDetail>).detail
+      if (!(event instanceof CustomEvent)) return
+      const detail: unknown = event.detail
+      if (!detail || typeof detail !== "object") return
+      if (!("operation" in detail) || typeof detail.operation !== "string") return
+      if (!("message" in detail) || typeof detail.message !== "string") return
       wb.pushDiagnostic("error", `${detail.operation}: ${detail.message}`, {
         autoDismiss: false,
         source: detail.operation,
@@ -346,7 +349,7 @@ function WorkbenchShell() {
                 class="rounded-lg bg-v2-button-primary-base px-4 py-2 text-14-medium text-v2-text-on-brand-base hover:bg-v2-button-primary-hover"
                 onClick={() => {
                   void import("@/components/dialog-select-server").then((x) => {
-                    dialog.show(() => <x.DialogSelectServer />)
+                    void dialog.show(() => <x.DialogSelectServer />)
                   })
                 }}
               >
@@ -389,7 +392,7 @@ function WorkbenchErrorFallback(props: { error: Error; reset: () => void }) {
               class="rounded-md bg-v2-icon-icon-brand px-5 py-2 text-13-semibold text-white hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
               onClick={() => {
                 void import("@/components/dialog-select-server").then((x) => {
-                  useDialog().show(() => <x.DialogSelectServer />)
+                  void useDialog().show(() => <x.DialogSelectServer />)
                 })
               }}
             >
@@ -437,7 +440,6 @@ export default function Workbench() {
               <WorkbenchRuntimeProvider>
                 <WorkbenchActionsProvider>
                   <WorkbenchSidecarCleanupBinding />
-                  <WorkbenchDshFlagBinding />
                   <SpaceStoreProvider>
                     <ViewRegistryProvider>
                       <ErrorBoundary

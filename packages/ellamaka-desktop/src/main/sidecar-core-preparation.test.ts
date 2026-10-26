@@ -5,12 +5,19 @@ import { join } from "node:path"
 describe("Desktop sidecar CorePreparation wiring", () => {
   test("starts the native listener before shared DSH preparation and no longer calls the legacy manager", () => {
     const source = readFileSync(join(import.meta.dir, "sidecar.ts"), "utf8")
-    expect(source).toContain("prepareDshHost")
+    expect(source).toContain("prepareDshProfiles")
     expect(source).not.toContain("initializeDshRuntime")
     const listener = source.indexOf("listener = serverListener")
     const mount = source.indexOf("dshInitialization = initializeDsh(command)")
     expect(listener).toBeGreaterThan(-1)
     expect(mount).toBeGreaterThan(listener)
+  })
+
+  test("activates Web and Tools independently after shared preparation", () => {
+    const source = readFileSync(join(import.meta.dir, "sidecar.ts"), "utf8")
+    expect(source).toContain("Promise.all([")
+    expect(source).toContain("mountDshIfPresent(command, legacyAdoptionConfirmed)")
+    expect(source).toContain("mountDshToolsIfPresent(command, legacyAdoptionConfirmed)")
   })
 
   test("reports server readiness before DSH preparation so the window never waits for DSH", () => {

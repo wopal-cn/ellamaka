@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { CorePreparationEvent } from "@wopal/ellamaka-core/preparation"
 import { getCorePreparationHealth, prepareDshHost } from "@/core/preparation"
 import { GlobalBus } from "@/bus/global"
+import { seedDshClosure } from "../fixture/dsh-closure"
 
 const dirs: string[] = []
 afterEach(() => {
@@ -12,6 +13,22 @@ afterEach(() => {
 })
 
 describe("product CorePreparation host wiring", () => {
+  test("forwards the requested profile set into real host preparation", async () => {
+    const wopalHome = mkdtempSync(join(tmpdir(), "core-preparation-web-only-"))
+    dirs.push(wopalHome)
+    seedDshClosure(wopalHome)
+
+    const outcome = await prepareDshHost({
+      wopalHome,
+      runtimeLogFile: join(wopalHome, "logs", "dsh-runtime.log"),
+      profiles: ["web"],
+    })
+
+    expect(outcome.status).toBe("prepared")
+    expect(existsSync(join(wopalHome, "dsh", "home", "profiles", "web", "package.json"))).toBe(true)
+    expect(existsSync(join(wopalHome, "dsh", "home", "profiles", "ellamaka-tools", "package.json"))).toBe(false)
+  })
+
   test("DSH disabled publishes one skipped fact and performs zero DSH filesystem work", async () => {
     const wopalHome = mkdtempSync(join(tmpdir(), "core-preparation-disabled-"))
     dirs.push(wopalHome)
@@ -25,7 +42,7 @@ describe("product CorePreparation host wiring", () => {
       const outcome = await prepareDshHost({
         wopalHome,
         runtimeLogFile: join(wopalHome, "logs", "dsh-runtime.log"),
-        env: { ELLAMAKA_DSH: "0" },
+        profiles: [],
         onProgress: (event) => progress.push(event),
       })
       expect(outcome.status).toBe("disabled")

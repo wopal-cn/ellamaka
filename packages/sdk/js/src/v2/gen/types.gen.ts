@@ -50,6 +50,7 @@ export type Event =
   | EventWorktreeFailed
   | EventServerConnected
   | EventGlobalDisposed
+  | EventRuntimeReloaded1
   | EventCorePreparation
   | EventModelsDevRefreshed
   | EventPluginAdded
@@ -902,6 +903,7 @@ export type GlobalEvent = {
     | EventWorktreeFailed
     | EventServerConnected
     | EventGlobalDisposed
+    | EventRuntimeReloaded
     | EventCorePreparation
     | EventModelsDevRefreshed
     | EventPluginAdded
@@ -3012,6 +3014,15 @@ export type EventGlobalDisposed = {
   }
 }
 
+export type EventRuntimeReloaded = {
+  id: string
+  type: "runtime.reloaded"
+  properties: {
+    unit: string
+    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
 export type EventCorePreparation = {
   id: string
   type: "core.preparation"
@@ -3892,6 +3903,15 @@ export type EventTuiToastShow1 = {
   }
 }
 
+export type EventRuntimeReloaded1 = {
+  id: string
+  type: "runtime.reloaded"
+  properties: {
+    unit: string
+    revision: number | "NaN" | "Infinity" | "-Infinity"
+  }
+}
+
 export type ModelV2Info1 = {
   id: string
   apiID: string
@@ -4126,7 +4146,10 @@ export type GlobalHealthResponses = {
       reason?: string
     }
     managedInstanceId?: string
-    dsh?: "disabled" | "preparing" | "ready" | "degraded"
+    dsh: {
+      web: "disabled" | "preparing" | "ready" | "degraded"
+      tools: "disabled" | "preparing" | "ready" | "degraded"
+    }
     dshRuntime?: {
       closureVersion: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
       homeVersion?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
@@ -4668,6 +4691,11 @@ export type ConfigConfigGetResponses = {
     effective: {
       ellamaka: Config
       wopal: {
+        dsh: {
+          web: {
+            enabled: boolean
+          }
+        }
         pluginConfig: {
           [key: string]: {
             [key: string]: unknown
@@ -4679,6 +4707,43 @@ export type ConfigConfigGetResponses = {
 }
 
 export type ConfigConfigGetResponse = ConfigConfigGetResponses[keyof ConfigConfigGetResponses]
+
+export type ConfigConfigUpdateData = {
+  body?: {
+    target: "global"
+    updates: Array<{
+      key: "wopal.dsh.web.enabled"
+      value: boolean
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config-v2"
+}
+
+export type ConfigConfigUpdateErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type ConfigConfigUpdateError = ConfigConfigUpdateErrors[keyof ConfigConfigUpdateErrors]
+
+export type ConfigConfigUpdateResponses = {
+  /**
+   * Update a registered Wopal product setting
+   */
+  200: {
+    changed: boolean
+    apply: "restart-required"
+  }
+}
+
+export type ConfigConfigUpdateResponse = ConfigConfigUpdateResponses[keyof ConfigConfigUpdateResponses]
 
 export type ConfigProvidersData = {
   body?: never

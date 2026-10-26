@@ -15,7 +15,7 @@ import { join } from "node:path"
 // serve handler, so the `web` entry silently shipped without any /dsh mount
 // (packaged `web` fell into the SPA fallback). Every command that owns a
 // server must delegate to the shared assembly — which now runs the unified
-// Runtime Manager (gating on ELLAMAKA_DSH internally, DESIGN-dsh-base.md)
+// Runtime Manager (gating on ELLAMAKA_DSH_TOOLS internally, DESIGN-dsh-base.md)
 // and mounts only on `ready`.
 describe("server entry points wire the shared dsh assembly", () => {
   const cases = [
@@ -23,21 +23,22 @@ describe("server entry points wire the shared dsh assembly", () => {
     { cmd: "web", path: "../../../src/cli/cmd/web.ts" },
   ]
   for (const { cmd, path } of cases) {
-    test(`${cmd} delegates to mountDshEngine (manager gates ELLAMAKA_DSH internally)`, () => {
+    test(`${cmd} delegates to mountDshEngine (manager gates ELLAMAKA_DSH_TOOLS internally)`, () => {
       const source = readFileSync(join(import.meta.dir, path), "utf-8")
       expect(source).toContain("mountDshEngine")
       // The manual kill-switch check is gone: the manager gates internally, so
-      // the entry must NOT short-circuit on Flag.ELLAMAKA_DSH itself.
-      expect(source).not.toContain("if (Flag.ELLAMAKA_DSH)")
+      // the entry must NOT short-circuit on Flag.ELLAMAKA_DSH_TOOLS itself.
+      expect(source).not.toContain("if (Flag.ELLAMAKA_DSH_TOOLS)")
     })
   }
 
   test("dsh-mount drives unified CorePreparation and injects the resolved runtime", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
-    expect(source).toContain("prepareDshHost")
+    expect(source).toContain("prepareDshProfiles")
     expect(source).not.toContain("initializeDshRuntime")
     expect(source).toContain("resolveInstallAnchor")
     expect(source).toContain("createDshRuntimeApi")
+    expect(source).toContain("Promise.all([mountWeb(), mountTools()])")
     expect(source).toContain("runtimeLogFile")
     // One level boundary for every DSH consumer: the host's effective level
     // (written back to ELLAMAKA_LOG_LEVEL) is mapped once, in cordis.
@@ -59,12 +60,13 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).not.toContain("mountDshWeb(")
   })
 
-  test("dsh-mount wraps init+mount in a degrade boundary (B-06) and injects the closure context (B-01)", () => {
+  test("dsh-mount degrades profile loads independently (B-06) and injects the closure context (B-01)", () => {
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/dsh-mount.ts"), "utf-8")
-    // A broken closure must never crash the CLI host: the assembly is wrapped
-    // in a try/catch that logs, disposes partial resources, and returns
-    // undefined (no mount, no process.exit).
-    expect(source).toContain("dsh engine mount failed")
+    // Shared runtime failures degrade DSH without exiting, while Web and Tools
+    // activation failures are isolated from each other.
+    expect(source).toContain("dsh runtime load failed")
+    expect(source).toContain("dsh web profile load failed")
+    expect(source).toContain("dsh tools profile load failed; native tools remain available")
     expect(source).toContain("mountDshEngine")
     // The in-process hub (tools container) is constructed with the
     // closure-resolved context — never a bare `new CordisHub(null)` that
@@ -85,7 +87,7 @@ describe("server entry points wire the shared dsh assembly", () => {
     expect(source).toContain("process.env.DSH_HOME = activeDshHome")
     // Task 4 safety boundary: the manager kill-switch and Home preparation
     // must complete before any DSH-specific environment mutation.
-    const call = source.indexOf("prepareDshHost({")
+    const call = source.indexOf("prepareDshProfiles({")
     const env = source.indexOf("process.env.DSH_HOME =")
     expect(call).toBeGreaterThan(-1)
     expect(env).toBeGreaterThan(call)
@@ -94,7 +96,7 @@ describe("server entry points wire the shared dsh assembly", () => {
 
   test("web opens the browser before suspending on the dsh mount", () => {
     // Regression: the dsh mount block suspended on Effect.never BEFORE the
-    // open(browser) call, so ELLAMAKA_DSH=1 web never opened a browser.
+    // open(browser) call, so ELLAMAKA_DSH_TOOLS=1 web never opened a browser.
     // The browser open must precede the command's never-suspend.
     const source = readFileSync(join(import.meta.dir, "../../../src/cli/cmd/web.ts"), "utf-8")
     const openIdx = source.indexOf("open(")

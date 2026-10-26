@@ -9,6 +9,9 @@ import { TOOLS_PROFILE_BLOCK, TOOLS_PROFILE_BLOCK_BEGIN, TOOLS_PROFILE_BLOCK_END
 
 export const WEB_PROFILE_NAME = "web"
 export const TOOLS_PROFILE_NAME = "ellamaka-tools"
+export type DshProfileName = typeof WEB_PROFILE_NAME | typeof TOOLS_PROFILE_NAME
+
+const ALL_PROFILE_NAMES: readonly DshProfileName[] = [WEB_PROFILE_NAME, TOOLS_PROFILE_NAME]
 
 /**
  * Ids the retired host-owned `ellamaka-tools` template disabled. The template
@@ -344,31 +347,30 @@ function needsLegacyToolsPatchCleanup(toolsPatch: string): boolean {
 }
 
 /** Purely inspect Ellamaka-owned profile resources. */
-export function inspectDshProfileResources(wopalHome: string): DshProfileResourceInspection {
+export function inspectDshProfileResources(
+  wopalHome: string,
+  profiles: readonly DshProfileName[] = ALL_PROFILE_NAMES,
+): DshProfileResourceInspection {
   const paths = resourcePathsAtRoot(resolveDshLayout(wopalHome).dshHome)
+  const web = profiles.includes(WEB_PROFILE_NAME)
+  const tools = profiles.includes(TOOLS_PROFILE_NAME)
   const files = [
-    paths.webManifest,
-    paths.webPatch,
-    paths.webRoot,
-    paths.webWorkspace,
-    paths.toolsManifest,
-    paths.toolsPatch,
-    paths.toolsRoot,
-    paths.toolsWorkspace,
+    ...(web ? [paths.webManifest, paths.webPatch, paths.webRoot, paths.webWorkspace] : []),
+    ...(tools ? [paths.toolsManifest, paths.toolsPatch, paths.toolsRoot, paths.toolsWorkspace] : []),
   ]
   const missing = files.filter((file) => !existsSync(file))
   // A retired host-owned patch still needs its one-time cleanup before the
   // profile is ready; that state stays internal (no version-specific field).
-  const needsToolsPatchCleanup = needsLegacyToolsPatchCleanup(paths.toolsPatch)
+  const needsToolsPatchCleanup = tools && needsLegacyToolsPatchCleanup(paths.toolsPatch)
   // The process only rewrites the block when it is actually stale, so a
   // matching composition is never re-assembled on an ordinary boot.
-  const toolsCompositionDrifted = !toolsCompositionCurrent(paths.toolsPatch)
+  const toolsCompositionDrifted = tools && !toolsCompositionCurrent(paths.toolsPatch)
   return {
     ready:
       missing.length === 0 &&
       !needsToolsPatchCleanup &&
       !toolsCompositionDrifted &&
-      !baseBackedToolsManifest(paths.toolsManifest),
+      (!tools || !baseBackedToolsManifest(paths.toolsManifest)),
     missing,
   }
 }
@@ -377,34 +379,44 @@ export function inspectDshProfileResources(wopalHome: string): DshProfileResourc
  * Create only missing host-owned profile resources. The caller must hold the
  * exclusive Home qualification; existing manifests and patches are preserved.
  */
-export function prepareDshProfileResources(wopalHome: string, runtime: DshRuntimeApi): void {
-  prepareDshProfileResourcesAtRoot(resolveDshLayout(wopalHome).dshHome, runtime)
+export function prepareDshProfileResources(
+  wopalHome: string,
+  runtime: DshRuntimeApi,
+  profiles: readonly DshProfileName[] = ALL_PROFILE_NAMES,
+): void {
+  prepareDshProfileResourcesAtRoot(resolveDshLayout(wopalHome).dshHome, runtime, profiles)
 }
 
 /** Prepare an already-resolved DSH territory root (used by isolated activation tests). */
-export function prepareDshProfileResourcesAtRoot(dshRoot: string, runtime: DshRuntimeApi): void {
+export function prepareDshProfileResourcesAtRoot(
+  dshRoot: string,
+  runtime: DshRuntimeApi,
+  profiles: readonly DshProfileName[] = ALL_PROFILE_NAMES,
+): void {
   const paths = resourcePathsAtRoot(dshRoot)
-  const baseManifest = baseBackedToolsManifest(paths.toolsManifest)
+  const web = profiles.includes(WEB_PROFILE_NAME)
+  const tools = profiles.includes(TOOLS_PROFILE_NAME)
+  const baseManifest = tools ? baseBackedToolsManifest(paths.toolsManifest) : undefined
 
   // The official initializer creates missing declarations only; existing user
   // files (manifest, patch layer, pnpm settings) are never touched here.
-  runtime.appBoot.initProfile(paths.web, ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"])
-  runtime.appBoot.initProfile(paths.tools, [])
+  if (web) runtime.appBoot.initProfile(paths.web, ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"])
+  if (tools) runtime.appBoot.initProfile(paths.tools, [])
 
   // `cordis.yml` is the runtime's synthetic root anchor, not user config: the
   // loader writes the composed tree back after every mount, so preparation
   // always resets it or the next boot re-applies a stale composition.
-  writeFileSync(paths.webRoot, "[]\n")
-  writeFileSync(paths.toolsRoot, "[]\n")
+  if (web) writeFileSync(paths.webRoot, "[]\n")
+  if (tools) writeFileSync(paths.toolsRoot, "[]\n")
 
   // Remove only provably host-owned retired disables. User rows stay intact.
-  if (existsSync(paths.toolsPatch)) {
+  if (tools && existsSync(paths.toolsPatch)) {
     const current = readFileSync(paths.toolsPatch, "utf8")
     const cleaned = cleanLegacyToolsPatch(current)
     if (cleaned !== null && cleaned !== current) writeFileSync(paths.toolsPatch, cleaned)
   }
 
-  {
+  if (tools) {
     const current = readFileSync(paths.toolsPatch, "utf8")
     const next = standaloneToolsPatch(current)
     if (next !== current) writeFileSync(paths.toolsPatch, next)
@@ -433,7 +445,7 @@ export function prepareDshProfileResourcesAtRoot(dshRoot: string, runtime: DshRu
   }
 
   // The official resolver uses this parent-walk fallback for shared packages.
-  mkdirSync(join(paths.profileDir, "node_modules"), { recursive: true })
+  if (profiles.length > 0) mkdirSync(join(paths.profileDir, "node_modules"), { recursive: true })
 }
 
 /** Activation is verification-only: never backfill from the running profile. */

@@ -26,6 +26,7 @@ export type DshHostPreparationOptions = {
   /** Operator confirmation for the one-time adoption of an unversioned Home. */
   legacyAdoptionConfirmed?: boolean
   onProgress?: (event: CorePreparationEvent) => void
+  profiles?: readonly ("web" | "ellamaka-tools")[]
 }
 
 export type DshRuntimeHealth = {
@@ -47,15 +48,31 @@ const hosts = new Map<string, HostRuntime>()
 let current: HostRuntime | undefined
 let disabledRuntime: DshRuntimeHealth | undefined
 
-function enabled(env: Record<string, string | undefined>): boolean {
-  return env.ELLAMAKA_DSH !== "0"
+function requestedProfiles(options: DshHostPreparationOptions) {
+  return options.profiles ?? (["web", "ellamaka-tools"] as const)
+}
+
+function publishProfilePreparationStatus(
+  profiles: readonly ("web" | "ellamaka-tools")[],
+  status: "disabled" | "preparing" | "degraded",
+) {
+  if (profiles.length === 0) {
+    if (status === "disabled") {
+      setDshStatus("web", "disabled")
+      setDshStatus("tools", "disabled")
+    }
+    return
+  }
+  if (profiles.includes("web")) setDshStatus("web", status)
+  if (profiles.includes("ellamaka-tools")) setDshStatus("tools", status)
 }
 
 function hostKey(options: DshHostPreparationOptions): string {
   const identity = DEFAULT_DSH_RUNTIME_MANIFEST.fingerprint ?? DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion
+  const profiles = [...requestedProfiles(options)].sort().join(",") || "none"
   // A confirmed legacy adoption is a distinct preparation attempt; it must not
   // reuse the service created for the unconfirmed (degraded) inspection.
-  return `${resolve(options.wopalHome)}::${identity}::${options.legacyAdoptionConfirmed ? "adopted" : "default"}`
+  return `${resolve(options.wopalHome)}::${identity}::${profiles}::${options.legacyAdoptionConfirmed ? "adopted" : "default"}`
 }
 
 function publish(
@@ -91,6 +108,7 @@ function getRuntime(options: DshHostPreparationOptions): HostRuntime {
       env: options.env,
       manifest: DEFAULT_DSH_RUNTIME_MANIFEST,
       closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion,
+      profiles: requestedProfiles(options),
       ...(options.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
     }),
   }
@@ -98,13 +116,15 @@ function getRuntime(options: DshHostPreparationOptions): HostRuntime {
   return runtime
 }
 
-export async function prepareDshHost(options: DshHostPreparationOptions): Promise<{
+export type DshHostPreparationResult = {
   status: DshHostPreparationStatus
   preparation?: CorePreparationResult
-}> {
-  const env = options.env ?? process.env
-  if (!enabled(env)) {
-    setDshStatus("disabled")
+}
+
+export async function prepareDshHost(options: DshHostPreparationOptions): Promise<DshHostPreparationResult> {
+  const profiles = requestedProfiles(options)
+  if (profiles.length === 0) {
+    publishProfilePreparationStatus(profiles, "disabled")
     disabledRuntime = { closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion }
     const event: CorePreparationEvent = {
       runId: randomUUID(),
@@ -119,12 +139,11 @@ export async function prepareDshHost(options: DshHostPreparationOptions): Promis
     publish(undefined, event, options.onProgress)
     return { status: "disabled" }
   }
-
   disabledRuntime = undefined
-  const runtime = getRuntime({ ...options, env })
+  const runtime = getRuntime({ ...options, profiles })
   current = runtime
   runtime.preparing = true
-  setDshStatus("preparing")
+  publishProfilePreparationStatus(profiles, "preparing")
   try {
     const preparation = await runtime.service.prepare(
       { target: { kind: "host" }, reason: "product-startup" },
@@ -132,13 +151,39 @@ export async function prepareDshHost(options: DshHostPreparationOptions): Promis
     )
     runtime.lastResult = preparation
     if (preparation.state !== "READY") {
-      setDshStatus("degraded")
+      publishProfilePreparationStatus(profiles, "degraded")
       return { status: "degraded", preparation }
     }
     return { status: "prepared", preparation }
   } finally {
     runtime.preparing = false
   }
+}
+
+export type DshProfilePreparationResults = {
+  web: DshHostPreparationResult
+  tools: DshHostPreparationResult
+}
+
+/**
+ * Prepare each requested profile independently while reusing the same closure
+ * and Home. The first profile may materialise shared resources; the second
+ * observes them as READY and only owns its profile-specific preparation.
+ */
+export async function prepareDshProfiles(options: DshHostPreparationOptions): Promise<DshProfilePreparationResults> {
+  const profiles = requestedProfiles(options)
+  if (profiles.length === 0) {
+    await prepareDshHost({ ...options, profiles: [] })
+    return { web: { status: "disabled" }, tools: { status: "disabled" } }
+  }
+
+  const web = profiles.includes("web")
+    ? await prepareDshHost({ ...options, profiles: ["web"] })
+    : { status: "disabled" as const }
+  const tools = profiles.includes("ellamaka-tools")
+    ? await prepareDshHost({ ...options, profiles: ["ellamaka-tools"] })
+    : { status: "disabled" as const }
+  return { web, tools }
 }
 
 export function writeCorePreparationProgress(event: CorePreparationEvent): void {
@@ -160,11 +205,6 @@ export async function getCorePreparationHealth(): Promise<{
   dshRuntime: DshRuntimeHealth
   preparation?: CorePreparationResult
 }> {
-  // Health must preserve the kill-switch zero-access boundary even when a test
-  // or embedding host toggles the environment after module evaluation.
-  if (process.env.ELLAMAKA_DSH === "0") {
-    return { dshRuntime: { closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion } }
-  }
   if (disabledRuntime) return { dshRuntime: disabledRuntime }
   const runtime = current
   if (!runtime) return { dshRuntime: { closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion } }

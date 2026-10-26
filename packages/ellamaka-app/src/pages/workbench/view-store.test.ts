@@ -79,6 +79,27 @@ describe("view-store reactive guard", () => {
 })
 
 describe("view-store diagnostics", () => {
+  test("DSH selection is transient and clears when a General/Space tab activates", () => {
+    let state: any
+    const dispose = createRoot((dis) => {
+      state = initWorkbenchState()
+      return dis
+    })
+
+    expect(state.dshSelected).toBe(false)
+    state.selectDsh()
+    expect(state.dshSelected).toBe(true)
+    state.setActive("")
+    expect(state.dshSelected).toBe(false)
+
+    state.selectDsh()
+    state.openTab({ id: "space-x", name: "Space X", path: "/space-x", type: "space" })
+    expect(state.dshSelected).toBe(false)
+    expect(state.activeTabPath).toBe("/space-x")
+
+    dispose()
+  })
+
   test("pushDiagnostic adds messages and legacy setStatusMessage pushes to diagnostics queue", () => {
     let state: any
     const dispose = createRoot((dis) => {

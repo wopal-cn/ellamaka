@@ -12,12 +12,12 @@ import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 
 const globals = globalThis as Record<string, unknown>
 const old = globals.__ellamakaDshContainer
-const env = process.env.ELLAMAKA_DSH
+const env = process.env.ELLAMAKA_DSH_TOOLS
 afterEach(async () => {
   await disposeAllInstances()
   globals.__ellamakaDshContainer = old
-  if (env === undefined) delete process.env.ELLAMAKA_DSH
-  else process.env.ELLAMAKA_DSH = env
+  if (env === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
+  else process.env.ELLAMAKA_DSH_TOOLS = env
 })
 
 const declarations: Array<string | [string, Record<string, unknown>]> = []
@@ -44,7 +44,7 @@ const layer = Plugin.layer.pipe(
 const it = testEffect(layer)
 
 function setup() {
-  process.env.ELLAMAKA_DSH = "1"
+  process.env.ELLAMAKA_DSH_TOOLS = "1"
   config = { "dsh-adapter": { sandbox: { enabled: true } } }
   declarations.length = 0
   preparations = 0

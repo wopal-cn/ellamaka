@@ -48,7 +48,7 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
       headers: result.headers,
     })
   }
-  return fn as typeof fetch
+  return Object.assign(fn, { preconnect: globalThis.fetch.preconnect })
 }
 
 function createEventSource(client: RpcClient): EventSource {
@@ -81,7 +81,7 @@ async function input(value?: string) {
  * the interactive entry that turns the operator's assertion into permission.
  */
 async function confirmLegacyDshHomeAdoption(): Promise<boolean> {
-  if (process.env.ELLAMAKA_DSH === "0") return false
+  if (process.env.ELLAMAKA_DSH_TOOLS === "0") return false
   if (!process.stdin.isTTY || !process.stdout.isTTY) return false
   let state: Awaited<ReturnType<typeof readDshHomeState>>
   try {

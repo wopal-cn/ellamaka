@@ -102,20 +102,23 @@ let disposeOnboarding: (() => void) | undefined
 
 /**
  * The dsh runtime initialised once per launch (W-02). The manager's
- * per-process in-flight cache alone is not enough: two sequential manager
- * calls can each start a fresh run when the first FAILED (in-flight is
- * removed on settle), so reusing the first run's outcome here guarantees the
- * sidecar initialises the dsh runtime exactly once and both the web and tool
- * mounts share the same status/anchor/runtime.
+ * profile-specific preparation still shares one closure/Home and one loaded
+ * runtime. The cached launch state carries each profile's own preparation
+ * terminal so Web and Tools activation can proceed independently.
  */
 let dshLaunchState:
   | {
-      status: import("virtual:opencode-server").DshRuntimeStatus
+      webStatus: import("virtual:opencode-server").DshRuntimeStatus
+      toolsStatus: import("virtual:opencode-server").DshRuntimeStatus
+      web: boolean
+      tools: boolean
+      profiles: readonly ("web" | "ellamaka-tools")[]
       reason?: string
       anchor?: import("virtual:opencode-server").DshInstallAnchor
       runtime?: import("virtual:opencode-server").DshRuntimeApi
     }
   | undefined
+let dshIntent: { web: boolean; tools: boolean; profiles: readonly ("web" | "ellamaka-tools")[] } | undefined
 let currentStartCommand: StartCommand | undefined
 let dshWatcherStarted = false
 let dshInitialization: Promise<void> | undefined
@@ -150,13 +153,9 @@ parentPort.on("message", (event) => {
 })
 
 async function start(command: StartCommand) {
-  const initialized = Promise.withResolvers<void>()
   try {
     ensureLoopbackNoProxy()
-    const { Database, JsonMigration, Log, Server, trackDshToolsInitialization } = await import(
-      "virtual:opencode-server"
-    )
-    void trackDshToolsInitialization(initialized.promise)
+    const { Database, JsonMigration, Log, Server } = await import("virtual:opencode-server")
     // Desktop dev tooling controls the sidecar through the double-L
     // `ELLAMAKA_DESKTOP_*` variables (shared with the onboarding reader):
     //   ELLAMAKA_DESKTOP_DEV=1 → dev channel (honors WOPAL_DEBUG_LOG_DIR and
@@ -227,17 +226,15 @@ async function start(command: StartCommand) {
     // Server readiness is independent from DSH readiness: the window and the
     // native Runtime must not wait for DSH preparation (DESIGN-desktop.md).
     currentStartCommand = command
-    if (process.env.ELLAMAKA_DSH !== "0") {
-      const { setDshStatus } = await import("virtual:opencode-server")
-      // Health must not report the "disabled" default while preparation is
-      // about to run: the window may query it before the first step starts.
-      setDshStatus("preparing")
-    }
+    const { resolveDshProfileIntent, setDshStatus } = await import("virtual:opencode-server")
+    dshIntent = await resolveDshProfileIntent(dshLaunch(command).wopalHome, process.env)
+    setDshStatus("web", dshIntent.web ? "preparing" : "disabled")
+    setDshStatus("tools", dshIntent.tools ? "preparing" : "disabled")
     parentPort.postMessage({ type: "ready" })
 
     // Optional dsh engine (single-process, DESIGN-dsh-base.md). The
     // unified CorePreparation host service (consumed via `virtual:opencode-server`,
-    // which the opencode sidecar bundle exports) gates on `ELLAMAKA_DSH` itself
+    // which the opencode sidecar bundle exports) uses the profile-specific Web setting and `ELLAMAKA_DSH_TOOLS` intent
     // (`=0` → disabled with zero file access) and materialises the closure on
     // demand; `disabled`/`degraded` never block the sidecar — the server runs
     // untouched. The web VirtualWebServer mounts onto the Ellamaka listener
@@ -251,8 +248,6 @@ async function start(command: StartCommand) {
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
     setImmediate(() => process.exit(1))
-  } finally {
-    initialized.resolve()
   }
 }
 
@@ -331,8 +326,9 @@ async function mountDshIfPresent(command: StartCommand, legacyAdoptionConfirmed 
   try {
     sidecarLog.info("dsh.desktop.web.start", { home, logDir })
     const launch = await initDshLaunch(command, legacyAdoptionConfirmed)
-    if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
-      sidecarLog.warn("dsh.desktop.web.skip", { status: launch.status })
+    if (!launch.web) return
+    if (launch.webStatus !== "ready" || !launch.anchor || !launch.runtime) {
+      sidecarLog.warn("dsh.desktop.web.skip", { status: launch.webStatus })
       return
     }
     sidecarLog.info("dsh.desktop.web.boot", { anchor: launch.anchor.path })
@@ -387,8 +383,12 @@ async function mountDshIfPresent(command: StartCommand, legacyAdoptionConfirmed 
         return undefined
       }
     })
+    const { setDshStatus } = await import("virtual:opencode-server")
+    setDshStatus("web", "ready")
     sidecarLog.info("dsh.desktop.web.mounted", { mountPath: host.mountPath })
   } catch (error) {
+    const { setDshStatus } = await import("virtual:opencode-server")
+    setDshStatus("web", "degraded")
     // A broken closure must never exit the sidecar (B-06).
     sidecarLog.error("dsh.desktop.web.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
@@ -411,8 +411,9 @@ async function mountDshToolsIfPresent(command: StartCommand, legacyAdoptionConfi
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   try {
     const launch = await initDshLaunch(command, legacyAdoptionConfirmed)
-    if (launch.status !== "ready" || !launch.anchor || !launch.runtime) {
-      sidecarLog.warn("dsh.desktop.tools.skip", { status: launch.status })
+    if (!launch.tools) return
+    if (launch.toolsStatus !== "ready" || !launch.anchor || !launch.runtime) {
+      sidecarLog.warn("dsh.desktop.tools.skip", { status: launch.toolsStatus })
       return
     }
     const runtime = launch.runtime
@@ -433,8 +434,13 @@ async function mountDshToolsIfPresent(command: StartCommand, legacyAdoptionConfi
       dispose: () => host.dispose(),
     }
     ;(globalThis as Record<string, unknown>).__ellamakaDshContainer = host.ctx
+    const { setDshStatus } = await import("virtual:opencode-server")
+    setDshStatus("tools", "ready")
     sidecarLog.info("dsh.desktop.tools.mounted")
   } catch (error) {
+    const { setDshStatus } = await import("virtual:opencode-server")
+    setDshStatus("tools", "degraded")
+    delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
     // A broken closure must never exit the sidecar (B-06).
     sidecarLog.error("dsh.desktop.tools.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
@@ -443,10 +449,9 @@ async function mountDshToolsIfPresent(command: StartCommand, legacyAdoptionConfi
 }
 
 /**
- * Prepare DSH resources exactly once per launch and cache the activation inputs
- * (W-02). CorePreparation already single-flights equivalent host targets; this
- * cache additionally makes the sequential web + tool mounts share one terminal
- * preparation result, Home lease, anchor and closure runtime.
+ * Prepare DSH resources once per launch and cache the activation inputs
+ * (W-02). Each profile keeps its own preparation terminal while both reuse the
+ * same Home lease, install anchor and closure runtime.
  */
 async function initDshLaunch(
   command: StartCommand,
@@ -457,28 +462,37 @@ async function initDshLaunch(
   const {
     DEFAULT_DSH_RUNTIME_MANIFEST,
     acquireDshHomeRuntimeAccess,
-    prepareDshHost,
+    prepareDshProfiles,
     resolveInstallAnchor,
     createDshRuntimeApi,
-    setDshStatus,
     Log,
     toDshLogLevel,
   } = await import("virtual:opencode-server")
   const sidecarLog = Log.create({ service: "dsh-desktop" })
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
+  const intent =
+    dshIntent ?? (await (await import("virtual:opencode-server")).resolveDshProfileIntent(wopalHome, process.env))
+  dshIntent = intent
   sidecarLog.info("dsh.desktop.prepare.start", { wopalHome, runtimeLogFile })
-  const preparation = await prepareDshHost({
+  const preparation = await prepareDshProfiles({
     wopalHome,
     runtimeLogFile,
     logLevel: toDshLogLevel(sidecarLogLevel.current),
+    profiles: intent.profiles,
     ...(legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
   })
-  const status: import("virtual:opencode-server").DshRuntimeStatus =
-    preparation.status === "prepared" ? "ready" : preparation.status
-  const reason = preparation.preparation?.reason
-  sidecarLog.info("dsh.desktop.prepare.status", { status, ...(reason ? { reason } : {}) })
-  if (status !== "ready") {
-    dshLaunchState = { status, ...(reason ? { reason } : {}) }
+  const webStatus: import("virtual:opencode-server").DshRuntimeStatus =
+    preparation.web.status === "prepared" ? "ready" : preparation.web.status
+  const toolsStatus: import("virtual:opencode-server").DshRuntimeStatus =
+    preparation.tools.status === "prepared" ? "ready" : preparation.tools.status
+  const reason = preparation.web.preparation?.reason ?? preparation.tools.preparation?.reason
+  sidecarLog.info("dsh.desktop.prepare.status", {
+    web: webStatus,
+    tools: toolsStatus,
+    ...(reason ? { reason } : {}),
+  })
+  if (webStatus !== "ready" && toolsStatus !== "ready") {
+    dshLaunchState = { webStatus, toolsStatus, ...intent, ...(reason ? { reason } : {}) }
     return dshLaunchState
   }
   const homeAccess = await acquireDshHomeRuntimeAccess({
@@ -491,8 +505,14 @@ async function initDshLaunch(
       homeVersion: homeAccess.homeVersion,
       closureVersion: manifest.closureVersion,
     })
-    setDshStatus("degraded")
-    dshLaunchState = { status: "degraded" }
+    const { setDshStatus } = await import("virtual:opencode-server")
+    if (intent.web) setDshStatus("web", "degraded")
+    if (intent.tools) setDshStatus("tools", "degraded")
+    dshLaunchState = {
+      webStatus: intent.web ? "degraded" : "disabled",
+      toolsStatus: intent.tools ? "degraded" : "disabled",
+      ...intent,
+    }
     return dshLaunchState
   }
   dshHomeAccess = { lease: homeAccess.lease, homeVersion: homeAccess.homeVersion }
@@ -500,7 +520,7 @@ async function initDshLaunch(
     const anchor = resolveInstallAnchor(wopalHome, manifest)
     const runtime = createDshRuntimeApi(anchor.path)
     sidecarLog.info("dsh.desktop.init.ready", { anchor: anchor.path, genId: anchor.genId })
-    dshLaunchState = { status, anchor, runtime }
+    dshLaunchState = { webStatus, toolsStatus, ...intent, anchor, runtime, ...(reason ? { reason } : {}) }
     return dshLaunchState
   } catch (error) {
     await dshHomeAccess.lease.release()
@@ -508,8 +528,14 @@ async function initDshLaunch(
     sidecarLog.error("dsh.desktop.init.load.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
     })
-    setDshStatus("degraded")
-    dshLaunchState = { status: "degraded" }
+    const { setDshStatus } = await import("virtual:opencode-server")
+    if (intent.web) setDshStatus("web", "degraded")
+    if (intent.tools) setDshStatus("tools", "degraded")
+    dshLaunchState = {
+      webStatus: intent.web ? "degraded" : "disabled",
+      toolsStatus: intent.tools ? "degraded" : "disabled",
+      ...intent,
+    }
     return dshLaunchState
   }
 }
@@ -520,32 +546,24 @@ async function initDshLaunch(
  */
 async function initializeDsh(command: StartCommand, legacyAdoptionConfirmed = false): Promise<void> {
   try {
-    await mountDshIfPresent(command, legacyAdoptionConfirmed)
-    await mountDshToolsIfPresent(command, legacyAdoptionConfirmed)
-    if (!dshWatcherStarted) {
+    // Prepare shared closure/Home and both requested profile resources first,
+    // then activate Web and Tools independently. A slow or failed profile load
+    // must not delay the other profile reaching its own terminal status.
+    await initDshLaunch(command, legacyAdoptionConfirmed)
+    await Promise.all([
+      mountDshIfPresent(command, legacyAdoptionConfirmed),
+      mountDshToolsIfPresent(command, legacyAdoptionConfirmed),
+    ])
+    if (!dshWatcherStarted && (dshHost?.includeEntry || dshToolsHost?.includeEntry)) {
       await startDshPluginWatcher(command)
-      if (dshHost?.includeEntry && dshToolsHost?.includeEntry) dshWatcherStarted = true
-    }
-    const { setDshStatus } = await import("virtual:opencode-server")
-    if (dshLaunchState?.status === "ready") {
-      if (dshHost && dshToolsHost) setDshStatus("ready")
-      else {
-        setDshStatus("degraded")
-        delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
-        await dshPluginService?.stop()
-        dshPluginService = undefined
-        await Promise.allSettled([dshHost?.dispose(), dshToolsHost?.dispose()])
-        dshHost = undefined
-        dshToolsHost = undefined
-        if (dshHomeAccess) await dshHomeAccess.lease.release()
-        dshHomeAccess = undefined
-      }
+      if (dshPluginService) dshWatcherStarted = true
     }
     if (dshLaunchState?.reason === "DSH_HOME_LEGACY_ADOPTION_REQUIRED")
       parentPort.postMessage({ type: "dshLegacyAdoptionRequired" })
   } catch (error) {
     const { Log, setDshStatus } = await import("virtual:opencode-server")
-    setDshStatus("degraded")
+    if (dshIntent?.web) setDshStatus("web", "degraded")
+    if (dshIntent?.tools) setDshStatus("tools", "degraded")
     Log.create({ service: "dsh-desktop" }).error("dsh.desktop.initialize.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
     })
@@ -571,16 +589,16 @@ async function adoptLegacyDshHome(): Promise<void> {
 
 /**
  * Start the Plugin Runtime Service (D-02, rook B-07): watch the plugin store
- * and hot-replay include patches into BOTH running containers, so dsh plugin
+ * and hot-replay include patches into whichever profiles are running, so dsh plugin
  * add/remove/enable/disable executed while the Desktop app runs take effect
- * without a restart. Only mounts when both containers are up; a failed start
+ * without a restart. A failed watcher start
  * degrades without crashing the sidecar (B-06).
  */
 async function startDshPluginWatcher(command: StartCommand): Promise<void> {
-  if (!dshHost?.includeEntry || !dshToolsHost?.includeEntry) {
+  if (!dshHost?.includeEntry && !dshToolsHost?.includeEntry) {
     const { Log } = await import("virtual:opencode-server")
     Log.create({ service: "dsh-desktop" }).warn("dsh.desktop.watcher.skip", {
-      reason: "one or both containers missing",
+      reason: "no dsh profile is mounted",
     })
     return
   }
@@ -588,23 +606,30 @@ async function startDshPluginWatcher(command: StartCommand): Promise<void> {
   try {
     const { startDshPluginService, Log } = await import("virtual:opencode-server")
     const sidecarLog = Log.create({ service: "dsh-desktop" })
+    const containers = [
+      ...(dshHost?.includeEntry
+        ? [{ profile: "web", ctx: dshHost.ctx, includeEntry: dshHost.includeEntry, stackContext: dshHost.stackContext }]
+        : []),
+      ...(dshToolsHost?.includeEntry
+        ? [
+            {
+              profile: "ellamaka-tools",
+              ctx: dshToolsHost.ctx,
+              includeEntry: dshToolsHost.includeEntry,
+              stackContext: dshToolsHost.stackContext,
+            },
+          ]
+        : []),
+    ]
     dshPluginService = startDshPluginService({
       home,
-      containers: [
-        { profile: "web", ctx: dshHost.ctx, includeEntry: dshHost.includeEntry, stackContext: dshHost.stackContext },
-        {
-          profile: "ellamaka-tools",
-          ctx: dshToolsHost.ctx,
-          includeEntry: dshToolsHost.includeEntry,
-          stackContext: dshToolsHost.stackContext,
-        },
-      ],
+      containers,
       // The mounted web context owns the dsh-plugins exporter. Routing the
       // watcher through it avoids the service's console fallback, which the
       // Desktop main process would otherwise relay as a WARN for every event.
-      logger: dshPluginLogger(dshHost.ctx, sidecarLog),
+      logger: dshPluginLogger(dshHost?.ctx ?? dshToolsHost?.ctx, sidecarLog),
     })
-    dshHost.pluginActivation?.bind(() => dshPluginService!.replay())
+    dshHost?.pluginActivation?.bind(() => dshPluginService!.replay())
     sidecarLog.info("dsh.desktop.watcher.started")
   } catch (error) {
     // A failed watcher must never exit the sidecar (B-06); installs simply

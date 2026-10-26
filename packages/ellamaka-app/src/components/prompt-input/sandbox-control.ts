@@ -79,7 +79,7 @@ export function drainPendingSessionSandbox(sessionKey: string): SandboxPreset | 
 // The sandbox tri-state selector is visible only when the DSH sandbox is a
 // runtime fact, not a config string (Issue #221). All of these must hold:
 //   1. The composer is a dock composer (`variant === "dock"`).
-//   2. The DSH runtime is `ready` — the kill switch is open (`ELLAMAKA_DSH`
+//   2. The DSH runtime is `ready` — the Tools profile is available (`ELLAMAKA_DSH_TOOLS`
 //      not `0`, which maps to `disabled`) AND the runtime materialised and
 //      mounted successfully (not `degraded`). `ready` therefore implies the
 //      kill switch check.
@@ -97,7 +97,7 @@ export function shouldShowSandboxControl(input: {
 }): boolean {
   if (input.variant !== "dock") return false
   if (input.dshStatus === undefined) return false
-  // Kill switch: `disabled` means `ELLAMAKA_DSH=0`; any other status means the
+  // Tools status: `disabled` means the Tools profile was not loaded; any other status means the
   // switch is open. `ready` additionally proves the runtime actually works.
   if (input.dshStatus === "disabled") return false
   if (input.dshStatus !== "ready") return false

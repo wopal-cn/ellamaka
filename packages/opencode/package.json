@@ -137,6 +137,7 @@
     "@wopal/ellamaka-cordis": "workspace:*",
     "@wopal/ellamaka-onboarding": "workspace:*",
     "@wopal/ellamaka-release": "workspace:*",
+    "@wopal/wopalspace": "workspace:*",
     "@wopal/llm": "workspace:*",
     "@wopal/ui": "workspace:*",
     "@zip.js/zip.js": "2.7.62",

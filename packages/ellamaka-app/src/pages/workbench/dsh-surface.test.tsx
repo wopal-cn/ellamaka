@@ -9,6 +9,7 @@ import {
   dshSurfaceStyle,
   healTargetUrl,
   looksLikeDsh401,
+  selectDshEntryForGeneration,
   selfHealDshIframe,
 } from "./dsh-surface"
 
@@ -98,6 +99,18 @@ describe("dshSurfaceStyle keep-alive", () => {
   test("visible layer participates in layout, hidden layer drops out", () => {
     expect(dshSurfaceStyle(true)).toEqual({ display: "contents" })
     expect(dshSurfaceStyle(false)).toEqual({ display: "none" })
+  })
+})
+
+describe("DSH entry generation selection", () => {
+  const gen1 = { key: "http://127.0.0.1:4097#gen1", url: "http://127.0.0.1:4097/dsh/?token=one" }
+  const gen2 = { key: "http://127.0.0.1:4097#gen2", url: "http://127.0.0.1:4097/dsh/?token=two" }
+
+  test("accepts only the current sidecar generation and falls back to a matching cached entry", () => {
+    expect(selectDshEntryForGeneration(gen2.key, gen2, gen1)).toBe(gen2)
+    expect(selectDshEntryForGeneration(gen2.key, gen1, gen2)).toBe(gen2)
+    expect(selectDshEntryForGeneration(gen2.key, gen1, undefined)).toBeUndefined()
+    expect(selectDshEntryForGeneration(undefined, gen2, gen2)).toBeUndefined()
   })
 })
 
@@ -300,6 +313,30 @@ describe("createDsh401Healer episode semantics (auth-fix-2)", () => {
     heal(null)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(calls()).toBe(0)
+    iframe.remove()
+  })
+
+  test("a 401 while the current DSH generation is not ready does not consume the heal episode", async () => {
+    const iframe = document.createElement("iframe")
+    iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
+    document.body.appendChild(iframe)
+    let ready = false
+    let calls = 0
+    const heal = createDsh401Healer({
+      getFrame: () => iframe,
+      canAttempt: () => ready,
+      refetchEntry: async () => FRESH(++calls),
+    })
+
+    const body = "dsh web authentication required; reopen the URL printed by dsh web.\n"
+    heal(body)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(calls).toBe(0)
+
+    ready = true
+    heal(body)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(calls).toBe(1)
     iframe.remove()
   })
 

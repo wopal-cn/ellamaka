@@ -18,7 +18,7 @@ const fetchSandboxSurface = async (input: RequestInfo | URL, init?: RequestInit)
       healthy: true,
       version: "test",
       cli: { state: "ok", requiredVersion: "test" },
-      dsh: "ready",
+      dsh: { web: "ready", tools: "ready" },
     })
   }
   if (url.pathname === "/config-v2") {
@@ -52,7 +52,7 @@ const checkHealth: ReturnType<typeof useCheckServerHealth> = async () => {
     healthy: true,
     version: "test",
     cli: { state: "ok", requiredVersion: "test" },
-    dsh: "ready",
+    dsh: { web: "ready", tools: "ready" },
   }
 }
 

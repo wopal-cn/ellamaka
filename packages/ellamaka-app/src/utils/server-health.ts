@@ -12,6 +12,10 @@ export type WopalCliHealth = {
 }
 
 export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
+export type DshRuntimeHealth = {
+  web: DshRuntimeStatus
+  tools: DshRuntimeStatus
+}
 
 /** Health records are keyed by the concrete connection, including sidecar generation. */
 export function resolveServerHealthKey(
@@ -25,7 +29,7 @@ export type ServerHealth = {
   healthy: boolean
   version?: string
   cli?: WopalCliHealth
-  dsh?: DshRuntimeStatus
+  dsh?: DshRuntimeHealth
   /** The server rejected the stored credentials (HTTP 401). */
   unauthorized?: boolean
 }
@@ -51,11 +55,13 @@ function cacheKey(server: ServerConnection.HttpBase) {
 }
 
 function timeoutSignal(timeoutMs: number) {
-  const timeout = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout
-  if (timeout) {
+  const timeout = Reflect.get(AbortSignal, "timeout")
+  if (typeof timeout === "function") {
     try {
+      const signal: unknown = Reflect.apply(timeout, AbortSignal, [timeoutMs])
+      if (!(signal instanceof AbortSignal)) throw new TypeError("AbortSignal.timeout returned an invalid signal")
       return {
-        signal: timeout.call(AbortSignal, timeoutMs),
+        signal,
         clear: undefined as (() => void) | undefined,
       }
     } catch {}
@@ -121,7 +127,7 @@ export async function checkServerHealth(
         x.error
           ? next(count, x.error, x.response)
           : {
-              healthy: x.data?.healthy === true,
+              healthy: x.data?.healthy ?? false,
               version: x.data?.version,
               ...(x.data?.cli ? { cli: x.data.cli } : {}),
               ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
@@ -137,7 +143,14 @@ export function useCheckServerHealth() {
   const platform = usePlatform()
   const fetcher = platform.fetch ?? globalThis.fetch
 
-  return (http: ServerConnection.HttpBase) => {
+  return (http: ServerConnection.HttpBase, opts?: CheckServerHealthOptions) => {
+    if (
+      opts?.signal ||
+      opts?.timeoutMs !== undefined ||
+      opts?.retryCount !== undefined ||
+      opts?.retryDelayMs !== undefined
+    )
+      return checkServerHealth(http, fetcher, opts)
     const key = cacheKey(http)
     const hit = healthCache.get(key)
     const now = Date.now()

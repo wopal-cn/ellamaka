@@ -1,7 +1,7 @@
 import { Icon as IconV2 } from "@wopal/ui/v2/components/icon.jsx"
 import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
 import { ButtonV2 } from "@wopal/ui/v2/components/button-v2.jsx"
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createSignal, onCleanup, onMount } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useWorkbenchState } from "../view-store"
 import { useSpaceStore } from "../space-store"
@@ -16,6 +16,7 @@ import { SpaceIcon } from "./session-tree-space"
 import { Spinner } from "@wopal/ui/spinner"
 import { createFlyoutController } from "./sidebar-flyout"
 import { activateSpaceTab } from "./space-tab-activation"
+import { useWorkbenchRuntime } from "../workbench-runtime"
 
 function PinIcon(props: { class?: string }) {
   return (
@@ -80,11 +81,10 @@ export function WorkbenchTitlebar() {
   const language = useLanguage()
   const dialog = useDialog()
   const notification = useNotification()
+  const runtime = useWorkbenchRuntime()
   const t = (k: string, params?: Record<string, string | number | boolean>) => language.t(k, params)
 
   const activity = useSessionActivity()
-
-  const activePath = () => wb.activeTabPath
 
   const getTabForDirectory = (dirPath: string): string => {
     const dirKey = pathKey(dirPath ?? "").toLowerCase()
@@ -159,7 +159,8 @@ export function WorkbenchTitlebar() {
 
   onMount(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (spaceMenuRef && !spaceMenuRef.contains(e.target as Node)) {
+      const target = e.target
+      if (spaceMenuRef && (!(target instanceof Node) || !spaceMenuRef.contains(target))) {
         spaceMenuFlyout.close()
       }
       setTabMenu(undefined)
@@ -199,10 +200,51 @@ export function WorkbenchTitlebar() {
           class="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-1/2 flex items-center gap-0.5 rounded-lg overflow-x-auto max-w-[60%] scrollbar-none z-10"
           style={{ "-webkit-app-region": "no-drag" }}
         >
+          <Show when={runtime.dshTabAvailable}>
+            <div
+              role="tab"
+              tabIndex={0}
+              aria-selected={wb.dshSelected}
+              class="relative grid h-8 w-max grid-cols-[1rem_max-content_1rem] items-center rounded-md px-2 cursor-pointer shrink-0 transition-colors"
+              classList={{
+                "text-v2-text-text-strong font-semibold": wb.dshSelected,
+                "text-v2-text-text-muted hover:text-v2-text-text-base font-medium": !wb.dshSelected,
+              }}
+              style={{ "-webkit-app-region": "no-drag" }}
+              onClick={() => wb.selectDsh()}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return
+                e.preventDefault()
+                wb.selectDsh()
+              }}
+              title={runtime.dshWeb === "degraded" ? language.t("workbench.dsh.unavailable") : undefined}
+            >
+              <Show when={wb.dshSelected}>
+                <span class="absolute top-0 inset-x-6 h-[2px] rounded-full bg-v2-icon-icon-accent" />
+              </Show>
+              <span class="flex size-4 items-center justify-center">
+                <PinIcon
+                  class={`size-3.5 ${wb.dshSelected ? "text-v2-text-text-strong" : "text-v2-text-text-muted"}`}
+                />
+              </span>
+              <span class="whitespace-nowrap inline-flex items-center text-center text-11-medium leading-none">
+                DSH
+              </span>
+              <span class="flex size-4 items-center justify-center">
+                <Show when={runtime.dshWeb === "preparing"}>
+                  <Spinner class="size-3.5 text-v2-icon-icon-accent" />
+                </Show>
+                <Show when={runtime.dshWeb === "degraded"}>
+                  <span class="size-2 rounded-full bg-v2-icon-icon-warning" />
+                </Show>
+              </span>
+            </div>
+          </Show>
           <For each={wb.tabs}>
             {(tab) => {
               const isGeneral = tab.path === ""
               const isActive = () => {
+                if (wb.dshSelected) return false
                 if (wb.activeTabPath === tab.path) return true
                 if (tab.path !== undefined && wb.activeTabPath !== undefined) {
                   return pathKey(wb.activeTabPath).toLowerCase() === pathKey(tab.path).toLowerCase()

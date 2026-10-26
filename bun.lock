@@ -412,6 +412,7 @@
         "@wopal/ellamaka-sdk": "workspace:*",
         "@wopal/llm": "workspace:*",
         "@wopal/ui": "workspace:*",
+        "@wopal/wopalspace": "workspace:*",
         "@zip.js/zip.js": "2.7.62",
         "ai": "catalog:",
         "ai-gateway-provider": "3.1.2",
@@ -587,6 +588,9 @@
     "packages/wopalspace": {
       "name": "@wopal/wopalspace",
       "version": "2.0.9",
+      "dependencies": {
+        "jsonc-parser": "3.3.1",
+      },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
         "@types/bun": "catalog:",

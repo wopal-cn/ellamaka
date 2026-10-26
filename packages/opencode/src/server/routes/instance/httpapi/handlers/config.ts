@@ -1,8 +1,11 @@
 import { Config } from "@/config/config"
+import { readDshWebEnabled } from "@/config/wopal-product-settings"
 import { Provider } from "@/provider/provider"
 import * as InstanceState from "@/effect/instance-state"
+import { Global } from "@wopal/ellamaka-core/global"
+import { updateDshWebEnabled } from "@wopal/wopalspace"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { markInstanceForDisposal } from "../lifecycle"
 
@@ -18,7 +21,17 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     const configGet = Effect.fn("ConfigHttpApi.configGet")(function* () {
       const ellamaka = yield* configSvc.get()
       const pluginConfig = yield* configSvc.getPluginConfig()
-      return { effective: { ellamaka, wopal: { pluginConfig } } }
+      const dshWebEnabled = yield* Effect.promise(() => readDshWebEnabled(Global.Path.wopalHome))
+      return { effective: { ellamaka, wopal: { dsh: { web: { enabled: dshWebEnabled } }, pluginConfig } } }
+    })
+
+    const configUpdate = Effect.fn("ConfigHttpApi.configUpdate")(function* (ctx) {
+      if (ctx.payload.updates.length !== 1) return yield* new HttpApiError.BadRequest({})
+      const [update] = ctx.payload.updates
+      return yield* Effect.tryPromise({
+        try: () => updateDshWebEnabled({ wopalHome: Global.Path.wopalHome, enabled: update.value }),
+        catch: () => new HttpApiError.BadRequest({}),
+      })
     })
 
     const update = Effect.fn("ConfigHttpApi.update")(function* (ctx) {
@@ -38,6 +51,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
     return handlers
       .handle("get", get)
       .handle("configGet", configGet)
+      .handle("configUpdate", configUpdate)
       .handle("update", update)
       .handle("providers", providers)
   }),

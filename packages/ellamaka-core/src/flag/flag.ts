@@ -84,10 +84,9 @@ export const Flag = {
   get ELLAMAKA_MODELS_FALLBACK_PATH() {
     return process.env["ELLAMAKA_MODELS_FALLBACK_PATH"]
   },
-  // Disable switch (kill switch), default ON. `ELLAMAKA_DSH=0` disables dsh;
-  // unset or any non-"0" value enables. Unified across CLI (serve/web/tui) and
-  // the desktop sidecar (DESIGN-dsh-base.md, constraint #11).
-  get ELLAMAKA_DSH() {
-    return process.env.ELLAMAKA_DSH?.toLowerCase() !== "0"
+  // Ellamaka Tools profile switch, default ON. `ELLAMAKA_DSH_TOOLS=0` disables
+  // only the process-level tools backend; unset or any non-"0" value enables it.
+  get ELLAMAKA_DSH_TOOLS() {
+    return process.env.ELLAMAKA_DSH_TOOLS?.toLowerCase() !== "0"
   },
 }

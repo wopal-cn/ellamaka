@@ -135,7 +135,7 @@ function forwardToOfficial(home: string, profile: string, pluginArgs: readonly s
   const child = spawnSync(
     command[0],
     [...command.slice(1), "dsh", "official", "--home", home, "plugin", "--profile", profile, ...pluginArgs],
-    { stdio: "inherit", env: { ...process.env, ELLAMAKA_DSH: "0" } },
+    { stdio: "inherit", env: { ...process.env, ELLAMAKA_DSH_TOOLS: "0" } },
   )
   if (child.error) throw child.error
   if (child.status !== 0) {

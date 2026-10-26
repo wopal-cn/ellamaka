@@ -134,7 +134,7 @@ function seedClosureAt(home: string, manifest: DshRuntimeManifestV1): string {
 }
 
 describe("initializeDshRuntime state machine", () => {
-  test("ELLAMAKA_DSH=0 -> disabled with zero file access", async () => {
+  test("ELLAMAKA_DSH_TOOLS=0 -> disabled with zero file access", async () => {
     const home = tmpHome()
     const options = makeBaseOptions(home, {
       deps: {
@@ -143,12 +143,12 @@ describe("initializeDshRuntime state machine", () => {
         },
       },
     })
-    const status = await initializeDshRuntime({ ...options, env: { ELLAMAKA_DSH: "0" } })
+    const status = await initializeDshRuntime({ ...options, env: { ELLAMAKA_DSH_TOOLS: "0" } })
     expect(status).toBe("disabled")
     expect(existsSync(resolveDshLayout(home).dshHome)).toBe(false)
   })
 
-  test("ELLAMAKA_DSH=0 -> no log file, no parent dir, clean stderr (B-02)", async () => {
+  test("ELLAMAKA_DSH_TOOLS=0 -> no log file, no parent dir, clean stderr (B-02)", async () => {
     const home = tmpHome()
     const logFile = join(home, "logs", "dsh.log")
     // Stub stderr so the disabled path cannot write anything to it.
@@ -162,7 +162,7 @@ describe("initializeDshRuntime state machine", () => {
       const status = await initializeDshRuntime({
         ...makeBaseOptions(home),
         logFile,
-        env: { ELLAMAKA_DSH: "0" },
+        env: { ELLAMAKA_DSH_TOOLS: "0" },
       })
       expect(status).toBe("disabled")
       // Zero dsh output on stderr.

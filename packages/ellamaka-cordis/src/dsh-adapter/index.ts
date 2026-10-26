@@ -307,7 +307,7 @@ export async function dshAdapter(
   input: Pick<PluginInput, "directory" | "worktree" | "pluginConfig">,
   inline?: PluginOptions,
 ): Promise<Hooks> {
-  if (process.env.ELLAMAKA_DSH?.toLowerCase() === "0") return {}
+  if (process.env.ELLAMAKA_DSH_TOOLS?.toLowerCase() === "0") return {}
   const configured = input.pluginConfig?.["dsh-adapter"]
   const parsed = configSchema.safeParse(configured !== undefined ? configured : (inline ?? {}))
   // Invalid configuration cannot be honoured; running native tools beats

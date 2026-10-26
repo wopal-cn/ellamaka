@@ -5,24 +5,24 @@ import {
   dshHomeDirOf,
   expandCacheDir,
   homeProfilesDirOf,
-  isDshEnabled,
+  isDshToolsEnabled,
   resolveDshLayout,
   resolveInstallAnchor,
 } from "./status"
 import type { DshRuntimeManifestV1 } from "./manifest"
 
-describe("isDshEnabled (Gate)", () => {
-  test("returns false when ELLAMAKA_DSH is exactly 0", () => {
-    expect(isDshEnabled({ ELLAMAKA_DSH: "0" })).toBe(false)
+describe("isDshToolsEnabled (Gate)", () => {
+  test("returns false when ELLAMAKA_DSH_TOOLS is exactly 0", () => {
+    expect(isDshToolsEnabled({ ELLAMAKA_DSH_TOOLS: "0" })).toBe(false)
   })
 
   test("returns true when the variable is unset", () => {
-    expect(isDshEnabled({})).toBe(true)
+    expect(isDshToolsEnabled({})).toBe(true)
   })
 
   test("returns true for any non-0 value", () => {
-    expect(isDshEnabled({ ELLAMAKA_DSH: "1" })).toBe(true)
-    expect(isDshEnabled({ ELLAMAKA_DSH: "false" })).toBe(true)
+    expect(isDshToolsEnabled({ ELLAMAKA_DSH_TOOLS: "1" })).toBe(true)
+    expect(isDshToolsEnabled({ ELLAMAKA_DSH_TOOLS: "false" })).toBe(true)
   })
 })
 

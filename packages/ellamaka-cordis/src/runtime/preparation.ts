@@ -10,13 +10,14 @@ import type { InitializeDshOptions } from "./manager.js"
 import { checkClosureIntegrity, materializeClosure, validateClosureOnDisk } from "./materializer.js"
 import { acquireMaterializeLock, releaseMaterializeLock } from "./lock.js"
 import { createDshLogger } from "./log.js"
-import { isDshEnabled, resolveDshLayout, resolveInstallAnchor } from "./status.js"
+import { resolveDshLayout, resolveInstallAnchor } from "./status.js"
 import { prepareDshHome, readDshHomeState, withDshHomeExclusiveAccess } from "./home-guard.js"
 import { createDshRuntimeApi, createPackageDshRuntimeApi } from "./loader.js"
-import { inspectDshProfileResources, prepareDshProfileResources } from "./profile-resources.js"
+import { inspectDshProfileResources, prepareDshProfileResources, type DshProfileName } from "./profile-resources.js"
 
 export type DshPreparationOptions = Omit<InitializeDshOptions, "entry"> & {
   readonly closureVersion: number
+  readonly profiles?: readonly DshProfileName[]
   /** Operator confirmation for the one-time adoption of an unversioned Home. */
   readonly legacyAdoptionConfirmed?: boolean
 }
@@ -28,7 +29,11 @@ function ready(): CorePreparationStepResult {
 }
 
 function disabled(options: DshPreparationOptions): boolean {
-  return !isDshEnabled(options.env ?? process.env)
+  return options.profiles?.length === 0
+}
+
+function profiles(options: DshPreparationOptions): readonly DshProfileName[] {
+  return options.profiles ?? ["web", "ellamaka-tools"]
 }
 
 function closureAnchor(options: DshPreparationOptions): string | null {
@@ -128,7 +133,7 @@ function profileRuntime(options: DshPreparationOptions) {
 
 async function inspectProfiles(options: DshPreparationOptions): Promise<CorePreparationStepResult> {
   if (disabled(options)) return ready()
-  const inspection = inspectDshProfileResources(options.wopalHome)
+  const inspection = inspectDshProfileResources(options.wopalHome, profiles(options))
   return inspection.ready ? ready() : { state: "NEEDS_PREPARATION" }
 }
 
@@ -140,7 +145,7 @@ async function prepareProfiles(
   context.report({ phase: "profiles.prepare" })
   const result = await withDshHomeExclusiveAccess(
     { wopalHome: options.wopalHome, closureVersion: options.closureVersion },
-    () => prepareDshProfileResources(options.wopalHome, profileRuntime(options)),
+    () => prepareDshProfileResources(options.wopalHome, profileRuntime(options), profiles(options)),
   )
   if (result.ok) {
     context.report({ phase: "profiles.completed" })

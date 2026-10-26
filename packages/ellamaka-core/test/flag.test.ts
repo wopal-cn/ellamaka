@@ -11,38 +11,38 @@ const catalogVariables = [
 
 const originalCatalogVariables = new Map(catalogVariables.map((key) => [key, process.env[key]]))
 
-// ELLAMAKA_DSH is a kill switch, default ON (DESIGN-dsh-base.md, constraint
-// #11). `ELLAMAKA_DSH=0` disables dsh; unset or any non-"0" value enables it.
-describe("ELLAMAKA_DSH kill switch", () => {
+// ELLAMAKA_DSH_TOOLS is a kill switch, default ON (DESIGN-dsh-base.md, constraint
+// #11). `ELLAMAKA_DSH_TOOLS=0` disables dsh; unset or any non-"0" value enables it.
+describe("ELLAMAKA_DSH_TOOLS kill switch", () => {
   afterEach(() => {
-    delete process.env.ELLAMAKA_DSH
+    delete process.env.ELLAMAKA_DSH_TOOLS
   })
 
-  test("enabled when ELLAMAKA_DSH is unset (default on)", () => {
-    delete process.env.ELLAMAKA_DSH
-    expect(Flag.ELLAMAKA_DSH).toBe(true)
+  test("enabled when ELLAMAKA_DSH_TOOLS is unset (default on)", () => {
+    delete process.env.ELLAMAKA_DSH_TOOLS
+    expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
   })
 
-  test("disabled when ELLAMAKA_DSH=0", () => {
-    process.env.ELLAMAKA_DSH = "0"
-    expect(Flag.ELLAMAKA_DSH).toBe(false)
+  test("disabled when ELLAMAKA_DSH_TOOLS=0", () => {
+    process.env.ELLAMAKA_DSH_TOOLS = "0"
+    expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(false)
   })
 
-  test("enabled when ELLAMAKA_DSH=1", () => {
-    process.env.ELLAMAKA_DSH = "1"
-    expect(Flag.ELLAMAKA_DSH).toBe(true)
+  test("enabled when ELLAMAKA_DSH_TOOLS=1", () => {
+    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
   })
 
-  test("enabled when ELLAMAKA_DSH is any non-zero value", () => {
-    process.env.ELLAMAKA_DSH = "true"
-    expect(Flag.ELLAMAKA_DSH).toBe(true)
+  test("enabled when ELLAMAKA_DSH_TOOLS is any non-zero value", () => {
+    process.env.ELLAMAKA_DSH_TOOLS = "true"
+    expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
   })
 
   test("evaluated at access time, not module load", () => {
-    delete process.env.ELLAMAKA_DSH
-    expect(Flag.ELLAMAKA_DSH).toBe(true)
-    process.env.ELLAMAKA_DSH = "0"
-    expect(Flag.ELLAMAKA_DSH).toBe(false)
+    delete process.env.ELLAMAKA_DSH_TOOLS
+    expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
+    process.env.ELLAMAKA_DSH_TOOLS = "0"
+    expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(false)
   })
 })
 

@@ -88,7 +88,7 @@ describe("dsh:web child process boundary", () => {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ELLAMAKA_DSH: "1" },
+      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
     })
 
     let exited = false
@@ -163,7 +163,7 @@ describe("dsh:web child process boundary", () => {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ELLAMAKA_DSH: "1" },
+      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
     })
     const reader = child.stdout.getReader()
     let buffer = ""
@@ -211,7 +211,7 @@ describe("dsh:web child process boundary", () => {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ELLAMAKA_DSH: "1" },
+      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
     })
     // Wait for the ready line, then close the parent's write end WITHOUT the
     // shutdown line: the only real-world way stdin hits EOF is the parent

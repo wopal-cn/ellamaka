@@ -293,7 +293,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?:
           ? effectiveConfig()?.effective
           : undefined,
       ).sandbox,
-      server.key ? servers.health[healthKey()]?.dsh : undefined,
+      server.key ? servers.health[healthKey()]?.dsh?.tools : undefined,
     ).map((plugin) => ({
       specifier: plugin.name,
       ...describeStatusPlugin(plugin, {
@@ -498,8 +498,19 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?:
                       data-source={plugin.source}
                       title={plugin.specifier}
                     >
-                      <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                      <div
+                        classList={{
+                          "size-1.5 rounded-full shrink-0": true,
+                          "bg-icon-success-base": plugin.enabled !== false,
+                          "bg-border-weak-base": plugin.enabled === false,
+                        }}
+                      />
                       <span class="min-w-0 flex-1 truncate text-14-regular text-text-base">{plugin.name}</span>
+                      <Show when={plugin.enabled === false}>
+                        <span class="shrink-0 text-12-regular text-text-weak">
+                          {language.t("status.popover.plugin.notEnabled")}
+                        </span>
+                      </Show>
                       <span class="shrink-0 rounded-sm border border-border-weak-base bg-surface-raised-base px-1.5 py-0.5 text-12-regular text-text-weak">
                         {language.t(`status.popover.plugin.${plugin.source}`)}
                       </span>

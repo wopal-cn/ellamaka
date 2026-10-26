@@ -1,7 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node"
 import { afterEach, describe, expect } from "bun:test"
 import { Context, Effect, Layer, Option } from "effect"
-import { HttpBody, HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
+import { HttpClient, HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
@@ -50,6 +50,9 @@ const apiLayer = HttpRouter.serve(
   Layer.provide(SpaceRegistry.defaultLayer),
   Layer.provide(SessionStatus.defaultLayer),
   Layer.provide(workbenchDshUrlLayer),
+  // Effect's empty context is intentionally widened to close the test-only
+  // layer graph; no runtime service is supplied by this cast.
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
   Layer.provide(Layer.succeedContext(Context.empty() as Context.Context<unknown>)),
 )
 const it = testEffect(apiLayer)
@@ -57,27 +60,28 @@ const it = testEffect(apiLayer)
 // `setDshStatus` mutates the process-wide holder; restore the safe default so
 // later files (e.g. httpapi-sdk's health assertion) see the pristine state.
 afterEach(() => {
-  setDshStatus("disabled")
+  setDshStatus("web", "disabled")
+  setDshStatus("tools", "disabled")
 })
 
 describe("global health dsh field", () => {
   it.live("reports the dsh runtime status (disabled before any mount)", () =>
     Effect.gen(function* () {
-      setDshStatus("disabled")
+      setDshStatus("web", "disabled")
+      setDshStatus("tools", "ready")
       const response = yield* HttpClient.get(GlobalPaths.health)
       expect(response.status).toBe(200)
-      const body = (yield* response.json) as { dsh?: string }
-      expect(body.dsh).toBe("disabled")
+      expect(yield* response.json).toMatchObject({ dsh: { web: "disabled", tools: "ready" } })
     }),
   )
 
   it.live("reports ready once the runtime manager publishes it", () =>
     Effect.gen(function* () {
-      setDshStatus("ready")
+      setDshStatus("web", "ready")
+      setDshStatus("tools", "degraded")
       const response = yield* HttpClient.get(GlobalPaths.health)
       expect(response.status).toBe(200)
-      const body = (yield* response.json) as { dsh?: string }
-      expect(body.dsh).toBe("ready")
+      expect(yield* response.json).toMatchObject({ dsh: { web: "ready", tools: "degraded" } })
     }),
   )
 })

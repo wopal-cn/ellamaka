@@ -49,7 +49,7 @@ export function PromptInputSandboxControl(props: {
   const visible = createMemo(() =>
     shouldShowSandboxControl({
       variant: props.variant,
-      dshStatus: sandboxHealth()?.dsh,
+      dshStatus: sandboxHealth()?.dsh?.tools,
       ...sandboxInputs(),
     }),
   )

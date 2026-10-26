@@ -2,21 +2,21 @@ import { describe, expect, test } from "bun:test"
 import { activateSpaceTab } from "./space-tab-activation"
 
 describe("activateSpaceTab", () => {
-  test("activates the tab directly; DSH visibility is derived from the active tab", () => {
+  test("activates the tab directly; WorkbenchState clears transient DSH selection", () => {
     const calls: string[] = []
     const wb = {
       setActive: (path: string) => calls.push(`active:${path}`),
     }
-    activateSpaceTab(wb as never, "/space-a")
+    activateSpaceTab(wb, "/space-a")
     expect(calls).toEqual(["active:/space-a"])
   })
 
-  test("activating the general tab switches DSH into view without extra state writes", () => {
+  test("activating the general tab uses the same navigation entry", () => {
     const calls: string[] = []
     const wb = {
       setActive: (path: string) => calls.push(`active:${path}`),
     }
-    activateSpaceTab(wb as never, "")
+    activateSpaceTab(wb, "")
     expect(calls).toEqual(["active:"])
   })
 })

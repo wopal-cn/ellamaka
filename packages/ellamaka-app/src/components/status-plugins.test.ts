@@ -7,22 +7,29 @@ describe("status plugin list", () => {
 
   test("includes the enabled built-in adapter alongside external plugins", () => {
     expect(statusPlugins(external, sandbox, "ready")).toEqual([
-      { name: "dsh-adapter", source: "internal" },
+      { name: "dsh-adapter", source: "internal", enabled: true },
       { name: external[0] },
     ])
   })
 
-  test("does not report the built-in adapter as enabled without a ready sandbox", () => {
+  test("reports the built-in adapter as not enabled without a ready sandbox", () => {
     for (const status of [undefined, "disabled", "preparing", "degraded"] as const) {
-      expect(statusPlugins(external, sandbox, status)).toEqual([{ name: external[0] }])
+      expect(statusPlugins(external, sandbox, status)).toEqual([
+        { name: "dsh-adapter", source: "internal", enabled: false },
+        { name: external[0] },
+      ])
     }
-    expect(statusPlugins(external, { enabled: false }, "ready")).toEqual([{ name: external[0] }])
-    expect(statusPlugins([], undefined, "ready")).toEqual([])
+    expect(statusPlugins(external, { enabled: false }, "ready")[0]).toEqual({
+      name: "dsh-adapter",
+      source: "internal",
+      enabled: false,
+    })
+    expect(statusPlugins([], undefined, "ready")).toEqual([{ name: "dsh-adapter", source: "internal", enabled: false }])
   })
 
   test("counts a legacy named adapter once and preserves external tuple declarations", () => {
     expect(statusPlugins(["dsh-adapter", ["other-plugin", {}]], sandbox, "ready")).toEqual([
-      { name: "dsh-adapter", source: "internal" },
+      { name: "dsh-adapter", source: "internal", enabled: true },
       { name: "other-plugin" },
     ])
   })
@@ -52,6 +59,7 @@ describe("plugin names and sources", () => {
     expect(describeStatusPlugin({ name: "dsh-adapter", source: "internal" }, roots)).toEqual({
       name: "dsh-adapter",
       source: "internal",
+      enabled: undefined,
     })
     expect(describeStatusPlugin({ name: "@vendor/plugin" }, roots)).toEqual({
       name: "@vendor/plugin",

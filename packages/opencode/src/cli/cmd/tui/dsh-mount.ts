@@ -39,7 +39,7 @@ export interface DshMountHandle {
  * execute with a lightweight per-call context — no live dsh sessions.
  *
  * Assembly (DESIGN-dsh-base.md): the unified Runtime Manager gates on
- * `ELLAMAKA_DSH` itself (`=0` → `disabled` with zero file access) and is
+ * `ELLAMAKA_DSH_TOOLS` (`=0` → tools disabled with zero DSH file access) and is
  * called unconditionally; `ready` mounts the tool container with the closure
  * runtime injected; `disabled`/`degraded` return `undefined` and the TUI runs
  * untouched.
@@ -88,6 +88,7 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
     runtimeLogFile,
     logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
+    profiles: process.env.ELLAMAKA_DSH_TOOLS === "0" ? [] : ["ellamaka-tools"],
     ...(opts.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
   })
   reportDshPreparationFailure(preparation)
@@ -101,7 +102,7 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
     closureVersion: manifest.closureVersion,
   })
   if (!homeAccess.ok) {
-    setDshStatus("degraded")
+    setDshStatus("tools", "degraded")
     Log.Default.error("dsh home access denied", {
       reason: homeAccess.reason,
       homeVersion: homeAccess.homeVersion,
@@ -111,7 +112,7 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
   }
 
   // The environment mutation is deliberately after the manager kill-switch
-  // and Home admission. ELLAMAKA_DSH=0 therefore performs zero DSH-specific
+  // and Home admission. ELLAMAKA_DSH_TOOLS=0 therefore performs zero DSH-specific
   // environment setup, filesystem access, network access or mounting.
   const previousDshHome = process.env.DSH_HOME
   const activeDshHome = join(home, "home")
@@ -192,11 +193,11 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
       })
     }
 
-    setDshStatus("ready")
+    setDshStatus("tools", "ready")
     return {
       dispose: async () => {
         try {
-          setDshStatus("disabled")
+          setDshStatus("tools", "disabled")
           delete (globalThis as Record<string, unknown>)[CONTAINER_KEY]
           await pluginService?.stop()
           await host.dispose()
@@ -213,7 +214,7 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
     // it. Degrade fully to "no dsh": dispose everything, remove the container
     // handle, and report the DSH status as DISABLED (not "degraded", which
     // would suggest a partial dsh is still serving).
-    setDshStatus("disabled")
+    setDshStatus("tools", "disabled")
     // Surface the mount failure through the TUI error area (toast) — a bare
     // console write would corrupt the interface — and keep a structured log
     // record for diagnosis.
