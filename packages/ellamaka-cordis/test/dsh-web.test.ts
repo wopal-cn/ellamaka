@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { homedir, tmpdir } from "node:os"
-import { join, relative, isAbsolute } from "node:path"
+import { isAbsolute, join, relative, sep } from "node:path"
 import { spawnSync } from "node:child_process"
 import { createRequire } from "node:module"
 import { createServer, type Server } from "node:http"
@@ -585,27 +585,33 @@ function isOsSandboxAvailable(): boolean {
 const osSandboxAvailable = isOsSandboxAvailable()
 
 /**
- * Whether the TEST HARNESS itself may write into the user's home directory.
+ * Whether the TEST HARNESS itself may write into the probe directory.
  * `danger-full-access` runs bash unconfined, so the bash child inherits the
  * harness's filesystem posture: on hosts where the harness is itself
- * sandboxed (nested CI sandbox denies homedir writes with EPERM — the same
+ * sandboxed (nested CI sandbox denies external writes with EPERM — the same
  * denial the child then reports), the unconfined external-write probe cannot
  * be exercised. The probe file is removed immediately.
  */
-function testHomedirWritable(): boolean {
-  const probe = join(homedir(), `.dsh-web-homedir-probe-${process.pid}`)
+function testDirectoryWritable(directory: string): boolean {
+  const probe = join(directory, `.dsh-web-writable-probe-${process.pid}-${crypto.randomUUID()}`)
+  let created = false
   try {
     writeFileSync(probe, "probe")
+    created = true
     return true
-  } catch {
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      typeof error.code !== "string" ||
+      !["EACCES", "EPERM", "EROFS"].includes(error.code)
+    )
+      throw error
     return false
   } finally {
-    rmSync(probe, { force: true })
+    if (created) rmSync(probe)
   }
 }
-
-/** Probed once per test process; harness sandbox posture never flips mid-run. */
-const homedirWritable = testHomedirWritable()
 
 /**
  * Whether a path lies inside one of dsh's `workspace-write` writable roots.
@@ -615,26 +621,12 @@ const homedirWritable = testHomedirWritable()
  * platform temp root covers it.
  */
 function isInsideWorkspaceWriteRoot(path: string): boolean {
-  try {
-    const canonical = realpathSync.native(path)
-    return ["/tmp", tmpdir()].some((root) => {
-      const rel = relative(realpathSync.native(root), canonical)
-      return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))
-    })
-  } catch {
-    // Unresolvable home: the sandbox compares as-spelled paths and cannot
-    // match an allow root, so the denial assertion still holds.
-    return false
-  }
+  const canonical = realpathSync.native(path)
+  return ["/tmp", tmpdir()].some((root) => {
+    const rel = relative(realpathSync.native(root), canonical)
+    return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+  })
 }
-
-/**
- * Whether the external-write probe can actually distinguish confinement.
- * A homes directory that is itself a temp dir would make the probe path
- * writable under `workspace-write`, so the denial assertion would be false
- * regardless of product behavior. Probed once, before registration.
- */
-const homedirOutsideWorkspaceWriteRoots = !isInsideWorkspaceWriteRoot(homedir())
 
 /**
  * The tool-container profile: a dedicated dsh profile for ellamaka's direct
@@ -971,10 +963,9 @@ describe("dsh tools profile", () => {
   // - `danger-full-access` (the adapter's "sandbox off" mapping, DESIGN
   //   §4.10) lets the same tool write outside the workspace. It never
   //   depends on the OS sandbox backend, so it ALWAYS runs; its external
-  //   write lands in the home root itself — the exact directory the
-  //   harness-writability gate probes — which requires the test harness
-  //   itself to be homedir-writable (an unconfined child inherits the
-  //   harness's sandbox posture), so only that final assertion pair adapts.
+  //   write uses the same directory as the harness-writability probe (an
+  //   unconfined child inherits the harness's sandbox posture), so only
+  //   that final assertion pair adapts.
   //   The probe file is always removed in `finally`.
   const bashSandboxBody = async (mode: "workspace-write" | "danger-full-access") => {
     const home = mkdtempSync(join(tmpdir(), "dsh-tools-host-"))
@@ -1019,45 +1010,38 @@ describe("dsh tools profile", () => {
       ).toBe(false)
       expect(readFileSync(allowed, "utf-8")).toBe("bash-ok")
 
-      // The probe lives in the home root itself (not /tmp) because dsh's
-      // `workspace-write` sandbox allows host /tmp and os.tmpdir() but denies
-      // everything else outside the workspace — so the external write probe
-      // is only denied under `workspace-write` and only allowed under
-      // `danger-full-access`. This is deliberately the same directory that
-      // `testHomedirWritable()` probed, so the gate and the real write share
-      // one filesystem: a `~/tmp` symlink cannot make them disagree.
-      outsidePath = join(homedir(), `.dsh-tools-bash-${mode}-${Date.now()}-${process.pid}.txt`)
+      // Keep the denial target outside all canonical writable roots. Usually
+      // this is the home root; /var/tmp also works when HOME is inside /tmp.
+      // Probe writability in that exact directory, never through ~/tmp.
+      const outsideDirectory = [homedir(), "/var/tmp"].find((directory) => !isInsideWorkspaceWriteRoot(directory))
+      if (!outsideDirectory) throw new Error("sandbox test requires a probe directory outside writable temp roots")
+      const outsideWritable = testDirectoryWritable(outsideDirectory)
+      outsidePath = join(outsideDirectory, `.dsh-tools-bash-${mode}-${Date.now()}-${process.pid}.txt`)
+      const quotedOutsidePath = `'${outsidePath.replaceAll("'", "'\\''")}'`
       const result = await execute({
-        command: `printf outside > "${outsidePath}"`,
+        command: `printf outside > ${quotedOutsidePath} && cat ${quotedOutsidePath}`,
         description: "Write outside the workspace",
       })
       if (mode === "workspace-write") {
         expect(result.isError).toBe(false)
-        const text = (result.content ?? []).map((block) => block.text ?? "").join("\n")
-        if (homedirOutsideWorkspaceWriteRoots) {
-          expect(text).toContain("[sandbox: file access denied under workspace-write mode]")
-          expect(existsSync(outsidePath)).toBe(false)
-        } else {
-          // `homedir()` itself canonicalizes into a `workspace-write` allow
-          // root (/tmp or os.tmpdir()), so the path IS writable by policy.
-          // Assert the real confinement rule instead of skipping: the write is
-          // not denied. The content is not re-read here because the sandbox
-          // gives a confined child its own ephemeral view of the temp root.
-          expect(text).not.toContain("[sandbox: file access denied under workspace-write mode]")
-        }
-      } else if (homedirWritable) {
+        expect((result.content ?? []).map((block) => block.text ?? "").join("\n")).toContain(
+          "[sandbox: file access denied under workspace-write mode]",
+        )
+        expect(existsSync(outsidePath)).toBe(false)
+      } else if (outsideWritable) {
         expect(result.isError).toBe(false)
         expect(readFileSync(outsidePath, "utf-8")).toBe("outside")
       } else {
-        // The harness denies homedir writes to the unconfined child too
+        // The harness denies external writes to the unconfined child too
         // (inherited posture). The tool contract reports the command's own
         // outcome — a failed redirect is exit code 1 on stderr, NOT a tool
         // error and NOT a `workspace-write` confinement denial — so assert
         // exactly that: the command ran unconfined and failed on the
-        // environment's EPERM. The mode mapping itself stays fully verified.
+        // environment's permission/read-only error. A missing directory is
+        // not an acceptable substitute for a permission failure.
         expect(result.isError).toBe(false)
         const text = (result.content ?? []).map((block) => block.text ?? "").join("\n")
-        expect(text).toContain("Operation not permitted")
+        expect(text).toMatch(/Operation not permitted|Permission denied|Read-only file system/)
         expect(text).not.toContain("[sandbox: file access denied under workspace-write mode]")
         expect(existsSync(outsidePath)).toBe(false)
       }
