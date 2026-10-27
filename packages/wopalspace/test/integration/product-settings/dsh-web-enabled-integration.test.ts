@@ -1,15 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { applicationDomains, updateDshWebEnabled } from "../src"
-
-describe("WopalSpace application contract boundary", () => {
-  test("owns Setup, Ontology, and Space without absorbing Runtime", () => {
-    expect(applicationDomains).toEqual(["setup", "ontology", "space", "product-settings"])
-    expect(applicationDomains.join(",")).not.toContain("runtime")
-  })
-})
+import { updateDshWebEnabled } from "../../../src"
 
 describe("Wopal product settings", () => {
   test("updates only the global DSH Web key while preserving comments and unknown fields", async () => {

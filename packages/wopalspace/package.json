@@ -7,14 +7,15 @@
   "private": true,
   "scripts": {
     "test": "bun test",
-    "test:unit": "bun test test/contract.test.ts",
-    "test:integration": "bun test test/import-purity-integration.test.ts",
+    "test:unit": "bun test test/unit",
+    "test:integration": "bun test test/integration",
     "typecheck": "tsgo --noEmit"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "effect": "catalog:",
     "jsonc-parser": "3.3.1"
   },
   "devDependencies": {

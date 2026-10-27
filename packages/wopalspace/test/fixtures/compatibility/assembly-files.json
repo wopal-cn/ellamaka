@@ -1,0 +1,20 @@
+{
+  "assembly/archetypes/coding.yaml": "\nversion: 1\ntype: coding\ndescription: Mock engineering workspace\nagents:\n  - wopal.md\nskills:\n  - dev-flow\nrules:\n  - typescript.md\ncommands:\n  - init.md\n  - wopal/memo.md\nplugins:\n  ellamaka:\n    - wopal-plugin\n",
+  "assembly/schemas/coding-space-schema.yaml": "\nversion: 1\nruntime:\n  path: .wopal-space\n  files:\n    - template: STRUCTURE.md\n      target: STRUCTURE.md\n    - template: REGULATIONS.md\n      target: REGULATIONS.md\n    - template: memory/USER.md\n      target: memory/USER.md\n  dirs:\n    - path: memory\n      keep:\n        - .gitkeep\n    - path: logs\n      keep:\n        - .gitkeep\n    - path: .tmp\nspace:\n  files:\n    - template: root-AGENTS.md\n      target: AGENTS.md\n    - template: gitignore\n      target: .gitignore\n  dirs:\n    - path: projects\n      keep:\n        - .gitkeep\n    - path: docs\n      keep:\n        - .gitkeep\n",
+  ".gitignore": "node_modules/\n.env\n",
+  "AGENTS.md": "# Mock Ontology Agents\n",
+  "AGENTS.zh-CN.md": "# Mock Ontology Agents (zh-CN)\n",
+  ".env.example": "# Mock environment template\n# Copy to .wopal/.env and fill in your values.\n\n# WOPAL_LLM_API_KEY=sk-your-key-here\nWOPAL_PLUGIN_LOG_LEVEL=info\n",
+  "config/settings.jsonc": "{\n  \"ellamaka\": {\n    \"default_agent\": \"wopal\",\n    \"plugin\": [\n      \"../plugins/wopal-plugin/index.ts\"\n    ]\n  }\n}\n",
+  "agents/wopal.md": "# wopal\n",
+  "skills/dev-flow/SKILL.md": "# dev-flow\n",
+  "rules/typescript.md": "# typescript\n",
+  "commands/init.md": "# init\n",
+  "commands/wopal/memo.md": "# memo\n",
+  "plugins/wopal-plugin/index.ts": "export default {}\n",
+  "assembly/templates/STRUCTURE.md": "# Space Structure\n\nversion: 1",
+  "assembly/templates/REGULATIONS.md": "# Regulations\n\nrules go here",
+  "assembly/templates/root-AGENTS.md": "# AGENTS\n\nAgent rules.",
+  "assembly/templates/gitignore": "node_modules/\ndist/\n",
+  "assembly/templates/memory/USER.md": "# User\n"
+}

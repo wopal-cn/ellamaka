@@ -1,0 +1,35 @@
+{
+  "absent": null,
+  "interrupted": {
+    "version": 1,
+    "currentStep": "create-space",
+    "steps": {
+      "system-check": "done",
+      "install-cli": "done",
+      "ontology-setup": "skipped",
+      "create-space": "in-progress"
+    },
+    "errors": {},
+    "completed": false,
+    "startedAt": null,
+    "updatedAt": null
+  },
+  "legacy-completed": {
+    "version": 1,
+    "currentStep": "done",
+    "steps": {
+      "system-check": "done",
+      "install-cli": "done",
+      "ontology-setup": "done",
+      "create-space": "done",
+      "ai-provider": "skipped",
+      "memory-config": "done",
+      "done": "done"
+    },
+    "errors": {},
+    "completed": true,
+    "startedAt": null,
+    "updatedAt": null
+  },
+  "corrupt": "{ not valid json"
+}

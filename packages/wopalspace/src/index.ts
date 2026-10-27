@@ -1,11 +1,15 @@
-export const applicationDomains = ["setup", "ontology", "space", "product-settings"] as const
-
-export type ApplicationDomain = (typeof applicationDomains)[number]
-
-export interface HostContext {
-  readonly wopalHome: string
-  readonly directory?: string
-}
+export {
+  applicationDomains,
+  hostContextSchema,
+  publicErrorSchema,
+  publicOperationCatalog,
+  publicOperationNames,
+  publicOperationSchema,
+  type ApplicationDomain,
+  type HostContext,
+  type PublicError,
+  type PublicOperation,
+} from "./contract"
 
 export {
   DSH_WEB_ENABLED_KEY,

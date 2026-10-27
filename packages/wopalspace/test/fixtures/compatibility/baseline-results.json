@@ -1,0 +1,178 @@
+{
+  "ontology-clone-synced": {
+    "mode": "clone",
+    "name": "test-onto",
+    "downstream": [
+      {
+        "label": "origin/main → local/main",
+        "kind": "merge",
+        "upToDate": true,
+        "fileDiffs": [],
+        "mergePrediction": "clean"
+      }
+    ],
+    "upstream": []
+  },
+  "ontology-fork-synced": {
+    "mode": "fork",
+    "name": "test-onto",
+    "downstream": [
+      {
+        "label": "origin/main → local/main",
+        "kind": "merge",
+        "upToDate": true,
+        "fileDiffs": [],
+        "mergePrediction": "clean"
+      },
+      {
+        "label": "upstream/main → local/main",
+        "kind": "merge",
+        "upToDate": true,
+        "fileDiffs": [],
+        "mergePrediction": "clean"
+      }
+    ],
+    "upstream": [
+      {
+        "label": "local/main → origin/main",
+        "kind": "push",
+        "upToDate": true,
+        "fileDiffs": [],
+        "mergePrediction": "clean"
+      },
+      {
+        "label": "origin/main → upstream/main",
+        "kind": "push",
+        "upToDate": true,
+        "fileDiffs": [],
+        "mergePrediction": "clean"
+      }
+    ]
+  },
+  "space-noop": {
+    "dryRun": false,
+    "contributions": [],
+    "strayFiles": [],
+    "mainAhead": 0,
+    "sparsePatterns": [
+      "/.gitignore",
+      "/AGENTS.md",
+      "/AGENTS.zh-CN.md",
+      "/LICENSE",
+      "/README.en.md",
+      "/README.md",
+      "/agents/wopal.md",
+      "/assembly/archetypes/coding.yaml",
+      "/assembly/schemas/coding-space-schema.yaml",
+      "/assembly/templates/",
+      "/commands/init.md",
+      "/commands/wopal/memo.md",
+      "/config/",
+      "/docs/",
+      "/plugins/wopal-plugin/",
+      "/rules/typescript.md",
+      "/skills/dev-flow/"
+    ]
+  },
+  "space-preview-unique-and-stray": {
+    "dryRun": true,
+    "contributions": [
+      {
+        "subject": "feat: note"
+      }
+    ],
+    "strayFiles": ["rules/custom.md"],
+    "sparsePatterns": [
+      "/.gitignore",
+      "/AGENTS.md",
+      "/AGENTS.zh-CN.md",
+      "/LICENSE",
+      "/README.en.md",
+      "/README.md",
+      "/agents/wopal.md",
+      "/assembly/archetypes/coding.yaml",
+      "/assembly/schemas/coding-space-schema.yaml",
+      "/assembly/templates/",
+      "/commands/init.md",
+      "/commands/wopal/memo.md",
+      "/config/",
+      "/docs/",
+      "/plugins/wopal-plugin/",
+      "/rules/custom.md",
+      "/rules/typescript.md",
+      "/skills/dev-flow/"
+    ],
+    "unchanged": true
+  },
+  "space-private-upload": [
+    {
+      "code": "SPACE_SYNC_UPLOAD_GATE",
+      "unchanged": true,
+      "changedFields": []
+    },
+    {
+      "code": "SPACE_SYNC_UPLOAD_GATE",
+      "unchanged": true,
+      "changedFields": []
+    }
+  ],
+  "space-dirty-touch-set": [
+    {
+      "code": "SPACE_SYNC_DIRTY",
+      "unchanged": true,
+      "changedFields": []
+    },
+    {
+      "code": "SPACE_SYNC_DIRTY",
+      "unchanged": true,
+      "changedFields": []
+    }
+  ],
+  "space-merge-conflict": [
+    {
+      "conflicts": {
+        "upstream": ["rules/typescript.md"],
+        "stray": []
+      },
+      "unchanged": false,
+      "changedFields": ["objects"]
+    },
+    {
+      "code": "SPACE_SYNC_CONFLICT",
+      "unchanged": true,
+      "changedFields": []
+    }
+  ],
+  "setup-absent": {
+    "view": {
+      "completed": false,
+      "currentStep": "system-check",
+      "completedSteps": []
+    },
+    "stateFiles": []
+  },
+  "setup-interrupted": {
+    "view": {
+      "completed": false,
+      "currentStep": "create-space",
+      "completedSteps": ["system-check", "install-cli"]
+    },
+    "stateFiles": ["onboarding.json"]
+  },
+  "setup-legacy-completed": {
+    "view": {
+      "completed": true,
+      "currentStep": "done",
+      "completedSteps": ["system-check", "install-cli", "ontology-setup", "create-space", "done"]
+    },
+    "stateFiles": ["onboarding.json"]
+  },
+  "setup-corrupt": {
+    "view": {
+      "completed": false,
+      "currentStep": "system-check",
+      "completedSteps": []
+    },
+    "stateFiles": ["onboarding.json.bak.<timestamp>"]
+  }
+}

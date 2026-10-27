@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-const PACKAGE_ROOT = join(import.meta.dir, "..")
+const PACKAGE_ROOT = join(import.meta.dir, "..", "..", "..")
 
 describe("WopalSpace package import boundary", () => {
   test("importing the package does not create WOPAL_HOME", () => {

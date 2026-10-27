@@ -589,6 +589,7 @@
       "name": "@wopal/wopalspace",
       "version": "2.0.9",
       "dependencies": {
+        "effect": "catalog:",
         "jsonc-parser": "3.3.1",
       },
       "devDependencies": {
