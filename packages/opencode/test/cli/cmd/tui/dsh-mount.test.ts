@@ -55,7 +55,8 @@ describe("tui CorePreparation presentation", () => {
 
 describe("tui dsh mount", () => {
   test("returns undefined when ELLAMAKA_DSH_TOOLS is disabled (kill switch =0)", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "0"
+    using toolsEnvironment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "0" })
+    void toolsEnvironment
     const wopalHome = tmpWopalHome()
     const handle = await mountDshIfEnabled({ wopalHome })
     expect(handle).toBeUndefined()
@@ -64,7 +65,8 @@ describe("tui dsh mount", () => {
   })
 
   test("points B-class $DSH_HOME reads at the official-layout home on a ready mount", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using toolsEnvironment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+    void toolsEnvironment
     const wopalHome = tmpWopalHome()
     seedDshClosure(wopalHome)
     const handle = await mountDshIfEnabled({
@@ -81,7 +83,8 @@ describe("tui dsh mount", () => {
   })
 
   test("mounts the tool container and executes grep without a live session", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using toolsEnvironment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+    void toolsEnvironment
     const wopalHome = tmpWopalHome()
     seedDshClosure(wopalHome)
     const handle = await mountDshIfEnabled({
@@ -123,7 +126,8 @@ describe("tui dsh mount", () => {
   }, 60_000)
 
   test("dispose clears the global container", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using toolsEnvironment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+    void toolsEnvironment
     const wopalHome = tmpWopalHome()
     seedDshClosure(wopalHome)
     const handle = await mountDshIfEnabled({
@@ -136,7 +140,8 @@ describe("tui dsh mount", () => {
   }, 60_000)
 
   test("a broken closure degrades instead of crashing the TUI (B-06)", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using toolsEnvironment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+    void toolsEnvironment
     const wopalHome = tmpWopalHome()
     const anchor = seedDshClosure(wopalHome)
     const closureRoot = dirname(dirname(dirname(dirname(anchor))))
@@ -173,7 +178,8 @@ describe("tui dsh mount", () => {
   }, 60_000)
 
   test("a tool container whose plugins fail to activate degrades fully to disabled", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using toolsEnvironment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+    void toolsEnvironment
     const wopalHome = tmpWopalHome()
     seedDshClosure(wopalHome)
     // Publish the managed home state BEFORE the user patch lands: the

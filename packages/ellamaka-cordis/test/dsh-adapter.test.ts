@@ -2,15 +2,17 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { tool, type ToolContext, type ToolDefinition } from "@wopal/ellamaka-plugin"
 import { dshAdapter, DshAdapterError, trackDshToolsInitialization } from "../src/dsh-adapter/index"
+import { scopedEnv } from "./fixture/process-env"
 
 const globals = globalThis as Record<string, unknown>
 const previous = globals.__ellamakaDshContainer
-const enabled = process.env.ELLAMAKA_DSH_TOOLS
 afterEach(() => {
   globals.__ellamakaDshContainer = previous
-  if (enabled === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
-  else process.env.ELLAMAKA_DSH_TOOLS = enabled
 })
+
+function withTools(value: string | undefined) {
+  return scopedEnv({ ELLAMAKA_DSH_TOOLS: value })
+}
 
 function input(config: Record<string, unknown> = { sandbox: { enabled: true } }): Parameters<typeof dshAdapter>[0] {
   return { directory: "/project", worktree: "/project", pluginConfig: { "dsh-adapter": config } }
@@ -105,7 +107,8 @@ describe("built-in dsh adapter", () => {
   })
   test("required instances wait for the host's shared initialization before binding tools", async () => {
     delete globals.__ellamakaDshContainer
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using environment = withTools("1")
+    void environment
     const ready = Promise.withResolvers<void>()
     void trackDshToolsInitialization(ready.promise)
     const pending = dshAdapter(input())
@@ -122,12 +125,14 @@ describe("built-in dsh adapter", () => {
       },
     }
     expect(await dshAdapter(input({ sandbox: { enabled: false } }))).toEqual({})
-    process.env.ELLAMAKA_DSH_TOOLS = "0"
+    using disabled = withTools("0")
+    void disabled
     expect(await dshAdapter(input())).toEqual({})
   })
 
   test("missing container falls back to native tools instead of failing the session", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using environment = withTools("1")
+    void environment
     delete globals.__ellamakaDshContainer
     const missing = await dshAdapter(input())
     expect(await projected(missing)).toEqual({})
@@ -164,7 +169,8 @@ describe("built-in dsh adapter", () => {
   })
 
   test("adopts a container that appears after preparation", async () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using environment = withTools("1")
+    void environment
     delete globals.__ellamakaDshContainer
     const hook = await dshAdapter(input())
     expect(await projected(hook)).toEqual({})

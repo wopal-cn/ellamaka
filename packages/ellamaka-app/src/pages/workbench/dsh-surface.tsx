@@ -111,8 +111,8 @@ export function selfHealDshIframe(
   iframe: HTMLIFrameElement,
   refetchEntry: () => Promise<string | undefined>,
   hooks?: { reload?: (iframe: HTMLIFrameElement) => void },
-): void {
-  void Promise.resolve()
+): Promise<void> {
+  return Promise.resolve()
     .then(refetchEntry)
     .then((entry) => {
       if (entry === undefined) return
@@ -144,9 +144,9 @@ export function createDsh401Healer(input: {
   getFrame: () => HTMLIFrameElement | undefined
   refetchEntry: () => Promise<string | undefined>
   canAttempt?: () => boolean
-}): (body: string | null | undefined) => void {
+}): (body: string | null | undefined) => Promise<void> {
   let attempted = false
-  return (body) => {
+  return async (body) => {
     if (!looksLikeDsh401(body)) {
       // Healthy load: the previous episode resolved; re-arm for the next one.
       attempted = false
@@ -157,7 +157,7 @@ export function createDsh401Healer(input: {
     const frame = input.getFrame()
     if (!frame) return
     attempted = true
-    selfHealDshIframe(frame, input.refetchEntry)
+    await selfHealDshIframe(frame, input.refetchEntry)
   }
 }
 
@@ -271,7 +271,7 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
       // Cross-origin frame: nothing to probe.
       return
     }
-    heal(body)
+    void heal(body)
   }
   return (
     <>

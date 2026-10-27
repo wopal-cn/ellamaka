@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
+import { scopedEnv } from "./fixture/process-env"
 
 const catalogVariables = [
   "ELLAMAKA_MODELS_URL",
@@ -14,34 +15,37 @@ const originalCatalogVariables = new Map(catalogVariables.map((key) => [key, pro
 // ELLAMAKA_DSH_TOOLS is a kill switch, default ON (DESIGN-dsh-base.md, constraint
 // #11). `ELLAMAKA_DSH_TOOLS=0` disables dsh; unset or any non-"0" value enables it.
 describe("ELLAMAKA_DSH_TOOLS kill switch", () => {
-  afterEach(() => {
-    delete process.env.ELLAMAKA_DSH_TOOLS
-  })
-
   test("enabled when ELLAMAKA_DSH_TOOLS is unset (default on)", () => {
-    delete process.env.ELLAMAKA_DSH_TOOLS
+    using environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: undefined })
+    void environment
     expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
   })
 
   test("disabled when ELLAMAKA_DSH_TOOLS=0", () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "0"
+    using environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "0" })
+    void environment
     expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(false)
   })
 
   test("enabled when ELLAMAKA_DSH_TOOLS=1", () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "1"
+    using environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+    void environment
     expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
   })
 
   test("enabled when ELLAMAKA_DSH_TOOLS is any non-zero value", () => {
-    process.env.ELLAMAKA_DSH_TOOLS = "true"
+    using environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "true" })
+    void environment
     expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
   })
 
   test("evaluated at access time, not module load", () => {
-    delete process.env.ELLAMAKA_DSH_TOOLS
+    using environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: undefined })
+    void environment
     expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(true)
-    process.env.ELLAMAKA_DSH_TOOLS = "0"
+    environment[Symbol.dispose]()
+    using disabled = scopedEnv({ ELLAMAKA_DSH_TOOLS: "0" })
+    void disabled
     expect(Flag.ELLAMAKA_DSH_TOOLS).toBe(false)
   })
 })

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, beforeEach, describe, expect } from "bun:test"
 import { Effect, Layer, Exit } from "effect"
 import { pathToFileURL } from "node:url"
 import path from "node:path"
@@ -9,15 +9,13 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { TestConfig } from "../fixture/config"
 import { testEffect } from "../lib/effect"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { scopedEnv } from "../fixture/process-env"
 
 const globals = globalThis as Record<string, unknown>
 const old = globals.__ellamakaDshContainer
-const env = process.env.ELLAMAKA_DSH_TOOLS
 afterEach(async () => {
   await disposeAllInstances()
   globals.__ellamakaDshContainer = old
-  if (env === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
-  else process.env.ELLAMAKA_DSH_TOOLS = env
 })
 
 const declarations: Array<string | [string, Record<string, unknown>]> = []
@@ -44,7 +42,6 @@ const layer = Plugin.layer.pipe(
 const it = testEffect(layer)
 
 function setup() {
-  process.env.ELLAMAKA_DSH_TOOLS = "1"
   config = { "dsh-adapter": { sandbox: { enabled: true } } }
   declarations.length = 0
   preparations = 0
@@ -63,6 +60,16 @@ function setup() {
 }
 
 describe("built-in adapter engine registration", () => {
+  let environment: Disposable
+
+  beforeEach(() => {
+    environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+  })
+
+  afterEach(() => {
+    environment[Symbol.dispose]()
+  })
+
   it.instance("takes legacy inline options without installing the external package", () =>
     Effect.gen(function* () {
       setup()

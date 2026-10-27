@@ -7,6 +7,7 @@ import { validateJsonSchemaValue } from "@deepseek-ai/dsh-tools"
 import { bootDshTools } from "../src/dsh-web"
 import { dshAdapter } from "../src/dsh-adapter/index"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
+import { scopedEnv } from "./fixture/process-env"
 
 test("built-in adapter preserves installed schemas and runs the real session-free tool profile", async () => {
   const home = await mkdtemp(join(tmpdir(), "ellamaka-adapter-home-"))
@@ -15,9 +16,9 @@ test("built-in adapter preserves installed schemas and runs the real session-fre
   const host = await bootDshTools({ home, port: 0 })
   const globals = globalThis as Record<string, unknown>
   const previous = globals.__ellamakaDshContainer
-  const enabled = process.env.ELLAMAKA_DSH_TOOLS
+  using environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+  void environment
   globals.__ellamakaDshContainer = host.ctx
-  process.env.ELLAMAKA_DSH_TOOLS = "1"
   const hook = await dshAdapter({
     directory: workspace,
     worktree: workspace,
@@ -115,8 +116,6 @@ test("built-in adapter preserves installed schemas and runs the real session-fre
   } finally {
     await hook.dispose?.()
     globals.__ellamakaDshContainer = previous
-    if (enabled === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
-    else process.env.ELLAMAKA_DSH_TOOLS = enabled
     await host.dispose()
   }
 }, 60_000)
