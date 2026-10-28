@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { resolve } from "path"
 import { parsePublishArgs, runPublishCli, type PublishCliDeps } from "../src/cli/publish-npm"
 import { createAuthCheck } from "../src/npm/execute"
-import { loadPublishTargets, readProductVersion, type NpmPublishTarget, type PublishPlanEntry } from "../src/npm/plan"
+import { loadPublishTargets, readSdkVersion, type NpmPublishTarget, type PublishPlanEntry } from "../src/npm/plan"
 
 const repoRoot = resolve(import.meta.dir, "..", "..", "..")
 
@@ -32,10 +32,10 @@ function recorder(
     out: [],
     err: [],
     deps: {
-      // Real workspace targets and the real version anchor: the CLI test proves
-      // the shipped packages agree with the release version the workflow passes.
+      // Real workspace targets and the SDK version anchor: the CLI test proves
+      // the shipped packages agree with the independent npm release version.
       loadTargets: options.targets ?? (() => loadPublishTargets(repoRoot)),
-      readProductVersion: () => readProductVersion(repoRoot),
+      readSdkVersion: () => readSdkVersion(repoRoot),
       isPublished: options.probe ?? ((name) => (options.published ?? []).includes(name)),
       verifySkipped: (entry) => {
         record.verified.push(entry)
@@ -236,8 +236,8 @@ describe("publish", () => {
     // The probe runs before the build/pack, so another release can publish the
     // same immutable version in between; the resulting conflict is not a
     // failure — the version is on the registry and this run still succeeds.
-    // Versions derive from the real anchor (which moves with release bumps).
-    const base = readProductVersion(repoRoot).split("-")[0]
+    // Versions derive from the independent SDK anchor.
+    const version = readSdkVersion(repoRoot)
     const probes: string[] = []
     const record = recorder({
       probe: (name, version) => {
@@ -250,10 +250,10 @@ describe("publish", () => {
 
     expect(runPublishCli([], record.deps)).toBe(0)
     expect(probes).toEqual([
-      `@wopal/ellamaka-sdk@${base}`,
-      `@wopal/ellamaka-plugin@${base}`,
-      `@wopal/ellamaka-sdk@${base}`,
-      `@wopal/ellamaka-plugin@${base}`,
+      `@wopal/ellamaka-sdk@${version}`,
+      `@wopal/ellamaka-plugin@${version}`,
+      `@wopal/ellamaka-sdk@${version}`,
+      `@wopal/ellamaka-plugin@${version}`,
     ])
     expect(record.err).toEqual([])
     expect(record.out.join("\n")).toMatch(/published concurrently/i)
@@ -269,11 +269,10 @@ describe("publish", () => {
 })
 
 describe("check mode", () => {
-  // --check answers one release-planning question: is the base version this
-  // release would ship to npm still publishable? Unlike --dry-run it runs the
-  // full skip verification (registry tarball vs local build) for every version
-  // already on the registry, so a burned base is discovered before the tag is
-  // cut, not after the workflow dies at the npm step.
+  // --check verifies the exact independent npm version. Unlike --dry-run it runs
+  // the full skip verification (registry tarball vs local build) for every
+  // version already on the registry, so an immutable-content mismatch is
+  // discovered before the npm tag is cut.
   test("parses --check and rejects combining it with --dry-run", () => {
     expect(parsePublishArgs(["--check"])).toEqual({
       options: { dryRun: false, check: true, registry: "https://registry.npmjs.org/", version: undefined },
@@ -289,10 +288,10 @@ describe("check mode", () => {
     expect(record.authChecks).toEqual([])
   })
 
-  test("fails closed on a burned base before anything would be published", () => {
+  test("fails closed on an immutable-content mismatch before anything would be published", () => {
     // The 2026-10-10 release failure: 2.0.8 shipped with plugin changes after
     // rc.1, so the plugin tarball diverged from the registry copy and every
-    // 2.0.8-base release died at the npm step. --check must surface this
+    // A 2.0.8 npm release died after publishing stale contents. --check must surface this
     // while only a plan exists.
     const record = recorder({
       published: ["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"],
@@ -307,8 +306,8 @@ describe("check mode", () => {
     expect(record.err.join("\n")).toMatch(/permanently burned/)
   })
 
-  test("reports a clean base and exits 0", () => {
-    // Base never published: the plan is pure [publish], nothing to verify.
+  test("reports an unpublished version as publishable and exits 0", () => {
+    // Version never published: the plan is pure [publish], nothing to verify.
     const record = recorder()
     expect(runPublishCli(["--check"], record.deps)).toBe(0)
     expect(record.verified).toEqual([])
@@ -327,19 +326,18 @@ describe("version validation", () => {
     expect(record.err.join("\n")).toContain("@wopal/ellamaka-plugin@2.0.4")
   })
 
-  test("--version overrides the anchor-derived product version", () => {
+  test("--version overrides the SDK anchor version", () => {
     const record = recorder()
     expect(runPublishCli(["--dry-run", "--version", "2.0.6"], record.deps)).toBe(1)
     expect(record.err.join("\n")).toContain("2.0.6")
   })
 
-  test("the shipped packages agree with the prerelease-bearing release version", () => {
-    // The anchor carries the release prerelease (2.0.5-rc.7) while the packages
-    // are pinned at the base version — the strip must bridge the two.
-    const anchor = readProductVersion(repoRoot)
+  test("defaults to the exact SDK anchor version", () => {
+    const anchor = readSdkVersion(repoRoot)
     expect(anchor).toMatch(/^\d+\.\d+\.\d+/)
     const record = recorder()
-    expect(runPublishCli(["--dry-run", "--version", anchor], record.deps)).toBe(0)
+    expect(runPublishCli(["--dry-run"], record.deps)).toBe(0)
+    expect(record.out.join("\n")).toContain(`version ${anchor}`)
     expect(record.err).toEqual([])
   })
 })

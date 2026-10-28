@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { buildPublishPlan, tarballFileName, type NpmPublishTarget } from "../src/npm/plan"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { buildPublishPlan, readSdkVersion, tarballFileName, type NpmPublishTarget } from "../src/npm/plan"
 
 function target(dir: string, name: string, version: string): NpmPublishTarget {
   return { dir, manifest: { name, version, exports: { ".": "./src/index.ts" } } }
@@ -9,10 +11,30 @@ const SDK = target("packages/sdk/js", "@wopal/ellamaka-sdk", "2.0.5")
 const PLUGIN = target("packages/plugin", "@wopal/ellamaka-plugin", "2.0.5")
 
 const neverPublished = () => false
+const REPO_ROOT = join(import.meta.dir, "..", "..", "..")
+
+describe("independent npm version", () => {
+  test("uses the SDK package as the default version anchor", () => {
+    expect(readSdkVersion(REPO_ROOT)).toBe(
+      JSON.parse(readFileSync(join(REPO_ROOT, "packages/sdk/js/package.json"), "utf8")).version,
+    )
+  })
+
+  test("preserves an npm prerelease version exactly", () => {
+    const sdk = target("packages/sdk/js", "@wopal/ellamaka-sdk", "2.1.0-beta.2")
+    const plugin = target("packages/plugin", "@wopal/ellamaka-plugin", "2.1.0-beta.2")
+    const plan = buildPublishPlan({
+      targets: [sdk, plugin],
+      releaseVersion: "2.1.0-beta.2",
+      isPublished: neverPublished,
+    })
+    expect(plan.version).toBe("2.1.0-beta.2")
+  })
+})
 
 describe("publish order", () => {
   test("sdk is published before plugin (plugin depends on sdk, including /v2)", () => {
-    const plan = buildPublishPlan({ targets: [SDK, PLUGIN], productVersion: "2.0.5", isPublished: neverPublished })
+    const plan = buildPublishPlan({ targets: [SDK, PLUGIN], releaseVersion: "2.0.5", isPublished: neverPublished })
     expect(plan.entries.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"])
   })
 })
@@ -21,7 +43,7 @@ describe("idempotency", () => {
   test("an already published version is skipped", () => {
     const plan = buildPublishPlan({
       targets: [SDK, PLUGIN],
-      productVersion: "2.0.5",
+      releaseVersion: "2.0.5",
       isPublished: (name) => name === "@wopal/ellamaka-sdk",
     })
     expect(plan.entries.map((entry) => entry.decision)).toEqual(["skip", "publish"])
@@ -29,45 +51,42 @@ describe("idempotency", () => {
   })
 
   test("a version absent from the registry is published", () => {
-    const plan = buildPublishPlan({ targets: [SDK], productVersion: "2.0.5", isPublished: neverPublished })
+    const plan = buildPublishPlan({ targets: [SDK], releaseVersion: "2.0.5", isPublished: neverPublished })
     expect(plan.entries[0]?.decision).toBe("publish")
     expect(plan.entries[0]?.tarball).toBe("wopal-ellamaka-sdk-2.0.5.tgz")
   })
 
   test("a fully published release plans no publish at all", () => {
-    const plan = buildPublishPlan({ targets: [SDK, PLUGIN], productVersion: "2.0.5", isPublished: () => true })
+    const plan = buildPublishPlan({ targets: [SDK, PLUGIN], releaseVersion: "2.0.5", isPublished: () => true })
     expect(plan.entries.every((entry) => entry.decision === "skip")).toBe(true)
   })
 
-  test("the registry is probed once per package at that package's own version", () => {
+  test("the registry is probed once per package at that package's exact version", () => {
     const probes: string[] = []
+    const sdk = target("packages/sdk/js", "@wopal/ellamaka-sdk", "2.0.5-rc.7")
+    const plugin = target("packages/plugin", "@wopal/ellamaka-plugin", "2.0.5-rc.7")
     buildPublishPlan({
-      targets: [SDK, PLUGIN],
-      productVersion: "2.0.5-rc.7",
+      targets: [sdk, plugin],
+      releaseVersion: "2.0.5-rc.7",
       isPublished: (name, version) => {
         probes.push(`${name}@${version}`)
         return false
       },
     })
-    expect(probes).toEqual(["@wopal/ellamaka-sdk@2.0.5", "@wopal/ellamaka-plugin@2.0.5"])
+    expect(probes).toEqual(["@wopal/ellamaka-sdk@2.0.5-rc.7", "@wopal/ellamaka-plugin@2.0.5-rc.7"])
   })
 })
 
 describe("version validation", () => {
-  test("strips the prerelease from the product version before matching", () => {
-    const plan = buildPublishPlan({ targets: [SDK, PLUGIN], productVersion: "2.0.5-rc.7", isPublished: neverPublished })
-    expect(plan.version).toBe("2.0.5")
-  })
-
-  test("accepts a prerelease-free product version as-is", () => {
-    const plan = buildPublishPlan({ targets: [SDK], productVersion: "2.0.5", isPublished: neverPublished })
+  test("accepts an exact stable npm version as-is", () => {
+    const plan = buildPublishPlan({ targets: [SDK], releaseVersion: "2.0.5", isPublished: neverPublished })
     expect(plan.version).toBe("2.0.5")
   })
 
   test("fails fast when a package version does not match the release version", () => {
     const stale = target("packages/plugin", "@wopal/ellamaka-plugin", "2.0.4")
     expect(() =>
-      buildPublishPlan({ targets: [SDK, stale], productVersion: "2.0.5", isPublished: neverPublished }),
+      buildPublishPlan({ targets: [SDK, stale], releaseVersion: "2.0.5", isPublished: neverPublished }),
     ).toThrow(/@wopal\/ellamaka-plugin@2\.0\.4/)
   })
 
@@ -79,7 +98,7 @@ describe("version validation", () => {
     expect(() =>
       buildPublishPlan({
         targets: [SDK, stale],
-        productVersion: "2.0.5",
+        releaseVersion: "2.0.5",
         isPublished: () => {
           probes++
           return false
@@ -89,10 +108,10 @@ describe("version validation", () => {
     expect(probes).toBe(0)
   })
 
-  test("rejects a non-semver product version instead of guessing a base", () => {
+  test("rejects a non-semver npm release version", () => {
     // stripPrerelease passes `local` through unchanged; the plan must then
     // fail the match rather than publish an unpublished version.
-    expect(() => buildPublishPlan({ targets: [SDK], productVersion: "local", isPublished: neverPublished })).toThrow(
+    expect(() => buildPublishPlan({ targets: [SDK], releaseVersion: "local", isPublished: neverPublished })).toThrow(
       /local/,
     )
   })
@@ -100,7 +119,7 @@ describe("version validation", () => {
     // Fail-closed before any publish: an empty/missing exports map would ship a
     // package whose public contract is gone.
     const bare = { dir: "packages/plugin", manifest: { name: "@wopal/ellamaka-plugin", version: "2.0.5" } }
-    expect(() => buildPublishPlan({ targets: [bare], productVersion: "2.0.5", isPublished: neverPublished })).toThrow(
+    expect(() => buildPublishPlan({ targets: [bare], releaseVersion: "2.0.5", isPublished: neverPublished })).toThrow(
       /exports/,
     )
   })
@@ -109,7 +128,7 @@ describe("version validation", () => {
     // A skipped package is never packed, so an unusable manifest must not fail
     // the run on its behalf.
     const bare = { dir: "packages/plugin", manifest: { name: "@wopal/ellamaka-plugin", version: "2.0.5" } }
-    const plan = buildPublishPlan({ targets: [bare], productVersion: "2.0.5", isPublished: () => true })
+    const plan = buildPublishPlan({ targets: [bare], releaseVersion: "2.0.5", isPublished: () => true })
     expect(plan.entries.map((entry) => entry.decision)).toEqual(["skip"])
   })
 })

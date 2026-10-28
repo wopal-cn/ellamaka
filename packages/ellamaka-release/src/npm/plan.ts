@@ -9,15 +9,12 @@
 //    registry is skipped. This lets the release workflow re-run after a failed
 //    attempt: the gap is filled, an already-published version is never
 //    republished.
-// 2. The packages follow the product base version. A release tag may carry a
-//    prerelease (`2.0.5-rc.7`) while the packages are pinned at the
-//    prerelease-free base (`2.0.5`); the strip is `stripPrerelease` in
-//    `@wopal/ellamaka-core` — the single implementation of that rule. The
-//    base version must match every package exactly, otherwise the plan fails
-//    before any registry access.
+// 2. SDK/plugin own an independent npm SemVer line. The release version must
+//    match both package manifests exactly, including any prerelease suffix,
+//    otherwise the plan fails before any registry access.
 
-import { stripPrerelease } from "@wopal/ellamaka-core/installation/version"
 import { join } from "path"
+import { valid } from "semver"
 import { rewriteExports, type DistExportTarget } from "./exports"
 import { readJsonObject } from "./json"
 
@@ -27,8 +24,8 @@ import { readJsonObject } from "./json"
  */
 export const NPM_PUBLISH_PACKAGE_DIRS = ["packages/sdk/js", "packages/plugin"] as const
 
-/** Version anchor for CLI releases (docs/DESIGN-distribution.md §3.2). */
-export const VERSION_ANCHOR = "packages/ellamaka-cli/package.json"
+/** Version anchor for the independent npm release line. */
+export const SDK_VERSION_ANCHOR = "packages/sdk/js/package.json"
 
 export interface PackageManifest {
   name: string
@@ -57,7 +54,7 @@ export interface PublishPlanEntry {
 }
 
 export interface PublishPlan {
-  /** Prerelease-free base version every package must be pinned to. */
+  /** Exact npm release version every published package must be pinned to. */
   version: string
   entries: PublishPlanEntry[]
 }
@@ -67,9 +64,9 @@ export function tarballFileName(name: string, version: string): string {
   return `${name.replace(/^@/, "").replace(/\//g, "-")}-${version}.tgz`
 }
 
-/** Read the release version anchor (the CLI package.json). */
-export function readProductVersion(repoRoot: string): string {
-  const path = join(repoRoot, VERSION_ANCHOR)
+/** Read the independent npm release version anchor (the SDK package.json). */
+export function readSdkVersion(repoRoot: string): string {
+  const path = join(repoRoot, SDK_VERSION_ANCHOR)
   const value = readJsonObject(path)
   if (typeof value.version !== "string") throw new Error(`${path}: expected a string "version" field`)
   return value.version
@@ -94,12 +91,13 @@ export function loadPublishTargets(repoRoot: string): NpmPublishTarget[] {
 
 export function buildPublishPlan(options: {
   targets: NpmPublishTarget[]
-  /** Raw product version (release tag or CLI anchor); may carry a prerelease. */
-  productVersion: string
+  /** Exact npm release version (release tag or SDK anchor). */
+  releaseVersion: string
   /** Returns true when `<name>@<version>` already exists on the registry. */
   isPublished: (name: string, version: string) => boolean
 }): PublishPlan {
-  const version = stripPrerelease(options.productVersion)
+  const version = options.releaseVersion
+  if (!valid(version)) throw new Error(`invalid npm release version: ${version}`)
 
   // Validate every package before probing the registry: a release whose
   // packages disagree with the tag is invalid regardless of what npm holds.
@@ -107,7 +105,7 @@ export function buildPublishPlan(options: {
     const { name, version: packageVersion } = target.manifest
     if (packageVersion !== version) {
       throw new Error(
-        `release version ${options.productVersion} (base ${version}) does not match ` +
+        `npm release version ${version} does not match ` +
           `${name}@${packageVersion} (${target.dir}/package.json) — ` +
           `bump the package version with the release, or fix the tag`,
       )

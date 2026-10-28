@@ -1,0 +1,92 @@
+name: Publish Ellamaka npm packages
+
+on:
+  push:
+    tags:
+      - "ellamaka-npm-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact npm version to retry (must match the selected ellamaka-npm-v* tag)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    if: github.repository == 'wopal-cn/ellamaka'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Resolve and validate npm release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            case "$GITHUB_REF_NAME" in
+              ellamaka-npm-v*) VERSION="${GITHUB_REF_NAME#ellamaka-npm-v}" ;;
+              *) echo "ERROR: unexpected npm release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
+            esac
+          else
+            VERSION="${{ inputs.version }}"
+            EXPECTED_TAG="ellamaka-npm-v${VERSION}"
+            if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "$EXPECTED_TAG" ]; then
+              echo "ERROR: workflow_dispatch retry must use --ref $EXPECTED_TAG" >&2
+              exit 1
+            fi
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: npm release workflow only supports stable X.Y.Z: $VERSION" >&2
+            exit 1
+          fi
+
+          SDK_VERSION="$(node -p "require('./packages/sdk/js/package.json').version")"
+          PLUGIN_VERSION="$(node -p "require('./packages/plugin/package.json').version")"
+          if [ "$SDK_VERSION" != "$VERSION" ] || [ "$PLUGIN_VERSION" != "$VERSION" ]; then
+            echo "ERROR: tag version $VERSION must match SDK ($SDK_VERSION) and Plugin ($PLUGIN_VERSION)." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/cache@v5
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Verify npm publisher
+        working-directory: packages/ellamaka-release
+        run: bun test test/npm-publish-*.test.ts
+
+      - name: Pack and clean-install npm packages
+        run: |
+          bun packages/ellamaka-release/src/cli/verify-npm.ts \
+            --version "${{ steps.version.outputs.version }}"
+
+      - uses: actions/setup-node@v6
+        with:
+          # npm >= 11.5.1 is required for OIDC trusted publishing.
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - name: Publish @wopal/ellamaka-sdk and @wopal/ellamaka-plugin
+        run: |
+          bun packages/ellamaka-release/src/cli/publish-npm.ts \
+            --version "${{ steps.version.outputs.version }}"

@@ -135,64 +135,23 @@ describe("release shell positional version", () => {
   })
 })
 
-describe("release.sh check_npm_base_burned", () => {
-  function runCheck(snippet: string, env: Record<string, string>): { out: string; code: number } {
-    const exports = Object.entries(env)
-      .map(([k, v]) => `export ${k}=${JSON.stringify(v)}`)
-      .join("\n")
-    const script = `
-      set -euo pipefail
-      ${exports}
-      export REPO_ROOT=${JSON.stringify(REPO_ROOT)}
-      source "$REPO_ROOT/scripts/lib/release.sh" >/dev/null 2>&1
-      ${snippet}
-    `
-    const proc = Bun.spawnSync(["bash", "-c", script], { timeout: 120_000 })
-    return { out: proc.stdout.toString().trim() + "\n" + proc.stderr.toString().trim(), code: proc.exitCode }
-  }
+describe("product release npm separation", () => {
+  test("product release scripts and workflows do not own npm publishing", async () => {
+    const releaseLib = await Bun.file(join(REPO_ROOT, "scripts/lib/release.sh")).text()
+    const cliWorkflow = await Bun.file(join(REPO_ROOT, ".github/workflows/publish-ellamaka-cli.yml")).text()
+    const desktopWorkflow = await Bun.file(join(REPO_ROOT, ".github/workflows/publish-ellamaka-desktop.yml")).text()
 
-  test("clean base: reports publishable and exits 0", () => {
-    // 目标 base 与 workspace 包 base 不同 → registry 上不可能存在该版本，
-    // 无需构建比对，直接判 publishable。钉住接线（命令形态、gate 行为）。
-    const { out, code } = runCheck(`check_npm_base_burned "9.9.9"; echo "rc=$?"`, {
-      PRODUCT: "ellamaka-cli",
-    })
-    expect(code).toBe(0)
-    expect(out).toContain("publishable")
-    expect(out).toContain("rc=0")
-  }, 120_000)
+    expect(releaseLib).not.toContain("check_npm_base_burned")
+    expect(releaseLib).toContain("d === 'plugin'")
+    expect(releaseLib).not.toContain("const sdk = path.join(root, 'packages', 'sdk', 'js', 'package.json')")
+    expect(cliWorkflow).not.toContain("publish-npm.ts")
+    expect(desktopWorkflow).not.toContain("publish-npm.ts")
+  })
 
-  test("burned base: aborts with the digest mismatch and a version suggestion", () => {
-    // 2026-10-10 失败模式：registry 内容与构建不一致。桩掉 publish CLI 返回
-    // 烧毁错误，guard 必须 abort 并给出 minor 建议版本。
-    const stub = join("/tmp", `publish-stub-${Date.now()}.ts`)
-    require("node:fs").writeFileSync(
-      stub,
-      `console.error("Error: @wopal/ellamaka-plugin@2.0.8 is already on the registry, but its contents differ from this build (registry bd058b97, local cfcff584). npm versions are immutable and this version number is permanently burned: bump the version and re-release.")\nprocess.exit(1)\n`,
-    )
-    const { out, code } = runCheck(`check_npm_base_burned "2.0.9"; echo "rc=$?"`, {
-      PRODUCT: "ellamaka-cli",
-      ELLAMAKA_NPM_PUBLISH_CLI: stub,
-    })
-    require("node:fs").rmSync(stub)
-    expect(code).toBe(1)
-    expect(out).toContain("已烧毁")
-    expect(out).toContain("permanently burned")
-    expect(out).toMatch(/--minor/)
-    expect(out).toMatch(/2\.1\.0/)
-  }, 120_000)
-
-  test("publish CLI unavailable: skips the check instead of blocking releases", () => {
-    // guard 是加固性预检：publish CLI 缺失（或 bun 不可用）不得让仓库无法发布。
-    // fail-open 并说明原因。
-    const { out, code } = runCheck(`check_npm_base_burned "2.0.8"; echo "rc=$?"`, {
-      PRODUCT: "ellamaka-cli",
-      ELLAMAKA_NPM_PUBLISH_CLI: "/tmp/ellamaka-no-such-publish-cli.ts",
-    })
-    expect(code).toBe(0)
-    expect(out).toContain("跳过 npm base 预检")
-    expect(out).toContain("rc=0")
-  }, 120_000)
+  test("standalone npm release entry and workflow exist", async () => {
+    expect(await Bun.file(join(REPO_ROOT, "scripts/release-npm.sh")).exists()).toBe(true)
+    expect(await Bun.file(join(REPO_ROOT, ".github/workflows/publish-ellamaka-npm.yml")).exists()).toBe(true)
+  })
 })
 
 describe("release.sh confirm model", () => {

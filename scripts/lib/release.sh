@@ -7,9 +7,9 @@
 #   不读取 package.json 作"版本线/锚点"候选状态。
 #
 # 写入（发布动作内）：本产品 package.json 写目标 VERSION（带 rc/beta 后缀或纯
-#   X.Y.Z，成功即成为记录）；根 + 其余 workspace 依赖包统一镜像纯 base，且单调
-#   不减——仅当本次 BASE 高于根当前版本时抬升（依赖包 base = 两产品较高者）。
-#   失败/中断发布不构成记录，可同版本重发。
+#   X.Y.Z，成功即成为记录）；根 + 产品内部 workspace 支持包统一镜像纯 base，且
+#   单调不减。公开 npm 包 @wopal/ellamaka-sdk / @wopal/ellamaka-plugin 拥有独立
+#   SemVer，产品发布绝不改它们。失败/中断发布不构成记录，可同版本重发。
 #
 # 版本推断（packages/ellamaka-release/src/version-line.ts）：
 #   rc/beta → 该产品通道：候选 base 未转正则续 N+1，否则已发 stable patch+1 的
@@ -387,55 +387,6 @@ check_dep_floor_synced() {
   " "$config_floor" "$dep_floor" || die "依赖下界未同步：@wopal/cli-capability-schema (^$dep_floor) 低于 .ci/versions.json minWopalCli ($config_floor)。请先运行 ./scripts/build.sh cli 或 dev.sh 完成同步并提交。"
 }
 
-# ── npm base 预检（2026-10-10 教训）────────────────────────
-# 依赖包（@wopal/ellamaka-sdk / @wopal/ellamaka-plugin）跟随产品 base 版本发布
-# （docs/DESIGN-distribution.md §npm），npm 版本不可覆盖。若 base 已在 registry
-# 且内容与本次构建不一致（contract 包在 rc 发布后继续演化），该 base 的所有后续
-# 发布必然死在 workflow 的 npm step —— 且 R2 manifest 未提交，版本推断会把同一
-# base 再次算出来，形成反复失败循环。此预检在打 tag 前发现该状态。
-#
-# 边界（fail-open，纯预检不阻断无 npm 发布路径的产品）：
-#   - 仅当目标 base == 当前 workspace 包 base 时才跑完整内容比对（publish CLI
-#     的 plan 校验要求两者一致；目标 base 更新时 registry 上不可能存在，直接判
-#     publishable）。
-#   - publish CLI 缺失 / bun 不可用：跳过预检（advisory hardening，不构成发布
-#     门禁的一部分）。
-check_npm_base_burned() {
-  local base="$1"
-  command -v bun >/dev/null 2>&1 || { echo "ℹ️  bun 不可用，跳过 npm base 预检"; return 0; }
-  local publish_cli="${ELLAMAKA_NPM_PUBLISH_CLI:-$REPO_ROOT/packages/ellamaka-release/src/cli/publish-npm.ts}"
-  [ -f "$publish_cli" ] || { echo "ℹ️  publish CLI 缺失，跳过 npm base 预检"; return 0; }
-
-  # 版本线规则决定产物形态：目标 base 不等于 workspace 包 base 时（新版本线），
-  # registry 上不可能存在该版本（immutable），无需构建比对。
-  local workspace_base=""
-  workspace_base="$(node -p "require('$REPO_ROOT/packages/ellamaka-cli/package.json').version.split('-')[0]" 2>/dev/null || echo "")"
-  if [ "$workspace_base" != "$base" ]; then
-    echo "→ npm base 预检: base $base 不在 registry（新版本线），publishable，跳过内容比对"
-    return 0
-  fi
-
-  echo "→ npm base 预检: base $base 已随此前发布进入 registry，比对内容一致性（约 1-2 分钟）..."
-  local output
-  if output=$(bun "$publish_cli" --check --version "$base" 2>&1); then
-    echo "$output" | grep -E "npm check" || true
-    return 0
-  fi
-
-  # 烧毁：同 base 的 --rc/--patch 转正都必然复发（包版本跟随 base 且不可覆盖），
-  # 唯一出路是 minor/major 开新线 —— 建议版本复用 version-line 推断，不另写规则。
-  echo "$output" >&2
-  local suggested=""
-  suggested="$(product_released_stable)"
-  suggested="$(bun "$REPO_ROOT/packages/ellamaka-release/src/cli/version-line.ts" minor "$suggested" "" "" "[]" 2>/dev/null || true)"
-  if [ -n "$suggested" ]; then
-    # ${suggested} 花括号定界是必须的：macOS bash 在 set -u 下，$var 紧贴多字节
-    # 字符（如中文括号）会把该字符首字节吞进变量名，报 unbound variable。
-    die "npm base $base 已烧毁（registry 内容与本次构建不一致，npm 版本不可覆盖）。同 base 的 --rc/--patch 都会复发此错误；请改用 --minor 开新版本线（下一个版本 ${suggested}）。"
-  fi
-  die "npm base $base 已烧毁（registry 内容与本次构建不一致，npm 版本不可覆盖）。请用 --minor/--major 开新版本线。"
-}
-
 # ── dispatch / 监控 ───────────────────────────────────────
 
 HAVE_GH=false
@@ -614,11 +565,6 @@ run_release() {
   check_withdrawn
   check_migration_floor
 
-  # npm base 预检（烧毁检测）：打 tag 前确认依赖包 base 在 registry 上仍然
-  # 可发布（immutable 冲突会在 workflow 的 npm step 才爆炸，且 R2 manifest
-  # 未提交导致同版本反复失败）。dry-run 与 confirm 两路都过。
-  check_npm_base_burned "$BASE"
-
   # ── 工作区变更：征询而非阻断（版本号已确定，提示更有信息量）──
   if [ "$WORKSPACE_DIRTY" = true ]; then
     confirm_dirty_release
@@ -737,10 +683,9 @@ run_release() {
 
   # ── 写入计划计算（无版本线/锚点）────────────────────────
   # 本产品 package.json 恒写目标 VERSION（发布成功即成为记录）。
-  # 根 + 依赖包镜像纯 base，且单调不减：仅当本次 BASE 高于根当前版本时才同步
-  # 抬升（如 cli 发 2.0.6-rc.1 → 依赖包升 2.0.6；随后 desktop 发 2.0.5-beta.2
-  # 时 BASE 2.0.5 < 根 2.0.6，依赖包不动）。根当前版本 = 两产品已发布 base 较高者
-  # 的记录产物。
+  # 根 + 产品内部 workspace 支持包镜像纯 base，且单调不减：仅当本次 BASE
+  # 高于根当前版本时才同步抬升。公开 npm 包 SDK/Plugin 明确排除，它们由独立
+  # npm release line 管理自己的 SemVer。
   ROOT_VERSION="$(node -p "require('$REPO_ROOT/package.json').version")"
   RAISE_ROOT=false
   # ROOT_VERSION < BASE → 依赖包需抬升。node 退出码：1=需要抬升，0=不需要。
@@ -767,15 +712,15 @@ run_release() {
     echo "  product:   $PRODUCT ($CHANNEL_LABEL)"
     echo "  version:   $VERSION"
     echo "  tag:       $TAG (打在 bump commit 上)"
-    echo "  写入:      产品 package.json → $VERSION$([ "$RAISE_ROOT" = true ] && echo "；根 + 依赖包 → $BASE")
-$([ "$PROD_WRITE" = false ] && [ "$RAISE_ROOT" = false ] && echo "  （产品与依赖均已到位，无版本文件改动，直接以当前 HEAD 打 tag）")"
+    echo "  写入:      产品 package.json → $VERSION$([ "$RAISE_ROOT" = true ] && echo "；根 + 内部包 → $BASE")
+$([ "$PROD_WRITE" = false ] && [ "$RAISE_ROOT" = false ] && echo "  （产品与内部包均已到位，无版本文件改动，直接以当前 HEAD 打 tag）")"
     echo "  push:      $REMOTE 分支 + ${TAG}（tag 触发 ${WORKFLOW}）"
     echo "  watch:     $([ "$NO_WATCH" = "true" ] && echo 跳过 || echo 自动)"
     echo "  cleanup:   publish workflow 成功后自动执行（2 stable + 2 rc/beta）"
     exit 0
   fi
 
-  # ── bump 写入（产品写目标 VERSION；根+依赖包仅当 BASE 更高时抬升）────
+  # ── bump 写入（产品写目标 VERSION；根+内部包仅当 BASE 更高时抬升）────
   if [ "$PROD_VERSION" = "$VERSION" ] && [ "$RAISE_ROOT" = false ]; then
     echo "→ 产品已是 ${VERSION} 且依赖包不需抬升，跳过 bump 与提交（直接以当前 HEAD 打 tag）"
   else
@@ -804,16 +749,14 @@ if (sub === 'cli') {
 } else {
   if (write(path.join(root, 'packages/ellamaka-desktop/package.json'), version)) changed++
 }
-// 根 + 其余 workspace 依赖包统一镜像纯 base，仅当本次 BASE 更高时抬升
+// 根 + 产品内部 workspace 支持包统一镜像纯 base，仅当本次 BASE 更高时抬升
 if (raiseRoot) {
   for (const d of fs.readdirSync(path.join(root, 'packages'))) {
     const p = path.join(root, 'packages', d, 'package.json')
     if (!fs.existsSync(p)) continue
-    if (d === 'ellamaka-cli' || d === 'ellamaka-desktop') continue
+    if (d === 'ellamaka-cli' || d === 'ellamaka-desktop' || d === 'plugin') continue
     if (write(p, depBase)) changed++
   }
-  const sdk = path.join(root, 'packages', 'sdk', 'js', 'package.json')
-  if (fs.existsSync(sdk) && write(sdk, depBase)) changed++
   if (write(path.join(root, 'package.json'), depBase)) changed++
 }
 console.log('  bumped ' + changed + ' package.json files')
@@ -823,11 +766,24 @@ console.log('  bumped ' + changed + ' package.json files')
     (cd "$REPO_ROOT" && bun install --lockfile-only 2>/dev/null) || die "bun install --lockfile-only 失败"
 
     echo "→ 提交版本 bump"
-    local -a bump_paths=(package.json)
-    local p
-    for p in packages/*/package.json packages/sdk/js/package.json bun.lock; do
-      if [ -e "$REPO_ROOT/$p" ]; then bump_paths+=("$p"); fi
-    done
+    local -a bump_paths=(bun.lock)
+    local p d
+    if [ "$SUBCOMMAND" = "cli" ]; then
+      bump_paths+=(packages/ellamaka-cli/package.json)
+    else
+      bump_paths+=(packages/ellamaka-desktop/package.json)
+    fi
+    if [ "$RAISE_ROOT" = true ]; then
+      bump_paths+=(package.json)
+      for p in packages/*/package.json; do
+        [ -e "$REPO_ROOT/$p" ] || continue
+        d="$(basename "$(dirname "$p")")"
+        case "$d" in
+          ellamaka-cli|ellamaka-desktop|plugin) continue ;;
+        esac
+        bump_paths+=("$p")
+      done
+    fi
     git -C "$REPO_ROOT" add -- "${bump_paths[@]}"
     # --only + pathspec：只提交版本文件，暂存区里其他改动原样保留（脏工作区发布时尤其重要）
     git -C "$REPO_ROOT" commit --only -m "$(bump_commit_subject)" -- "${bump_paths[@]}"

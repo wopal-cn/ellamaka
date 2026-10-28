@@ -2266,12 +2266,6 @@
     {
       "rule": "TISO004",
       "file": "scripts/lib/release.test.ts",
-      "detail": "Bun.spawnSync([\"bash\", \"-c\", script], { timeout: 120_000 })",
-      "count": 1
-    },
-    {
-      "rule": "TISO004",
-      "file": "scripts/lib/release.test.ts",
       "detail": "Bun.spawnSync([\"bash\", \"-c\", script])",
       "count": 2
     },

@@ -17,20 +17,20 @@ description: Long-lived architecture boundaries, implementation, logging, releas
 
 Ellamaka combines Runtime, a Server composition host, the private WopalSpace application service, and the official App BFF. The Server may mount Public Platform API and App-private BFF on one host; lower-level Runtime does not depend on either WopalSpace or the App BFF. Browser/Desktop use the public SDK for platform capabilities and an app-private generated client for official App projections, while Wopal CLI owns Product management. The target boundaries are in DESIGN; this filesystem map lists only paths that currently exist.
 
-| Path | Module responsibility |
-|---|---|
-| packages/ellamaka-core/ | Shared product primitives for paths, processes, files, and logging |
-| packages/opencode/src/cli/ | Ellamaka CLI entry, command routing, and TUI startup |
-| packages/opencode/src/config/, packages/opencode/src/plugin/ | Configuration evaluation and plugin assembly |
-| packages/opencode/src/server/ | Server composition, Root/Instance APIs, HTTP and event connections; WopalSpace handler integration is under routes/instance/httpapi/ |
-| packages/opencode/src/session/, packages/opencode/src/agent/, packages/opencode/src/permission/, packages/opencode/src/tool/ | Runtime sessions, agents, permission evaluation, and tool execution |
-| packages/opencode/src/workbench/ | Server-side Workbench composition of Runtime and Space data |
-| packages/ellamaka-cordis/ | DSH closure loading, Cordis lifecycle, and profile bridge |
-| packages/sdk/js/ | Public Runtime/WopalSpace contracts and generated client |
-| packages/ellamaka-app/ | Shared Browser/Desktop Onboarding and Workbench UI plus ownership of the Official App BFF contract/client |
-| packages/ellamaka-desktop/ | Electron shell and Server sidecar lifecycle |
-| packages/ellamaka-release/ | CLI/Desktop product builds, identity, and release |
-| scripts/ | User-facing convenience scripts only: build, dev, release. Every script must be registered in `scripts/README.md`. CI gates, test harnesses, and other tooling belong to the package that owns them. |
+| Path                                                                                                                         | Module responsibility                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| packages/ellamaka-core/                                                                                                      | Shared product primitives for paths, processes, files, and logging                                                                                                                                   |
+| packages/opencode/src/cli/                                                                                                   | Ellamaka CLI entry, command routing, and TUI startup                                                                                                                                                 |
+| packages/opencode/src/config/, packages/opencode/src/plugin/                                                                 | Configuration evaluation and plugin assembly                                                                                                                                                         |
+| packages/opencode/src/server/                                                                                                | Server composition, Root/Instance APIs, HTTP and event connections; WopalSpace handler integration is under routes/instance/httpapi/                                                                 |
+| packages/opencode/src/session/, packages/opencode/src/agent/, packages/opencode/src/permission/, packages/opencode/src/tool/ | Runtime sessions, agents, permission evaluation, and tool execution                                                                                                                                  |
+| packages/opencode/src/workbench/                                                                                             | Server-side Workbench composition of Runtime and Space data                                                                                                                                          |
+| packages/ellamaka-cordis/                                                                                                    | DSH closure loading, Cordis lifecycle, and profile bridge                                                                                                                                            |
+| packages/sdk/js/                                                                                                             | Public Runtime/WopalSpace contracts and generated client                                                                                                                                             |
+| packages/ellamaka-app/                                                                                                       | Shared Browser/Desktop Onboarding and Workbench UI plus ownership of the Official App BFF contract/client                                                                                            |
+| packages/ellamaka-desktop/                                                                                                   | Electron shell and Server sidecar lifecycle                                                                                                                                                          |
+| packages/ellamaka-release/                                                                                                   | CLI/Desktop product builds, identity, and release                                                                                                                                                    |
+| scripts/                                                                                                                     | User-facing convenience scripts only: build, dev, release. Every script must be registered in `scripts/README.md`. CI gates, test harnesses, and other tooling belong to the package that owns them. |
 
 Keep these boundaries in mind when choosing an owner:
 
@@ -40,16 +40,16 @@ Keep these boundaries in mind when choosing an owner:
 
 ## Development Commands
 
-| Scenario | Command | When |
-|---|---|---|
-| Lint | bun run lint | After code changes |
-| Full typecheck | bun run typecheck | After TypeScript changes |
-| opencode unit tests | bun run test:unit (from packages/opencode/) | Runtime unit tests |
-| opencode integration tests | bun run test:integration (from packages/opencode/) | Server or cross-module changes |
-| App unit tests | bun run test:unit --force-exit (from packages/ellamaka-app/) | Frontend behavior changes |
-| App boundary check | bun run check:workbench-boundaries (from packages/ellamaka-app/) | Workbench changes |
-| Desktop tests | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes |
-| Development entry | ./scripts/dev.sh help | GUI, TUI, and Server integration |
+| Scenario                   | Command                                                                                  | When                             |
+| -------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------- |
+| Lint                       | bun run lint                                                                             | After code changes               |
+| Full typecheck             | bun run typecheck                                                                        | After TypeScript changes         |
+| opencode unit tests        | bun run test:unit (from packages/opencode/)                                              | Runtime unit tests               |
+| opencode integration tests | bun run test:integration (from packages/opencode/)                                       | Server or cross-module changes   |
+| App unit tests             | bun run test:unit --force-exit (from packages/ellamaka-app/)                             | Frontend behavior changes        |
+| App boundary check         | bun run check:workbench-boundaries (from packages/ellamaka-app/)                         | Workbench changes                |
+| Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes    |
+| Development entry          | ./scripts/dev.sh help                                                                    | GUI, TUI, and Server integration |
 
 Run tests from their owning package. See package rules and script help for the full command matrix and artifact checks.
 
@@ -65,7 +65,7 @@ Run tests from their owning package. See package rules and script help for the f
 - WopalSpace integration boundary: Setup, Ontology, and base Space business are implemented once in the private WopalSpace service and exposed through the Public Platform SDK. Product management, Evolution, Skill lifecycle, and scheduling remain Wopal CLI-owned. Ellamaka does not depend on Wopal CLI command handling, a shared schema package, or a minimum CLI version. Session provisioning accepts only registered Spaces and safe relative directories; a failed directory never deletes the Session.
 - API and SDK: define the domain owner and Root/Instance scope first, and go through `HttpApiGroup`. Reusable Runtime/WopalSpace operations belong to the Public Platform contract and public SDK; official App-only projections/use cases belong to the App BFF private contract and must not enter public `/doc` or SDK exports. Regeneration is all-or-nothing for each contract — after a payload change, rerun its generator and verify type plus runtime parameter mapping. Never hand-edit generated files.
 - Permission rules: agent frontmatter declares no `"*": allow`-style wildcards, only explicit narrowings; evaluation is LAST-wins, so an explicit rule must sit after the wildcard. After a change, verify the merged rule order on a live instance via `GET /agent`.
-- Release discipline: the release build entry is the only bundling point for the CLI binary; introduce no Wopal CLI version floor or release-order dependency. CLI and Desktop update independently. Desktop UI changes must be validated on native Windows (a macOS build is not sufficient). Release workflows use only Node 24-native official actions — inspect `runs.using === "node24"` before adding or upgrading one. Committed releases are immutable; whole-version withdrawal follows DESIGN-distribution.
+- Release discipline: the release build entry is the only bundling point for the CLI binary; introduce no Wopal CLI version floor or release-order dependency. CLI and Desktop update independently. Public `@wopal/ellamaka-sdk` / `@wopal/ellamaka-plugin` npm releases have their own SemVer and dedicated workflow; CLI/Desktop product releases never bump or publish those npm packages. Desktop UI changes must be validated on native Windows (a macOS build is not sufficient). Release workflows use only Node 24-native official actions — inspect `runs.using === "node24"` before adding or upgrading one. Committed releases are immutable; whole-version withdrawal follows DESIGN-distribution.
 - Logging: ellamaka-core's structured logger owns routing and redaction; plugins log only through built-in `ctx.logger` (no `console.log`, no hand-built logger). Must log: lifecycle changes, errors and exceptions (including degraded paths), key decisions. Must not log: per-item records inside loops, routine success-path steps, information derivable from context. Aggregate a loop into one summary; carry context in structured fields rather than concatenating into the message; never swallow an exception in a `catch`. Default level INFO, DEBUG for diagnosis, TRACE selected explicitly per category. No log may carry credentials, prompt/message bodies, tool arguments, commands, paths, or unbounded child output. Level, routing, and file details live in DESIGN-logging.
 - Debugging: widen output with `--log-level` / `--trace <category>` rather than adding temporary records to the code; an explicit `--log-level` overrides `--trace` promotion. Log locations (role-scoped directories, dev scope, DSH files) are in DESIGN-logging.
 - Startup and progress: report only stages actually performed; show counts or percentages only when a real total exists; long phases emit heartbeat. Progress goes to stderr or a dedicated UI so machine stdout stays clean. When `wopal.dsh.web.enabled=false` and `ELLAMAKA_DSH_TOOLS=0`, report skipped DSH preparation and perform zero DSH file/network/mount work. A Tools profile load failure may leave Native Tools available; once Tools is ready and a Space adopts `dsh-adapter`, sandbox/tool execution failures stay failures and must never retry through Native Tools.
@@ -121,13 +121,13 @@ The reasoning, the three isolation models, and the full rule-to-gate map live in
 
 GUI, onboarding, and desktop-shell behavior verification entries. An agent can check Desktop through CDP; hand off only behavior that still needs human observation.
 
-| Entry | Command | Isolation |
-|---|---|---|
-| Desktop (regular) | `./scripts/dev.sh desktop` | Uses the real environment; first run needs `--rebuild` to build the sidecar |
-| Desktop (CDP) | `./scripts/dev.sh desktop --rebuild --cdp-debug [port]` | Uses the real environment; port 5173 and the selected CDP port must be free (default 9222) |
-| Workbench / backend | `./scripts/dev.sh serve` | Port 4096; `--cdp-debug` opens 9222 CDP |
-| TUI | `./scripts/dev.sh tui` | In-process backend by default |
-| Stop | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | — |
+| Entry               | Command                                                   | Isolation                                                                                  |
+| ------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Desktop (regular)   | `./scripts/dev.sh desktop`                                | Uses the real environment; first run needs `--rebuild` to build the sidecar                |
+| Desktop (CDP)       | `./scripts/dev.sh desktop --rebuild --cdp-debug [port]`   | Uses the real environment; port 5173 and the selected CDP port must be free (default 9222) |
+| Workbench / backend | `./scripts/dev.sh serve`                                  | Port 4096; `--cdp-debug` opens 9222 CDP                                                    |
+| TUI                 | `./scripts/dev.sh tui`                                    | In-process backend by default                                                              |
+| Stop                | `./scripts/dev.sh stop <backend\|frontend\|desktop\|all>` | —                                                                                          |
 
 - Desktop CDP: `agent-browser --session <name> connect <port>` connects to the Electron window for UI verification. Pass a custom port when 9222 is taken, e.g. `./scripts/dev.sh desktop --cdp-debug 9333` then `connect 9333`; only the selected port must be free.
 - Logs (dev runs): `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`. `<scope>` is the first 10 hex chars of the md5 of the repo/worktree root that owns `scripts/dev.sh` (symlinks resolved) — resolve it from `.wopal-space/logs/dev/registry`, or recompute as dev.sh does `printf '%s' "<root>" | md5 -q | cut -c1-10`. A worktree run logs into its base space's ledger.

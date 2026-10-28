@@ -36,12 +36,12 @@ $SCRIPT — 发布 CLI 版本：版本推断 → bump → 提交 → tag → pus
 
 发布模型（docs/DISTRIBUTION.md §3.2/§4.1）：cli 与 desktop 各自独立序列，
 以已成功发布的 git tag 记录为版本推进唯一依据（无版本线/锚点）。本产品
-package.json 发布时写目标版本，根 + 依赖包统一镜像两产品较高 base。
+package.json 发布时写目标版本，根 + 内部包统一镜像两产品较高 base；公开 SDK/Plugin npm 包保持独立版本。
 
 用法:
   $SCRIPT [选项] [--] [version]
 
-默认 dry-run：只打印发布计划（含 npm base 预检），不做任何写入。加
+默认 dry-run：只打印产品发布计划，不做任何写入。加
 --confirm 才真正执行（执行前仍会 y/N 确认；自动化用 --confirm -y）。
 
 Bump 类型:

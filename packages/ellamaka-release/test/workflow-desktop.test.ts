@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "fs"
 import { dirname, join, resolve } from "path"
 import { fileURLToPath } from "url"
-import { stepBlockBefore } from "./workflow-helpers"
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(currentDir, "..", "..", "..")
@@ -12,8 +11,6 @@ const finalizeScript = readFileSync(
   join(root, "packages", "ellamaka-desktop", "scripts", "finalize-latest-json.ts"),
   "utf8",
 )
-
-const NPM_PUBLISH_STEP = "bun packages/ellamaka-release/src/cli/publish-npm.ts"
 
 /** The `release` job's YAML, so npm/OIDC assertions cannot match another job. */
 function releaseJob(): string {
@@ -100,61 +97,12 @@ describe("publish-ellamaka-desktop workflow", () => {
     expect(workflow).toContain("needs: [version, release-gate]")
   })
 
-  test("publishes the plugin/SDK npm packages from the desktop release", () => {
-    // A desktop release bumps the whole workspace to the base version
-    // (scripts/lib/release.sh mirrors every dependency package to the pure
-    // base), so the engine's plugin pin needs the branded packages on npm even
-    // when no CLI release runs in between. Same shared publish CLI as the CLI
-    // workflow: it owns the idempotency probe and the prerelease-free version
-    // check, so the raw tag version is passed through untouched.
-    expect(releaseJob()).toContain(NPM_PUBLISH_STEP)
-    expect(workflow).toContain("Publish npm packages (@wopal/ellamaka-sdk, @wopal/ellamaka-plugin)")
-    expect(workflow).toContain('--version "${{ needs.version.outputs.version }}"')
-  })
-
-  test("gates the desktop npm publish on a real release and never strips in shell", () => {
-    // A desktop beta tag (2.0.6-beta.1) still maps to the base package version
-    // (2.0.6); the strip happens exactly once, inside the publish CLI.
-    const stepBlock = stepBlockBefore(workflow, NPM_PUBLISH_STEP)
-    expect(stepBlock).toContain("needs.version.outputs.release != ''")
-    expect(stepBlock).not.toMatch(/\bsed\b|\bcut\b/)
-  })
-
-  test("publishes to npm before the immutable R2 commit point", () => {
-    // The versioned R2 manifest is the release commit point and a re-run
-    // cannot overwrite it, so a failed npm publish must abort the release
-    // before it is committed; the publish CLI's idempotency then lets a
-    // re-run fill the gap.
-    const npmIdx = workflow.indexOf(NPM_PUBLISH_STEP)
-    const commitIdx = workflow.indexOf("Upload binaries and metadata to Cloudflare R2")
-    expect(npmIdx).toBeGreaterThan(-1)
-    expect(commitIdx).toBeGreaterThan(npmIdx)
-  })
-
-  test("installs workspace dependencies before the npm publish step", () => {
-    // The publish CLI builds the SDK and plugin packages with the
-    // workspace-local tsc; a fresh runner has no node_modules until
-    // `bun install` runs inside the same release job.
-    const npmIdx = workflow.indexOf(NPM_PUBLISH_STEP)
-    const installIdx = workflow.indexOf("- run: bun install")
-    expect(installIdx).toBeGreaterThan(-1)
-    expect(installIdx).toBeLessThan(npmIdx)
-  })
-
-  test("uses OIDC trusted publishing, scoped to the release job", () => {
-    // Same mechanism as the CLI release: no long-lived npm token. id-token:
-    // write is required for the OIDC exchange and npm >= 11.5.1 (Node 24) is
-    // required for trusted publishing; the grant must not leak into the build
-    // matrix job.
+  test("keeps npm publishing outside the Desktop product workflow", () => {
     const job = releaseJob()
-    expect(job).toContain("permissions:")
-    expect(job).toContain("id-token: write")
+    expect(job).not.toContain("publish-npm.ts")
+    expect(workflow).not.toContain("Publish npm packages")
+    expect(workflow).not.toContain("registry-url: 'https://registry.npmjs.org'")
+    expect(job).not.toContain("id-token: write")
     expect(job).toContain("contents: write")
-    expect(workflow).toContain("registry-url: 'https://registry.npmjs.org'")
-    expect(workflow).toContain("node-version: '24'")
-    expect(workflow).not.toContain("NPM_TOKEN")
-    expect(workflow.slice(workflow.indexOf("\n  build-desktop:\n"), workflow.indexOf("\n  release:\n"))).not.toContain(
-      "id-token",
-    )
   })
 })

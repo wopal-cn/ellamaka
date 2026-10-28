@@ -21,18 +21,18 @@ exports `{"./*": "./src/*.ts"}`).
 
 ## Module Layout
 
-| Module | Path | Responsibility |
-|--------|------|----------------|
-| identity | `src/identity.ts` | Single source of truth for the release identity model (parse/build/release identity, channels, namespaced tags, legacy versions, upstream lock validation, migration floor, SemVer compare). The ONLY copy — build-time, runtime, and scripts all share it. |
-| build targets | `src/build-targets.ts` | Build target matrix (per-OS/arch). |
-| build identity | `src/build-identity.ts` | Build-time identity injection helper. |
-| context | `src/context.ts` | Build release context (serialize/parse). |
-| manifest | `src/manifest.ts` | Release manifest generation (`manifest.json`, checksums, release notes). |
-| gitee | `src/gitee.ts` | Gitee release creation. |
-| cleanup core | `src/cleanup/core.ts` | Product-agnostic cleanup kernel: reference graph, retention planning, withdrawal planning (protection model, [Cleanup Contract](../../docs/DESIGN-distribution.md#cleanup-contract)). |
-| cleanup products | `src/cleanup/products.ts` | Product difference = config (`ellamaka-cli` / `ellamaka-desktop` channels, R2 roots, alias names, restore strategy). |
-| upstream lock | `src/upstream-lock.ts` | The ONLY writer of `release/upstreams.lock.json` (operator-run). |
-| inventory | `src/inventory.ts` | Read-only legacy inventory capture ([Legacy Migration](../../docs/DESIGN-distribution.md#legacy-migration)). |
+| Module           | Path                      | Responsibility                                                                                                                                                                                                                                              |
+| ---------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| identity         | `src/identity.ts`         | Single source of truth for the release identity model (parse/build/release identity, channels, namespaced tags, legacy versions, upstream lock validation, migration floor, SemVer compare). The ONLY copy — build-time, runtime, and scripts all share it. |
+| build targets    | `src/build-targets.ts`    | Build target matrix (per-OS/arch).                                                                                                                                                                                                                          |
+| build identity   | `src/build-identity.ts`   | Build-time identity injection helper.                                                                                                                                                                                                                       |
+| context          | `src/context.ts`          | Build release context (serialize/parse).                                                                                                                                                                                                                    |
+| manifest         | `src/manifest.ts`         | Release manifest generation (`manifest.json`, checksums, release notes).                                                                                                                                                                                    |
+| gitee            | `src/gitee.ts`            | Gitee release creation.                                                                                                                                                                                                                                     |
+| cleanup core     | `src/cleanup/core.ts`     | Product-agnostic cleanup kernel: reference graph, retention planning, withdrawal planning (protection model, [Cleanup Contract](../../docs/DESIGN-distribution.md#cleanup-contract)).                                                                       |
+| cleanup products | `src/cleanup/products.ts` | Product difference = config (`ellamaka-cli` / `ellamaka-desktop` channels, R2 roots, alias names, restore strategy).                                                                                                                                        |
+| upstream lock    | `src/upstream-lock.ts`    | The ONLY writer of `release/upstreams.lock.json` (operator-run).                                                                                                                                                                                            |
+| inventory        | `src/inventory.ts`        | Read-only legacy inventory capture ([Legacy Migration](../../docs/DESIGN-distribution.md#legacy-migration)).                                                                                                                                                |
 
 ## CLI Entries (`src/cli/`)
 
@@ -40,21 +40,23 @@ Thin entry points: parse argv → call library → exit code. Invoked as
 `bun packages/ellamaka-release/src/cli/<name>.ts ...`. Do not import these
 into other modules (they carry top-level CLI side effects).
 
-| Entry | Purpose |
-|-------|---------|
-| `build.ts` | Branded CLI build. |
-| `context.ts` | Generate `release-context.json`. |
-| `manifest.ts` | Generate release manifest from archives. |
-| `gitee.ts` | Create Gitee release. |
-| `cleanup.ts` | Release cleanup (retention / withdraw), `--product ellamaka-cli\|ellamaka-desktop`. |
-| `upstream-lock.ts` | Update upstream lock (`engine --version X.Y.Z [--dry-run]`). |
-| `inventory.ts` | Legacy inventory capture (`--dry-run` / `--output`). |
+| Entry              | Purpose                                                                                                              |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `build.ts`         | Branded CLI build.                                                                                                   |
+| `context.ts`       | Generate `release-context.json`.                                                                                     |
+| `manifest.ts`      | Generate release manifest from archives.                                                                             |
+| `gitee.ts`         | Create Gitee release.                                                                                                |
+| `cleanup.ts`       | Release cleanup (retention / withdraw), `--product ellamaka-cli\|ellamaka-desktop`.                                  |
+| `upstream-lock.ts` | Update upstream lock (`engine --version X.Y.Z [--dry-run]`).                                                         |
+| `inventory.ts`     | Legacy inventory capture (`--dry-run` / `--output`).                                                                 |
+| `publish-npm.ts`   | Independent npm publisher for `@wopal/ellamaka-sdk` + `@wopal/ellamaka-plugin`; exact shared npm version, SDK first. |
+| `verify-npm.ts`    | Build/pack both npm packages and run a source-tree-external clean-install smoke before publishing.                   |
 
 ## Development Commands
 
-| Scenario | Command |
-|----------|---------|
-| Tests | `bun test` (from `packages/ellamaka-release`) |
+| Scenario    | Command                                                             |
+| ----------- | ------------------------------------------------------------------- |
+| Tests       | `bun test` (from `packages/ellamaka-release`)                       |
 | Single test | `bun test test/<module>.test.ts` (from `packages/ellamaka-release`) |
 
 ## Testing & TDD Rules

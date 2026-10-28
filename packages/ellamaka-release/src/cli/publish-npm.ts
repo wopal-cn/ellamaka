@@ -1,26 +1,21 @@
 // packages/ellamaka-release/src/cli/publish-npm.ts
 //
 // Thin CLI entry: publish the fork contract packages (`@wopal/ellamaka-sdk`,
-// `@wopal/ellamaka-plugin`) to npm as part of a CLI release.
+// `@wopal/ellamaka-plugin`) on their independent npm release line.
 //
 // Usage:
 //   bun packages/ellamaka-release/src/cli/publish-npm.ts [--dry-run] [--check] [--version <v>] [--registry <url>]
 //
 // The publish is idempotent (a version already on the registry is skipped), so
-// the release workflow can re-run after a failed attempt. A skip is not blind:
+// the npm release workflow can re-run after a failed attempt. A skip is not blind:
 // the registry tarball is compared against this build's tarball by canonical
 // content digest, and a version whose contents have diverged aborts the release
 // — see `../npm/verify.ts`. The SDK is published before the plugin (the plugin
-// depends on the SDK, including its `/v2` subpaths). The product version may
-// carry a prerelease (`2.0.5-rc.7`); it is stripped to the base version
-// (`2.0.5`) — the packages follow the product base version — and must match
-// both packages exactly, else the run fails before any registry access.
+// depends on the SDK, including its `/v2` subpaths). The npm release version
+// must match both package manifests exactly, including any prerelease suffix.
 //
-// `--check` is the release preflight: same plan, full skip verification for
-// every version already on the registry, zero publishes. The release scripts
-// run it before cutting a tag so a burned base (contents diverged from the
-// registry copy — npm versions are immutable) fails in seconds/minutes at
-// planning time instead of after the workflow's build matrix.
+// `--check` is a side-effect-free npm release preflight: same plan, full skip
+// verification for every version already on the registry, zero publishes.
 //
 // Environment:
 //   NODE_AUTH_TOKEN — npm publish token (optional; OIDC trusted publishing is
@@ -41,7 +36,7 @@ import {
 import {
   buildPublishPlan,
   loadPublishTargets,
-  readProductVersion,
+  readSdkVersion,
   type NpmPublishTarget,
   type PublishPlanEntry,
 } from "../npm/plan"
@@ -54,18 +49,18 @@ export interface PublishCliOptions {
   /**
    * Release preflight: run the full plan, then the skip verification (registry
    * tarball vs local build) for every version already on the registry, and
-   * publish nothing. Answers "is the base version still publishable" before a
-   * tag is cut; a burned base fails here with the registry/local digests.
+   * publish nothing. An immutable version whose registry contents differ from
+   * this build fails here with the registry/local digests.
    */
   check: boolean
   registry: string
-  /** Raw release version; defaults to the CLI version anchor. */
+  /** Exact npm release version; defaults to the SDK version anchor. */
   version?: string
 }
 
 export interface PublishCliDeps {
   loadTargets: () => NpmPublishTarget[]
-  readProductVersion: () => string
+  readSdkVersion: () => string
   isPublished: (name: string, version: string, registry: string) => boolean
   /**
    * Confirm a version about to be skipped really holds this build. Throws when
@@ -110,13 +105,13 @@ export function runPublishCli(argv: string[], deps: PublishCliDeps): number {
     return parsed.exitCode
   }
   const { dryRun, check, registry } = parsed.options
-  const productVersion = parsed.options.version ?? deps.readProductVersion()
+  const releaseVersion = parsed.options.version ?? deps.readSdkVersion()
 
   let plan
   try {
     plan = buildPublishPlan({
       targets: deps.loadTargets(),
-      productVersion,
+      releaseVersion,
       isPublished: (name, version) => deps.isPublished(name, version, registry),
     })
   } catch (err) {
@@ -148,8 +143,8 @@ export function runPublishCli(argv: string[], deps: PublishCliDeps): number {
 
   if (check) {
     // Preflight: verify every skip (the expensive registry-vs-build comparison)
-    // and stop there — no auth check, no publish. A clean base is reported so
-    // the operator can cut the tag; a burned base fails with the digests.
+    // and stop there — no auth check, no publish. An unpublished version is
+    // reported publishable; an immutable-content mismatch fails with digests.
     try {
       for (const entry of toSkip) deps.verifySkipped(entry, registry)
     } catch (err) {
@@ -158,8 +153,8 @@ export function runPublishCli(argv: string[], deps: PublishCliDeps): number {
     }
     deps.log(
       toPublish.length === 0
-        ? `npm check: base ${plan.version} is fully published and verified against this build.`
-        : `npm check: base ${plan.version} is publishable — ${toPublish.length} package(s) not yet on the registry.`,
+        ? `npm check: version ${plan.version} is fully published and verified against this build.`
+        : `npm check: version ${plan.version} is publishable — ${toPublish.length} package(s) not yet on the registry.`,
     )
     return 0
   }
@@ -239,7 +234,7 @@ function main(argv: string[]): number {
 
   return runPublishCli(argv, {
     loadTargets: () => loadPublishTargets(repoRoot),
-    readProductVersion: () => readProductVersion(repoRoot),
+    readSdkVersion: () => readSdkVersion(repoRoot),
     isPublished: (name, version, registry) => createRegistryProbe(registry)(name, version),
     verifySkipped: (entry, registry) => {
       const fetchStaging = mkdtempSync(join(tmpdir(), "ellamaka-npm-verify-"))
