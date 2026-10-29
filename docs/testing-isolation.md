@@ -95,16 +95,28 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 
 ## 规则与门禁的对应
 
-| 规则                                   | 门禁    | 判定方式                                                        |
-| -------------------------------------- | ------- | --------------------------------------------------------------- |
-| 普通测试不出现 `mock.module`           | TISO001 | AST 扫描，命中 baseline 外的记录即失败                          |
-| 环境变量变更必须走 scoped helper       | TISO002 | AST 扫描 `process.env.X = ...` / `delete process.env.X`         |
-| 不用固定 sleep 当同步                  | TISO003 | AST 扫描 `Effect.sleep(` / `Bun.sleep(` / `setTimeout` 作为等待 |
-| unit 层不含真实 I/O                    | TISO004 | 扫描 unit 层文件里的 subprocess / fs.watch / 网络调用           |
-| 不新增 skip/todo，禁用 .only           | TISO005 | AST 扫描 `.only` 与新增的 `.skip` / `.todo`                     |
-| 共享路径必须走 ownership-aware fixture | TISO006 | 扫描直接写 `Global.Path.*`、固定 `/tmp` 路径                    |
-| baseline 不得有 stale 条目             | TISO007 | baseline 里记录的违规在源码中已不存在即失败                     |
-| 测试不得污染进程环境                   | TISO101 | 运行时哨兵：preload 记录 env/cwd 基线，测试结束后比对           |
+| 规则                                     | 门禁    | 判定方式                                                                |
+| ---------------------------------------- | ------- | ----------------------------------------------------------------------- |
+| 普通测试不出现 `mock.module`             | TISO001 | AST 扫描，命中 baseline 外的记录即失败                                  |
+| 环境变量变更必须走 scoped helper         | TISO002 | AST 扫描 `process.env.X = ...` / `delete process.env.X`                 |
+| 不用固定 sleep 当同步                    | TISO003 | AST 扫描 `Effect.sleep(` / `Bun.sleep(` / `setTimeout` 作为等待         |
+| unit 层不含真实 I/O                      | TISO004 | 扫描 unit 层文件里的 subprocess / fs.watch / 网络调用                   |
+| 不新增 skip/todo，禁用 .only             | TISO005 | AST 扫描 `.only` 与新增的 `.skip` / `.todo`                             |
+| 共享路径必须走 ownership-aware fixture   | TISO006 | 扫描直接写 `Global.Path.*`、固定 `/tmp` 路径                            |
+| baseline 不得有 stale 条目               | TISO007 | baseline 里记录的违规在源码中已不存在即失败                             |
+| 普通测试不直接启用 Bun 进程内 concurrent | TISO008 | 识别 bun:test 控制器（含 alias/namespace/chained form）的 `.concurrent` |
+| OpenCode 测试不得泄漏 env/cwd            | TISO101 | OpenCode preload 记录 env/cwd 基线，测试结束后比对并先恢复再报错        |
+
+TISO008 是**直接 Bun test control 门禁**，不是“禁止一切并发”。测试可以在一个普通用例内部并发执行
+由该用例明确拥有的操作；也可以通过经过审查的 owner-aware helper 开启 test-level concurrency。
+当前 `packages/opencode/test/lib/cli-process.ts::cliIt.concurrent` 是显式例外：每个调用拥有独立临时 Home、
+独立 Effect scope、监听随机端口的 TestLLMServer 与子进程生命周期。新增类似 helper 必须先证明资源所有权，
+并在 helper 旁记录隔离契约；普通测试仍禁止直接调用 `test.concurrent` / `describe.concurrent`。
+
+TISO101 当前是 **OpenCode package 的运行时 backstop**，由 `packages/opencode/bunfig.toml` 加载
+`test/preload.ts` 后生效；它不是全仓每个 Bun test process 都已安装的保证。其它 package 仍受全仓静态
+TISO 门禁与 scoped fixture 规则约束；若未来需要同等级的运行时 env/cwd 哨兵，应在对应 package 的 test
+preload/runner 中显式接入，而不是把 OpenCode preload 的覆盖范围当成全仓事实。
 
 **baseline 的维护规则**：baseline 是**精确债务清单**，每条记录「规则 + 文件 + 具体目标（模块 id / env key / API）+ 出现次数」。
 出现次数是必需的：同一个文件里第二条完全相同的违规如果没有计数，就会匹配上只记录了一次的条目而被漏掉。
@@ -162,12 +174,12 @@ bun run check:test-isolation -- --fix                 # 逐条扣除已修复的
 ## 分期
 
 - **P0（本次落地）**：铁律写进根 AGENTS.md；仓库级 `check:test-isolation`；
-  TISO001-TISO007 静态门禁（含计数 baseline、stale 检测、边界漂移守护）；现有 App 顺序隔离检查接入 CI。
+  TISO001-TISO008 静态门禁（含计数 baseline、stale 检测、边界漂移守护）；OpenCode 的 TISO101
+  preload env/cwd 运行时哨兵；现有 App 顺序隔离检查接入 CI。
   规则补全后一次性看见的历史存量（31 个 unit 层 live-I/O 测试）已如实记入 baseline，属于 P1 迁移对象。
 - **P1**：把已记入 baseline 的 unit 层 live-I/O 测试迁到 integration 层（或改造为 DI）；
   继续用 package-local `scopedEnv` helper 清理 baseline 中剩余的手写环境变量恢复逻辑；
-  preload 加 env/cwd 运行时哨兵（TISO101）；存量 `mock.module` 逐步迁到 DI；
-  顺序回归泛化到全仓高风险分组。
+  存量 `mock.module` 逐步迁到 DI；顺序回归泛化到全仓高风险分组。
 - **P2**：singleton / 共享 fixture 的自动 reset 检测；随机 seed 顺序回归；
   提示型断言强度 diff checker；listener / handle / 资源泄漏哨兵。
 

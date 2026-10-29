@@ -57,6 +57,77 @@ describe("Runner", () => {
   )
 
   it.live(
+    "ensureRunning opens readiness only after the run is registered",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+      const ready = yield* Latch.make()
+
+      const fiber = yield* runner.ensureRunning(Effect.never, ready).pipe(Effect.forkChild)
+      yield* ready.await
+
+      expect(runner.state._tag).toBe("Running")
+      yield* runner.cancel
+      expect(yield* Fiber.join(fiber)).toBe("interrupted")
+    }),
+  )
+
+  it.live(
+    "ensureRunning opens readiness when joining an already running run",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s)
+      const gate = yield* Deferred.make<void>()
+      const first = yield* runner.ensureRunning(Deferred.await(gate).pipe(Effect.as("shared"))).pipe(Effect.forkChild)
+      yield* waitForState(runner, "Running")
+
+      const ready = yield* Latch.make()
+      const joined = yield* runner.ensureRunning(Effect.die("must not run"), ready).pipe(Effect.forkChild)
+      yield* ready.await
+
+      expect(runner.state._tag).toBe("Running")
+      yield* Deferred.succeed(gate, undefined)
+      expect(yield* Fiber.join(first)).toBe("shared")
+      expect(yield* Fiber.join(joined)).toBe("shared")
+    }),
+  )
+
+  it.live(
+    "ensureRunning opens readiness after a run is queued behind a shell",
+    Effect.gen(function* () {
+      const s = yield* Scope.Scope
+      const runner = Runner.make<string>(s, { onInterrupt: Effect.succeed("interrupted") })
+      const shellReady = yield* Latch.make()
+      const shell = yield* runner
+        .startShell(
+          Effect.gen(function* () {
+            yield* shellReady.open
+            return yield* Effect.never
+          }),
+          shellReady,
+        )
+        .pipe(Effect.forkChild)
+      yield* shellReady.await
+
+      const queuedReady = yield* Latch.make()
+      const queued = yield* runner.ensureRunning(Effect.succeed("run"), queuedReady).pipe(Effect.forkChild)
+      yield* queuedReady.await
+
+      expect(runner.state._tag).toBe("ShellThenRun")
+
+      const joinedReady = yield* Latch.make()
+      const joined = yield* runner.ensureRunning(Effect.die("must not run"), joinedReady).pipe(Effect.forkChild)
+      yield* joinedReady.await
+      expect(runner.state._tag).toBe("ShellThenRun")
+
+      yield* runner.cancel
+      expect(yield* Fiber.join(queued)).toBe("interrupted")
+      expect(yield* Fiber.join(joined)).toBe("interrupted")
+      expect(yield* Fiber.join(shell)).toBe("interrupted")
+    }),
+  )
+
+  it.live(
     "concurrent callers all receive same error",
     Effect.gen(function* () {
       const s = yield* Scope.Scope

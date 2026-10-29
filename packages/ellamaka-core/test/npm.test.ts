@@ -7,6 +7,7 @@ import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Global } from "@wopal/ellamaka-core/global"
 import { Npm } from "@wopal/ellamaka-core/npm"
 import { EffectFlock } from "@wopal/ellamaka-core/util/effect-flock"
+import { scopedEnv } from "./fixture/process-env"
 import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
@@ -45,6 +46,7 @@ describe("Npm.sanitize", () => {
 describe("Npm.add", () => {
   test("reifies when package cache directory exists without the package installed", async () => {
     await using tmp = await tmpdir()
+    using _env = scopedEnv({ npm_config_user_agent: undefined, NODE_ENV: undefined })
     await fs.mkdir(path.join(tmp.path, "fixture-provider"))
     await writePackage(path.join(tmp.path, "fixture-provider"), {
       name: "fixture-provider",
@@ -61,12 +63,15 @@ describe("Npm.add", () => {
     }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
 
     expect(Option.isSome(entry.entrypoint)).toBe(true)
+    expect(process.env.npm_config_user_agent).toBeUndefined()
+    expect(process.env.NODE_ENV).toBeUndefined()
   })
 })
 
 describe("Npm.install", () => {
   test("respects omit from project .npmrc", async () => {
     await using tmp = await tmpdir()
+    using _env = scopedEnv({ npm_config_user_agent: undefined, NODE_ENV: undefined })
 
     await writePackage(tmp.path, {
       name: "fixture",
@@ -87,5 +92,7 @@ describe("Npm.install", () => {
 
     await expect(fs.stat(path.join(tmp.path, "node_modules", "prod-pkg"))).resolves.toBeDefined()
     await expect(fs.stat(path.join(tmp.path, "node_modules", "dev-pkg"))).rejects.toThrow()
+    expect(process.env.npm_config_user_agent).toBeUndefined()
+    expect(process.env.NODE_ENV).toBeUndefined()
   })
 })

@@ -4,8 +4,9 @@ import os from "os"
 import path from "path"
 import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
-import { afterAll } from "bun:test"
+import { afterAll, afterEach } from "bun:test"
 import { stripGitLocatorVars } from "./lib/git-env"
+import { assertProcessStateClean, captureProcessState } from "./lib/process-state-guard"
 
 // Set WOPAL_HOME FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
@@ -114,3 +115,12 @@ void Log.init({
 })
 
 initProjectors()
+
+// Capture after all process-wide test bootstrap has finished, but before the
+// first test file can mutate process.env/cwd. Bun runs a preload afterEach only
+// after the test file's own cleanup hooks, so this detects real leaks rather
+// than temporary scoped mutations. Restore before throwing to prevent one bad
+// test from contaminating every test that follows it.
+const processStateBaseline = captureProcessState()
+afterEach(() => assertProcessStateClean(processStateBaseline))
+afterAll(() => assertProcessStateClean(processStateBaseline))
