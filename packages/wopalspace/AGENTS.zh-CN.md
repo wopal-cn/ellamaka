@@ -66,6 +66,7 @@ maintenance: 仅当模块出现长期有效且无法由代码、测试或 DESIGN
 
 ## Testing
 
+- 本包行为变更继承父级 Testing Best Practices；canonical TDD 适用性规则判定需要 RED 循环时必须使用 TDD。先在真正拥有该行为的 domain/service/contract 边界定义失败行为，再按下述 package-specific unit/integration 分层实现。
 - Unit test 只覆盖纯领域规则和通过依赖注入可完全控制的 service 行为。真实 Git、网络、子进程、filesystem watcher 和真实时钟不得进入 unit 层。
 - Integration test 覆盖真实 filesystem、Git repository/remotes/worktree/sparse、持久化、受控进程和外部 adapter 边界；全部使用临时环境与临时仓库。
 - 测试不得读取或修改真实用户 `$WOPAL_HOME`、真实 Space、真实工作仓库或真实远端写资源。测试需要 Home 时必须显式创建并传入隔离目录。

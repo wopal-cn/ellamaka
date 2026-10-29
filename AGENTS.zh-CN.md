@@ -77,7 +77,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 
 ## Testing
 
-- 所有测试相关工作统一遵循 WopalSpace 装配的 `testing.md` 规则（**测试最佳实践**），包括测试价值、最低成本分层、确定性与隔离、异步同步、资源 owner、并发边界、flaky 根因证明和验证成本；本项目规范只补充 Ellamaka 特有命令与约束。
+- 所有测试相关工作统一遵循 WopalSpace 装配的 `testing.md` 规则（**测试最佳实践**），包括 TDD 适用性判定、测试价值、最低成本分层、确定性与隔离、异步同步、资源 owner、并发边界、flaky 根因证明和验证成本。凡 canonical 规则判定适合 RED 循环的行为变更都必须走 TDD；本项目规范只补充 Ellamaka 特有命令与约束。
 - 修改平台宿主、运行时闭包或发布制品时，在对应真实平台/制品路径验证；说明静态检查未覆盖的边界。
 - 手动验证只用于 package/host 自动化检查无法观察的 GUI 或原生宿主行为。
 - 改动涉及的文件必须通过 `bunx oxlint --deny-warnings <文件>`（不得新增 warning）与 `bunx prettier --check`；改 TypeScript 必须 typecheck 通过。包内测试从所属 package 运行；仓库根只运行上表明确列出的跨包编排或全仓门禁。

@@ -84,6 +84,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 
 ## Testing
 
+- 本包行为变更继承父级 Testing Best Practices；canonical TDD 适用性规则判定需要 RED 循环时必须使用 TDD。失败测试放在真正拥有该行为、且成本最低的 opencode observable boundary，再按下述 package-specific 分层和 helper 实现。
 - 测试子集由 `script/run-tests.ts` 按层展开，`package.json` 提供四个入口：`test:unit`（默认开发子集——扫描 `test/` 全部子目录、顶层 `*.test.ts` 以及 runner 自身的 `script/*.test.ts`，剔除集成目录以及任何名为 `*-e2e.test.ts` 或 `*-integration.test.ts` 的文件）、`test:integration`（集成目录加上 `test/` 与 `script/` 下所有 `*-integration.test.ts`：server/session/cli/project/tool/control-plane/plugin/file/pty/skill/reference/share/mcp/lsp/publish-smoke）、`test:e2e`（只跑 `test/` 与 `script/` 下的 `*-e2e.test.ts` 文件，递归）、`test:all`（package 全量回归）。单元层是快速日常循环：目前覆盖约 94 files / 1434 tests，耗时二十几秒。日常开发用 `test:unit`；改到集成目录相关代码或 `*-integration.test.ts` 文件时，至少跑 `test:integration`；只有风险需要 package 级全量回归证明时才跑 `test:all`，不把它当成每次提交的无条件门禁。
 - e2e 文件遵循 `*-e2e.test.ts` 命名约定，通过 `pathIgnorePatterns` 从 `test:unit`/`test:integration` 隔离（CLI 值覆盖 bunfig，不合并），只在 `test:e2e` 下运行。不要将 e2e 文件移出所属 domain 目录。
 - 新增测试目录默认自动纳入 `test:unit`（扫描式）；若某目录属于集成（真实 I/O），把目录名加入 `script/run-tests.ts` 的 `INTEGRATION_DIRS` 常量，并在本文件集成目录清单同步。

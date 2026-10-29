@@ -66,6 +66,7 @@ Use the repository's existing tooling; do not create a separate test framework f
 
 ## Testing
 
+- Behavior changes in this package follow the parent Testing Best Practices and use TDD whenever its canonical applicability rule selects a RED cycle. Define the failing behavior at the owning domain/service/contract boundary before choosing the package-specific unit or integration layer below.
 - Unit tests cover pure domain rules and service behavior whose dependencies are fully controlled through injection. Real Git, network access, subprocesses, filesystem watchers, and real clocks do not belong in the unit layer.
 - Integration tests cover real filesystem behavior, Git repositories/remotes/worktrees/sparse checkout, persistence, controlled processes, and external adapter boundaries. Use temporary environments and temporary repositories only.
 - Tests must never read or modify the real user's `$WOPAL_HOME`, real Spaces, real working repositories, or writable real remotes. When a Home is needed, create and pass an isolated directory explicitly.

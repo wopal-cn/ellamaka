@@ -42,6 +42,7 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 
 ## Testing
 
+- 本包行为变更继承父级 Testing Best Practices；canonical TDD 适用性规则判定需要 RED 循环时必须使用 TDD。
 - 从 `packages/ellamaka-brand` 运行 `bun test`。
 - 修改 `branding.ts` 后运行 `branding.test.ts`；修改 `detect.ts` 后运行 `detect.test.ts`；修改 `is-wopal-install.ts` 后运行 `is-wopal-install.test.ts`。
 

@@ -57,7 +57,7 @@ ellamaka-desktop 是共用 ellamaka-app renderer 的 Electron 宿主。Main 拥�
 
 ## Testing
 
-- 生命周期单元测试使用 Electron mock。
+- 本包行为变更继承父级 Testing Best Practices 及其 TDD 适用性规则。生命周期单元行为需要 TDD 时，通过 Electron mock 先驱动出失败行为。
 - 在目标操作系统验证平台生命周期和打包；其他系统构建不能替代目标系统退出/安装验证。
 - GUI/native 行为使用真实 CDP 或平台运行验证，不能由单元测试观察的结果单独报告。
 

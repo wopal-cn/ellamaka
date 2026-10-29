@@ -7,6 +7,8 @@ description: Vendored Drizzle Effect SQLite adapter rules for generic Drizzle + 
 
 This package vendors a Drizzle Effect SQLite adapter for this repo.
 
+Parent Testing Best Practices remain in force. Observable adapter behavior changes use TDD whenever the canonical applicability rule selects a RED cycle; put the failing assertion at the Drizzle/Effect/SQLite contract boundary. Run `bun test` from this package for changed behavior and `bun run typecheck` after TypeScript changes.
+
 - Keep this package generic: Drizzle + Effect + SQLite only.
 - Do not add opencode-specific tables, paths, migrations, post-commit hooks, or domain storage APIs here.
 - Runtime code should depend on generic `effect/unstable/sql/SqlClient`, not a specific SQLite driver.

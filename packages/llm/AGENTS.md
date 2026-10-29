@@ -19,6 +19,7 @@ Per-type constructors live on the type, not as top-level re-exports. Use `Messag
 
 ## Tests
 
+- Behavior and protocol changes in this package follow the parent Testing Best Practices and use TDD whenever its canonical applicability rule selects a RED cycle. Prefer deterministic fixtures or `scriptedResponses` for that failing test; live provider recording is evidence for provider semantics, not a prerequisite for RED.
 - Use `testEffect(...)` from `test/lib/effect.ts` for tests requiring Effect layers.
 - Keep provider tests fixture-first. Live provider calls must stay behind `RECORD=true` and required API-key checks.
 

@@ -61,6 +61,7 @@ into other modules (they carry top-level CLI side effects).
 
 ## Testing Rules
 
+- Behavior changes in this package follow the parent Testing Best Practices and use TDD whenever its canonical applicability rule selects a RED cycle; define the failing behavior at the release contract being changed rather than mirroring source-file structure.
 - Keep focused regression tests under `test/` for the release contracts they protect; test names should identify the owning release concern rather than mirror the source tree mechanically.
 - The cleanup kernel (`src/cleanup/core.ts`) MUST stay product-agnostic and
   is covered by `test/cleanup-core.test.ts`; product differences are tested

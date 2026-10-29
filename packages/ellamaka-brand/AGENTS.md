@@ -44,6 +44,7 @@ This package is responsible for ellamaka's brand identity injection and build. U
 
 ## Testing
 
+- Behavior changes in this package follow the parent Testing Best Practices and use TDD whenever its canonical applicability rule selects a RED cycle.
 - Run `bun test` from `packages/ellamaka-brand`.
 - After modifying `branding.ts`, run `branding.test.ts`; after modifying `detect.ts`, run `detect.test.ts`; after modifying `is-wopal-install.ts`, run `is-wopal-install.test.ts`.
 

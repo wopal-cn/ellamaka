@@ -81,7 +81,7 @@ ellamaka-app 是 Browser/Desktop 共用的 renderer，通过生成的 SDK 与 El
 
 ## Testing
 
-- SDK 传输边界允许使用受控 fake；Store/Provider/Action/组件测试放在真正拥有该行为的边界。
+- 本包行为变更继承父级 Testing Best Practices 及其 TDD 适用性规则。需要 TDD 时，失败的 observable-behavior 测试写在真正拥有该行为的 Store/Provider/Action/组件边界；SDK 传输边界允许使用受控 fake。
 - 修改生命周期逻辑时，验证迟到响应、scope/Server 变化、重连、隐藏 Panel、显式关闭和资源清理。
 - Workbench 改动运行边界检查、browser-condition 单元测试和 typecheck；CSS 改动还需跑 CSS lint。GUI 观察结果与自动化证据分开报告。
 

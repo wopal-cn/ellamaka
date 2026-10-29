@@ -107,6 +107,8 @@ Assertions must read the real source of truth instead of restating its current v
 
 ## Testing With Effects
 
+Parent Testing Best Practices and TDD applicability remain in force. This file only adds OpenCode-specific Effect fixtures, readiness helpers, and test-host conventions; it does not replace the parent TDD rule.
+
 Use `testEffect(...)` from `test/lib/effect.ts` for tests that exercise Effect services or Effect-based workflows.
 
 ### Core Pattern

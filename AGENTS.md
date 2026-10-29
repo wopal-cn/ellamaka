@@ -76,7 +76,7 @@ Run package-local tests from their owning package. Repository-root test commands
 
 ## Testing
 
-- All test-related work follows the assembled WopalSpace `testing.md` rule (**Testing Best Practices**) for test value, lowest-cost layering, determinism, isolation, async synchronization, resource ownership, concurrency, flaky-test root-cause proof, and verification cost. This project section adds only Ellamaka-specific commands and constraints.
+- All test-related work follows the assembled WopalSpace `testing.md` rule (**Testing Best Practices**), including TDD applicability, test value, lowest-cost layering, determinism, isolation, async synchronization, resource ownership, concurrency, flaky-test root-cause proof, and verification cost. Behavior changes use TDD whenever that canonical rule says a RED cycle is appropriate; this project section adds only Ellamaka-specific commands and constraints.
 - Validate runtime closures, host integrations, and packaged artifacts through the corresponding real product path; state which limits remain after static checks.
 - Reserve manual verification for GUI or native-host behavior that automated package/host checks cannot observe.
 - Every changed file must pass `bunx oxlint --deny-warnings <files>` (no new warning) and `bunx prettier --check`; TypeScript changes must typecheck. Package-local tests run from the owning package; repo-root runs are only the explicit cross-package orchestration or repository-wide gates above.

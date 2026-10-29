@@ -5,6 +5,8 @@ description: Server and HttpApi middleware test patterns for test/server
 
 # Server Test Guide
 
+Parent Testing Best Practices and TDD applicability remain in force. Server-test changes use the parent rule for deciding when a RED cycle is required; this file only defines the server fixtures and protocol-specific mechanics below.
+
 Use these patterns for server and HttpApi middleware tests in this directory.
 
 - Prefer focused middleware tests with tiny fake routes over full API route trees when testing routing, context, proxying, or middleware policy.

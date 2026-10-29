@@ -27,3 +27,7 @@ Type-only export package with no runtime logic. CLI loads `src/` directly via Ty
 | Scenario | Command | When |
 |---|---|---|
 | Typecheck | `bun run typecheck` from `packages/plugin` | After type changes |
+
+## Testing
+
+Parent Testing Best Practices and TDD applicability remain in force. This package is type-only: behavior-bearing helpers use TDD when the canonical rule selects a RED cycle; declaration-only changes that cannot produce a meaningful failing runtime assertion are verified with the package typecheck and any owning contract tests rather than a fake RED.
