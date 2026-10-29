@@ -269,6 +269,124 @@ function isTestControlCall(node: ts.CallExpression) {
 /** The identifiers that introduce a bun:test control. */
 const TEST_CONTROL_OWNERS = new Set(["test", "it", "describe", "bench", "suite", "testIf", "itIf", "describeIf"])
 
+type TestControlBindings = {
+  identifiers: Set<string>
+  namespaces: Set<string>
+}
+
+function bindingNames(name: ts.BindingName, names: Set<string>) {
+  if (ts.isIdentifier(name)) {
+    names.add(name.text)
+    return
+  }
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) continue
+    bindingNames(element.name, names)
+  }
+}
+
+function bindingHasName(name: ts.BindingName, target: string) {
+  const names = new Set<string>()
+  bindingNames(name, names)
+  return names.has(target)
+}
+
+function statementDeclaresName(statement: ts.Statement, target: string) {
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.some((declaration) => bindingHasName(declaration.name, target))
+  }
+  if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+    return statement.name?.text === target
+  }
+  return false
+}
+
+/**
+ * Resolve the local names that refer to Bun's test controls.
+ *
+ * Canonical names are globals in Bun's test runner, but a test file can shadow
+ * one of those names with a local binding. Named and namespace imports from
+ * bun:test may also rename the controls, and those aliases still need the same
+ * isolation rule.
+ */
+function collectTestControlBindings(source: ts.SourceFile): TestControlBindings {
+  const identifiers = new Set(TEST_CONTROL_OWNERS)
+  const namespaces = new Set<string>()
+  for (const statement of source.statements) {
+    if (ts.isImportDeclaration(statement)) {
+      const specifier = statement.moduleSpecifier
+      const clause = statement.importClause
+      if (!ts.isStringLiteralLike(specifier) || !clause) continue
+
+      if (specifier.text === "bun:test") {
+        const bindings = clause.namedBindings
+        if (bindings && ts.isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            const imported = element.propertyName ? element.propertyName.text : element.name.text
+            if (TEST_CONTROL_OWNERS.has(imported)) identifiers.add(element.name.text)
+          }
+        } else if (bindings && ts.isNamespaceImport(bindings)) {
+          namespaces.add(bindings.name.text)
+        }
+        continue
+      }
+
+      if (clause.name) identifiers.delete(clause.name.text)
+      const bindings = clause.namedBindings
+      if (bindings && ts.isNamedImports(bindings)) {
+        for (const element of bindings.elements) identifiers.delete(element.name.text)
+      } else if (bindings && ts.isNamespaceImport(bindings)) {
+        identifiers.delete(bindings.name.text)
+      }
+      continue
+    }
+
+    for (const name of TEST_CONTROL_OWNERS) {
+      if (statementDeclaresName(statement, name)) identifiers.delete(name)
+    }
+  }
+  return { identifiers, namespaces }
+}
+
+function isShadowedInLexicalScope(identifier: ts.Identifier) {
+  const name = identifier.text
+  let node: ts.Node | undefined = identifier.parent
+  while (node && !ts.isSourceFile(node)) {
+    if (
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isMethodDeclaration(node)) &&
+      (node.parameters.some((parameter) => bindingHasName(parameter.name, name)) ||
+        ("name" in node && node.name && ts.isIdentifier(node.name) && node.name.text === name))
+    ) {
+      return true
+    }
+    if (ts.isBlock(node) && node.statements.some((statement) => statementDeclaresName(statement, name))) return true
+    if (ts.isCatchClause(node) && node.variableDeclaration && bindingHasName(node.variableDeclaration.name, name)) {
+      return true
+    }
+    node = node.parent
+  }
+  return false
+}
+
+function isTestControlOwner(node: ts.Node, bindings: TestControlBindings) {
+  if (ts.isIdentifier(node)) return bindings.identifiers.has(node.text) && !isShadowedInLexicalScope(node)
+  if (!ts.isPropertyAccessExpression(node)) return false
+  const namespace = node.expression
+  return (
+    ts.isIdentifier(namespace) &&
+    bindings.namespaces.has(namespace.text) &&
+    !isShadowedInLexicalScope(namespace) &&
+    TEST_CONTROL_OWNERS.has(node.name.text)
+  )
+}
+
+function isConcurrentTestControlAccess(node: ts.PropertyAccessExpression, bindings: TestControlBindings) {
+  return node.name.text === "concurrent" && isTestControlOwner(node.expression, bindings)
+}
+
 /** setTimeout(callback, ms) and setInterval(callback, ms). */
 function isTimerCall(node: ts.CallExpression) {
   const callee = node.expression
@@ -313,6 +431,7 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
 
   const source = ts.createSourceFile(relative, sourceText, ts.ScriptTarget.Latest, true)
   const liveIoBindings = collectLiveIoBindings(source)
+  const testControlBindings = collectTestControlBindings(source)
   const lineOf = (node: ts.Node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1
 
   const report = (rule: RuleId, node: ts.Node, detail: string) => {
@@ -356,6 +475,15 @@ export function scanSource(relative: string, sourceText: string, _options: Scann
       if (isTestControlCall(node)) {
         report("TISO005", node, textOf(source, node).slice(0, 60))
       }
+    }
+
+    // TISO008 - direct Bun in-process concurrent controls. Match the member
+    // access rather than only a direct call so chained forms such as
+    // test.concurrent.each() cannot bypass the rule. Owner-aware package
+    // helpers (for example cliIt.concurrent) are deliberately outside this
+    // direct-control gate and must own/document their isolation separately.
+    if (ts.isPropertyAccessExpression(node) && isConcurrentTestControlAccess(node, testControlBindings)) {
+      report("TISO008", node, textOf(source, node).slice(0, 80))
     }
 
     // TISO002 - direct environment mutation

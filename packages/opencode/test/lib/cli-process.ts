@@ -451,6 +451,10 @@ export const cliIt = {
     body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,
     opts?: number | TestOptions,
   ) => it.live(name, () => withCliFixture(body), opts),
+  // TISO008 owner-aware exception: each invocation gets its own scoped temp
+  // Home, TestLLMServer on an ephemeral port, Effect scope, and child-process
+  // lifecycle. Do not use this pattern for tests that share process globals or
+  // other mutable resources; direct bun:test `.concurrent` remains forbidden.
   concurrent: <A, E>(
     name: string,
     body: (input: CliFixture) => Effect.Effect<A, E, Scope.Scope | HttpClient.HttpClient>,

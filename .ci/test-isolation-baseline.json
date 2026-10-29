@@ -711,18 +711,6 @@
     },
     {
       "rule": "TISO002",
-      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
-      "detail": "process.env.CLAUDE_CODE_SSE_PORT",
-      "count": 6
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/cli/tui/editor-context.test.tsx",
-      "detail": "process.env.OPENCODE_EDITOR_SSE_PORT",
-      "count": 6
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/opencode/test/cli/tui/plugin-loader-pure.test.ts",
       "detail": "process.env.OPENCODE_PURE",
       "count": 3
@@ -1017,39 +1005,15 @@
     },
     {
       "rule": "TISO002",
-      "file": "packages/opencode/test/session/prompt.test.ts",
-      "detail": "process.env.SHELL",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/opencode/test/session/tools-permission.test.ts",
       "detail": "process.env.OPENCODE_TEST_HOME",
       "count": 2
     },
     {
       "rule": "TISO002",
-      "file": "packages/opencode/test/shell/shell.test.ts",
-      "detail": "process.env.SHELL",
-      "count": 4
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/opencode/test/skill/skill.test.ts",
       "detail": "process.env.OPENCODE_TEST_HOME",
       "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/tool/shell.test.ts",
-      "detail": "process.env.SHELL",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/tool/shell.test.ts",
-      "detail": "process.env[...]",
-      "count": 3
     },
     {
       "rule": "TISO002",
@@ -1895,36 +1859,6 @@
       "rule": "TISO003",
       "file": "packages/opencode/test/session/llm.test.ts",
       "detail": "setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms)",
-      "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/opencode/test/session/processor-effect.test.ts",
-      "detail": "Effect.sleep(\"10 millis\")",
-      "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/opencode/test/session/processor-effect.test.ts",
-      "detail": "Effect.sleep(\"20 millis\")",
-      "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/opencode/test/session/prompt.test.ts",
-      "detail": "Effect.sleep(50)",
-      "count": 4
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/opencode/test/session/prompt.test.ts",
-      "detail": "Effect.sleep(Duration.millis(10))",
-      "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/opencode/test/session/retry.test.ts",
-      "detail": "setTimeout(() => {\n            socket.destroy()\n          }, 10)",
       "count": 1
     },
     {

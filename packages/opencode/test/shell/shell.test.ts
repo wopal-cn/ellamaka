@@ -3,18 +3,15 @@ import path from "path"
 import { Shell } from "../../src/shell/shell"
 import { Filesystem } from "@/util/filesystem"
 import { which } from "../../src/util/which"
+import { scopedEnv } from "../fixture/process-env"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
-  const prev = process.env.SHELL
-  if (shell === undefined) delete process.env.SHELL
-  else process.env.SHELL = shell
+  using _env = scopedEnv({ SHELL: shell })
   Shell.acceptable.reset()
   Shell.preferred.reset()
   try {
     await fn()
   } finally {
-    if (prev === undefined) delete process.env.SHELL
-    else process.env.SHELL = prev
     Shell.acceptable.reset()
     Shell.preferred.reset()
   }

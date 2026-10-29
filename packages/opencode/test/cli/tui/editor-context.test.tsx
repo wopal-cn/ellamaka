@@ -1,19 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, expect, spyOn, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { EditorContextProvider, useEditorContext } from "../../../src/cli/cmd/tui/context/editor"
 import { tmpdir } from "../../fixture/fixture"
+import { scopedEnv } from "../../fixture/process-env"
 import { FakeWebSocket } from "../../lib/websocket"
-
-const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
-const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
-
-afterEach(() => {
-  process.env.CLAUDE_CODE_SSE_PORT = originalClaudePort
-  process.env.OPENCODE_EDITOR_SSE_PORT = originalOpencodePort
-})
 
 function nextTick() {
   return new Promise<void>((resolve) => queueMicrotask(resolve))
@@ -94,6 +87,7 @@ function expectedSelection(filePath: string, text = "foo") {
 
 test("useEditorContext reconnect switches editor server by session directory", async () => {
   await using tmp = await tmpdir()
+  using _env = scopedEnv({ CLAUDE_CODE_SSE_PORT: undefined, OPENCODE_EDITOR_SSE_PORT: undefined })
   const startupDirectory = path.join(tmp.path, "startup")
   const sessionDirectory = path.join(tmp.path, "session")
   const ideDirectory = path.join(tmp.path, ".claude", "ide")
@@ -115,10 +109,8 @@ test("useEditorContext reconnect switches editor server by session directory", a
     }),
   )
 
-  process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
-  spyOn(process, "cwd").mockImplementation(() => startupDirectory)
-  spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  using _cwd = spyOn(process, "cwd").mockImplementation(() => startupDirectory)
+  using _home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const firstSocket = new FakeWebSocket("ws://127.0.0.1:3001")
   const secondSocket = new FakeWebSocket("ws://127.0.0.1:3002")
 
@@ -144,6 +136,7 @@ test("useEditorContext reconnect switches editor server by session directory", a
 
 test("useEditorContext favors configured port over lock files", async () => {
   await using tmp = await tmpdir()
+  using _env = scopedEnv({ CLAUDE_CODE_SSE_PORT: "4010", OPENCODE_EDITOR_SSE_PORT: undefined })
   const startupDirectory = path.join(tmp.path, "startup")
   const ideDirectory = path.join(tmp.path, ".claude", "ide")
   await mkdir(startupDirectory, { recursive: true })
@@ -156,10 +149,8 @@ test("useEditorContext favors configured port over lock files", async () => {
     }),
   )
 
-  process.env.CLAUDE_CODE_SSE_PORT = "4010"
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
-  spyOn(process, "cwd").mockImplementation(() => startupDirectory)
-  spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  using _cwd = spyOn(process, "cwd").mockImplementation(() => startupDirectory)
+  using _home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:4010")
 
   const mounted = mountEditorContext(createWebSocketImpl(socket))
@@ -172,6 +163,7 @@ test("useEditorContext favors configured port over lock files", async () => {
 
 test("useEditorContext clears selection when reconnecting", async () => {
   await using tmp = await tmpdir()
+  using _env = scopedEnv({ CLAUDE_CODE_SSE_PORT: undefined, OPENCODE_EDITOR_SSE_PORT: undefined })
   const startupDirectory = path.join(tmp.path, "startup")
   const ideDirectory = path.join(tmp.path, ".claude", "ide")
   await mkdir(startupDirectory, { recursive: true })
@@ -184,10 +176,8 @@ test("useEditorContext clears selection when reconnecting", async () => {
     }),
   )
 
-  process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
-  spyOn(process, "cwd").mockImplementation(() => startupDirectory)
-  spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  using _cwd = spyOn(process, "cwd").mockImplementation(() => startupDirectory)
+  using _home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:3001")
 
   const mounted = mountEditorContext(createWebSocketImpl(socket))
@@ -232,6 +222,7 @@ test("useEditorContext clears selection when reconnecting", async () => {
 
 test("useEditorContext preserves selection for the next reconnect when requested", async () => {
   await using tmp = await tmpdir()
+  using _env = scopedEnv({ CLAUDE_CODE_SSE_PORT: undefined, OPENCODE_EDITOR_SSE_PORT: undefined })
   const startupDirectory = path.join(tmp.path, "startup")
   const ideDirectory = path.join(tmp.path, ".claude", "ide")
   await mkdir(startupDirectory, { recursive: true })
@@ -244,10 +235,8 @@ test("useEditorContext preserves selection for the next reconnect when requested
     }),
   )
 
-  process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
-  spyOn(process, "cwd").mockImplementation(() => startupDirectory)
-  spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  using _cwd = spyOn(process, "cwd").mockImplementation(() => startupDirectory)
+  using _home = spyOn(os, "homedir").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:3001")
 
   const mounted = mountEditorContext(createWebSocketImpl(socket))
@@ -274,9 +263,8 @@ test("useEditorContext preserves selection for the next reconnect when requested
 
 test("useEditorContext connects with OPENCODE_EDITOR_SSE_PORT", async () => {
   await using tmp = await tmpdir()
-  process.env.CLAUDE_CODE_SSE_PORT = undefined
-  process.env.OPENCODE_EDITOR_SSE_PORT = "4020"
-  spyOn(process, "cwd").mockImplementation(() => tmp.path)
+  using _env = scopedEnv({ CLAUDE_CODE_SSE_PORT: undefined, OPENCODE_EDITOR_SSE_PORT: "4020" })
+  using _cwd = spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:4020")
 
   const mounted = mountEditorContext(createWebSocketImpl(socket))

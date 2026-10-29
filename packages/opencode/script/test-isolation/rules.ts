@@ -14,6 +14,7 @@ export type RuleId =
   | "TISO005" // .only, or a newly added .skip / .todo
   | "TISO006" // test writes a shared path without an owning fixture
   | "TISO007" // baseline entry no longer matches any source violation
+  | "TISO008" // ordinary test enables in-process concurrent execution
 
 export type Rule = {
   id: RuleId
@@ -72,6 +73,15 @@ export const RULES: Record<RuleId, Rule> = {
     message:
       "This violation was fixed but the baseline entry was kept. Remove the stale entry; the baseline may " +
       "only shrink.",
+  },
+  TISO008: {
+    id: "TISO008",
+    title: "ordinary test directly enables Bun in-process concurrent execution",
+    message:
+      "Direct bun:test test.concurrent / describe.concurrent calls share process.env, module state, caches, " +
+      "listeners and filesystem globals with other tests. Keep ordinary direct controls serial. If concurrency " +
+      "is needed, create it inside one test with explicitly owned dependencies, use a documented owner-aware " +
+      "package helper, or isolate each worker in a separate process.",
   },
 }
 

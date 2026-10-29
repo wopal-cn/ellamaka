@@ -133,6 +133,88 @@ test("TISO005 ignores a product method that happens to be called skip or todo", 
   )
 })
 
+test("TISO008 reports in-process concurrent test controls", () => {
+  expect(rulesOf("packages/opencode/test/example.test.ts", 'test.concurrent("race", () => {})')).toEqual(["TISO008"])
+  expect(rulesOf("packages/opencode/test/example.test.ts", 'describe.concurrent("race", () => {})')).toEqual([
+    "TISO008",
+  ])
+})
+
+test("TISO008 follows bun:test aliases and namespace imports", () => {
+  expect(
+    rulesOf(
+      "packages/opencode/test/example.test.ts",
+      ['import { test as bunTest } from "bun:test"', 'bunTest.concurrent("race", () => {})'].join("\n"),
+    ),
+  ).toEqual(["TISO008"])
+
+  expect(
+    rulesOf(
+      "packages/opencode/test/example.test.ts",
+      ['import * as bt from "bun:test"', 'bt.describe.concurrent("race", () => {})'].join("\n"),
+    ),
+  ).toEqual(["TISO008"])
+})
+
+test("TISO008 reports chained concurrent controls", () => {
+  expect(rulesOf("packages/opencode/test/example.test.ts", 'test.concurrent.each([[1]])("race", () => {})')).toEqual([
+    "TISO008",
+  ])
+})
+
+test("TISO008 ignores a local object that only shares a test-control name", () => {
+  expect(
+    rulesOf(
+      "packages/opencode/test/example.test.ts",
+      ["const test = { concurrent: (name: string) => name }", 'test.concurrent("product operation")'].join("\n"),
+    ),
+  ).toEqual([])
+})
+
+test("TISO008 keeps canonical controls outside a nested shadow", () => {
+  const violations = scan(
+    "packages/opencode/test/example.test.ts",
+    [
+      "function helper() { const test = { concurrent: () => {} }; test.concurrent() }",
+      'test.concurrent("real test", () => {})',
+    ].join("\n"),
+  )
+  expect(violations.filter((violation) => violation.rule === "TISO008")).toHaveLength(1)
+  expect(violations.find((violation) => violation.rule === "TISO008")?.line).toBe(2)
+})
+
+test("TISO008 ignores a nested shadow of a bun:test alias", () => {
+  expect(
+    rulesOf(
+      "packages/opencode/test/example.test.ts",
+      [
+        'import { test as bunTest } from "bun:test"',
+        "function helper() { const bunTest = { concurrent: () => {} }; bunTest.concurrent() }",
+      ].join("\n"),
+    ),
+  ).toEqual([])
+})
+
+test("TISO008 ignores explicit concurrency created inside one ordinary test", () => {
+  expect(
+    rulesOf(
+      "packages/opencode/test/example.test.ts",
+      'test("race", async () => { await Promise.all([runOne(), runTwo()]) })',
+    ),
+  ).not.toContain("TISO008")
+})
+
+test("TISO008 leaves documented owner-aware package concurrency helpers to their fixture contract", () => {
+  expect(
+    rulesOf(
+      "packages/opencode/test/example.test.ts",
+      ['import { cliIt } from "./lib/cli-process"', 'cliIt.concurrent("isolated cli process", () => runCli())'].join(
+        "\n",
+      ),
+    ),
+  ).not.toContain("TISO008")
+})
+
 test("TISO006 reports a write to a shared global path", () => {
   expect(
     rulesOf(

@@ -12,6 +12,21 @@ const npmPath = fileURLToPath(new URL("..", import.meta.url))
 export const load = (dir: string) =>
   Effect.tryPromise({
     try: async () => {
+      // @npmcli/config's flatteners mutate the parent process for user-agent
+      // and omit=dev (NODE_ENV), even when Config receives its own env object.
+      // NpmConfig is a library boundary inside a long-lived Ellamaka process,
+      // so contain those third-party side effects and restore the caller's
+      // exact state on both success and failure.
+      const previous = {
+        npm_config_user_agent: process.env.npm_config_user_agent,
+        NODE_ENV: process.env.NODE_ENV,
+      }
+      const restore = () => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }
+      }
       const config = new Config({
         npmPath,
         cwd: dir,
@@ -25,8 +40,12 @@ export const load = (dir: string) =>
         shorthands,
         warn: false,
       })
-      await config.load()
-      return config.flat as Record<string, unknown>
+      try {
+        await config.load()
+        return config.flat as Record<string, unknown>
+      } finally {
+        restore()
+      }
     },
     catch: (cause) => cause,
   }).pipe(Effect.orElseSucceed(() => ({}) as Record<string, unknown>))

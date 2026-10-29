@@ -8,6 +8,7 @@ import { Shell } from "../../src/shell/shell"
 import { ShellTool } from "../../src/tool/shell"
 import { Filesystem } from "@/util/filesystem"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { scopedEnv } from "../fixture/process-env"
 import type { Permission } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
@@ -127,17 +128,15 @@ const forms = (dir: string) => {
 const withShell = <A, E, R>(item: { label: string; shell: string }, self: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
-      const prev = process.env.SHELL
-      process.env.SHELL = item.shell
+      const scope = scopedEnv({ SHELL: item.shell })
       Shell.acceptable.reset()
       Shell.preferred.reset()
-      return prev
+      return scope
     }),
     () => self,
-    (prev) =>
+    (scope) =>
       Effect.sync(() => {
-        if (prev === undefined) delete process.env.SHELL
-        else process.env.SHELL = prev
+        scope[Symbol.dispose]()
         Shell.acceptable.reset()
         Shell.preferred.reset()
       }),
@@ -546,16 +545,12 @@ describe("tool.shell permissions", () => {
         withShell(
           item,
           Effect.acquireUseRelease(
-            Effect.sync(() => {
-              const key = "OPENCODE_TEST_MISSING"
-              const prev = process.env[key]
-              delete process.env[key]
-              return { key, prev }
-            }),
-            ({ key }) =>
+            Effect.sync(() => scopedEnv({ OPENCODE_TEST_MISSING: undefined })),
+            () =>
               runIn(
                 projectRoot,
                 Effect.gen(function* () {
+                  const key = "OPENCODE_TEST_MISSING"
                   const err = new Error("stop after permission")
                   const requests: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
                   const root = path.parse(process.env.WINDIR!).root.replace(/[\\/]+$/, "")
@@ -573,11 +568,7 @@ describe("tool.shell permissions", () => {
                   expect(extDirReq!.patterns).toContain(glob(path.join(process.env.WINDIR!, "*")))
                 }),
               ),
-            ({ key, prev }) =>
-              Effect.sync(() => {
-                if (prev === undefined) delete process.env[key]
-                else process.env[key] = prev
-              }),
+            (scope) => Effect.sync(() => scope[Symbol.dispose]()),
           ),
         ),
       )

@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Latch, Layer } from "effect"
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
@@ -50,6 +50,7 @@ import { Format } from "../../src/format"
 import { Reference } from "../../src/reference/reference"
 import { RepositoryCache } from "../../src/reference/repository-cache"
 import { TestInstance, writeGlobalTestConfig, removeGlobalTestConfig } from "../fixture/fixture"
+import { scopedEnv } from "../fixture/process-env"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { SyncEvent } from "@/sync"
@@ -73,16 +74,14 @@ const ref = {
 function withSh<A, E, R>(fx: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
     Effect.sync(() => {
-      const prev = process.env.SHELL
-      process.env.SHELL = "/bin/sh"
+      const scope = scopedEnv({ SHELL: "/bin/sh" })
       Shell.preferred.reset()
-      return prev
+      return scope
     }),
     () => fx(),
-    (prev) =>
+    (scope) =>
       Effect.sync(() => {
-        if (prev === undefined) delete process.env.SHELL
-        else process.env.SHELL = prev
+        scope[Symbol.dispose]()
         Shell.preferred.reset()
       }),
   )
@@ -1306,8 +1305,9 @@ it.instance(
 
       const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
       yield* llm.wait(1)
-      const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      const ready = yield* Latch.make()
+      const b = yield* prompt.loop({ sessionID: chat.id }, ready).pipe(Effect.forkChild)
+      yield* ready.await
 
       yield* prompt.cancel(chat.id)
       const [exitA, exitB] = yield* Effect.all([Fiber.await(a), Fiber.await(b)])
@@ -1686,8 +1686,9 @@ it.instance(
         .pipe(Effect.forkChild)
       yield* waitForBusy(chat.id)
 
-      const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      const ready = yield* Latch.make()
+      const loop = yield* prompt.loop({ sessionID: chat.id }, ready).pipe(Effect.forkChild)
+      yield* ready.await
 
       expect(yield* llm.calls).toBe(0)
 
@@ -1723,9 +1724,12 @@ it.instance(
         .pipe(Effect.forkChild)
       yield* waitForBusy(chat.id)
 
-      const a = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      const b = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      const readyA = yield* Latch.make()
+      const a = yield* prompt.loop({ sessionID: chat.id }, readyA).pipe(Effect.forkChild)
+      yield* readyA.await
+      const readyB = yield* Latch.make()
+      const b = yield* prompt.loop({ sessionID: chat.id }, readyB).pipe(Effect.forkChild)
+      yield* readyB.await
 
       expect(yield* llm.calls).toBe(0)
 
@@ -1832,11 +1836,11 @@ unixNoLLMServer(
           })
           .pipe(Effect.forkChild)
 
-        yield* Effect.gen(function* () {
-          while (!(yield* afs.existsSafe(ready))) {
-            yield* Effect.sleep(Duration.millis(10))
-          }
-        }).pipe(Effect.timeout(Duration.seconds(5)))
+        yield* pollWithTimeout(
+          afs.existsSafe(ready).pipe(Effect.map((exists) => (exists ? true : undefined))),
+          "timed out waiting for shell trap readiness",
+          Duration.seconds(5),
+        )
 
         yield* prompt.cancel(chat.id)
 
@@ -1921,8 +1925,9 @@ unixNoLLMServer(
       const sh = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "sleep 30" }).pipe(Effect.forkChild)
       yield* waitForBusy(chat.id)
 
-      const loop = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
-      yield* Effect.sleep(50)
+      const ready = yield* Latch.make()
+      const loop = yield* prompt.loop({ sessionID: chat.id }, ready).pipe(Effect.forkChild)
+      yield* ready.await
 
       yield* prompt.cancel(chat.id)
 

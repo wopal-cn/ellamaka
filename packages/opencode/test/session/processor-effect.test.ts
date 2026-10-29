@@ -1,7 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { expect } from "bun:test"
 import { tool } from "ai"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
@@ -104,17 +104,6 @@ function defer<T>() {
   })
   return { promise, resolve }
 }
-
-const waitFor = <A>(check: Effect.Effect<A | undefined>, message: string) =>
-  Effect.gen(function* () {
-    const stop = Date.now() + 500
-    while (Date.now() < stop) {
-      const value = yield* check
-      if (value !== undefined) return value
-      yield* Effect.sleep("10 millis")
-    }
-    return yield* Effect.fail(new Error(message))
-  })
 
 const user = Effect.fn("TestSession.user")(function* (sessionID: SessionID, text: string) {
   const session = yield* Session.Service
@@ -286,6 +275,16 @@ it.live("session.processor effect tests preserve text start time", () =>
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "hi")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const bus = yield* Bus.Service
+        const textStarted = yield* Deferred.make<number>()
+        const off = yield* bus.subscribeCallback(MessageV2.Event.PartUpdated, (evt) => {
+          const part = evt.properties.part
+          if (evt.properties.sessionID !== chat.id) return
+          if (part.messageID !== msg.id || part.type !== "text") return
+          if (part.time?.start === undefined) return
+          Deferred.doneUnsafe(textStarted, Effect.succeed(part.time.start))
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(off))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const handle = yield* processors.create({
           assistantMessage: msg,
@@ -312,11 +311,20 @@ it.live("session.processor effect tests preserve text start time", () =>
           })
           .pipe(Effect.forkChild)
 
-        yield* waitFor(
-          Effect.sync(() => MessageV2.parts(msg.id).find((part): part is MessageV2.TextPart => part.type === "text")),
-          "timed out waiting for text part",
+        const startedAt = yield* Deferred.await(textStarted).pipe(
+          Effect.timeoutOrElse({
+            duration: "5 seconds",
+            orElse: () => Effect.fail(new Error("timed out waiting for text part")),
+          }),
         )
-        yield* Effect.sleep("20 millis")
+        yield* Effect.gen(function* () {
+          while (Date.now() <= startedAt) yield* Effect.yieldNow
+        }).pipe(
+          Effect.timeoutOrElse({
+            duration: "1 second",
+            orElse: () => Effect.fail(new Error("clock did not advance after text start")),
+          }),
+        )
         gate.resolve()
 
         const exit = yield* Fiber.await(run)
@@ -735,6 +743,16 @@ it.live("session.processor effect tests retain streamed pending tool input befor
         const chat = yield* session.create({})
         const parent = yield* user(chat.id, "tool abort")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const bus = yield* Bus.Service
+        const pendingInput = yield* Deferred.make<{ tool: string; raw: string }>()
+        const off = yield* bus.subscribeCallback(MessageV2.Event.PartUpdated, (evt) => {
+          const part = evt.properties.part
+          if (evt.properties.sessionID !== chat.id) return
+          if (part.messageID !== msg.id || part.type !== "tool") return
+          if (part.state.status !== "pending" || !part.state.raw) return
+          Deferred.doneUnsafe(pendingInput, Effect.succeed({ tool: part.tool, raw: part.state.raw }))
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(off))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
         const handle = yield* processors.create({
           assistantMessage: msg,
@@ -762,17 +780,14 @@ it.live("session.processor effect tests retain streamed pending tool input befor
           .pipe(Effect.forkChild)
 
         yield* llm.wait(1)
-        const pending = yield* waitFor(
-          Effect.sync(() => {
-            const part = MessageV2.parts(msg.id).find((part): part is MessageV2.ToolPart => part.type === "tool")
-            return part?.state.status === "pending" && part.state.raw ? part : undefined
+        const pending = yield* Deferred.await(pendingInput).pipe(
+          Effect.timeoutOrElse({
+            duration: "5 seconds",
+            orElse: () => Effect.fail(new Error("timed out waiting for streamed pending tool input")),
           }),
-          "timed out waiting for streamed pending tool input",
         )
         expect(pending.tool).toBe("read")
-        if (pending.state.status === "pending") {
-          expect(pending.state.raw).toContain('"filePath"')
-        }
+        expect(pending.raw).toContain('"filePath"')
         yield* Fiber.interrupt(run)
 
         const exit = yield* Fiber.await(run)
