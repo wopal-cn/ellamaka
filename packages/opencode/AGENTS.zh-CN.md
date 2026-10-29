@@ -43,7 +43,7 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 | Dev | `bun run dev` | 本地运行 package dev entry |
 | Typecheck | `bun typecheck` | 修改 TypeScript 后；不要直接运行 `tsc` |
 | Test（默认子集） | `bun run test:unit` | 修改 package behavior 后（只跑快速单元测试，约 25s） |
-| Test（重目录集成） | `bun run test:integration` | 修改集成目录相关行为后（目录清单见下方 Testing 一节，以 `INTEGRATION_DIRS` 为准） |
+| Test（重目录集成） | `bun run test:integration` | 修改 `test/AGENTS.md` 判定属于 integration 的行为后 |
 | Test（e2e） | `bun run test:e2e` | 修改真实 provider 链路 / 浏览器 e2e 测试后 |
 | Test（全量回归） | `bun run test:all` | 完整回归（等价 `bun test --timeout 30000 --force-exit --max-concurrency=4`） |
 | Build | `bun run build` | 修改 runtime、CLI、package build 或发布相关代码后 |
@@ -84,21 +84,10 @@ description: Main inherited OpenCode engine package for CLI, runtime, config, se
 
 ## Testing
 
-- 本包行为变更继承父级 Testing Best Practices；canonical TDD 适用性规则判定需要 RED 循环时必须使用 TDD。失败测试放在真正拥有该行为、且成本最低的 opencode observable boundary，再按下述 package-specific 分层和 helper 实现。
-- 测试子集由 `script/run-tests.ts` 按层展开，`package.json` 提供四个入口：`test:unit`（默认开发子集——扫描 `test/` 全部子目录、顶层 `*.test.ts` 以及 runner 自身的 `script/*.test.ts`，剔除集成目录以及任何名为 `*-e2e.test.ts` 或 `*-integration.test.ts` 的文件）、`test:integration`（集成目录加上 `test/` 与 `script/` 下所有 `*-integration.test.ts`：server/session/cli/project/tool/control-plane/plugin/file/pty/skill/reference/share/mcp/lsp/publish-smoke）、`test:e2e`（只跑 `test/` 与 `script/` 下的 `*-e2e.test.ts` 文件，递归）、`test:all`（package 全量回归）。单元层是快速日常循环：目前覆盖约 94 files / 1434 tests，耗时二十几秒。日常开发用 `test:unit`；改到集成目录相关代码或 `*-integration.test.ts` 文件时，至少跑 `test:integration`；只有风险需要 package 级全量回归证明时才跑 `test:all`，不把它当成每次提交的无条件门禁。
-- e2e 文件遵循 `*-e2e.test.ts` 命名约定，通过 `pathIgnorePatterns` 从 `test:unit`/`test:integration` 隔离（CLI 值覆盖 bunfig，不合并），只在 `test:e2e` 下运行。不要将 e2e 文件移出所属 domain 目录。
-- 新增测试目录默认自动纳入 `test:unit`（扫描式）；若某目录属于集成（真实 I/O），把目录名加入 `script/run-tests.ts` 的 `INTEGRATION_DIRS` 常量，并在本文件集成目录清单同步。
-- **单元层必须保持快速且确定。** 单元测试不得 fork 子进程（`Process.run`/`spawn`）、监听文件系统、对真实仓库运行 git、访问网络，或依赖真实时钟/`it.live`。需要真实 OS 行为的测试属于集成层——把文件放进匹配的 `INTEGRATION_DIRS` 目录（或把该目录加入该常量），或者在移动文件不现实时，命名为 `*-integration.test.ts`：单元层排除该后缀，`test:integration` 显式纳入它，因此它按需运行而不必每次都跑。唯一例外：只需要临时目录的测试（`tmpdir`/`it.instance`）仍属单元测试——包括夹具自己的临时仓库（`tmpdir({ git: true })`），其 git 命令固定在该临时目录内。
-- 跨包编排：从 repo root 运行 `bun run test:unit|test:integration|test:e2e` 会通过根入口 `packages/opencode/script/run-tests-root.ts` 在所有 package 上跑对应层；用 `--package <name>` 指定单个 package（如 `bun run test:unit --package opencode`）。
-- 测试提速用现成工具：`bun run bench:test`（全量基准）与 `bun run profile:test`（定位最慢测试文件，`TEST_PROFILE_GLOB`/`TEST_PROFILE_LIMIT` 收窄范围）。判定提速成立以目标文件 3 次重跑的中位数为准——单次全量运行噪声大，混跑时单文件耗时可被放大数倍，不得据此下结论。
-- package-local 测试入口从 `packages/opencode` 运行；仓库根只用于明确的跨包 runner 或父级规范拥有的全仓门禁。
-- Effect services 或 Effect workflows 使用 `testEffect(...)` from `test/lib/effect.ts`。
-- 默认用 `it.instance(...)` 测试需要一个临时 instance 的场景。
-- 测试需要 real time、filesystem mtimes、child processes、git、locks 或 OS behavior 时使用 `it.live(...)`。
-- 测试可用 `TestClock` 和 `TestConsole` 时使用 `it.effect(...)`。
-- 需要临时目录时优先使用 `tmpdir`、`tmpdirScoped`、`provideTmpdirInstance` 或 `provideTmpdirServer` from `test/fixture/fixture.ts`。
+- 本包行为变更继承父级 Testing Best Practices；canonical TDD 适用性规则判定需要 RED 循环时必须使用 TDD。失败测试放在真正拥有该行为、且成本最低的 opencode observable boundary；具体测试层级与 helper 由 `test/AGENTS.md` 负责。
+- `test/AGENTS.md` 是测试层选择、runner 自动发现、integration 目录/文件命名、unit 层速度预算、Effect fixtures、readiness helpers 与测试宿主约定的详细唯一 owner；这些机制变化时只更新该文件，不在本节重复维护。
+- package-local 测试入口从 `packages/opencode` 运行；仓库根只用于明确的跨包编排（`bun run test:unit|test:integration|test:e2e`）或父级规范拥有的全仓门禁。
 - Server 和 HttpApi middleware tests 遵循 `test/server/AGENTS.md`，优先 focused middleware tests 和 Effect HTTP stack。
-- 修改 legacy 路由或为 Effect HttpApi 补充 parity coverage 时，在 `test/server/` 下添加或更新测试（`test/server/httpapi-*.test.ts` 或 focused HttpApi tests）。
 - 修改 database schema 时生成 migration，并添加或更新 migration tests。
 - 修改 CLI/runtime/config/plugin/agent/TUI space mode 后，验证或说明 `WOPAL_SPACE` flag、`.wopal/config/settings.*`、TUI settings、plugin loading、theme loading。
 - Windows 的 Git 克隆通常使用 `core.symlinks=false`；插件解析器必须把内容为受限相对源码路径的扁平化 symlink 占位文件解析到同一插件目录内的真实文件，并拒绝目录越界目标。

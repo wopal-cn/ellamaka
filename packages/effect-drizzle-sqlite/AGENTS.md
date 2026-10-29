@@ -7,6 +7,8 @@ description: Vendored Drizzle Effect SQLite adapter rules for generic Drizzle + 
 
 This package vendors a Drizzle Effect SQLite adapter for this repo.
 
+Parent project rules in `../../AGENTS.md` remain in force; this file adds only adapter-specific constraints.
+
 Parent Testing Best Practices remain in force. Observable adapter behavior changes use TDD whenever the canonical applicability rule selects a RED cycle; put the failing assertion at the Drizzle/Effect/SQLite contract boundary. Run `bun test` from this package for changed behavior and `bun run typecheck` after TypeScript changes.
 
 - Keep this package generic: Drizzle + Effect + SQLite only.
@@ -15,7 +17,7 @@ Parent Testing Best Practices remain in force. Observable adapter behavior chang
 - Concrete SQLite clients such as `@effect/sql-sqlite-bun` belong in tests or examples unless this package intentionally adds a driver-specific helper.
 - Preserve Drizzle adapter naming and behavior where possible so this can be replaced by upstream `drizzle-orm/effect-sqlite` later.
 - If touching copied Drizzle internals, compare with current `drizzle-orm@1.0.0-rc.2` declarations and runtime JS.
-- If touching Effect APIs, verify against the local reference checkout of the effect-smol repository (previously at `/Users/kit/code/open-source/effect-smol`; the upstream repo and its API surface may have moved, so confirm against the pinned Effect version used by this repo).
+- If touching Effect APIs, verify against the Effect version pinned by the repository root catalog and that installed package's declarations/runtime source; do not depend on a developer-local reference checkout.
 
 Useful entry points:
 

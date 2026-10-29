@@ -17,7 +17,7 @@ This package is responsible for ellamaka's brand identity injection and build. U
 
 | File | Responsibility |
 |------|---------------|
-| `branding.ts` | Brand constants (BINARY_NAME, CHANNEL_*); changes require rebuild via `bun packages/ellamaka-release/src/cli/build.ts` |
+| `branding.ts` | Brand constants (BINARY_NAME, CHANNEL_*); changes require rebuild via `bun ../ellamaka-release/src/cli/build.ts` |
 | `detect.ts` | WopalSpace auto-detection: walks up from cwd looking for `.wopal/.git` worktree marker |
 | `is-wopal-install.ts` | Installation path guard: checks whether `process.execPath` resides under `WOPAL_HOME/bin/` |
 | `logo.ts` | ellamaka ASCII logo |
@@ -32,7 +32,7 @@ This package is responsible for ellamaka's brand identity injection and build. U
 | Scenario | Command |
 |----------|---------|
 | Test | `bun test` from `packages/ellamaka-brand` |
-| Build | `bun packages/ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` |
+| Build | `bun ../ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` from `packages/ellamaka-brand` |
 
 ## Implementation Rules
 

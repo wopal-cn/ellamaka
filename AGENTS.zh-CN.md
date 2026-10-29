@@ -9,7 +9,7 @@ description: Ellamaka 长期有效的架构边界、实施、日志与验证规�
 
 - [DESIGN](docs/DESIGN.md) 是目标态与详细架构契约的权威来源。
 - 按任务阅读子设计：DSH 基础 [DESIGN-dsh-base](docs/DESIGN-dsh-base.md)、DSH Web [DESIGN-dsh-web](docs/DESIGN-dsh-web.md)、工具容器 [DESIGN-ellamaka-tools](docs/DESIGN-ellamaka-tools.md)、统一 SDK [DESIGN-ellamaka-sdk](docs/DESIGN-ellamaka-sdk.md)、Workbench [DESIGN-workbench](docs/DESIGN-workbench.md)、Desktop [DESIGN-desktop](docs/DESIGN-desktop.md)、Onboarding [DESIGN-onboarding](docs/DESIGN-onboarding.md)、分发 [DESIGN-distribution](docs/DESIGN-distribution.md)、日志 [DESIGN-logging](docs/DESIGN-logging.md)、配置 [DESIGN-config-engine](docs/DESIGN-config-engine.md)。
-- 包级规范（改动对应包时必读）：[opencode](packages/opencode/AGENTS.md)、[ellamaka-cordis](packages/ellamaka-cordis/AGENTS.md)、[ellamaka-app](packages/ellamaka-app/AGENTS.md)、[ellamaka-desktop](packages/ellamaka-desktop/AGENTS.md)。
+- 改动任何 package 或子目录时，都必须同时遵循距离该路径最近的 `AGENTS.md`；下级规范只细化本项目规则，不能替代父级 Testing/TDD、安全、日志或评审要求。
 - 本文件保留实施与验证时必须照做的稳定规则；详细数据模型、流程和接口以对应 DESIGN 为准，但本文件的规则不因 DESIGN 有描述而省略。
 - 根 `AGENTS.md` 与 `AGENTS.zh-CN.md` 是双语镜像，任何规则变更必须在同一次提交内同步更新两份。
 
@@ -121,6 +121,12 @@ GUI、Onboarding 与 Desktop 壳层行为的验证入口。Agent 可用 CDP 检�
 - Desktop CDP：`agent-browser --session <name> connect <端口>` 连接 Electron 窗口做 UI 验证。9222 被占用时可指定端口，例如 `./scripts/dev.sh desktop --cdp-debug 9333` 后 `connect 9333`；只需所选端口空闲。
 - 日志（dev 运行）：`.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`。`<scope>` 是拥有 `scripts/dev.sh` 的仓库/工作树根（解析符号链接）的 md5 前 10 个十六进制字符；可从 `.wopal-space/logs/dev/registry` 解析，或按 dev.sh 同样方式计算 `printf '%s' "<root>" | md5 -q | cut -c1-10`。工作树运行记入其 base space 的 ledger。
 - Plan 的 User Validation 必须引用本表并给出用户可直接复制运行的命令；"启动应用"这类泛化措辞不可接受。
+
+## Code Review Rules
+
+代码变更评审使用空间已装配的 `df-implement-review`；Plan / 提案评审使用 `df-proposal-review`。只报告当前 diff 引入、具有明确触发条件、受影响行为和证据的缺陷；不要把既有问题、风格偏好或已经由 CI 机械保证的事项当成评审缺陷。
+
+下级 `AGENTS.md` 继承本评审流程，只补充本地专项检查。至少核对：Ellamaka owner 边界没有被打破；generated contract/client 保持一致；canonical Testing/TDD 继承链仍然可见；使用的是所属 package 的正确测试 runner/层级；改动边界要求的真实宿主或制品验证没有被源码态检查替代。
 
 ## User-Supplied Rules
 

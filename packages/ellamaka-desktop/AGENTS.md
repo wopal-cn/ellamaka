@@ -43,9 +43,9 @@ Run from packages/ellamaka-desktop/.
 | Typecheck | bun run typecheck | After TypeScript changes |
 | Build | bun run build | After Desktop changes |
 | Package macOS dev build | bun run package:mac | Packaging/resource checks |
-| Dev server help | ./scripts/dev.sh help | Cross-package GUI validation |
+| Dev server help | ../../scripts/dev.sh help | Cross-package GUI validation |
 
-Build the opencode sidecar with bun script/build-node.ts before the Desktop build when sidecar code changes.
+Build the opencode sidecar with `bun ../opencode/script/build-node.ts` before the Desktop build when sidecar code changes.
 
 ## Implementation Rules
 

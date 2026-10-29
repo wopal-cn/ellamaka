@@ -43,9 +43,9 @@ ellamaka-desktop 是共用 ellamaka-app renderer 的 Electron 宿主。Main 拥�
 | 类型检查 | bun run typecheck | 修改 TypeScript 后 |
 | 构建 | bun run build | 修改 Desktop 后 |
 | macOS 开发包 | bun run package:mac | 检查打包和资源路径 |
-| 联调帮助 | ./scripts/dev.sh help | 跨包 GUI 验证 |
+| 联调帮助 | ../../scripts/dev.sh help | 跨包 GUI 验证 |
 
-修改 sidecar 代码后，Desktop 构建前先运行 bun script/build-node.ts 构建 opencode sidecar。
+修改 sidecar 代码后，Desktop 构建前先运行 `bun ../opencode/script/build-node.ts` 构建 opencode sidecar。
 
 ## Implementation Rules
 

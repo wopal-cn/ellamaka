@@ -5,6 +5,8 @@ description: LLM package development rules for Effect-based HTTP clients, stream
 
 # LLM Package Guide
 
+Parent project rules in `../../AGENTS.md` remain in force. This file owns only LLM-package-specific Effect, protocol, recording, and test-helper constraints.
+
 ## Effect
 
 - Prefer `HttpClient.HttpClient` / `HttpClientResponse.HttpClientResponse` over web `fetch` / `Response` at package boundaries.

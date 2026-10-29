@@ -85,7 +85,7 @@ Use the repository's existing tooling; do not create a separate test framework f
 
 ## Code Review Rules
 
-Use the assembled `df-implement-review` skill for code-change review and `df-proposal-review` for Plan/proposal review. Report only defects introduced by the current diff with a concrete trigger and behavioral impact; do not report pre-existing problems, style preferences, or checks already mechanically guaranteed by CI as review defects.
+Inherit the review process and defect-report boundary from `../../AGENTS.md`; this section adds only WopalSpace-specific checkpoints.
 
 ### WopalSpace-specific checkpoints
 

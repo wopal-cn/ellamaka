@@ -85,7 +85,7 @@ maintenance: 仅当模块出现长期有效且无法由代码、测试或 DESIGN
 
 ## Code Review Rules
 
-代码变更评审使用空间已装配的 `df-implement-review`；Plan / 提案评审使用 `df-proposal-review`。只报告当前 diff 引入、具有明确触发条件和行为影响的缺陷；不要把既有问题、风格偏好或已经由 CI 机械保证的事项当成评审缺陷。
+评审流程与缺陷报告边界继承 `../../AGENTS.md`；本节只补充 WopalSpace 专项检查。
 
 ### WopalSpace 专项检查
 

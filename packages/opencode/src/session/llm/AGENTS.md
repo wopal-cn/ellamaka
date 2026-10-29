@@ -5,7 +5,7 @@ description: Adapter boundaries behind the opencode session LLM service
 
 # Session LLM Runtime Boundaries
 
-Parent Testing Best Practices and TDD applicability remain in force. Observable adapter/runtime-selection behavior changes use TDD whenever the canonical rule selects a RED cycle; keep assertions at the normalized request, tool bridge, runtime selection, or emitted `LLMEvent` boundary.
+Package rules in `../../../AGENTS.md`, including the parent Testing Best Practices and TDD applicability rule, remain in force. Observable adapter/runtime-selection behavior changes use TDD whenever the canonical rule selects a RED cycle; keep assertions at the normalized request, tool bridge, runtime selection, or emitted `LLMEvent` boundary.
 
 `../llm.ts` is the opencode session LLM service. It owns opencode concerns: auth, config, model/provider resolution, plugins, permissions, telemetry headers, and runtime selection. It is the only file in this area that should know about the full session request shape.
 

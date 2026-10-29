@@ -9,7 +9,7 @@ description: Long-lived architecture boundaries, implementation, logging, releas
 
 - [DESIGN](docs/DESIGN.md) is the authority for target behavior and detailed architecture contracts.
 - Read sub-designs as the task requires: DSH foundation [DESIGN-dsh-base](docs/DESIGN-dsh-base.md), DSH Web [DESIGN-dsh-web](docs/DESIGN-dsh-web.md), tool container [DESIGN-ellamaka-tools](docs/DESIGN-ellamaka-tools.md), unified SDK [DESIGN-ellamaka-sdk](docs/DESIGN-ellamaka-sdk.md), Workbench [DESIGN-workbench](docs/DESIGN-workbench.md), Desktop [DESIGN-desktop](docs/DESIGN-desktop.md), Onboarding [DESIGN-onboarding](docs/DESIGN-onboarding.md), distribution [DESIGN-distribution](docs/DESIGN-distribution.md), logging [DESIGN-logging](docs/DESIGN-logging.md), config [DESIGN-config-engine](docs/DESIGN-config-engine.md).
-- Package rules (required when changing the package): [opencode](packages/opencode/AGENTS.md), [ellamaka-cordis](packages/ellamaka-cordis/AGENTS.md), [ellamaka-app](packages/ellamaka-app/AGENTS.md), [ellamaka-desktop](packages/ellamaka-desktop/AGENTS.md).
+- For every changed package or subdirectory, also follow its nearest `AGENTS.md`; local rules refine this project rulebook and never replace the parent Testing/TDD, safety, logging, or review requirements.
 - This file keeps the stable rules an agent must follow while implementing and verifying; detailed data models, flows, and APIs stay in their owning DESIGN, but a rule is not dropped here merely because a DESIGN also describes it.
 - Root `AGENTS.md` and `AGENTS.zh-CN.md` are bilingual mirrors; any rule change updates both in the same commit.
 
@@ -126,6 +126,12 @@ GUI, onboarding, and desktop-shell behavior verification entries. An agent can c
 - Desktop CDP: `agent-browser --session <name> connect <port>` connects to the Electron window for UI verification. Pass a custom port when 9222 is taken, e.g. `./scripts/dev.sh desktop --cdp-debug 9333` then `connect 9333`; only the selected port must be free.
 - Logs (dev runs): `.wopal-space/logs/dev/<scope>/ellamaka-dev-{tui,serve,sidecar}.log`. `<scope>` is the first 10 hex chars of the md5 of the repo/worktree root that owns `scripts/dev.sh` (symlinks resolved) — resolve it from `.wopal-space/logs/dev/registry`, or recompute as dev.sh does `printf '%s' "<root>" | md5 -q | cut -c1-10`. A worktree run logs into its base space's ledger.
 - A Plan's User Validation must reference this table and give a command the user can copy and run directly; generic wording such as "start the app" is not acceptable.
+
+## Code Review Rules
+
+Use the assembled `df-implement-review` skill for code-change review and `df-proposal-review` for Plan/proposal review. Report only defects introduced by the current diff with a concrete trigger, affected behavior, and evidence; omit pre-existing problems, style preferences, and checks already mechanically guaranteed by CI.
+
+Subdirectory `AGENTS.md` files inherit this review process and add only their local checkpoints. In particular, verify that changes preserve Ellamaka ownership boundaries, generated contract/client consistency, the canonical Testing/TDD inheritance chain, the owning package's test runner/layer rules, and any real host or packaged-artifact validation required by the changed boundary.
 
 ## User-Supplied Rules
 

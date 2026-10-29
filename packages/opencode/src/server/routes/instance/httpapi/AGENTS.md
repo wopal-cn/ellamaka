@@ -5,7 +5,7 @@ description: Effect HttpApi route patterns for instance endpoints, including str
 
 # HttpApi Route Patterns
 
-Parent Testing Best Practices and TDD applicability remain in force. Observable route-contract changes use TDD whenever the canonical rule selects a RED cycle; assert the declared HTTP/SDK-visible contract rather than handler internals.
+Package rules in `../../../../../AGENTS.md`, including the parent Testing Best Practices and TDD applicability rule, remain in force. Observable route-contract changes use TDD whenever the canonical rule selects a RED cycle; assert the declared HTTP/SDK-visible contract rather than handler internals.
 
 Use `HttpApiBuilder.group(...)` for normal HTTP endpoints, including streaming HTTP responses such as server-sent events. Handlers should yield stable services once while building the handler layer, then close over those services in endpoint implementations.
 

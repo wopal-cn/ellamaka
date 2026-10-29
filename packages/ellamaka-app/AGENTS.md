@@ -46,7 +46,7 @@ Core ownership facts:
 | Workbench boundary check | bun run check:workbench-boundaries | After Workbench changes |
 | Workbench lint | bun run lint:workbench | After Workbench changes |
 | CSS lint | bun run lint:css | After CSS changes |
-| Frontend/backend dev help | ./scripts/dev.sh help | Integrated development |
+| Frontend/backend dev help | ../../scripts/dev.sh help | Integrated development |
 
 Unit tests must use the package script, which sets the browser condition and happy-dom preload; raw bun test resolves the wrong SolidJS renderer for component tests. Typecheck uses `tsgo -b`; never run `tsc` directly.
 

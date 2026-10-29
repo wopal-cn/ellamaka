@@ -5,6 +5,8 @@ description: Test fixtures and patterns for the opencode package test suite
 
 # Test Fixtures Guide
 
+Parent package rules in `../AGENTS.md` and the project Testing Best Practices remain in force. This file is the authoritative owner for OpenCode test layers, runner discovery, fixtures, readiness helpers, and test-host conventions.
+
 ## Temporary Directory Fixture
 
 The `tmpdir` function in `fixture/fixture.ts` creates temporary directories for tests with automatic cleanup.
@@ -93,6 +95,10 @@ await using tmp = await tmpdir({
 - `bun run test:integration` — run whenever a change touches an integration directory (see `INTEGRATION_DIRS`) or a `*-integration.test.ts` file.
 - `bun run test:e2e` — `*-e2e.test.ts` files only.
 - `bun run test:all` — full package regression when the changed risk requires package-wide proof.
+
+`script/run-tests.ts` is the source of truth for layer discovery. `INTEGRATION_DIRS` owns live-I/O directories; `*-integration.test.ts` marks a live-I/O file that must stay in its current domain directory; `*-e2e.test.ts` is reserved for the e2e layer. New ordinary test directories are discovered automatically by the unit layer; when a directory becomes integration-heavy, add it to `INTEGRATION_DIRS` instead of hand-registering individual files.
+
+From the repository root, `bun run test:unit`, `bun run test:integration`, and `bun run test:e2e` delegate to `packages/opencode/script/run-tests-root.ts`; use `--package <name>` only through that explicit root orchestrator. For test-speed work, use `bun run bench:test` and `bun run profile:test` from `packages/opencode`; narrow profiling with `TEST_PROFILE_GLOB` / `TEST_PROFILE_LIMIT`, and require a median improvement across three repeated target-file runs rather than trusting one noisy full-suite run.
 
 The unit layer is the one that must stay green and bounded: it currently covers roughly 94 files / 1434 tests in the low twenties of seconds. Treat that as a budget — a change that pushes the unit layer well past the ~30s timeout is a signal that live-I/O tests leaked into it, not something to absorb.
 

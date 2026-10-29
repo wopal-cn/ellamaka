@@ -46,7 +46,7 @@ ellamaka-app 是 Browser/Desktop 共用的 renderer，通过生成的 SDK 与 El
 | Workbench 边界检查 | bun run check:workbench-boundaries | 修改 Workbench 后 |
 | Workbench lint | bun run lint:workbench | 修改 Workbench 后 |
 | CSS lint | bun run lint:css | 修改 CSS 后 |
-| 前后端联调帮助 | ./scripts/dev.sh help | 集成开发 |
+| 前后端联调帮助 | ../../scripts/dev.sh help | 集成开发 |
 
 单元测试必须用包脚本（它设置 browser condition 与 happy-dom preload）；直接跑 `bun test` 会解析到错误的 SolidJS renderer。Typecheck 走 `tsgo -b`，不要直接运行 `tsc`。
 

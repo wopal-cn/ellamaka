@@ -5,7 +5,7 @@ description: Server and HttpApi middleware test patterns for test/server
 
 # Server Test Guide
 
-Parent Testing Best Practices and TDD applicability remain in force. Server-test changes use the parent rule for deciding when a RED cycle is required; this file only defines the server fixtures and protocol-specific mechanics below.
+Parent package rules in `../../AGENTS.md`, the test-layer/fixture rules in `../AGENTS.md`, and the project Testing Best Practices remain in force. Server-test changes use the canonical rule for deciding when a RED cycle is required; this file only defines server-specific fixtures and protocol mechanics.
 
 Use these patterns for server and HttpApi middleware tests in this directory.
 
