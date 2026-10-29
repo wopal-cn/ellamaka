@@ -453,18 +453,6 @@
     },
     {
       "rule": "TISO002",
-      "file": "packages/ellamaka-cordis/test/dsh-adapter-runtime.test.ts",
-      "detail": "process.env.ELLAMAKA_DSH",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-cordis/test/dsh-adapter.test.ts",
-      "detail": "process.env.ELLAMAKA_DSH",
-      "count": 6
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/ellamaka-cordis/test/dsh-isolation.test.ts",
       "detail": "process.env.DSH_HOME",
       "count": 2
@@ -504,48 +492,6 @@
       "file": "packages/ellamaka-core/test/effect/observability.test.ts",
       "detail": "process.env.OTEL_RESOURCE_ATTRIBUTES",
       "count": 5
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env.ELLAMAKA_DSH",
-      "count": 7
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env.ELLAMAKA_MODELS_FALLBACK_PATH",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env.ELLAMAKA_MODELS_PATH",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env.ELLAMAKA_MODELS_URL",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env.OPENCODE_MODELS_PATH",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env.OPENCODE_MODELS_URL",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-core/test/flag.test.ts",
-      "detail": "process.env[...]",
-      "count": 2
     },
     {
       "rule": "TISO002",
@@ -726,12 +672,6 @@
       "file": "packages/opencode/test/agent/agent.test.ts",
       "detail": "process.env.OPENCODE_TEST_HOME",
       "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/cli/cmd/tui/dsh-mount.test.ts",
-      "detail": "process.env.ELLAMAKA_DSH",
-      "count": 6
     },
     {
       "rule": "TISO002",
@@ -953,12 +893,6 @@
       "rule": "TISO002",
       "file": "packages/opencode/test/lib/git-env.test.ts",
       "detail": "process.env[...]",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/plugin/dsh-adapter.test.ts",
-      "detail": "process.env.ELLAMAKA_DSH",
       "count": 3
     },
     {
@@ -1212,12 +1146,6 @@
       "file": "packages/ellamaka-app/src/pages/session/prompt-navigator.test.tsx",
       "detail": "setTimeout(resolve, ms)",
       "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/ellamaka-app/src/pages/workbench/dsh-surface.test.tsx",
-      "detail": "setTimeout(resolve, 20)",
-      "count": 12
     },
     {
       "rule": "TISO003",

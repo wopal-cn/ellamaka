@@ -40,16 +40,17 @@ Keep these boundaries in mind when choosing an owner:
 
 ## Development Commands
 
-| Scenario                   | Command                                                                                  | When                             |
-| -------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------- |
-| Lint                       | bun run lint                                                                             | After code changes               |
-| Full typecheck             | bun run typecheck                                                                        | After TypeScript changes         |
-| opencode unit tests        | bun run test:unit (from packages/opencode/)                                              | Runtime unit tests               |
-| opencode integration tests | bun run test:integration (from packages/opencode/)                                       | Server or cross-module changes   |
-| App unit tests             | bun run test:unit --force-exit (from packages/ellamaka-app/)                             | Frontend behavior changes        |
-| App boundary check         | bun run check:workbench-boundaries (from packages/ellamaka-app/)                         | Workbench changes                |
-| Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes    |
-| Development entry          | ./scripts/dev.sh help                                                                    | GUI, TUI, and Server integration |
+| Scenario                   | Command                                                                                  | When                                              |
+| -------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Lint                       | bun run lint                                                                             | After code changes                                |
+| Full typecheck             | bun run typecheck                                                                        | After TypeScript changes                          |
+| Test isolation gate        | bun run check:test-isolation                                                             | After any test/fixture/preload/test-config change |
+| opencode unit tests        | bun run test:unit (from packages/opencode/)                                              | Runtime unit tests                                |
+| opencode integration tests | bun run test:integration (from packages/opencode/)                                       | Server or cross-module changes                    |
+| App unit tests             | bun run test:unit --force-exit (from packages/ellamaka-app/)                             | Frontend behavior changes                         |
+| App boundary check         | bun run check:workbench-boundaries (from packages/ellamaka-app/)                         | Workbench changes                                 |
+| Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes                     |
+| Development entry          | ./scripts/dev.sh help                                                                    | GUI, TUI, and Server integration                  |
 
 Run tests from their owning package. See package rules and script help for the full command matrix and artifact checks.
 
@@ -89,20 +90,26 @@ The reasoning, the three isolation models, and the full rule-to-gate map live in
   call `mock.module`: Bun module mocks are process-wide, are not undone by `mock.restore()`, and apply to
   bindings that were already imported, so they leak into every test file loaded later. Give the product a
   seam instead (a service, a factory, `Layer.mock`) and let the test supply the double.
-- Scope every process-global mutation. Environment variables, shared files, and shared singletons must be
-  restored by a shared helper, never by a hand-written `try/finally` in each file. A library that reads
-  `process.env` at import time cannot be driven by mutating `process.env`; give it an explicit input.
-- Wait on an observable readiness signal, never on a fixed delay. A fixed sleep is not synchronization: it
-  times out on a slow machine and wastes time on a fast one.
+- Never write or delete `process.env` directly in a `*.test.*` file. Use the owning package's
+  `test/fixture/process-env.ts::scopedEnv` helper; canonical helpers exist in `opencode`, `ellamaka-core`, and
+  `ellamaka-cordis`. If another package needs environment mutation, add the same package-local non-test fixture
+  first instead of hand-writing restoration in the test. Do not overlap these process-global scopes in concurrent
+  tests. A library that reads `process.env` at import time needs dependency injection or a separate process.
+- Await the operation's own Promise or a published readiness signal, never a fixed delay. If the code under test
+  starts asynchronous work but returns `void`, expose a completion Promise/callback seam rather than using
+  `setTimeout`, `Bun.sleep`, or `Effect.sleep` as a "flush". Use `Promise.withResolvers()`/`Deferred` for one-shot
+  readiness and poll only observable state; timeouts are failure backstops, not synchronization.
 - Shared filesystem state needs an owner. A test that writes a shared path owns it, releases exactly what it
   wrote, and never deletes state another test still needs.
 - Never weaken an assertion to make a suite pass. Deleting an expectation, shortening an observation window,
   or hiding a real bug behind a retry is a review failure, not a fix.
 - Keep live I/O out of the unit layer. Subprocesses, filesystem watching, real git, network calls, and real
   clocks belong to the integration layer.
-- Every change to a test, fixture, preload, or test configuration must pass `bun run check:test-isolation`.
-  The check is a baseline gate: a new violation fails, and a fixed violation must be removed from the
-  baseline in the same change.
+- Every change to a test, fixture, preload, or test configuration must run `bun run check:test-isolation` from the
+  repository root **before** package tests. The baseline is a debt ledger, not an allowance to copy or rename:
+  touched baselined code must migrate to the compliant pattern, and renaming an env key/API does not transfer the
+  old allowance. Run `bun run check:test-isolation -- --fix` only after there are zero new violations; it may only
+  remove stale debt, never record new debt.
 - Trigger error paths explicitly and assert the specific error and preserved state. Do not assume permissions,
   user identity, external services, or existing caches will produce the intended failure.
 - Gate a probe in the same place you act on it. When a test decides between branches by testing an

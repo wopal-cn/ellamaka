@@ -35,17 +35,17 @@ export const RULES: Record<RuleId, Rule> = {
     id: "TISO002",
     title: "test mutates process.env directly",
     message:
-      "Process-wide environment changes leak into every later test file. Use a shared scoped helper " +
-      "that restores the previous value. A library that reads process.env at import time needs an " +
-      "explicit input, not an env mutation.",
+      "Process-wide environment changes leak into every later test file. Use the owning package's " +
+      "test/fixture/process-env.ts scopedEnv helper (add the same package-local helper first if absent). " +
+      "A library that reads process.env at import time needs an explicit input or a separate process.",
   },
   TISO003: {
     id: "TISO003",
     title: "test waits on a fixed delay instead of a readiness signal",
     message:
       "A fixed delay is not synchronization: it times out on a slow machine and wastes time on a fast " +
-      "one. Wait on an observable readiness signal (a Deferred, a callback, a published state) and keep " +
-      "the timeout only as a failure backstop.",
+      "one. Await the operation's Promise or a published readiness signal; if the code returns void while " +
+      "starting async work, expose a completion Promise/callback seam. Keep timeouts only as failure backstops.",
   },
   TISO004: {
     id: "TISO004",

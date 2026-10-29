@@ -107,28 +107,29 @@ export function healTargetUrl(
  * @param hooks - observability seam; `reload` overrides the in-place
  *   `contentWindow.location.reload()` call (happy-dom cannot observe it)
  */
-export function selfHealDshIframe(
+export async function selfHealDshIframe(
   iframe: HTMLIFrameElement,
   refetchEntry: () => Promise<string | undefined>,
   hooks?: { reload?: (iframe: HTMLIFrameElement) => void },
-): void {
-  void Promise.resolve()
-    .then(refetchEntry)
-    .then((entry) => {
-      if (entry === undefined) return
-      const current = iframe.getAttribute("src")
-      if (entry === current) {
-        // Same token: force the in-place reload so the frame re-runs the
-        // token/cookie exchange instead of a no-op src assignment.
-        if (hooks?.reload) hooks.reload(iframe)
-        else iframe.contentWindow?.location.reload()
-        return
-      }
-      iframe.setAttribute("src", entry)
-    })
-    .catch(() => {
-      // Self-heal is best-effort: a failed refetch leaves the current state.
-    })
+): Promise<void> {
+  try {
+    // Keep the production call fire-and-forget semantics: the actual refetch
+    // starts on the next microtask, while tests can await the returned promise.
+    await Promise.resolve()
+    const entry = await refetchEntry()
+    if (entry === undefined) return
+    const current = iframe.getAttribute("src")
+    if (entry === current) {
+      // Same token: force the in-place reload so the frame re-runs the
+      // token/cookie exchange instead of a no-op src assignment.
+      if (hooks?.reload) hooks.reload(iframe)
+      else iframe.contentWindow?.location.reload()
+      return
+    }
+    iframe.setAttribute("src", entry)
+  } catch {
+    // Self-heal is best-effort: a failed refetch leaves the current state.
+  }
 }
 
 /**
@@ -144,9 +145,9 @@ export function createDsh401Healer(input: {
   getFrame: () => HTMLIFrameElement | undefined
   refetchEntry: () => Promise<string | undefined>
   canAttempt?: () => boolean
-}): (body: string | null | undefined) => void {
+}): (body: string | null | undefined) => Promise<void> {
   let attempted = false
-  return (body) => {
+  return async (body) => {
     if (!looksLikeDsh401(body)) {
       // Healthy load: the previous episode resolved; re-arm for the next one.
       attempted = false
@@ -157,7 +158,7 @@ export function createDsh401Healer(input: {
     const frame = input.getFrame()
     if (!frame) return
     attempted = true
-    selfHealDshIframe(frame, input.refetchEntry)
+    await selfHealDshIframe(frame, input.refetchEntry)
   }
 }
 
@@ -271,7 +272,7 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
       // Cross-origin frame: nothing to probe.
       return
     }
-    heal(body)
+    void heal(body)
   }
   return (
     <>

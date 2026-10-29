@@ -143,9 +143,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
       entryCalls += 1
       return "http://localhost:4097/dsh/?token=fresh"
     }
-    selfHealDshIframe(iframe, resolveEntry)
-    // The reload is deferred to the next microtask/frame; wait it out.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await selfHealDshIframe(iframe, resolveEntry)
 
     expect(entryCalls).toBe(1)
     expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=fresh")
@@ -161,8 +159,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
       entryCalls += 1
       return undefined
     }
-    selfHealDshIframe(iframe, resolveEntry)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await selfHealDshIframe(iframe, resolveEntry)
 
     expect(entryCalls).toBe(1)
     expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=stale")
@@ -176,12 +173,11 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
     // happy-dom does not implement contentWindow.location.reload; the seam
     // exists so the reload branch is observable in tests too.
     let reloadCalls = 0
-    selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=same", {
+    await selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=same", {
       reload: () => {
         reloadCalls += 1
       },
     })
-    await new Promise((resolve) => setTimeout(resolve, 20))
 
     expect(reloadCalls).toBe(1)
     expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=same")
@@ -193,12 +189,11 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
     iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
     document.body.appendChild(iframe)
     let reloadCalls = 0
-    selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=fresh", {
+    await selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=fresh", {
       reload: () => {
         reloadCalls += 1
       },
     })
-    await new Promise((resolve) => setTimeout(resolve, 20))
 
     expect(reloadCalls).toBe(0)
     expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=fresh")
@@ -235,8 +230,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
     document.body.appendChild(iframe)
     const refetchEntry = async () =>
       healTargetUrl("http://127.0.0.1:4097", "http://127.0.0.1:4097/dsh/?token=fresh", "http://localhost:3000")
-    selfHealDshIframe(iframe, refetchEntry)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await selfHealDshIframe(iframe, refetchEntry)
 
     // The proxy-originated URL differs from the frame's current src, so the
     // heal swaps the src — the frame never leaves the page origin.
@@ -253,8 +247,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
       entryCalls += 1
       return undefined
     }
-    selfHealDshIframe(iframe, resolveEntry)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await selfHealDshIframe(iframe, resolveEntry)
 
     expect(entryCalls).toBe(1)
     expect(iframe.getAttribute("src")).toBe("http://localhost:4097/dsh/?token=stale")
@@ -270,8 +263,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
       entryCalls += 1
       return "http://localhost:4097/dsh/?token=same"
     }
-    selfHealDshIframe(iframe, resolveEntry)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await selfHealDshIframe(iframe, resolveEntry)
 
     expect(entryCalls).toBe(1)
     // Unchanged entry: force the in-place reload instead of a no-op src set.
@@ -284,8 +276,7 @@ describe("dsh 401 self-heal probe (auth-fix-2)", () => {
     iframe.setAttribute("src", "http://localhost:4097/dsh/?token=stale")
     document.body.appendChild(iframe)
     const before = iframe
-    selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=fresh")
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await selfHealDshIframe(iframe, async () => "http://localhost:4097/dsh/?token=fresh")
     expect(iframe).toBe(before)
     expect(document.body.contains(before)).toBe(true)
     iframe.remove()
@@ -309,9 +300,8 @@ describe("createDsh401Healer episode semantics (auth-fix-2)", () => {
 
   test("healthy probes never refetch", async () => {
     const { heal, calls, iframe } = healerHarness()
-    heal("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")
-    heal(null)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await heal("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")
+    await heal(null)
     expect(calls()).toBe(0)
     iframe.remove()
   })
@@ -329,38 +319,35 @@ describe("createDsh401Healer episode semantics (auth-fix-2)", () => {
     })
 
     const body = "dsh web authentication required; reopen the URL printed by dsh web.\n"
-    heal(body)
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await heal(body)
     expect(calls).toBe(0)
 
     ready = true
-    heal(body)
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await heal(body)
     expect(calls).toBe(1)
     iframe.remove()
   })
 
   test("consecutive 401 loads trigger exactly one attempt (no storm)", async () => {
     const { heal, calls, iframe } = healerHarness()
-    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
-    // The src reload lands on a still-stale session: the load probe fires 401 again.
-    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
-    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await Promise.all([
+      heal("dsh web authentication required; reopen the URL printed by dsh web.\n"),
+      // The src reload lands on a still-stale session: the load probe fires 401 again.
+      heal("dsh web authentication required; reopen the URL printed by dsh web.\n"),
+      heal("dsh web authentication required; reopen the URL printed by dsh web.\n"),
+    ])
     expect(calls()).toBe(1)
     iframe.remove()
   })
 
   test("a healthy load re-arms the healer so a later episode heals again", async () => {
     const { heal, calls, iframe } = healerHarness()
-    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
     expect(calls()).toBe(1)
     // The healed src reloaded into a healthy surface, then the cookie expired
     // again weeks later: a NEW failure episode must heal once more.
-    heal("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")
-    heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await heal("<!DOCTYPE html><html><body>__DSH_BOOT__</body></html>")
+    await heal("dsh web authentication required; reopen the URL printed by dsh web.\n")
     expect(calls()).toBe(2)
     iframe.remove()
   })

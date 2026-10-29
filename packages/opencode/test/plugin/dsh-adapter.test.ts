@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, beforeEach, describe, expect } from "bun:test"
 import { Effect, Layer, Exit } from "effect"
 import { pathToFileURL } from "node:url"
 import path from "node:path"
@@ -7,17 +7,22 @@ import { Plugin } from "@/plugin"
 import { Bus } from "@/bus"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { TestConfig } from "../fixture/config"
+import { scopedEnv } from "../fixture/process-env"
 import { testEffect } from "../lib/effect"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 
 const globals = globalThis as Record<string, unknown>
 const old = globals.__ellamakaDshContainer
-const env = process.env.ELLAMAKA_DSH_TOOLS
+let environment: Disposable
+
+beforeEach(() => {
+  environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+})
+
 afterEach(async () => {
   await disposeAllInstances()
   globals.__ellamakaDshContainer = old
-  if (env === undefined) delete process.env.ELLAMAKA_DSH_TOOLS
-  else process.env.ELLAMAKA_DSH_TOOLS = env
+  environment[Symbol.dispose]()
 })
 
 const declarations: Array<string | [string, Record<string, unknown>]> = []
@@ -44,7 +49,6 @@ const layer = Plugin.layer.pipe(
 const it = testEffect(layer)
 
 function setup() {
-  process.env.ELLAMAKA_DSH_TOOLS = "1"
   config = { "dsh-adapter": { sandbox: { enabled: true } } }
   declarations.length = 0
   preparations = 0

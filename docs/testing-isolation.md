@@ -128,7 +128,7 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 - **故障由测试明确控制。** 验证拒绝写入时，在文件系统 service 或可恢复的写入 spy 上注入 `EACCES`，保留真实调用链；不要仅靠 `chmod 0444` 假定会拒绝写入。root、Windows ACL 与挂载策略会改变结果。权限位本身是被测对象时，单独验证权限位，并明确执行身份与平台前提。
 - **先证明走到了目标错误路径。** 不只断言“失败了”，还检查具体错误和原数据未被修改，防止因别的异常碰巧通过。spy 用 `using` 恢复；Effect 依赖用 scoped layer/service 注入。
 - **门禁与实际操作同址。** 测试若先探测环境（能否写入、挂载是否就绪、路径是否在沙箱允许根内）再选择分支，真实写入必须发生在被探测的同一个目录或资源上。`~/tmp` 这类可能指向别的卷甚至未挂载位置的软链，会让门禁和实际操作看到两个不同的文件系统。沙箱拒绝探针规范化后必须位于所有允许写入根之外；若原路径不满足，选用符合前提的目标，不能把拒绝断言改成仅检查“没有错误”。成功路径必须验证输出或最终状态；路径错误、权限错误和只读挂载必须明确区分，不得吞掉意外错误。
-- **环境必须恢复原值。** OpenCode 可用 `test/fixture/process-env.ts` 的 `scopedEnv`；值不存在和空字符串要分别恢复。禁止并发测试共享这些进程级变更；import 时读取或带缓存的依赖用 DI / 独立进程。
+- **环境必须恢复原值。** `opencode`、`ellamaka-core`、`ellamaka-cordis` 都使用各自 `test/fixture/process-env.ts` 的 `scopedEnv`；其他 package 需要修改环境变量时，先补同样的 package-local helper。值不存在和空字符串要分别恢复。禁止并发测试共享这些进程级变更；import 时读取或带缓存的依赖用 DI / 独立进程。
 - **资源先停止再清理。** 在 `finally` / async disposal 中等待容器、watcher、server 和子进程结束，再删除各自的临时目录。断言失败也必须走同一清理路径。
 - **偶发失败不能用一次绿灯关闭。** 先保留原命令、提交、失败信息，区分单文件与组合、冷进程与复用缓存、不同文件顺序。建立能触发原缺陷的回归用例；验证组中任一次失败都判失败，不能挑选成功结果。
 - **分层不减少覆盖。** 调整 unit/integration 执行入口时，要核对改动前后实际执行的文件；移出的用例必须在对应 CI 层执行，不能通过少跑测试获得绿灯。当前 OpenCode `test:ci` 仍保留完整扫描。
@@ -164,7 +164,7 @@ bun run check:test-isolation -- --fix                 # 逐条扣除已修复的
   TISO001-TISO007 静态门禁（含计数 baseline、stale 检测、边界漂移守护）；现有 App 顺序隔离检查接入 CI。
   规则补全后一次性看见的历史存量（31 个 unit 层 live-I/O 测试）已如实记入 baseline，属于 P1 迁移对象。
 - **P1**：把已记入 baseline 的 unit 层 live-I/O 测试迁到 integration 层（或改造为 DI）；
-  统一 `scopedEnv` helper 取代各文件自写的还原逻辑；
+  继续用 package-local `scopedEnv` helper 清理 baseline 中剩余的手写环境变量恢复逻辑；
   preload 加 env/cwd 运行时哨兵（TISO101）；存量 `mock.module` 逐步迁到 DI；
   顺序回归泛化到全仓高风险分组。
 - **P2**：singleton / 共享 fixture 的自动 reset 检测；随机 seed 顺序回归；
