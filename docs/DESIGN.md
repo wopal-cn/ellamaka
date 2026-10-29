@@ -1,13 +1,14 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-10-29
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
 > - `./DESIGN-auth.md` — Draft，阶段 3 Host/DSH 认证统一方向，不属本轮实施范围
 > - `./DESIGN-config-engine.md` — Draft，阶段 3 配置编辑设计，不属本轮实施范围
 > - `./DESIGN-wopalspace.md` — private `@wopal/wopalspace` application capabilities、API、领域逻辑与 Core integration boundary
+> - `./DESIGN-wopalspace-ontology-sync.md` — Ontology source-chain 状态、同步事务、reconciliation 与正式 Git 历史契约
 > - `./DESIGN-desktop.md` — 官方桌面应用架构
 > - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
 > - `./DESIGN-dsh-base.md` — dsh 集成基础：文件领地、依赖闭包、Profile 生命周期

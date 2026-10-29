@@ -1,12 +1,13 @@
 # WopalSpace Application Domain
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-10-29
 > **Parent**: `./DESIGN.md`
 > **Scope**: private `@wopal/wopalspace` 的目标态架构、能力范围、公开契约、核心流程与状态归属
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-ellamaka-sdk.md` — 统一公开 SDK、HTTP/OpenAPI 与本机调用方式
+> - `./DESIGN-wopalspace-ontology-sync.md` — Ontology source-chain 状态、同步事务、reconciliation 与正式 Git 历史契约
 > - `./DESIGN-onboarding.md` — 唯一 Web Onboarding 初始化流程与 `wopal setup` launcher
 > - `./DESIGN-dsh-base.md` — DSH closure、Home、profile 与运行时激活
 > - `./DESIGN-auth.md` — Phase 3 认证加固方向（Draft）
@@ -348,11 +349,11 @@ Ontology 内容真相源是 Git repository。WopalSpace 负责安装、登记和
 ### Operation Semantics
 
 - `ontology.list` 读取 registry 并为每个条目返回稳定身份和可安全取得的本地摘要；单个仓库不可读时作为该条目的诊断事实，不触发 fetch 或自动修复。
-- `ontology.inspect` 解析 registry 指向的真实仓库，检查 branch/worktree cleanliness、origin/upstream topology、已知 refs 与同步关系。它只基于本地对象数据库和 refs。
+- `ontology.inspect` 解析 registry 指向的真实仓库，检查 branch/worktree cleanliness、origin/upstream topology、已知 refs 与同步关系。每个 source-chain segment 分开返回 content state、history state 与 required action；它只基于本地对象数据库和 refs。
 - `ontology.capability.list` 从已注册 Ontology 的 assembly/capability source 解析完整候选能力及来源信息；它描述“可供 Space 选择什么”，不计算某个 Runtime 当前实际加载或授权了什么。
 - `ontology.install` 先验证 name/source/mode 与现有 registry/repository 是否兼容。兼容的同一仓库返回 reused；不存在时在受控临时/目标位置完成 clone 或 fork topology 建立、验证 assembly 后再提交 registry。身份冲突、remote/history 冲突在注册写入前终止。
 - `ontology.refresh` 更新 remote tracking refs、FETCH_HEAD 与对象数据，并查询贡献分支对应的 PR；Git fetch 与 PR 查询分别报告成功或不可用。PR 查询失败不阻断本地同步状态展示。
-- `ontology.sync` 先生成本地/远端动作计划。preview 返回该计划且零写入；apply 重新生成并确认仍等价后执行。local main 更新成功而 push 失败时，返回 local success + remote failure，后续重试不得重复破坏已完成的本地阶段。
+- `ontology.sync` 先生成本地/远端动作计划。preview 返回该计划且零写入；apply 重新生成并确认仍等价后执行。同步同时闭合内容与 Git ancestry；tree 已一致但 source commit 尚未进入 local ancestry 时执行 history reconciliation。local main 更新成功而 push 失败时，返回 local success + remote failure，后续重试不得重复破坏已完成的本地阶段。完整状态与事务合同见 [Ontology Synchronization](./DESIGN-wopalspace-ontology-sync.md)。
 
 ### Install
 
@@ -373,15 +374,17 @@ Fork 模式下，从本地 `contribute/*` 分支、origin 上同前缀分支及�
 
 每项展示分支名、worktree 路径（存在时）、PR 编号/链接及 open / merged / closed 状态。未找到对应 PR 与查询失败分别展示；merged 标记“已合并，待收尾”，closed-unmerged 标记“已关闭，待决定”，两者都不是删除授权。远端分支已删除但本地分支/worktree 仍存在的贡献继续可见。命名约定只约束新建资源，现有长名称仍可发现，不自动改名或删除。
 
-CLI `ontology status` 先请求 refresh，再 inspect。Git 或 PR 刷新失败保留可取得的事实并明确标注，不能用缓存宣称当前已合并或可安全清理。
+CLI `ontology status` 先请求 refresh，再 inspect。Git 或 PR 刷新失败保留可取得的事实并明确标注，不能用缓存宣称当前已合并或可安全清理。状态不能把“merge 后 tree 不变”直接展示为 fully synchronized；只要 remote source 尚未成为 local ancestry 的已知部分，就必须显示 history reconciliation 仍待执行。贡献差量只有在 `upstream/main` 已成为 `local main` ancestor 后才是权威结果，避免 squash/rebase 后把已经落地的内容再次误报为待贡献。
 
 ### Sync
 
-Fork 模式：`upstream/main -> origin/main -> local main -> origin/main`。
+Fork 模式维护三个事实：`origin/main` 的远端 fork 历史先进入 `local main`，`upstream/main` 的中央历史随后进入同一 local candidate，全部本地阶段成功后再把 `local main` 以普通 fast-forward push 镜像到 `origin/main`。成功后的 source-chain invariant 是 `upstream/main` 为 `local main` ancestor，且 `origin/main == local main`。
 
-Clone 模式：`origin/main -> local main`。
+Clone 模式只维护 `origin/main -> local main`，成功后 `origin/main` 为 `local main` ancestor。
 
-preview 不修改 refs；apply 使用相同判断执行。冲突不能留下半完成状态；本地同步成功但 push 失败时要明确报告本地与远端结果不同。
+同步先利用 ancestry 判断是否需要动作，再利用 virtual merge 判断该动作是否带来内容变化。source 已在 target ancestry 中时跳过；target 可 fast-forward 到 source 时不创建新 commit；双方 diverged 且 merge tree 改变时创建内容 merge；双方 diverged 但 merge tree 与 first parent 相同时创建 history reconciliation merge。preview 不修改 refs；apply 使用相同判断执行。冲突不能留下半完成状态；本地同步成功但 push 失败时要明确报告本地与远端结果不同。
+
+正式 Git 历史只承载真实 source-chain 事实：每个 diverged source stage 最多生成一条 merge/reconciliation commit；fast-forward、skip、push 都不额外写 record commit；持久 commit message 使用稳定业务语义，不包含候选 worktree 或临时 branch 名。完整决策表、输出合同、commit subject 与 retry 语义见 [Ontology Synchronization](./DESIGN-wopalspace-ontology-sync.md)。
 
 ### Contribute
 
@@ -499,3 +502,5 @@ Official App BFF 可以直接调用 private WopalSpace query service 与 Runtime
 10. `ellamaka dsh init` 不属于目标态。
 11. Workbench integration 可以直接组合 private WopalSpace service；底层 Runtime domain 不能反向依赖 WopalSpace。
 12. 当前阶段不引入细粒度远程授权体系；业务 path/resource safety 仍必须由各 operation 保证。
+13. Ontology fork sync 成功后，`upstream/main` 必须进入 `local main` ancestry，`origin/main` 必须与 `local main` 指向同一 commit；内容等价不能替代这个 history invariant。
+14. Ontology sync 只在 ancestry 需要闭合时产生 merge/reconciliation commit，并使用稳定业务 commit subject；临时 worktree/branch identity 不进入正式 Git history。
