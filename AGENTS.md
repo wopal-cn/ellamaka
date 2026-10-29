@@ -73,24 +73,10 @@ Run tests from their owning package. See package rules and script help for the f
 
 ## Testing
 
-- Use TDD for behavior: first add a failing test for the observable input/output behavior, then implement and refactor.
-- Test real owners and cross-module boundaries. Mock only explicit transport or external-system boundaries.
+- All test-related work follows the assembled WopalSpace `testing.md` rule (**Testing Best Practices**) for test value, lowest-cost layering, determinism, isolation, async synchronization, resource ownership, concurrency, flaky-test root-cause proof, and verification cost. This project section adds only Ellamaka-specific commands and constraints.
 - Validate runtime closures, host integrations, and packaged artifacts through the corresponding real product path; state which limits remain after static checks.
 - Automate repeatable logic and protocol checks. Reserve manual verification for GUI or native-host behavior that tests cannot observe.
 - Every changed file must pass `bunx oxlint --deny-warnings <files>` (no new warning) and `bunx prettier --check`; TypeScript changes must typecheck; run tests from the owning package directory, never from the repo root.
-
-### Test Design Best Practices
-
-- Every test must protect a clear externally observable behavior, contract, or invariant. Do not add a test unless you can explain why deliberately breaking the protected behavior would reliably make it fail. For critical paths, prefer counterexamples, fault injection, or equivalent mutation thinking to prove the test can detect defects.
-- Prove risk at the **lowest-cost layer that is strong enough**. Pure logic belongs in unit tests; use integration only when collaboration between real local implementations cannot be proved adequately at unit level; use system/E2E only for external-system, real-host, packaged-artifact, or cross-process semantics that lower layers cannot prove. Never promote a test merely to feel "more real", and do not target fixed layer percentages.
-- The same code, inputs, and equivalent environment must produce deterministic results. Tests must not depend on execution order, wall-clock time, the real user HOME, caller cwd, fixed ports, shared temp paths, stale caches, undeclared network state, or globals left by another test. When such inputs matter, model, inject, or isolate them explicitly.
-- Async tests wait for **events, observable state, or the operation's own completion signal**, never a fixed sleep used to guess readiness. A timeout may be a failure backstop only; it is never a synchronization mechanism or a passing condition.
-- Every mutable resource has an owner. The test that creates or mutates env, cwd, global/module state, mocks, temp directories, ports, listeners, sockets, child processes, file handles, or timers restores/releases it on both success and failure paths. If a third-party library mutates process state, contain that mutation at the product adapter boundary instead of teaching later tests to tolerate pollution.
-- Concurrency is allowed only for genuinely independent state. Tests touching process-global state, shared files/ports, singleton caches, or the same external resource must not use in-process concurrency. Fix the ownership/isolation problem; never serialize the entire suite behind a global semaphore just to suppress flakes.
-- A flaky test is a test-system defect until proved otherwise and requires root-cause analysis. Never obtain green by rerun/retry, a longer timeout, weaker assertions, a shorter observation window, skipped branches, or global serialization. If the failure exposes a real product defect, preserve the evidence and fix the product rather than "stabilizing" the test.
-- One passing run does not prove a flaky fix. Verify the original failure scenario, relevant combined/order-sensitive execution, multiple independent cold processes, then the owning package suite; escalate to broader integration/full CI only as required by the blast radius. Any failure in the verification group remains a failure and cannot be cancelled by a later successful rerun.
-- Tests have a performance budget too. Before adding real I/O, processes, network access, or a higher-level system test, prove that a cheaper layer is insufficient. Measure and justify material package/full-suite time regressions. Repeated setup, repeated downloads/builds, redundant high-level coverage, and unnecessary real waits are test debt.
-- Failure and recovery semantics are first-class behavior. Trigger failure explicitly and assert the specific error, partial side effects, state restoration, and resource cleanup. "Did not throw" is not success; assert the output or final state.
 
 ### Test Isolation Rules
 
