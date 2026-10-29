@@ -270,6 +270,10 @@ jobs:
       - name: Build desktop (electron-vite)
         working-directory: packages/ellamaka-desktop
         env:
+          # electron-vite runs under Node/V8. The macOS arm64 runner's default
+          # old-space limit is ~2 GiB, which the current renderer bundle exceeds.
+          # Keep the larger heap scoped to bundling rather than the whole release.
+          NODE_OPTIONS: --max-old-space-size=4096
           ELLAMAKA_RELEASE_CONTEXT_PATH: ${{ github.workspace }}/release-context.json
         run: bun run build
 
