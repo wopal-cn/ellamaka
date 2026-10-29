@@ -20,7 +20,7 @@ import { baselineSize, compareBaseline, entryKey, type Baseline } from "./baseli
 const BASELINE_PATH = ".ci/test-isolation-baseline.json"
 const SCAN_ROOTS = ["packages", "scripts"]
 const NL = "\n"
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", ".artifacts", "coverage", "e2e", "build"])
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "test-results", "coverage", "e2e", "build"])
 
 async function collectTestFiles(root: string, current: string, out: string[] = []) {
   const entries = await readdir(current, { withFileTypes: true })

@@ -12,11 +12,11 @@ const ciText = readFileSync(join(workflowDir, "ci.yml"), "utf8")
 const ci = parseWorkflow(ciText)
 
 describe("ci workflow — trigger and runner contract", () => {
-  test("runs nightly and by hand only, never on push or pull request", () => {
+  test("runs nightly/by hand, is reusable by release workflows, and never runs directly on push or pull request", () => {
     // CI minutes are limited by an explicit product decision: the nightly
-    // suite and the manual run are the only entry points. Merges are not
-    // gated on this workflow.
-    expect(Object.keys(ci.on ?? {}).sort()).toEqual(["schedule", "workflow_dispatch"])
+    // suite and the manual run are the only standalone entry points. Release
+    // workflows reuse the same quality gate through workflow_call.
+    expect(Object.keys(ci.on ?? {}).sort()).toEqual(["schedule", "workflow_call", "workflow_dispatch"])
     const schedule = ci.on?.schedule
     expect(Array.isArray(schedule)).toBe(true)
     if (Array.isArray(schedule)) expect(schedule).toHaveLength(1)
@@ -42,7 +42,9 @@ describe("ci workflow — trigger and runner contract", () => {
 describe("ci workflow — jobs", () => {
   test("nightly test:ci reaches every Cordis upgrade safety contract", () => {
     const pkg = JSON.parse(readFileSync(join(root, "packages/ellamaka-cordis/package.json"), "utf8"))
-    expect(pkg.scripts["test:ci"]).toBe(`mkdir -p .artifacts/unit && ${pkg.scripts["test:contracts"]} --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml`)
+    expect(pkg.scripts["test:ci"]).toBe(
+      `mkdir -p test-results/unit && ${pkg.scripts["test:contracts"]} --reporter=junit --reporter-outfile=test-results/unit/junit.xml`,
+    )
     for (const suite of [
       "src/runtime/home-generation.test.ts",
       "src/runtime/home-guard.test.ts",
@@ -87,12 +89,9 @@ const publishWorkflows = [
 ] as const
 
 const gateSteps = [
-  "scripts/ci/prepare-dsh-sandbox.sh",
   "generate-dsh-runtime-manifest.ts --check",
   "generate-dsh-runtime-lock.ts --check",
   "check-dsh-home-generation.ts",
-  "bun run --cwd packages/ellamaka-cordis test:contracts",
-  "bun run --cwd packages/ellamaka-cordis test:tools",
 ]
 
 for (const target of publishWorkflows) {
@@ -115,11 +114,20 @@ for (const target of publishWorkflows) {
       // The generation check resolves published frontiers from tags and
       // immutable manifests; a shallow checkout cannot see them.
       for (const [name, job] of Object.entries(workflow.jobs)) {
-        if (name === "cleanup") continue
+        if (name === "cleanup" || job.uses) continue
         const checkouts = jobSteps(job, name).filter((step) => step.uses?.startsWith("actions/checkout@"))
         expect(checkouts.length).toBeGreaterThan(0)
         for (const step of checkouts) expect(step.with?.["fetch-depth"]).toBe(0)
       }
+    })
+
+    test("runs the complete CI quality gate before release-specific checks", () => {
+      const quality = getJob(workflow, "quality-gate")
+      expect(quality.uses).toBe("./.github/workflows/ci.yml")
+      expect(quality.needs).toBe("version")
+
+      const gate = getJob(workflow, "release-gate")
+      expect(gate.needs).toEqual(["version", "quality-gate"])
     })
 
     test("gate runs the safety checks in the fixed order on ubuntu-24.04", () => {
@@ -138,11 +146,6 @@ for (const target of publishWorkflows) {
       const scripts = steps.map((step) => step.run ?? "").join("\n")
       expect(scripts).not.toContain("|| true")
       expect(scripts).not.toContain("continue-on-error")
-      const tools = steps.find((step) => step.run?.includes("test:tools"))
-      expect(tools?.if).toBeUndefined()
-      const contracts = steps.find((step) => step.run?.includes("test:contracts"))
-      expect(contracts).toBeDefined()
-      expect(contracts?.if).toBeUndefined()
     })
 
     test("packaging waits for the gate instead of repeating the manifest checks", () => {
@@ -152,8 +155,10 @@ for (const target of publishWorkflows) {
       expect(countOccurrences(text, "generate-dsh-runtime-lock.ts --check")).toBe(1)
     })
 
-    test("DSH tool tests only run inside the gate, never in the packaging matrix", () => {
-      expect(countOccurrences(text, "test:tools")).toBe(1)
+    test("release workflow does not repeat CI test suites", () => {
+      expect(countOccurrences(text, "test:tools")).toBe(0)
+      expect(countOccurrences(text, "test:contracts")).toBe(0)
+      expect(countOccurrences(text, "scripts/ci/prepare-dsh-sandbox.sh")).toBe(0)
       const build = getJob(workflow, target.buildJob)
       const buildRuns = jobSteps(build, target.buildJob)
         .map((step) => step.run ?? "")

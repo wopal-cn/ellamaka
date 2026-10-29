@@ -33,3 +33,8 @@ tsconfig.tsbuildinfo
 CLAUDE.md
 release/legacy-inventory.dry-run.json
 .bun-cache
+
+# Local test reports
+test-results/
+# Legacy test:ci output path; no longer generated, kept ignored for old local runs.
+.artifacts/

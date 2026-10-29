@@ -38,6 +38,7 @@ export type WorkflowStep = {
 /** A job as parsed from YAML (only the fields the contracts read). */
 export type WorkflowJob = {
   "runs-on"?: string
+  uses?: string
   needs?: string | string[]
   steps?: WorkflowStep[]
   strategy?: unknown

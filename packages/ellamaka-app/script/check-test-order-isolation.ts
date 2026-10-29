@@ -10,7 +10,7 @@ export type TestRun = {
 }
 
 const TEST_FILE_PATTERN = /\.test\.(?:ts|tsx)$/
-const SKIPPED_DIRECTORIES = new Set(["node_modules", ".artifacts", "dist", "e2e"])
+const SKIPPED_DIRECTORIES = new Set(["node_modules", "test-results", "dist", "e2e"])
 const PAIR_ROOT = "src/context/global-sync/"
 const RUN_TIMEOUT_MS = 180_000
 

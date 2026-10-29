@@ -108,12 +108,15 @@ jobs:
           fi
           echo "  version matches packages/ellamaka-cli/package.json: $PKG_VERSION"
 
-  # Packaging gate shared by both products. The step order is a contract:
-  # sandbox probe -> engine manifest -> full dependency lock -> generation
-  # check -> tool-container tests. Any non-zero exit stops the release;
-  # nothing here is allowed to continue on error or be skipped.
-  release-gate:
+  # Reuse the complete CI quality gate for the exact release commit.
+  quality-gate:
     needs: version
+    uses: ./.github/workflows/ci.yml
+
+  # Release-specific packaging gate. General type/lint/unit/sandbox testing
+  # already ran in quality-gate; keep only release-generation invariants here.
+  release-gate:
+    needs: [version, quality-gate]
     runs-on: ubuntu-24.04
     if: github.repository == 'wopal-cn/ellamaka'
     steps:
@@ -134,9 +137,6 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Prepare and probe DSH sandbox
-        run: bash scripts/ci/prepare-dsh-sandbox.sh
-
       - name: Check DSH runtime manifest
         run: bun packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts --check
 
@@ -145,12 +145,6 @@ jobs:
 
       - name: Check DSH Home generation
         run: bun packages/ellamaka-cordis/script/check-dsh-home-generation.ts
-
-      - name: Run DSH upgrade safety contracts
-        run: bun run --cwd packages/ellamaka-cordis test:contracts
-
-      - name: Run DSH tool tests
-        run: bun run --cwd packages/ellamaka-cordis test:tools
 
   build-and-release:
     needs: [version, release-gate]

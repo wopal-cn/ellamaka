@@ -23,7 +23,7 @@
     "test:integration": "bun run script/run-tests.ts --mode integration",
     "test:e2e": "bun run script/run-tests.ts --mode e2e",
     "test:all": "bun run script/run-tests.ts --mode all",
-    "test:ci": "mkdir -p .artifacts/unit && bun test --timeout 30000 --force-exit --reporter=junit --reporter-outfile=.artifacts/unit/junit.xml",
+    "test:ci": "mkdir -p test-results/unit && bun test --timeout 30000 --force-exit --reporter=junit --reporter-outfile=test-results/unit/junit.xml",
     "test:httpapi": "bun run script/httpapi-exercise-runner.ts",
     "bench:test": "bun run script/bench-test-suite.ts",
     "profile:test": "bun run script/profile-test-files.ts",

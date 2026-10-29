@@ -14,12 +14,12 @@
       "passThroughEnv": ["*"]
     },
     "test:ci": {
-      "outputs": [".artifacts/unit/junit.xml"],
+      "outputs": ["test-results/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },
     "ellamaka#test:ci": {
       "dependsOn": ["^build"],
-      "outputs": [".artifacts/unit/junit.xml"],
+      "outputs": ["test-results/unit/junit.xml"],
       "passThroughEnv": ["*"]
     },
     "@wopal/ui#test": {
@@ -28,7 +28,7 @@
     },
     "@wopal/ui#test:ci": {
       "dependsOn": ["^build"],
-      "outputs": [".artifacts/unit/junit.xml"],
+      "outputs": ["test-results/unit/junit.xml"],
       "passThroughEnv": ["*"]
     }
   }

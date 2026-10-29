@@ -1,14 +1,14 @@
 name: CI
 
-# Nightly + manual only. This repository deliberately does not run the test
-# suite on push or pull requests: CI minutes are limited by an explicit
-# product decision, and merges are not gated on this workflow. Packaging has
-# its own release gate in the publish workflows.
+# Nightly + manual as standalone entry points. Release workflows reuse this
+# same complete quality gate through workflow_call. Ordinary push and pull
+# request events still do not trigger it directly.
 on:
   schedule:
     # 18:00 UTC = 02:00 Asia/Shanghai.
     - cron: "0 18 * * *"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read

@@ -55,7 +55,7 @@ describe("test file discovery", () => {
     expect(found).toEqual([...found].sort())
     expect(found.every((file) => file.endsWith(".test.ts") || file.endsWith(".test.tsx"))).toBeTrue()
     expect(found.some((file) => file.includes("node_modules"))).toBeFalse()
-    expect(found.some((file) => file.includes(".artifacts"))).toBeFalse()
+    expect(found.some((file) => file.includes("test-results"))).toBeFalse()
   })
 
   test("covers the whole app test tree, not just the paired directory", async () => {
