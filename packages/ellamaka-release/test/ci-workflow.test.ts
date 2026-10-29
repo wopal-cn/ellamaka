@@ -12,11 +12,11 @@ const ciText = readFileSync(join(workflowDir, "ci.yml"), "utf8")
 const ci = parseWorkflow(ciText)
 
 describe("ci workflow — trigger and runner contract", () => {
-  test("runs nightly/by hand, is reusable by release workflows, and never runs directly on push or pull request", () => {
+  test("runs nightly/by hand and never runs directly on push or pull request", () => {
     // CI minutes are limited by an explicit product decision: the nightly
-    // suite and the manual run are the only standalone entry points. Release
-    // workflows reuse the same quality gate through workflow_call.
-    expect(Object.keys(ci.on ?? {}).sort()).toEqual(["schedule", "workflow_call", "workflow_dispatch"])
+    // suite and the manual run are the only entry points. Release packaging
+    // has its own fixed safety gate instead of re-running this whole suite.
+    expect(Object.keys(ci.on ?? {}).sort()).toEqual(["schedule", "workflow_dispatch"])
     const schedule = ci.on?.schedule
     expect(Array.isArray(schedule)).toBe(true)
     if (Array.isArray(schedule)) expect(schedule).toHaveLength(1)
@@ -89,9 +89,12 @@ const publishWorkflows = [
 ] as const
 
 const gateSteps = [
+  "scripts/ci/prepare-dsh-sandbox.sh",
   "generate-dsh-runtime-manifest.ts --check",
   "generate-dsh-runtime-lock.ts --check",
   "check-dsh-home-generation.ts",
+  "bun run --cwd packages/ellamaka-cordis test:contracts",
+  "bun run --cwd packages/ellamaka-cordis test:tools",
 ]
 
 for (const target of publishWorkflows) {
@@ -121,13 +124,11 @@ for (const target of publishWorkflows) {
       }
     })
 
-    test("runs the complete CI quality gate before release-specific checks", () => {
-      const quality = getJob(workflow, "quality-gate")
-      expect(quality.uses).toBe("./.github/workflows/ci.yml")
-      expect(quality.needs).toBe("version")
-
+    test("runs the release safety gate directly after version validation", () => {
+      expect(workflow.jobs["quality-gate"]).toBeUndefined()
+      expect(text).not.toContain("uses: ./.github/workflows/ci.yml")
       const gate = getJob(workflow, "release-gate")
-      expect(gate.needs).toEqual(["version", "quality-gate"])
+      expect(gate.needs).toBe("version")
     })
 
     test("gate runs the safety checks in the fixed order on ubuntu-24.04", () => {
@@ -148,22 +149,16 @@ for (const target of publishWorkflows) {
       expect(scripts).not.toContain("continue-on-error")
     })
 
-    test("packaging waits for the gate instead of repeating the manifest checks", () => {
+    test("packaging waits for the gate and each release safety check runs exactly once", () => {
       const build = getJob(workflow, target.buildJob)
       expect(build.needs).toEqual(["version", "release-gate"])
-      expect(countOccurrences(text, "generate-dsh-runtime-manifest.ts --check")).toBe(1)
-      expect(countOccurrences(text, "generate-dsh-runtime-lock.ts --check")).toBe(1)
-    })
-
-    test("release workflow does not repeat CI test suites", () => {
-      expect(countOccurrences(text, "test:tools")).toBe(0)
-      expect(countOccurrences(text, "test:contracts")).toBe(0)
-      expect(countOccurrences(text, "scripts/ci/prepare-dsh-sandbox.sh")).toBe(0)
-      const build = getJob(workflow, target.buildJob)
       const buildRuns = jobSteps(build, target.buildJob)
         .map((step) => step.run ?? "")
         .join("\n")
-      expect(buildRuns).not.toContain("test:tools")
+      for (const step of gateSteps) {
+        expect(countOccurrences(text, step)).toBe(1)
+        expect(buildRuns).not.toContain(step)
+      }
     })
   })
 }
