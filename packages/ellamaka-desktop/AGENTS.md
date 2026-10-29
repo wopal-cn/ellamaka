@@ -57,7 +57,7 @@ Build the opencode sidecar with bun script/build-node.ts before the Desktop buil
 
 ## Testing
 
-- Follow TDD with the Electron mock for unit-level lifecycle behavior.
+- Use the Electron mock for unit-level lifecycle behavior.
 - Test platform-specific lifecycle and packaging on the target OS. A build on another OS does not verify target quit/install behavior.
 - Use real CDP/native runs for GUI behavior that unit tests cannot observe.
 

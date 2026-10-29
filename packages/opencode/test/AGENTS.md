@@ -92,7 +92,7 @@ await using tmp = await tmpdir({
 - `bun run test:unit` — the daily feedback loop.
 - `bun run test:integration` — run whenever a change touches an integration directory (see `INTEGRATION_DIRS`) or a `*-integration.test.ts` file.
 - `bun run test:e2e` — `*-e2e.test.ts` files only.
-- `bun run test:all` — full regression before commit/merge.
+- `bun run test:all` — full package regression when the changed risk requires package-wide proof.
 
 The unit layer is the one that must stay green and bounded: it currently covers roughly 94 files / 1434 tests in the low twenties of seconds. Treat that as a budget — a change that pushes the unit layer well past the ~30s timeout is a signal that live-I/O tests leaked into it, not something to absorb.
 
@@ -150,8 +150,6 @@ Do **not** put these in the unit layer — they belong in the integration layer 
 
 If a file needs live behavior and lives in a unit directory, take it out of the unit layer instead of leaving it to slow down every unit pass: move it into the matching integration directory (or add its directory to `INTEGRATION_DIRS`), or — when moving the file is not practical — rename it with the `*-integration.test.ts` suffix. That suffix is the file-level convention the runner honors: the unit layer ignores those files, while `test:integration` picks them up explicitly. It is equivalent to a directory move without restructuring `test/<domain>/`. A test that only needs a temp directory (`tmpdir` / `it.instance`) is still a unit test — the temp directory itself is not an integration concern.
 
-Prefer event-driven assertions over hard waits. Avoid `"5 seconds"`-style timeouts as a synchronization mechanism; wait on the actual signal (a `Deferred`, a callback) and keep the timeout only as a failure backstop.
-
 ### Effect Fixtures
 
 Prefer the Effect-aware helpers from `fixture/fixture.ts` instead of building a manual runtime in each test.
@@ -199,15 +197,9 @@ const failingAccountLayer = Layer.mock(Account.Service, {
 
 This is much shorter than stubbing every method with `Effect.void` / `Effect.succeed(...)` placeholders, and it keeps the test focused on the behaviour under test.
 
-## Synchronizing With Concurrent Work
+## Synchronization Helpers
 
-### The Anti-Pattern
-
-Using `Effect.sleep(N)` or `setTimeout` as a "wait for the forked fiber to be ready" hack races the scheduler. The forked fiber may not have reached the synchronization point within `N` ms on a slow CI host, and the test fails intermittently. See PR #27622 for a concrete flake that fell out of this exact pattern.
-
-### The Fix
-
-Wait on a **published readiness signal**, not wall-clock time. Available affordances:
+Follow the shared Testing Best Practices for event/state-based synchronization. In this package, prefer these existing readiness/completion helpers rather than inventing another polling or timing mechanism:
 
 - `pollWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — repeatedly run a predicate effect until it returns a non-`undefined` value, with a timeout.
 - `awaitWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — wrap any effect with `Effect.timeoutOrElse` and a custom error message.
@@ -237,9 +229,3 @@ yield *
   )
 yield * prompt.cancel(chat.id)
 ```
-
-### When Fixed Sleeps Are OK
-
-- Testing debounce or throttle behavior, where the sleep **is** the test.
-- Letting real wall-clock advance past a genuine timestamp resolution boundary (e.g. mtime granularity).
-- Simulating network latency in race-regression tests that intentionally exercise ordering.

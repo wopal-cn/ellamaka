@@ -59,11 +59,9 @@ into other modules (they carry top-level CLI side effects).
 | Tests       | `bun test` (from `packages/ellamaka-release`)                       |
 | Single test | `bun test test/<module>.test.ts` (from `packages/ellamaka-release`) |
 
-## Testing & TDD Rules
+## Testing Rules
 
-- Follow TDD: write a failing test first, then implement to make it pass.
-- Tests map 1:1 to modules under `test/` (e.g. `test/cleanup-core.test.ts`
-  covers `src/cleanup/core.ts`).
+- Keep focused regression tests under `test/` for the release contracts they protect; test names should identify the owning release concern rather than mirror the source tree mechanically.
 - The cleanup kernel (`src/cleanup/core.ts`) MUST stay product-agnostic and
   is covered by `test/cleanup-core.test.ts`; product differences are tested
   in `test/cleanup-products.test.ts`.

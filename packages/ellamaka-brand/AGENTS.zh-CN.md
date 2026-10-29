@@ -42,7 +42,6 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 
 ## Testing
 
-- 代码变更遵循 TDD：先写能失败的测试，再实现代码使其通过。
 - 从 `packages/ellamaka-brand` 运行 `bun test`。
 - 修改 `branding.ts` 后运行 `branding.test.ts`；修改 `detect.ts` 后运行 `detect.test.ts`；修改 `is-wopal-install.ts` 后运行 `is-wopal-install.test.ts`。
 

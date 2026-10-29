@@ -68,7 +68,7 @@ Run from packages/ellamaka-cordis/.
 
 ## Testing
 
-- Follow TDD at the real metadata, installer, profile, or container boundary being changed.
+- Keep regression coverage at the real metadata, installer, profile, or container boundary being changed.
 - Keep pure contract tests deterministic and put real container/host integration in the integration suite.
 - Validate packaged closure resolution and Electron utility-process behavior through their host paths; source tests alone do not prove them.
 - Run the test gate at three layers: nightly/manual CI on Linux, the required Linux pre-release gate, and a local pre-commit quick check that does not run tests.

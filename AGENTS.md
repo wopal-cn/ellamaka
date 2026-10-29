@@ -45,6 +45,9 @@ Keep these boundaries in mind when choosing an owner:
 | Lint                       | bun run lint                                                                             | After code changes                                |
 | Full typecheck             | bun run typecheck                                                                        | After TypeScript changes                          |
 | Test isolation gate        | bun run check:test-isolation                                                             | After any test/fixture/preload/test-config change |
+| Cross-package unit tests   | bun run test:unit                                                                        | Repo-wide unit orchestration                      |
+| Cross-package integration  | bun run test:integration                                                                 | Repo-wide integration orchestration               |
+| Cross-package e2e          | bun run test:e2e                                                                         | Repo-wide e2e orchestration                       |
 | opencode unit tests        | bun run test:unit (from packages/opencode/)                                              | Runtime unit tests                                |
 | opencode integration tests | bun run test:integration (from packages/opencode/)                                       | Server or cross-module changes                    |
 | App unit tests             | bun run test:unit --force-exit (from packages/ellamaka-app/)                             | Frontend behavior changes                         |
@@ -52,7 +55,7 @@ Keep these boundaries in mind when choosing an owner:
 | Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes                     |
 | Development entry          | ./scripts/dev.sh help                                                                    | GUI, TUI, and Server integration                  |
 
-Run tests from their owning package. See package rules and script help for the full command matrix and artifact checks.
+Run package-local tests from their owning package. Repository-root test commands are reserved for the explicit cross-package orchestration and repository-wide gates listed above; see package rules and script help for the full matrix and artifact checks.
 
 ## Implementation Rules
 
@@ -75,8 +78,8 @@ Run tests from their owning package. See package rules and script help for the f
 
 - All test-related work follows the assembled WopalSpace `testing.md` rule (**Testing Best Practices**) for test value, lowest-cost layering, determinism, isolation, async synchronization, resource ownership, concurrency, flaky-test root-cause proof, and verification cost. This project section adds only Ellamaka-specific commands and constraints.
 - Validate runtime closures, host integrations, and packaged artifacts through the corresponding real product path; state which limits remain after static checks.
-- Automate repeatable logic and protocol checks. Reserve manual verification for GUI or native-host behavior that tests cannot observe.
-- Every changed file must pass `bunx oxlint --deny-warnings <files>` (no new warning) and `bunx prettier --check`; TypeScript changes must typecheck; run tests from the owning package directory, never from the repo root.
+- Reserve manual verification for GUI or native-host behavior that automated package/host checks cannot observe.
+- Every changed file must pass `bunx oxlint --deny-warnings <files>` (no new warning) and `bunx prettier --check`; TypeScript changes must typecheck. Package-local tests run from the owning package; repo-root runs are only the explicit cross-package orchestration or repository-wide gates above.
 
 ### Test Isolation Rules
 
@@ -94,32 +97,17 @@ The reasoning, the three isolation models, and the full rule-to-gate map live in
   `ellamaka-cordis`. If another package needs environment mutation, add the same package-local non-test fixture
   first instead of hand-writing restoration in the test. Do not overlap these process-global scopes in concurrent
   tests. A library that reads `process.env` at import time needs dependency injection or a separate process.
-- Await the operation's own Promise or a published readiness signal, never a fixed delay. If the code under test
-  starts asynchronous work but returns `void`, expose a completion Promise/callback seam rather than using
-  `setTimeout`, `Bun.sleep`, or `Effect.sleep` as a "flush". Use `Promise.withResolvers()`/`Deferred` for one-shot
-  readiness and poll only observable state; timeouts are failure backstops, not synchronization.
-- Shared filesystem state needs an owner. A test that writes a shared path owns it, releases exactly what it
-  wrote, and never deletes state another test still needs.
-- Never weaken an assertion to make a suite pass. Deleting an expectation, shortening an observation window,
-  or hiding a real bug behind a retry is a review failure, not a fix.
-- Keep live I/O out of the unit layer. Subprocesses, filesystem watching, real git, network calls, and real
-  clocks belong to the integration layer.
 - Every change to a test, fixture, preload, or test configuration must run `bun run check:test-isolation` from the
   repository root **before** package tests. The baseline is a debt ledger, not an allowance to copy or rename:
   touched baselined code must migrate to the compliant pattern, and renaming an env key/API does not transfer the
   old allowance. Run `bun run check:test-isolation -- --fix` only after there are zero new violations; it may only
   remove stale debt, never record new debt.
-- Trigger error paths explicitly and assert the specific error and preserved state. Do not assume permissions,
-  user identity, external services, or existing caches will produce the intended failure.
 - Gate a probe in the same place you act on it. When a test decides between branches by testing an
   environment (writability, mount, sandbox root), the real operation must use that same directory or
   resource, so a symlink, mount, or overlay cannot make the decision and the action disagree. Sandbox
   denial probes must resolve outside every writable root; select a valid target rather than weakening
   the denial assertion. Absence of an error does not prove success: verify output or resulting state.
-- A flaky-test fix must verify the original failure scenario, cold processes, and combined execution.
-  Any failed run fails the verification group; a successful rerun does not establish the root cause.
 - When changing test layers or entry points, compare the executed files and preserve existing CI coverage.
-  Dispose each test's containers, child processes, and temporary directories on exceptional paths too.
 - Cross-runtime or host subprocess tests must cover inherited stream semantics, pipe backpressure, and
   cancellation cleanup. A successful small-output command does not prove the process boundary correct.
 

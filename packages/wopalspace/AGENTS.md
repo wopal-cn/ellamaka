@@ -66,23 +66,17 @@ Use the repository's existing tooling; do not create a separate test framework f
 
 ## Testing
 
-- Behavior changes use TDD: write a failing observable-behavior test first, implement, then refactor. A behavior change without corresponding automated coverage is incomplete.
 - Unit tests cover pure domain rules and service behavior whose dependencies are fully controlled through injection. Real Git, network access, subprocesses, filesystem watchers, and real clocks do not belong in the unit layer.
 - Integration tests cover real filesystem behavior, Git repositories/remotes/worktrees/sparse checkout, persistence, controlled processes, and external adapter boundaries. Use temporary environments and temporary repositories only.
 - Tests must never read or modify the real user's `$WOPAL_HOME`, real Spaces, real working repositories, or writable real remotes. When a Home is needed, create and pass an isolated directory explicitly.
-- Replace dependencies through injection, service seams, or controlled fakes. Ordinary tests must not use process-wide module replacement; follow the parent rules for `mock.module` and other global contamination.
-- Async tests wait for observable readiness/state and never use a fixed `sleep` as synchronization.
 - Maintain automated regression coverage for long-lived invariants such as preview/apply, partial success, cancel/retry, dirty-state protection, path confinement, and secret redaction.
 - Preview tests must prove both the returned decision and zero writes. Apply tests must verify that actual side effects match the preview decision and cover preserved/recoverable state after failure.
 - New tests must automatically enter their unit or integration layer. Test entry points must not rely long-term on per-file manual registration that can silently omit newly added tests.
 - Any change to tests, fixtures, preloads, test configuration, or test entry points must run the root `bun run check:test-isolation` gate. Also confirm that root test orchestration still includes this package and that the executed file set did not shrink unexpectedly.
-- Trigger failure paths explicitly and assert the specific error plus preserved state. Do not rely on machine permissions, caches, user identity, or external services to fail by accident.
-- Fixtures, temporary directories, child processes, and other test resources must be released on both success and exceptional paths; cleanup must not depend on natural process exit.
 
 ## Debugging and Verification
 
 - Debugging, manual verification, and real-process smoke tests use an isolated `WOPAL_HOME`, temporary repositories, and controlled credentials; never use a real user's Home or Space as a test environment.
-- A flaky-test fix must reproduce and remove the original failure condition; do not hide it with retries, larger timeouts, fixed delays, or weakened assertions.
 - TypeScript changes must pass `bun run typecheck`; changed code files also follow the parent `oxlint --deny-warnings` and Prettier gates.
 - Server/SDK contract changes must be verified at the real HttpApi/generated-SDK consumer boundary in addition to module service tests.
 - When changing test layers, runners, or package scripts, run both package-local and root targeted commands and confirm they execute the intended test layer.

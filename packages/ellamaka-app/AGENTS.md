@@ -81,7 +81,7 @@ These rules apply to `src/index.css` changes that touch `src/pages/session/` cha
 
 ## Testing
 
-- Follow TDD at the Store/Provider/Action/component boundary. Controlled SDK fakes are allowed at the transport boundary.
+- Controlled SDK fakes are allowed at the transport boundary; keep Store/Provider/Action/component tests at the boundary that owns the behavior.
 - Verify stale replies, scope/Server changes, reconnect, hidden panels, explicit close, and resource cleanup when changing lifecycle behavior.
 - Run boundary checks, browser-condition unit tests, and typecheck for Workbench changes; CSS changes also require CSS lint. Report GUI observations separately from automated evidence.
 

@@ -66,23 +66,17 @@ maintenance: 仅当模块出现长期有效且无法由代码、测试或 DESIGN
 
 ## Testing
 
-- 行为代码强制 TDD：先写能够失败的 observable behavior 测试，再实现，再重构；没有对应自动化测试的行为变更视为未完成。
 - Unit test 只覆盖纯领域规则和通过依赖注入可完全控制的 service 行为。真实 Git、网络、子进程、filesystem watcher 和真实时钟不得进入 unit 层。
 - Integration test 覆盖真实 filesystem、Git repository/remotes/worktree/sparse、持久化、受控进程和外部 adapter 边界；全部使用临时环境与临时仓库。
 - 测试不得读取或修改真实用户 `$WOPAL_HOME`、真实 Space、真实工作仓库或真实远端写资源。测试需要 Home 时必须显式创建并传入隔离目录。
-- 依赖替换使用 injection、service seam 或受控 fake；普通测试不得使用进程级 module replacement。遵循根规则对 `mock.module` 与其他全局污染的限制。
-- 异步测试等待可观察 readiness/state，不使用固定 `sleep` 作为同步机制。
 - 对 preview/apply、partial success、cancel/retry、dirty-state protection、path confinement、secret redaction 等长期业务 invariant，必须保留自动化回归覆盖。
 - Preview 测试必须同时证明结果正确和零写入；apply 测试必须验证实际副作用与 preview 判定一致，并覆盖失败后的保留/恢复状态。
 - 新测试必须自动进入所属 unit 或 integration layer。测试入口不得长期依赖逐文件手工登记，从而允许新增测试被静默漏跑。
 - 修改 test、fixture、preload、test config 或测试入口时，必须运行根级 `bun run check:test-isolation`；同时确认根级 test orchestration 仍包含本模块，且执行文件集合没有意外缩水。
-- 测试失败路径要显式制造并断言具体错误和保留状态；不得依赖机器权限、缓存、用户身份或外部服务“碰巧失败”。
-- Fixture、临时目录、子进程和其他测试资源在正常与异常路径都必须释放，不得把清理依赖于测试自然结束。
 
 ## Debugging and Verification
 
 - 调试、手工验证和真实进程 smoke 一律使用隔离 `WOPAL_HOME`、临时仓库和受控 credential；不得拿真实用户 Home/Space 作为测试环境。
-- 修复 flaky test 必须复现并消除原始失败条件；不得通过 retry、扩大 timeout、固定延迟或削弱 assertion 把失败隐藏掉。
 - 修改本模块 TypeScript 必须通过 `bun run typecheck`；改动代码文件还必须遵循上位规则的 `oxlint --deny-warnings` 与 Prettier 检查。
 - 修改 Server/SDK contract 时，除本模块 service 测试外，还必须在真实 HttpApi/生成 SDK consumer 边界验证；内部 service 绿灯不能替代跨边界验证。
 - 修改测试层级、runner 或 package scripts 时，分别运行 package-local 与根级定向命令，确认两条入口执行同一预期测试层。

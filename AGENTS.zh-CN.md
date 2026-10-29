@@ -45,6 +45,9 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 | Lint                       | bun run lint                                                                            | 修改代码后                              |
 | Full typecheck             | bun run typecheck                                                                       | TypeScript 改动后                       |
 | Test isolation gate        | bun run check:test-isolation                                                            | 修改任何测试/fixture/preload/测试配置后 |
+| Cross-package unit tests   | bun run test:unit                                                                       | 全仓 unit 编排                          |
+| Cross-package integration  | bun run test:integration                                                                | 全仓 integration 编排                   |
+| Cross-package e2e          | bun run test:e2e                                                                        | 全仓 e2e 编排                           |
 | opencode unit tests        | bun run test:unit（在 packages/opencode/）                                              | Runtime 单元测试                        |
 | opencode integration tests | bun run test:integration（在 packages/opencode/）                                       | Server/跨模块集成变化                   |
 | App unit tests             | bun run test:unit --force-exit（在 packages/ellamaka-app/）                             | 前端逻辑变化                            |
@@ -52,7 +55,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 | Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src（在 packages/ellamaka-desktop/） | Desktop 主进程/渲染器变化               |
 | Development entry          | ./scripts/dev.sh help                                                                   | GUI、TUI、Server 联调                   |
 
-测试必须从所属包执行；完整命令和制品验证方式看各包规范与脚本 help。
+包内测试从所属 package 执行；仓库根只用于上表明确列出的跨包编排与全仓门禁。完整命令和制品验证方式看各包规范与脚本 help。
 
 ## Implementation Rules
 
@@ -76,8 +79,8 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 
 - 所有测试相关工作统一遵循 WopalSpace 装配的 `testing.md` 规则（**测试最佳实践**），包括测试价值、最低成本分层、确定性与隔离、异步同步、资源 owner、并发边界、flaky 根因证明和验证成本；本项目规范只补充 Ellamaka 特有命令与约束。
 - 修改平台宿主、运行时闭包或发布制品时，在对应真实平台/制品路径验证；说明静态检查未覆盖的边界。
-- 自动化覆盖可重复的逻辑和协议行为；手动验证只用于无法由测试观察的 GUI 或原生宿主行为。
-- 改动涉及的文件必须通过 `bunx oxlint --deny-warnings <文件>`（不得新增 warning）与 `bunx prettier --check`；改 TypeScript 必须 typecheck 通过；测试从所属包目录运行，不从仓库根。
+- 手动验证只用于 package/host 自动化检查无法观察的 GUI 或原生宿主行为。
+- 改动涉及的文件必须通过 `bunx oxlint --deny-warnings <文件>`（不得新增 warning）与 `bunx prettier --check`；改 TypeScript 必须 typecheck 通过。包内测试从所属 package 运行；仓库根只运行上表明确列出的跨包编排或全仓门禁。
 
 ### 测试隔离铁律
 
@@ -92,25 +95,15 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
   `test/fixture/process-env.ts::scopedEnv`；当前 `opencode`、`ellamaka-core`、`ellamaka-cordis` 都有该 helper。
   其他 package 若需要修改环境变量，先新增同样的 package-local 非测试 fixture，禁止在测试里手写恢复逻辑；
   这些进程级 scope 不得在并发测试中重叠。若依赖在 import 时读取 `process.env`，必须改用依赖注入或独立进程。
-- 必须等待被测操作自身返回的 Promise 或已发布的就绪信号，禁止固定等待。被测代码若启动异步工作却返回 `void`，
-  应暴露完成 Promise/callback 接缝，而不是用 `setTimeout`、`Bun.sleep`、`Effect.sleep` 当“刷新/等一会儿”。
-  一次性就绪优先用 `Promise.withResolvers()`/`Deferred`，轮询只能观察已发布状态；timeout 只作失败兜底，不作同步。
-- 共享文件系统状态必须有 owner。写共享路径的测试自己拥有它，只释放自己写的那部分，
-  绝不删除别的测试还在用的状态。
-- 绝不为让测试通过而削弱断言。删掉 expect、缩短观察窗口、用 retry 掩盖真实 bug，
-  是评审失败，不是修复。
-- unit 层不放真实 I/O。子进程、文件监听、真实 git、网络请求、真实时钟都属于 integration 层。
 - 任何改动测试、fixture、preload 或测试配置的工作，都必须先在仓库根运行 `bun run check:test-isolation`，
   通过后再跑所属 package 测试。baseline 是技术债账本，不是可复制/改名继承的豁免：碰到已有 baseline 债务时必须
   顺手迁移为合规写法，环境变量名或 API 改名也不能继承旧额度。只有在“零新增违规”后才运行
   `bun run check:test-isolation -- --fix`，它只能删除 stale 债务，严禁记录新债务。
-- 错误路径必须由测试明确触发，并断言具体错误与原状态；不要假定权限位、用户身份、外部服务或已有缓存会制造预期故障。
 - 环境门禁与实际操作必须同址。测试若先探测环境（可否写入、挂载状态、沙箱允许根）再据此选择分支，
   真实操作必须落在同一个目录或资源上，避免软链、挂载、叠加层让判断与操作不一致。
   沙箱拒绝探针规范化后必须位于所有允许写入根之外；选用符合前提的目标，不能削弱拒绝断言。
   没有错误不代表成功，必须验证输出或最终状态。
-- 偶发失败修复必须验证原失败场景、冷进程与组合运行。验证组任一次失败都算失败，不能以重跑成功代替根因证据。
-- 调整测试分层或入口必须核对实际执行文件，保持原有 CI 覆盖；每个用例的容器、子进程和临时目录在异常路径也必须完成清理。
+- 调整测试分层或入口必须核对实际执行文件，保持原有 CI 覆盖。
 - 跨运行时或宿主的子进程测试要覆盖流继承、管道背压及取消回收；小输出命令成功不足以证明进程边界正确。
 
 ### 手动验证入口

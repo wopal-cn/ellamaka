@@ -1,8 +1,9 @@
 # 测试隔离规范（Test Isolation）
 
-本文件解释「为什么」和「怎么判」。**规则本身在根 `AGENTS.md` 的 Testing 小节**（全仓不可违反的铁律），
-机器可判定的部分在 `packages/opencode/script/test-isolation/`（`bun run check:test-isolation`）。
-三处不重复同一句话：规范写 AGENTS，原理写本文，机器规则写 checker。
+本文件解释 Ellamaka 测试隔离的「为什么」和「怎么判」，不是另一份通用测试政策。跨项目测试原则与 TDD 语义由
+WopalSpace 装配的 `testing.md` 统一拥有；Ellamaka 特有、需要全仓执行的隔离约束写在根 `AGENTS.md`，
+机器可判定的部分在 `packages/opencode/script/test-isolation/`（`bun run check:test-isolation`）。本文只保留事故分类、
+隔离模型、TISO 映射和 checker 判定依据。
 
 ## 背景：为什么需要这份规范
 

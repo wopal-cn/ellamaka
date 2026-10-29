@@ -68,7 +68,7 @@ ellamaka-cordis 是随 Ellamaka CLI 和 Desktop 分发的产品 DSH Bridge。它
 
 ## Testing
 
-- 对本次改动涉及的 metadata、installer、profile 或 container 边界遵循 TDD。
+- 本次改动涉及的 metadata、installer、profile 或 container 行为，在其真实 owner 边界保留回归覆盖。
 - 纯 contract tests 保持确定性；真实 container/host 集成放入 integration suite。
 - 通过真实宿主路径检查打包闭包解析和 Electron utility-process 行为，源码测试不能证明这些边界。
 - 测试门禁分三层：CI 每晚/手动在 Linux 运行、发版前必须通过 Linux 关卡、本地 pre-commit 只做快检查不跑测试。
