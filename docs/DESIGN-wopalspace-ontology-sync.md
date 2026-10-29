@@ -86,6 +86,8 @@ origin/main -> local main
 
 ### Content State
 
+`contentState` 描述当前 segment 在既定 source/target 关系下的内容事实；不同 `kind` 使用各自与动作一致的计算方式。
+
 merge 型 segment 使用 quarantined `merge-tree` 预测 source 合入 target 的结果：
 
 | `contentState` | 含义 |
@@ -96,6 +98,10 @@ merge 型 segment 使用 quarantined `merge-tree` 预测 source 合入 target �
 | `unknown` | 缺 ref、无共同祖先或无法可靠预测 |
 
 `aligned` 不表示 history 已闭合。`historyState=diverged` 且 `contentState=aligned` 正是 squash/rebase 后最常见的 reconciliation 状态。
+
+push 型 segment 在 refs 可可靠比较时直接比较 source/target tree：tree 相同为 `aligned`，不同为 `changes`，`fileDiffs` 表示这次 mirror push 的 tree 差量；push 不产生 merge conflict，因此 `conflictFiles=[]`。`historyState=no-common-base|unavailable` 时返回 `contentState=unknown`、`fileDiffs=[]`、`conflictFiles=[]`，由 action 决定是否可以继续。
+
+contribute 型 segment 只有在 `upstream/main` 已是 `local main` ancestor 时拥有权威 content baseline。此时以 upstream 为 merge base 计算 three-dot diff：无差异为 `aligned`，有差异为 `changes` 并返回待贡献 `fileDiffs`。baseline 尚未闭合时返回 `contentState=unknown`、`fileDiffs=[]`、`conflictFiles=[]`；它不提前猜测待贡献内容。
 
 ### Required Action
 
@@ -148,7 +154,7 @@ merge 型 segment 的动作判定固定为：
 | `diverged` | `conflict` | `blocked` |
 | `no-common-base` / `unavailable` | `unknown` | `blocked` |
 
-这个表同时驱动 preview 与 apply，不允许 status 以 tree equality 把 `reconcile-history` 折叠成 `none`。
+这个表同时驱动 preview 与 apply，不允许 status 以 tree equality 把 `reconcile-history` 折叠成 `none`。push 与 contribute 的动作判定由 Inspect Contract 中对应 segment 规则定义。
 
 ## Inspect Contract
 
@@ -169,19 +175,19 @@ Clone 模式只报告 `origin/main -> local main` merge segment；它没有 fork
 
 `local main -> origin/main` 使用 ancestry 判断是否可普通 push：
 
-- origin 与 local 相同：`none`。
-- origin 是 local ancestor：`push`。
-- local 是 origin ancestor，或双方 diverged：`sync-first`；先运行 origin intake stage，禁止 force push。
-- 无共同祖先或 ref 不可用：`blocked`。
+- origin 与 local 相同：`contentState=aligned`，`requiredAction=none`。
+- origin 是 local ancestor：按两个 tree 返回 `aligned|changes`，`requiredAction=push`；即使 tree 已相同，也通过普通 push 闭合 mirror history。
+- local 是 origin ancestor，或双方 diverged：按两个 tree 返回 `aligned|changes`，`requiredAction=sync-first`；先运行 origin intake stage，禁止 force push。
+- 无共同祖先或 ref 不可用：`contentState=unknown`、空 `fileDiffs/conflictFiles`，`requiredAction=blocked`。
 
 ### Contribution State
 
 `local main -> upstream/main` 只在 `upstream/main` 已经是 `local main` ancestor 时计算权威待贡献内容。此时 three-dot diff 的 merge base 就是当前 upstream baseline，`fileDiffs` 只表示 baseline 之后仍留在 local 的内容：
 
-- 有文件差异：`contribute`。
-- tree 无差异：`none`。
+- 有文件差异：`contentState=changes`，`requiredAction=contribute`。
+- tree 无差异：`contentState=aligned`，`requiredAction=none`。
 
-只要 `upstream/main` 还不是 `local main` ancestor，贡献 segment 返回 `sync-first`，不把 commit divergence 或 three-dot 结果冒充为待贡献文件清单。这样 squash/rebase 已落地的内容不会在 reconciliation 之前被重复展示为新贡献。
+`upstream/main` 可解析但尚不是 `local main` ancestor 时，贡献 segment 返回 `contentState=unknown`、空 `fileDiffs/conflictFiles` 与 `requiredAction=sync-first`，不把 commit divergence 或 three-dot 结果冒充为待贡献文件清单。无共同祖先或 ref 不可用时返回同样的 unknown content facts，但 `requiredAction=blocked`。这样 squash/rebase 已落地的内容不会在 reconciliation 之前被重复展示为新贡献。
 
 CLI 或其他 presentation 可以展示更自然的文本，但不得丢失 content/history 两个维度。`Content: aligned` 与 `History: reconciliation required` 是合法且常见的组合。
 
