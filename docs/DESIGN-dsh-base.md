@@ -1,11 +1,12 @@
 # DSH 集成基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-10-30
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-wopalspace.md` — WopalSpace Setup 对 CorePreparation 的上层消费边界
+> - `./DESIGN-desktop.md` — Desktop sidecar 的 Host Environment 与启动边界
 >
 > **Scope**: DSH v0.2 的运行资源、固定 Home 基本防护、切代前备份与 profile 生命周期。
 
@@ -112,6 +113,14 @@ DSH v0.2 使用 `createRuntimeResolution` 提供不可变的包映射，`auditSt
 App Boot 审计后，宿主检查采用的必需服务和工具：`web` 检查核心 Web 服务与默认 preset（`standard`）可解析、可绑定；`ellamaka-tools` 检查本平台全部采用工具均已实际注册到 `tools` 服务（详见 `./DESIGN-ellamaka-tools.md`）。插件等待服务的警告不能等同于完整挂载成功。
 
 ## Host Compatibility
+
+### Host Environment Input
+
+DSH Bridge 不拥有第二套 Desktop 宿主环境。它运行在当前 Ellamaka host 进程中，并把该进程环境作为 DSH 运行时的父环境来源：Desktop 入口由 Electron Main 把一次解析出的 Host Environment 显式传给 sidecar；CLI、TUI 与 `serve` 入口使用各自启动进程实际继承的环境。Web 与 `ellamaka-tools` profile 因此共享当前 host 的同一份上游环境事实，不各自重新执行 login-shell probe。
+
+DSH 的 Browser Terminal、bash/pwsh tool 与其他走 `ctx.subprocess` 的本地子进程继续使用官方 subprocess seam。`subprocess-local` 以 DSH 的 `scrubbedParentEnv()` 构造 child base，再叠加调用方显式 env。官方规则保留 `PATH`、Home、locale 与 proxy 类环境，并过滤 credential-shaped ambient 名称与 ambient `DSH_*`；Ellamaka Bridge 不复制这套 scrubber，也不为了 Desktop Host Environment 绕过它。这样 Desktop 修复后的用户 `PATH` 会自然进入 DSH 执行链，而 DSH 自己的 child-env 安全语义保持由 DSH 版本拥有。
+
+DSH 的 `shell-env` 插件是另一层概念：它为每次模型 shell 执行构造受管理的 `DSH_*` 运行时 overlay，例如 session/profile/Home 事实。它不是操作系统 login-shell 环境加载器，也不负责恢复 Desktop GUI 缺失的 `PATH`。Sandbox provider 消费最终 child env 并施加文件/进程执行限制，不重新初始化用户 shell 环境。
 
 ### Package Routing
 

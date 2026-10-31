@@ -1,7 +1,7 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-10-30
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -103,6 +103,14 @@ Web 的能力组合与执行后端一致。Bun 与 Node Desktop 都装配标准 
 源码 Bun 执行 Bridge 的极小 child entry 后进入官方 `process.js`；编译后的 CLI 复用同一个 Ellamaka 可执行文件，通过 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 私有角色在正常 CLI 初始化之前进入 child bootstrap。Node Desktop 继续直接使用原生 Node provider，不经过 Bun 兼容层。两种 Bun 形态都必须验证真实程序执行、连续多次进程启动、取消与平台沙箱拒绝；在 macOS 上 `workspace-write` 的验收要求 provider 报告 full enforcement，`read-only` 必须拒绝临时目录写入。Bun 的 heap 参数不声明为 Node/V8 等价的硬内存上限；资源边界以已验证的沙箱、deadline、取消和输出上限为准。
 
 宿主能力补丁在每次完整配置生成中应用，原生管理操作也消费该补丁。用户自建声明引用不可用服务时保留具体诊断。Ellamaka 主 Session 的外部能力装配属于独立的 Session 设计。
+
+### Browser Terminal Environment
+
+Web profile 的 Browser Terminal 由官方 `terminal-controller` 选择当前 Agent execution provider，再调用 `ctx.subprocess.spawnTerminal()`。在 Ellamaka Desktop 中，这个 provider 所在进程就是承载 DSH/Cordis 的 Ellamaka sidecar，因此它首先看到 Desktop 已解析并传入 sidecar 的 Host Environment，不需要 Web profile 自己再运行 login-shell probe。
+
+本地 provider 随后按 DSH 官方 child-env 契约处理 terminal：以 `scrubbedParentEnv()` 为基线，再叠加 terminal 显式环境（例如当前 `DSH_SESSION_ID` 与终端类型）。`PATH` 保留，因此 Desktop Host Environment 修复的 CLI 查找能力同时覆盖 DSH Browser Terminal；credential-shaped ambient 名称与 ambient `DSH_*` 的过滤继续属于 DSH subprocess policy。Ellamaka 不在 Web profile 外再加第二套过滤或环境恢复逻辑。
+
+Web profile 中名为 `shell-env` 的 DSH 插件管理受信任的 `DSH_*` per-execution overlay，与 Ellamaka/OpenCode 插件协议里的 `shell.env` Hook 不是同一个接口。前者服务 DSH 模型 shell 的 session/profile/Home 等运行时事实；后者是 Ellamaka Native Runtime 在 PTY/Shell 执行前允许插件追加环境的扩展点。两者都不替代 Desktop Host Environment bootstrap。
 
 ## Web Surface
 

@@ -1,13 +1,14 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-10-30
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-wopalspace.md` — WopalSpace Setup 与 CorePreparation integration boundary
 > - `./DESIGN-onboarding.md` — Renderer 使用的统一 WopalSpace Setup/Onboarding
 > - `./DESIGN-ellamaka-sdk.md` — Renderer 的 Public Platform SDK 与 App-private BFF 边界
+> - `./DESIGN-logging.md` — Desktop Host Environment bootstrap 的持久诊断与脱敏边界
 
 本文档描述 `packages/ellamaka-desktop` 的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
 
@@ -55,6 +56,7 @@ Electron 安全修复、生命周期修复和平台兼容修复可以只发布 D
 ```text
 Electron Main Process
 ├── Window Manager
+├── Host Environment Resolver
 └── Sidecar Manager
           │ IPC
 Electron Preload
@@ -62,9 +64,13 @@ Electron Preload
 ellamaka-app Renderer
           │ HTTP / WebSocket
 Ellamaka node sidecar
-├── PTY Session Registry
-├── Disconnect Grace Reaper
-└── PTY / TUI processes
+├── Native Runtime
+│   ├── PTY Session Registry
+│   ├── Disconnect Grace Reaper
+│   └── PTY / Shell / MCP / LSP processes
+└── DSH / Cordis
+    ├── Web profile / Browser Terminal
+    └── Tools profile / sandbox subprocesses
 ```
 
 ### Electron Main Process
@@ -72,9 +78,89 @@ Ellamaka node sidecar
 Main Process 是桌面应用与本地服务的所有者，负责：
 
 - 创建和管理 BrowserWindow。
+- 构造当前 Desktop 运行期唯一的 Host Environment，并显式传给 Ellamaka sidecar。
 - 启动、监控和停止 Ellamaka sidecar。
 - 执行桌面菜单、文件选择、系统通知、更新和深链接能力。
 - 在应用退出时停止 sidecar，使 sidecar finalizer 释放全部 PTY。
+
+### Desktop Host Environment
+
+Desktop Main 为每次应用运行构造一次内存态 **Host Environment**。它代表 Desktop 作为当前登录用户启动本地开发工具时可见的基础环境，并作为 Ellamaka sidecar 的父环境来源。Host Environment 与 Electron Main 自身的 `process.env` 是两个不同概念：解析结果通过显式参数进入 sidecar 创建路径，Main 不依赖把解析结果整体写回进程全局环境来完成进程间传递。
+
+```text
+Electron inherited environment
+            │
+            ▼
+      Base Environment
+            │
+    ┌───────┴────────┐
+    │                │
+ Windows        macOS / Linux
+    │                │
+    │          login-shell resolver
+    │                │
+    └───────┬────────┘
+            ▼
+      Host Environment
+            │
+            ▼
+   createSidecarEnv(...)
+            │
+            ▼
+      Ellamaka sidecar
+            │
+      Runtime / PTY / DSH
+```
+
+平台语义如下：
+
+| 平台          | Host Environment 来源                                      | Shell probe                                                                      |
+| ------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Windows       | Electron 从 Windows 登录会话继承的用户环境与系统环境       | 不运行 POSIX login shell；继承环境直接作为 Host Environment 基线                 |
+| macOS / Linux | Electron inherited environment + 当前用户 login-shell 环境 | 运行一次有界的 login-shell resolution，以补齐 GUI 启动缺失的 PATH 与普通用户环境 |
+
+POSIX resolver 按以下顺序尝试互不重复的候选 shell：操作系统账号记录中的 login shell、`/bin/zsh`、`/bin/bash`、`/bin/sh`。`$SHELL` 不决定首选候选，避免 GUI inherited environment 中的临时值替代账号真实 login shell。
+
+每个候选使用 interactive login shell 读取环境，stdin 保持关闭，并在用户 Home 下执行。环境输出使用 NUL 分隔和前后 framing marker 提取，因此 shell rc 在 stdout 打印 banner 时不会污染变量解析。probe 注入只服务于读取过程的抑制变量，用于避免自动更新或 tmux autostart 等非终端行为阻塞；这些 probe-only/session-local 变量不进入最终 Host Environment。
+
+每个候选拥有独立的有界 deadline。timeout、abort 或候选失败会终止该 probe 所有的进程组并继续下一个候选；显式 abort 结束本次 resolution。第一个成功候选生成 Host Environment；全部候选失败时使用 Base Environment 继续启动 Desktop，使环境恢复失败表现为可诊断的降级而不是应用启动失败。
+
+Host Environment 表达当前登录用户实际可用的宿主环境事实。默认兼容模式不根据变量名猜测 Secret，也不维护 Ellamaka 自己的 credential denylist：
+
+- Windows 保留登录会话继承环境。
+- POSIX 成功读取 login shell 后，默认以该 shell 的完整用户运行环境补齐 Host Environment；shell 的 `PATH` 是 Desktop 发现 `gh`、`pnpm`、`bun`、`python3`、`rg` 等用户工具的权威 PATH。
+- Desktop/launcher 自己拥有的 sidecar 启动参数在创建 sidecar 时作为显式 overlay 提供；这一步不改变 Host Environment snapshot 本身，也不承担用户环境的 Secret 分类。
+- 显式 inherited `WOPAL_HOME` 具有优先级；login shell 只在 inherited value 缺失时补齐它。Desktop 启动期复用同一 Host Environment snapshot，不为 `WOPAL_HOME` 再执行第二次 shell probe。
+
+Desktop 提供一个全局、可选的 shell-import 收敛策略，配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，因为一个 Desktop sidecar 只有一份 Host Environment，Space 配置不改变它：
+
+```jsonc
+{
+  "wopal": {
+    "desktop": {
+      "environment": {
+        "mode": "inherit",
+        "allow": ["MY_COMPANY_*", "HTTP_PROXY"],
+      },
+    },
+  },
+}
+```
+
+`mode` 只有两种语义：
+
+- `inherit`：默认值。保留 Electron inherited Base Environment，并导入成功 login-shell probe 得到的完整环境；这是当前版本的兼容路径。
+- `allowlist`：保留 Base Environment，只从 login-shell snapshot 额外导入 `PATH`、缺失时的 `WOPAL_HOME`，以及 `allow` 明确匹配的变量。`allow` 支持精确变量名和结尾为 `*` 的前缀匹配，不引入正则表达式或基于 `TOKEN` / `SECRET` / `KEY` 等名称的推断。
+
+这个配置只控制 Desktop 从 login shell 额外导入哪些宿主变量，不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
+
+完整 Host Environment 只存在于当前 Desktop 进程内存中，不序列化为 userData cache 或其他持久文件。若未来需要持久化某个恢复值，其设计使用明确 allowlist，并把该值作为独立配置处理，而不是保存完整环境快照。
+
+Host Environment 只向 sidecar 传递一次。Native Ellamaka Runtime 与 DSH/Cordis 都运行在这个 sidecar 的父环境之上，因此 #263 不为两个核心分别执行第二套 login-shell probe，也不维护两份 Host Environment。Native PTY、Shell、MCP 与 LSP 从 sidecar 宿主环境按各自 Runtime 契约派生子进程；DSH Web 与 Tools profile 同样从该 sidecar 环境起步，并继续使用 DSH 官方 subprocess/environment 契约。DSH 当前的 `subprocess-local` 会在启动 Browser Terminal、shell/tool 子进程前应用自己的 `scrubbedParentEnv()`，再叠加调用方显式 env；其中 `PATH`、Home、locale 与 proxy 类环境继续传递，DSH 自己定义的 credential-shaped 与 `DSH_*` ambient 过滤语义保持由 DSH 拥有。Ellamaka Desktop 不在 #263 中复制、绕过或重写这套 DSH child-env policy。
+
+Sandbox 只负责执行边界和资源限制；它消费调用方交给它的环境，不负责重新读取 login shell、构造 PATH 或初始化用户环境。Desktop Host Environment 因而只定义 Desktop → sidecar 的共同宿主基础环境。Native 与 DSH 下游的 child-env 差异由各自 Runtime owner 保持。
+
+shell resolution 的持久诊断遵循 [`DESIGN-logging.md`](./DESIGN-logging.md) 的 Desktop Bootstrap Records：失败原因可诊断，完整环境、PATH 内容、shell/Home 路径、命令和子进程原始输出保持在日志之外。
 
 ### Preload
 
@@ -109,13 +195,17 @@ Desktop sidecar 是 **随 Desktop 打包、由 Desktop 管生命周期的 Ellama
 
 Electron Main 只负责 sidecar 的进程生命周期、随机本地端口、本地认证、重启与退出。Ellamaka Runtime 负责 HTTP/SSE/WebSocket、Session、PTY 与 Core activation；WopalSpace integration layer 在同一 Server composition 上挂载 Setup/Onboarding HTTP projection。
 
+Electron Main 以 Host Environment 为基础创建 sidecar env，再叠加 Desktop 自己拥有的本地认证、产品控制值和 Engine 启动参数。Sidecar 因此获得与当前登录用户一致的基础运行环境，同时由 Main 保持 server credential 的最终所有权。
+
+同一份 sidecar env 同时成为 Native Ellamaka Runtime 与 DSH/Cordis 的宿主父环境。Native 与 DSH 不分别接收 Desktop IPC 环境副本，也不各自重新探测 login shell；任何 profile 或工具子进程只在这个共同父环境之上执行自己的既有 overlay / child-env 规则。
+
 Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。sidecar 再检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源。DSH Web 与 Tools 是两个独立 profile：Web 是否请求由全局 `wopal.dsh.web.enabled` 决定，Tools 是否请求由 sidecar 进程的 `ELLAMAKA_DSH_TOOLS` 决定。任一 profile 处于 `PREPARING/DEGRADED` 时只影响自身能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
 
 Renderer 连接同一个 Server：Setup/Onboarding 与 Runtime/WopalSpace 平台能力通过 `@wopal/ellamaka-sdk/http`，Workbench 产品专用 projection/use case 通过 `ellamaka-app` 的 private BFF client。Desktop Main 不维护第二套 Setup 状态机，也不负责产品安装。
 
 一个 sidecar 同时承载非 WopalSpace 与多个 WopalSpace directory instance。每个配置加载和插件创建按 directory 独立检测可选 `wopalSpaceRoot`。空间根与空间内任意子目录共享同一个值；非 WopalSpace instance 保持 OpenCode-compatible capability loading，并使用 WOPAL_HOME 全局配置与能力层。
 
-PluginInput 使用 `wopalSpaceRoot` 接收当前 instance 的空间根。Instruction 使用 Config 的当前模式保持既有兼容行为。Sidecar 的 `process.env` 不表达当前空间，也不装载 `$WOPAL_HOME/.env` 或空间 `.env`；`.env` 由每次 plugin invocation 的 effective env loader 消费。Shell、PTY、MCP 与 LSP 保持官方的运行时行为。
+PluginInput 使用 `wopalSpaceRoot` 接收当前 instance 的空间根。Instruction 使用 Config 的当前模式保持既有兼容行为。Sidecar 的 `process.env` 承载 Desktop Host Environment 与 sidecar-owned 启动参数，不表达当前空间，也不装载 `$WOPAL_HOME/.env` 或空间 `.env`；`.env` 由每次 plugin invocation 的 effective env loader 消费。Shell、PTY、MCP 与 LSP 从 sidecar 宿主环境继续按各自 Runtime owner 的契约派生子进程环境。
 
 PTY Service 是 PTY 生命周期的权威所有者。最后一个 WebSocket subscriber 断开时，服务进入断连宽限期；同一 PTY 在宽限期内重新连接时继续运行，宽限期结束后仍未连接则自动终止。
 
@@ -123,6 +213,7 @@ PTY Service 是 PTY 生命周期的权威所有者。最后一个 WebSocket subs
 
 ```text
 Electron Main
+  -> resolve one Host Environment snapshot
   -> start packaged Ellamaka Server
   -> wait Server health (listener + native Runtime + WopalSpace API)
   -> create and show the window
@@ -168,6 +259,7 @@ Desktop 自动更新只更新当前 Desktop/channel。
 | PTY session、subscriber、断连回收计时                  | Ellamaka sidecar                 | 当前 sidecar 运行期                              |
 | PTY/TUI 操作系统进程                                   | Ellamaka sidecar                 | 当前 sidecar 运行期                              |
 | Directory WopalSpace context                           | Ellamaka sidecar `InstanceState` | 当前 directory instance；空间根和子目录共享 root |
+| Desktop Host Environment snapshot                      | Electron Main Process            | 当前 Desktop 运行期；仅内存                      |
 | Sidecar 连接凭据                                       | Electron Main Process            | 当前应用进程                                     |
 
 `localStorage` 继续负责 Workbench 布局，并将 PTY ID 作为重连提示保存。Sidecar 的 PTY Session Registry 是进程存活状态的真相源。Renderer 每次使用持久化 PTY ID 前都通过 `ptyManager.ensure()` 探测；2xx 表示存活并复用，明确 404 表示已回收并清除旧 ID，传输失败或非权威响应表示状态未知并保留旧 ID。只有 `dead` 结果才能触发 PTY 重建。
@@ -333,14 +425,14 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 
 ### 状态定义
 
-| 状态         | 含义                                                      |
-| ------------ | --------------------------------------------------------- |
-| `starting`   | 正在启动 sidecar 进程，等待 Server health 通过         |
+| 状态         | 含义                                                    |
+| ------------ | ------------------------------------------------------- |
+| `starting`   | 正在启动 sidecar 进程，等待 Server health 通过          |
 | `ready`      | Server 可连接；不表示所有附加能力 READY 或 Setup 已完成 |
-| `lost`       | Sidecar 进程退出或启动失败，等待自动重试                  |
-| `restarting` | 正在执行自动重启（spawn 新进程）                          |
-| `failed`     | 连续 3 次重启失败，停止自动重试                           |
-| `stopped`    | 应用退出或用户主动停止，不触发自动重启                    |
+| `lost`       | Sidecar 进程退出或启动失败，等待自动重试                |
+| `restarting` | 正在执行自动重启（spawn 新进程）                        |
+| `failed`     | 连续 3 次重启失败，停止自动重试                         |
+| `stopped`    | 应用退出或用户主动停止，不触发自动重启                  |
 
 ### 状态转换
 

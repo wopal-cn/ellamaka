@@ -1,13 +1,14 @@
 # Ellamaka — Logging Architecture
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-10-30
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`（产品架构；空间运行态 `logs/` 的归属）
 > **Sibling DESIGNs**:
 >
 > - `../../../projects/wopal-cli/docs/DESIGN.md` — CLI 侧日志架构：空间感知路由的参照模型，以及 CLI 与引擎的日志边界
 > - `../../../docs/products/wopal-space/DESIGN-config-settings.md` — 配置体系：`wopal.logging.level` 与 `ELLAMAKA_LOG_LEVEL` 的统一定义
+> - `./DESIGN-desktop.md` — Desktop Host Environment bootstrap 与 sidecar 环境所有权
 >
 > **Scope**: 引擎日志的目录路由、文件生命周期、输出通道、级别与 Trace 策略、脱敏边界
 
@@ -131,6 +132,23 @@ Trace 绝不承载原始 payload 或用户数据：
 Effect 代码经 logger bridge 发 trace：`EffectLogger.create(...).trace(category, message, extra)`。Effect 在 logger 之前过滤 Sub-Info 级别，bridge 以 annotation 携带类别并路由到 `Log.trace`；不要用 `Effect.logTrace` 期待 trace 记录。
 
 DSH 只有四级：宿主 `TRACE` 在边界映射为 DSH `DEBUG`。`--trace` 运行不丢 DSH 诊断，DSH 日志契约保持不变。
+
+## Desktop Bootstrap Records
+
+Desktop Host Environment bootstrap 是 Desktop Main 的启动边界。POSIX login-shell resolution 中的候选失败属于可恢复降级，必须留下持久、结构化且有界的诊断记录；Windows 直接使用 inherited environment，不产生 shell-probe 记录。
+
+每个失败候选记录一个 `WARN`，字段限制为：
+
+- 固定事件名，例如 `desktop.shell_env.probe_failed`；
+- 平台族；
+- 候选逻辑名称，例如 `account-shell`、`zsh`、`bash`、`sh`，不记录可识别用户路径的绝对 shell 路径；
+- attempt 序号；
+- 固定 reason category，例如 `timeout`、`aborted`、`spawn-error`、`exit`、`unparsed`；
+- 有界的 deadline/duration 数值和必要的非敏感状态码。
+
+第一个候选直接成功属于正常启动路径，不写例行成功日志。存在候选失败但后续恢复成功时，失败记录本身提供诊断链。全部候选失败并回落到 inherited Base Environment 时，再写一个 `WARN` summary，表达 `degraded=true`、候选数与最终 source=`inherited`，不复制失败 payload。
+
+Desktop bootstrap 日志不包含完整 environment、PATH 值、Home 或 shell 的绝对路径、shell rc 内容、probe 命令、stdout/stderr、token、credential 或 sidecar password。Host Environment 本身也不作为日志字段或 crash payload 持久化。
 
 ## Redaction and Bounds
 
