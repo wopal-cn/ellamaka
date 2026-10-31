@@ -107,7 +107,7 @@ WopalSpace 的长期公开协议由本节与后续各领域章节共同定义。
 - 输入的既有默认值、合法组合和稳定拒绝条件；
 - 领域结果字段及其含义、partial-success 表达和稳定错误语义；
 - Ontology 的 clone/fork、origin/upstream、branch/history、dirty-worktree、preview/apply、push/PR 与恢复行为；
-- Space 的 registry identity、assembly snapshot、shared/local/private/include/exclude/path/plugin selection、sparse、relink/repair、sync 与回滚行为；
+- Space 的 registry identity、assembly snapshot、shared/local/include/exclude/path/plugin selection、未跟踪内容保护、sparse、relink/repair、sync 与回滚行为；
 - 用户文件、Git history、无关 dirty change 和已有本地状态的保护边界；
 - 幂等、重复调用、并发、取消、重试和失败恢复的可观察结果；
 - Workbench/Onboarding 已验证的 Session、PTY、文件浏览、导航、重连和 Space 使用流程；
@@ -182,7 +182,7 @@ DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.
 | `space.search` | `GET /wopal-space/spaces/:name/search` | 在 registered root 内按受控条件查找 repo/dir/file |
 | `space.scan` | `POST /wopal-space/spaces/:name/scan` | 扫描 repo/worktree/AGENTS 等只读事实，不启动 Runtime |
 | `space.status` | `GET /wopal-space/spaces/:name/status` | 返回 Git、assembly snapshot、selection、sparse 与 preparation facts |
-| `space.sync` | `POST /wopal-space/spaces/:name/sync` | `confirm:false` preview，`confirm:true` apply；返回 shared/private/sparse 与部分结果 |
+| `space.sync` | `POST /wopal-space/spaces/:name/sync` | `confirm:false` preview，`confirm:true` apply；返回 shared/untracked/sparse 与部分结果 |
 | `space.capability.add` | `POST /wopal-space/spaces/:name/capabilities` | 输入 references/local/section/confirm；装配已有能力，或纳管当前 Space worktree 中的新完整能力后装配 |
 | `space.capability.remove` | `DELETE /wopal-space/spaces/:name/capabilities` | 与 add 同一 selection contract；从当前空间或当前类型的默认装配中移除 |
 
@@ -430,7 +430,7 @@ Space 身份由 registry、Space root、Ontology `space/<name>` branch、`.wopal
 - `space.projects.list` 枚举 registered root 内受认可的 project/worktree facts；`space.files.list/read`、`space.search` 与 `space.scan` 使用同一 registered-root/realpath confinement。文件读取只接受受控相对路径，不执行 package/bootstrap、Git fetch 或 Runtime activation。
 - `space.status` 汇总 registry、meta snapshot、Git branch/worktree、sparse/selection 与 instance preparation 的实时 facts；状态检查不改变这些事实。
 - `space.init` 根据 registry、root、Ontology branch 与 snapshot 将请求分类为 create/reuse/relink/repair。它在改变任何用户状态前验证固定 Space type、目标 root、Ontology 身份和可恢复 snapshot；随后在现有装配事务边界内物化/修复 `.wopal`，成功后提交 registry/snapshot，再调用 instance preparation。materialization 与 preparation 分开返回，后者失败不撤销前者。
-- `space.sync` 从当前 Space snapshot 与 Ontology main 计算允许触达的 shared 内容、private 排除和 sparse 变化。preview 零写入；apply 重算并校验 dirty touch-set，再按既有 refs/sparse/meta 事务执行。与 touch-set 冲突的脏改动或 private 上行在第一处写入前拒绝。
+- `space.sync` 从当前 Space snapshot 与 Ontology main 计算 shared 内容、未跟踪路径碰撞和 sparse 变化。preview 零写入；apply 重算并校验 dirty touch-set，再按既有 refs/sparse/meta 事务执行。与 touch-set 冲突的脏改动或未跟踪路径碰撞在第一处写入前拒绝。
 - `space.capability.add/remove` 先在当前 assembly snapshot、空间分支和 Ontology pool 上计算完整动作。`confirm:false` 返回 preview；apply 重读关键 facts 后执行，并保留无关用户内容。
 - `add --local` 表示“当前空间额外挂载”：已有共享能力写 `include`；若引用对应的是当前 Space worktree 中尚未进入共享 Git 的完整新能力，先扩宽 sparse range、按完整资产纳入空间分支，再写 `include`。
 - `add` 表示“当前类型默认装配”：已有共享能力更新 archetype；新能力则把完整资产与 archetype 变更一起纳入空间分支。
@@ -459,9 +459,9 @@ resolve Space + Ontology
 
 ### Sync and Capability Selection
 
-Space sync 的 preview/apply 使用同一判断；private 内容不能因普通 sync 上传；失败不能留下无法解释的 refs/sparse/assembly 状态。
+Space sync 的 preview/apply 使用同一判断；未跟踪文件不会被自动提交、覆盖或删除；失败不能留下无法解释的 refs/sparse/assembly 状态。
 
-Capability 模型分三层：共享能力池决定能力是否存在；archetype 决定类型默认装配；`include` / `exclude` 决定当前空间的额外挂载或本地排除。`private` 仅用于明确要求内容不进入共享 Git 的特殊持有，不是普通新能力创作的默认路径。WopalSpace 负责共享纳管与 selection mutation，Runtime 负责 effective capability discovery。
+Capability 模型分三层：共享能力池决定能力是否存在；archetype 决定类型默认装配；`include` / `exclude` 决定当前空间的额外挂载或本地排除。未跟踪能力文件只是临时 working-tree 事实，决定保留后由 WopalSpace 安全纳入空间分支 Git。WopalSpace 负责共享纳管与 selection mutation，Runtime 负责 effective capability discovery。
 
 ## Workbench Integration
 
