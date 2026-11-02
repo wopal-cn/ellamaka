@@ -91,7 +91,7 @@ Desktop Main 为每次应用运行构造一次内存态 **Host Environment**。�
 Electron inherited environment
             │
             ▼
-      Base Environment
+   Inherited Environment
             │
     ┌───────┴────────┐
     │                │
@@ -123,7 +123,7 @@ POSIX resolver 按以下顺序尝试互不重复的候选 shell：操作系统�
 
 每个候选使用 interactive login shell 读取环境，stdin 保持关闭，并在用户 Home 下执行。环境输出使用 NUL 分隔和前后 framing marker 提取，因此 shell rc 在 stdout 打印 banner 时不会污染变量解析。probe 注入只服务于读取过程的抑制变量，用于避免自动更新或 tmux autostart 等非终端行为阻塞；这些 probe-only/session-local 变量不进入最终 Host Environment。
 
-每个候选拥有独立的有界 deadline。timeout、abort 或候选失败会终止该 probe 所有的进程组并继续下一个候选；显式 abort 结束本次 resolution。第一个成功候选生成 Host Environment；全部候选失败时使用 Base Environment 继续启动 Desktop，使环境恢复失败表现为可诊断的降级而不是应用启动失败。
+每个候选拥有独立的有界 deadline。timeout、abort 或候选失败会终止该 probe 所有的进程组并继续下一个候选；显式 abort 结束本次 resolution。第一个成功候选生成 Shell Environment；全部候选失败时只使用 Inherited Environment 继续启动 Desktop，使环境恢复失败表现为可诊断的降级而不是应用启动失败。
 
 Host Environment 表达当前登录用户实际可用的宿主环境事实。默认兼容模式不根据变量名猜测 Secret，也不维护 Ellamaka 自己的 credential denylist：
 
@@ -132,23 +132,26 @@ Host Environment 表达当前登录用户实际可用的宿主环境事实。默
 - Desktop/launcher 自己拥有的 sidecar 启动参数在创建 sidecar 时作为显式 overlay 提供；这一步不改变 Host Environment snapshot 本身，也不承担用户环境的 Secret 分类。
 - 显式 inherited `WOPAL_HOME` 具有优先级；login shell 只在 inherited value 缺失时补齐它。Desktop 启动期复用同一 Host Environment snapshot，不为 `WOPAL_HOME` 再执行第二次 shell probe。
 
-Desktop 消费 WopalSpace 的全局 Host Environment 设置。配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，Space 配置不覆盖它：
+Desktop 消费 WopalSpace 的全局 shell 环境导入设置。配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，Space 配置不覆盖它：
 
 ```jsonc
 {
   "wopal": {
-    "environment": {
+    "shell-env": {
       "mode": "inherit",
-      "allow": ["MY_COMPANY_*", "HTTP_PROXY"],
+      "list": [],
     },
   },
 }
 ```
 
-`mode` 只有两种语义：
+`mode` 有三种语义：
 
-- `inherit`：默认值。保留 Electron inherited Base Environment，并导入成功 login-shell probe 得到的完整环境；这是当前版本的兼容路径。
-- `allowlist`：保留 Base Environment，只从 login-shell snapshot 额外导入 `PATH`、缺失时的 `WOPAL_HOME`，以及 `allow` 明确匹配的变量。`allow` 支持精确变量名和结尾为 `*` 的前缀匹配，不引入正则表达式或基于 `TOKEN` / `SECRET` / `KEY` 等名称的推断。
+- `inherit`：默认值。保留 Electron Inherited Environment，并导入完整 Shell Environment；`list` 不使用。
+- `allowlist`：保留 Inherited Environment，只导入 `list` 匹配的 Shell Environment 变量。
+- `denylist`：保留 Inherited Environment，导入除 `list` 匹配项之外的全部 Shell Environment 变量。
+
+`list` 支持精确变量名和结尾为 `*` 的前缀匹配。空列表在 `allowlist` 下表示不额外导入 shell 变量，在 `denylist` 下等同于 `inherit`。被导入的 shell 变量覆盖 inherited 同名值；未导入的变量保持 inherited 值。显式 inherited `WOPAL_HOME` 仍具有优先级。
 
 这个配置定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。它不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
 
