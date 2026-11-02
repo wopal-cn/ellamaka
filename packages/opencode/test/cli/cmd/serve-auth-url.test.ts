@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { workbenchAuthUrl } from "../../../src/cli/cmd/serve"
+import { applicationAuthUrl, workbenchAuthUrl } from "../../../src/cli/cmd/serve"
 
 /**
  * With `ELLAMAKA_SERVER_PASSWORD` set, the browser cannot authenticate the
@@ -11,13 +11,13 @@ import { workbenchAuthUrl } from "../../../src/cli/cmd/serve"
 describe("workbenchAuthUrl", () => {
   test("appends the base64 token for the default username", () => {
     expect(workbenchAuthUrl("http://localhost:4097", "123")).toBe(
-      "http://localhost:4097/workbench?auth_token=ZWxsYW1ha2E6MTIz",
+      `http://localhost:4097/workbench?auth_token=${btoa("ellamaka:123")}`,
     )
   })
 
   test("encodes a custom username", () => {
     expect(workbenchAuthUrl("http://localhost:4097", "123", "kit")).toBe(
-      "http://localhost:4097/workbench?auth_token=a2l0OjEyMw==",
+      `http://localhost:4097/workbench?auth_token=${btoa("kit:123")}`,
     )
   })
 
@@ -28,7 +28,21 @@ describe("workbenchAuthUrl", () => {
 
   test("keeps an IPv6 origin intact", () => {
     expect(workbenchAuthUrl("http://[::1]:4097", "pw")).toBe(
-      "http://[::1]:4097/workbench?auth_token=ZWxsYW1ha2E6cHc=",
+      `http://[::1]:4097/workbench?auth_token=${btoa("ellamaka:pw")}`,
+    )
+  })
+})
+
+describe("applicationAuthUrl", () => {
+  test("builds the onboarding entry with the same auth-token contract", () => {
+    expect(applicationAuthUrl("http://localhost:4097", "onboarding", "123")).toBe(
+      `http://localhost:4097/onboarding?auth_token=${btoa("ellamaka:123")}`,
+    )
+  })
+
+  test("returns a clean onboarding URL for an unsecured server", () => {
+    expect(applicationAuthUrl("http://localhost:4097/", "onboarding", undefined)).toBe(
+      "http://localhost:4097/onboarding",
     )
   })
 })

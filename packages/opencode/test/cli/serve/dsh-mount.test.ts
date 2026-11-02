@@ -25,7 +25,11 @@ describe("server entry points wire the shared dsh assembly", () => {
   for (const { cmd, path } of cases) {
     test(`${cmd} delegates to mountDshEngine (manager gates ELLAMAKA_DSH_TOOLS internally)`, () => {
       const source = readFileSync(join(import.meta.dir, path), "utf-8")
-      expect(source).toContain("mountDshEngine")
+      expect(source).toContain("createDshMountController")
+      expect(source).toContain("controller.ensure()")
+      expect(source).toContain("setupCompleted()")
+      expect(source).toContain("installDshMountController")
+      if (cmd === "web") expect(source).toContain('entry: "web"')
       // The manual kill-switch check is gone: the manager gates internally, so
       // the entry must NOT short-circuit on Flag.ELLAMAKA_DSH_TOOLS itself.
       expect(source).not.toContain("if (Flag.ELLAMAKA_DSH_TOOLS)")

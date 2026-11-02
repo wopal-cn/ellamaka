@@ -91,14 +91,13 @@ describe("macOS workbench titlebar", () => {
 })
 
 describe("desktop initial route", () => {
-  test("starts on workbench without mounting the official app route first", async () => {
+  test("starts on the neutral route before the shared startup gate chooses a stage", async () => {
     const entry = await Bun.file(join(dir, "index.tsx")).text()
     const router = await Bun.file(join(dir, "desktop-router.tsx")).text()
 
     expect(entry).toContain('import { DesktopRouter } from "./desktop-router"')
     expect(entry).not.toContain("WorkbenchRedirect")
-    expect(router).toContain('value: "/workbench"')
+    expect(router).toContain('value: "/startup"')
     expect(router).toContain("<MemoryRouter {...props} history={desktopHistory} />")
   })
 })
-

@@ -38,3 +38,4 @@ release/legacy-inventory.dry-run.json
 test-results/
 # Legacy test:ci output path; no longer generated, kept ignored for old local runs.
 .artifacts/
+.artifacts/

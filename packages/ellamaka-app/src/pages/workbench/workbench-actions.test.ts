@@ -53,6 +53,9 @@ function createStorePort(options?: { withPty?: boolean }) {
         tuiPtyId: undefined,
       }
     },
+    commitPanelDirectory: (_scope, _panelID, directory) => {
+      panel = { ...panel, directory }
+    },
     commitSessionUnbinding: () => {
       if (panel.slotState === "empty") return false
       panel = {
@@ -106,6 +109,51 @@ const unusedSessionPort = {
 }
 
 describe("WorkbenchActions", () => {
+  test("a pending alias action cannot recreate the alias after identity migration", async () => {
+    const state = createStorePort()
+    const pending = deferred<string>()
+    let generation = 0
+    const oldScope = spaceScope("Space", "/alias")
+    const newScope = spaceScope("Space", "/real")
+    const store = {
+      ...state.store,
+      reconcileSpaceIdentity: () => {
+        generation += 1
+        return true
+      },
+    }
+    const actions = createWorkbenchActions({
+      store,
+      pty: { disposePanel: async () => {}, ensure: () => pending.promise, disposePty: async () => {} },
+      session: unusedSessionPort,
+    })
+    const ensure = actions.ensurePanelPty({
+      scope: oldScope,
+      panelID: state.panel().id,
+      kind: "term",
+      create: async () => "unused",
+    })
+    await actions.reconcileSpaceIdentity(oldScope, newScope)
+    pending.resolve("pty-old")
+    expect(await ensure).toEqual({ status: "stale", panelID: state.panel().id })
+    expect(generation).toBe(1)
+  })
+  test("refresh restores the server session directory while preserving the PTY", async () => {
+    const state = createStorePort()
+    const actions = createWorkbenchActions({
+      store: state.store,
+      pty: { disposePanel: async () => {}, ensure: async ({ create }) => create(), disposePty: async () => {} },
+      session: { ...unusedSessionPort, get: async () => ({ ...nextSession, id: "session-old" }) },
+    })
+    await actions.refreshSession({
+      scope,
+      panelID: state.panel().id,
+      sessionID: "session-old",
+      directory: state.panel().directory,
+    })
+    expect(state.panel().directory).toBe(nextSession.directory)
+    expect(state.panel().tuiPtyId).toBe("pty-existing")
+  })
   test("reports how many Panel bindings an external Session removal affected", async () => {
     const state = createStorePort({ withPty: false })
     const actions = createWorkbenchActions({

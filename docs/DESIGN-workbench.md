@@ -1,7 +1,7 @@
 # Ellamaka Workbench 设计规范
 
 > **Status**: Active
-> **Updated**: 2026-10-26
+> **Updated**: 2026-11-02
 > **Parent**: `./DESIGN.md`
 >
 > 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
@@ -107,7 +107,7 @@ App BFF 的 schema 可以生成 `ellamaka-app` 内部 client；它与公开 SDK 
 
 DSH Web 与 Ellamaka Native Assistant 是两个独立表面。General 继续承载 Ellamaka 通用会话；DSH Web 启用时，顶栏额外派生一个固定 DSH Tab。DSH Tab 不是 `SpaceScope`，不创建 General task 或 Space directory instance，也不进入 Space 的 Panel 布局模型。
 
-Workbench 不读取 DSH 进程环境变量。Web Tab 的存在与内容只消费 `/global/health.dsh.web`，Tools 采用状态只消费 `/global/health.dsh.tools` 与当前 Space 的 `pluginConfig`；持久化 Web 开关只通过 `config-v2` 读取和写入 `wopal.dsh.web.enabled`。
+Workbench 不读取 DSH 进程环境变量。Web Tab 的存在与内容只消费 `/global/health.dsh.web`，Tools 采用状态只消费 `/global/health.dsh.tools` 与当前 General / Space Instance 的 `pluginConfig`；持久化 Web 开关只通过 `config-v2` 读取和写入 `wopal.dsh.web.enabled`。
 
 DSH Tab 的存在与内容由 Runtime `dsh.web` 状态驱动：
 
@@ -623,7 +623,7 @@ Workbench 不再把布局、服务端会话和运行时资源塞进一个控制�
 - **Directory SDK/sync**：插件、MCP、LSP 和配置按规范化 directory 缓存，不持久化。Panel 使用该 Panel 的 directory；TopBar 与 StatusPopover 通过活动 `SpaceScope` 和活动 Panel selector 获得同一 directory。
 - **Space Store** (`space-store.tsx`)：读取可打开 Space 的目录列表，用于校验和展示；已打开 Tab 及其布局归 WorkbenchStore 所有。
 
-`SpaceScope` 在领域边界明确表示 General 或 Space。General 空间的规范路径固定为空字符串 `""`，但在逻辑识别上必须使用 Tagged Union 类型 `scope.kind === "general"`，严禁依赖空字符串真假判断（如 `if (spacePath)` 或 `path || fallback`）来区分空间。General 的 Panel directory 可以是后端生成的 General task 目录或空字符串，但能力组成仍只来自全局配置。Space 的能力是全局能力与该 Space 定义能力的并集；验收必须核对完整来源路径，而非数量。
+`SpaceScope` 在领域边界明确表示 General 或 Space。General 空间的规范路径固定为空字符串 `""`，但在逻辑识别上必须使用 Tagged Union 类型 `scope.kind === "general"`，严禁依赖空字符串真假判断（如 `if (spacePath)` 或 `path || fallback`）来区分空间。General 的 Panel directory 可以是后端生成的 General task 目录或空字符串；它的产品行为配置由 built-in defaults 与用户全局层组成。Space 在相同基线上再叠加该 Space 的 public / local 配置与能力；验收必须核对完整来源路径，而非数量。
 
 会话树（Session Tree）双击与会话装载交互必须经由 `WorkbenchActions` 暴露的单事务 API（如 `replaceSession` / `loadSessionIntoPanel`）统一处理。严禁在组件层或零散 Helper 中编写自定义异步流程直接修改 Store 或跨层调用 SDK，以保证目标面板决议、替换、冲突确认与投影更新的原子性与确定性。
 
@@ -806,7 +806,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
   - **可恢复与清除机制**：每个条目呈现图标、文本、时间戳及来源；携带重试句柄的条目提供异步重试（成功后自动剔除）；支持单条目关闭与一键全部清除。
 - **右区（服务器状态与控制）**：与左区以左边框分隔，呈现在线指示器与服务器名称。
 
-状态中心的 Plugins 页以当前 Instance 的真实采用结果显示内置 `dsh-adapter`。`dsh.tools=ready` 且当前 Space 的 `wopal.pluginConfig.dsh-adapter.sandbox.enabled=true` 时显示为已启用；Tools profile 被环境禁用、加载失败，或当前 Space 没有启用 sandbox 时显示“未启用”。单次 DSH 工具调用失败不改变插件启用状态。
+状态中心的 Plugins 页以当前 Instance 的真实采用结果显示内置 `dsh-adapter`。General 与 Space 都从产品默认 `sandbox.enabled=true, mode=workspace-write` 开始；global 可覆盖两者，Space / Space-local 再覆盖对应 Space。`dsh.tools=ready` 且当前 Instance 的 effective `sandbox.enabled=true` 时显示为已启用；Tools profile 被环境禁用、加载失败，或当前 Instance 显式关闭 sandbox 时显示“未启用”。单次 DSH 工具调用失败不改变插件启用状态。
 
 ### 浏览器生命周期与单 Tab 互斥
 

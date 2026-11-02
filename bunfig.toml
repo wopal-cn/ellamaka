@@ -27,7 +27,6 @@ minimumReleaseAgeExcludes = [
   "@opentui/core-win32-x64",
   "@opentui/keymap",
   "@opentui/solid",
-  "@wopal/cli-capability-schema",
   "gitlab-ai-provider"
 ]
 

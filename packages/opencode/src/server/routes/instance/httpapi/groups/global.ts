@@ -1,17 +1,19 @@
 import { Config } from "@/config/config"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
-import { CliHealthSchema, CliRepairSchema } from "@/wopal/cli-contract"
+import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
+import { SessionStatus } from "@/session/status"
 import "@/server/event"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"
+import { ApiNotFoundError } from "../errors"
 import { CorePreparationResultSchema } from "@/core/preparation-event"
 
 const GlobalHealth = Schema.Struct({
   healthy: Schema.Literal(true),
   version: Schema.String,
-  cli: CliHealthSchema,
   managedInstanceId: Schema.optional(Schema.String),
   dsh: Schema.Struct({
     web: Schema.Literals(["disabled", "preparing", "ready", "degraded"]),
@@ -25,6 +27,11 @@ const GlobalHealth = Schema.Struct({
     }),
   ),
   preparation: Schema.optional(CorePreparationResultSchema),
+})
+
+const RuntimePreparationResult = Schema.Struct({
+  status: Schema.Literals(["ready", "degraded", "disabled"]),
+  diagnostic: Schema.optional(Schema.String),
 })
 
 const GlobalEventSchema = Schema.Struct({
@@ -51,7 +58,9 @@ const GlobalUpgradeResult = Schema.Union([
 
 export const GlobalPaths = {
   health: "/global/health",
-  cliRepair: "/global/cli/repair",
+  runtimePrepare: "/global/runtime/prepare",
+  sessionStatus: "/global/session/status",
+  sessionGet: "/global/session/:sessionID",
   event: "/global/event",
   config: "/global/config",
   dispose: "/global/dispose",
@@ -70,13 +79,36 @@ export const GlobalApi = HttpApi.make("global").add(
           description: "Get health information about the OpenCode server.",
         }),
       ),
-      HttpApiEndpoint.post("cliRepair", GlobalPaths.cliRepair, {
-        success: described(CliRepairSchema, "Wopal CLI repair result"),
+      HttpApiEndpoint.post("runtimePrepare", GlobalPaths.runtimePrepare, {
+        success: described(RuntimePreparationResult, "Host runtime preparation result"),
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "global.cli.repair",
-          summary: "Repair Wopal CLI",
-          description: "Update or reinstall the managed Wopal CLI after explicit user confirmation.",
+          identifier: "global.runtime.prepare",
+          summary: "Prepare host runtime resources",
+          description: "Prepare enabled runtime profiles without activating them.",
+        }),
+      ),
+      HttpApiEndpoint.get("sessionStatus", GlobalPaths.sessionStatus, {
+        success: described(
+          Schema.Array(Schema.Struct({ directory: Schema.String, sessionID: SessionID, status: SessionStatus.Info })),
+          "Active session statuses",
+        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.session.status",
+          summary: "Get active session statuses",
+          description: "Read the in-memory status of active sessions without loading a directory instance.",
+        }),
+      ),
+      HttpApiEndpoint.get("sessionGet", GlobalPaths.sessionGet, {
+        params: { sessionID: SessionID },
+        success: described(Session.Info, "Session information"),
+        error: ApiNotFoundError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.session.get",
+          summary: "Get session without loading a directory",
+          description: "Read session metadata directly from storage without loading a directory instance.",
         }),
       ),
       HttpApiEndpoint.get("event", GlobalPaths.event, {

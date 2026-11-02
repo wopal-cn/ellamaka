@@ -11,8 +11,8 @@ export type GroupSession = {
   directoryHealth: "healthy" | "missing" | "unavailable"
   agent?: string
   marker?: "" | "directory" | "worktree"
-  relativePath?: string
-  branch?: string
+  relativePath?: string | null
+  branch?: string | null
   timeCreated: number
   timeUpdated: number
 }
@@ -67,32 +67,23 @@ export interface OpenSessionActions {
   }): Promise<{ status: string; panelID: string }>
 }
 
-// ── fetchSessionGroups (pure async — receives SDK client, returns groups) ──
+// -- fetchSessionGroups (pure async: projects the canonical session tree) --
 
-export type SessionGroupsSDK = {
-  client: {
-    workbench: {
-      sessionGroups: () => Promise<{
-        data?: {
-          groups: Array<{
-            id: string
-            title: string
-            type: "space" | "general"
-            sessionCount: number | string
-            sessions?: Array<{
-              id: string
-              title: string
-              directory: string
-              directoryHealth: "healthy" | "missing" | "unavailable"
-              agent?: string
-              timeCreated: number | string
-              timeUpdated: number | string
-            }>
-          }>
-        }
-      }>
-    }
-  }
+// The App BFF contract is fixed to createSession/sessionTree/locations/dshEntry,
+// so this grouping is derived from the canonical session tree instead of a
+// second private operation (DESIGN-workbench.md API ownership).
+
+export type SessionGroupsSDK = SessionTreeSDK
+
+export async function fetchSessionGroups(sdk: SessionGroupsSDK): Promise<SessionGroup[]> {
+  const tree = await fetchSessionTree(sdk)
+  return tree.scopes.map((scope) => ({
+    id: scope.path,
+    title: scope.name,
+    type: scope.kind,
+    sessionCount: scope.sessionCount,
+    sessions: scope.locations.flatMap((location) => location.sessions),
+  }))
 }
 
 function normalizeCount(n: number | string): number {
@@ -103,29 +94,10 @@ function normalizeTimestamp(n: number | string): number {
   return typeof n === "number" ? n : 0
 }
 
-export async function fetchSessionGroups(sdk: SessionGroupsSDK): Promise<SessionGroup[]> {
-  const res = await sdk.client.workbench.sessionGroups()
-  const rawGroups = res.data?.groups ?? []
-  return rawGroups.map((g) => ({
-    id: g.id,
-    title: g.title,
-    type: g.type,
-    sessionCount: normalizeCount(g.sessionCount),
-    sessions: (g.sessions ?? []).map((s) => ({
-      id: s.id,
-      title: s.title,
-      directory: s.directory,
-      directoryHealth: s.directoryHealth,
-      agent: s.agent,
-      timeCreated: normalizeTimestamp(s.timeCreated),
-      timeUpdated: normalizeTimestamp(s.timeUpdated),
-    })),
-  }))
-}
-
 export type SessionTreeSDK = {
-  client: {
+  bff: {
     workbench: {
+      locations: (input: { spacePath: string }) => Promise<{ data?: { scopePath?: string } }>
       sessionTree: (input?: { limitPerScope?: string }) => Promise<{
         data?: {
           scopes?: Array<{
@@ -146,9 +118,9 @@ export type SessionTreeSDK = {
                 directory: string
                 directoryHealth: "healthy" | "missing" | "unavailable"
                 agent?: string
-                marker?: "" | "directory" | "worktree"
-                relativePath?: string
-                branch?: string
+                marker: "" | "directory" | "worktree"
+                relativePath?: string | null
+                branch?: string | null
                 timeCreated: number | string
                 timeUpdated: number | string
               }>
@@ -161,10 +133,19 @@ export type SessionTreeSDK = {
 }
 
 export async function fetchSessionTree(sdk: SessionTreeSDK): Promise<WorkbenchSessionTree> {
-  const response = await sdk.client.workbench.sessionTree()
+  const response = await sdk.bff.workbench.sessionTree()
+  const raw = response.data?.scopes ?? []
+  const paths = await Promise.all(
+    raw.map(async (scope) =>
+      scope.kind === "space"
+        ? ((await sdk.bff.workbench.locations({ spacePath: scope.path }).catch(() => undefined))?.data?.scopePath ??
+          scope.path)
+        : scope.path,
+    ),
+  )
   return {
-    scopes: (response.data?.scopes ?? []).map((scope) => ({
-      path: scope.path,
+    scopes: raw.map((scope, index) => ({
+      path: paths[index],
       name: scope.name,
       kind: scope.kind,
       sessionCount: normalizeCount(scope.sessionCount),
@@ -205,16 +186,18 @@ export async function fetchSessionTree(sdk: SessionTreeSDK): Promise<WorkbenchSe
 // nodes reuse `prev` references wherever they land.
 
 function sessionEqual(a: GroupSession, b: GroupSession): boolean {
-  return a.id === b.id
-    && a.title === b.title
-    && a.directory === b.directory
-    && a.directoryHealth === b.directoryHealth
-    && a.agent === b.agent
-    && a.marker === b.marker
-    && a.relativePath === b.relativePath
-    && a.branch === b.branch
-    && a.timeCreated === b.timeCreated
-    && a.timeUpdated === b.timeUpdated
+  return (
+    a.id === b.id &&
+    a.title === b.title &&
+    a.directory === b.directory &&
+    a.directoryHealth === b.directoryHealth &&
+    a.agent === b.agent &&
+    a.marker === b.marker &&
+    a.relativePath === b.relativePath &&
+    a.branch === b.branch &&
+    a.timeCreated === b.timeCreated &&
+    a.timeUpdated === b.timeUpdated
+  )
 }
 
 function mergeSessions(prev: GroupSession[], next: GroupSession[]): GroupSession[] {
@@ -233,9 +216,7 @@ function mergeSessions(prev: GroupSession[], next: GroupSession[]): GroupSession
 }
 
 function mergeLocation(prev: SessionTreeLocation, next: SessionTreeLocation): SessionTreeLocation {
-  const topEqual = prev.label === next.label
-    && prev.kind === next.kind
-    && prev.relativePath === next.relativePath
+  const topEqual = prev.label === next.label && prev.kind === next.kind && prev.relativePath === next.relativePath
   const mergedSessions = mergeSessions(prev.sessions, next.sessions)
   if (topEqual && mergedSessions === prev.sessions) return prev
   return { ...next, sessions: mergedSessions }
@@ -259,10 +240,11 @@ function mergeLocations(prev: SessionTreeLocation[], next: SessionTreeLocation[]
 }
 
 function mergeScope(prev: SessionTreeScope, next: SessionTreeScope): SessionTreeScope {
-  const topEqual = prev.name === next.name
-    && prev.kind === next.kind
-    && prev.sessionCount === next.sessionCount
-    && prev.truncated === next.truncated
+  const topEqual =
+    prev.name === next.name &&
+    prev.kind === next.kind &&
+    prev.sessionCount === next.sessionCount &&
+    prev.truncated === next.truncated
   const mergedLocs = mergeLocations(prev.locations, next.locations)
   if (topEqual && mergedLocs === prev.locations) return prev
   return { ...next, locations: mergedLocs }
@@ -343,10 +325,7 @@ export function resolveTargetPanel(
 
 // ── getPanelBadge (pure helper) ─────────────────────────────────────────────
 
-export function getPanelBadge(
-  wb: OpenSessionWB,
-  sessionId: string,
-): string | undefined {
+export function getPanelBadge(wb: OpenSessionWB, sessionId: string): string | undefined {
   const binding = wb.findSessionBinding(sessionId)
   if (!binding) return undefined
   const index = wb.spaces[binding.spacePath]?.panels.findIndex((panel) => panel.id === binding.panelID) ?? -1
@@ -400,15 +379,11 @@ export async function openSessionInPanel(params: {
       const updatedSpace = params.wb.spaces[targetSpacePath]
       const newPanel = updatedSpace?.panels?.find((p) => p.id === newPanelId)
       if (newPanel) {
-        await loadSessionIntoPanel(newPanel).catch((error) =>
-          reportWorkbenchError("load session into panel", error),
-        )
+        await loadSessionIntoPanel(newPanel).catch((error) => reportWorkbenchError("load session into panel", error))
       }
     }
   } else {
-    params.showOverwriteDialog(resolution.index, () =>
-      loadSessionIntoPanel(resolution.panel),
-    )
+    params.showOverwriteDialog(resolution.index, () => loadSessionIntoPanel(resolution.panel))
   }
 }
 

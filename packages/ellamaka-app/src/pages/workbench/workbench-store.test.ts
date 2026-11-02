@@ -41,6 +41,93 @@ const fixture = (): PersistedWorkbench => ({
 })
 
 describe("WorkbenchStore", () => {
+  test("moves an alias tab and its panel state to the verified Space root", () => {
+    const store = createWorkbenchStore(fixture())
+    expect(store.reconcileSpacePath("/fixtures/space-a", "/real/space-a")).toBe(true)
+    expect(store.tabs.find((tab) => tab.id === "space-a")?.path).toBe("/real/space-a")
+    expect(store.activeTab()?.path).toBe("/real/space-a")
+    expect(store.spaceState("/real/space-a")?.panels[0]).toMatchObject({
+      boundSessionId: "session-a",
+      directory: "/fixtures/space-a/project-a",
+    })
+  })
+  test("merges colliding alias and canonical Space states without losing panels", () => {
+    const store = createWorkbenchStore(fixture())
+    store.ensureSpace("/real/space-a")
+    expect(store.reconcileSpacePath("/fixtures/space-a", "/real/space-a")).toBe(true)
+    expect(store.spaceState("/fixtures/space-a")).toBeUndefined()
+    expect(store.spaceState("/real/space-a")?.panels.some((panel) => panel.boundSessionId === "session-a")).toBe(true)
+    expect(store.tabs.filter((tab) => tab.path === "/real/space-a")).toHaveLength(1)
+  })
+  test("keeps the three-Panel limit when two valid layouts collide", () => {
+    const store = createWorkbenchStore({
+      ...fixture(),
+      spaces: {
+        "/alias": {
+          activePanelID: "a1",
+          panels: ["a1", "a2", "a3"].map((id) => ({
+            id,
+            slotState: "bound" as const,
+            boundSessionId: id,
+            directory: "/alias/",
+            mode: "chat" as const,
+            width: 1,
+          })),
+        },
+        "/real": {
+          activePanelID: "r1",
+          panels: ["r1", "r2", "r3"].map((id) => ({
+            id,
+            slotState: "bound" as const,
+            boundSessionId: id,
+            directory: "/real/",
+            mode: "chat" as const,
+            width: 1,
+          })),
+        },
+      },
+      tabs: [
+        { id: "a", name: "A", path: "/alias", type: "space" },
+        { id: "r", name: "R", path: "/real", type: "space" },
+      ],
+      activeTabPath: "/alias",
+    })
+    expect(store.reconcileSpacePath("/alias", "/real")).toBe(true)
+    expect(store.spaceState("/real")?.panels).toHaveLength(3)
+    expect(store.spaceState("/real")?.panels.map((panel) => panel.boundSessionId)).toEqual(["a1", "a2", "a3"])
+    expect(store.activeTabPath).toBe("/real")
+  })
+  test("preserves a bound session directory when opening its Space", () => {
+    const store = createWorkbenchStore({
+      ...fixture(),
+      spaces: {
+        "/fixtures/new-space": {
+          activePanelID: "panel-stale",
+          panels: [
+            {
+              id: "panel-stale",
+              slotState: "bound",
+              boundSessionId: "session-old",
+              mode: "chat",
+              viewMode: "chat",
+              directory: "/fixtures/old-home/spaces/new-space",
+              width: 1,
+            },
+          ],
+        },
+      },
+      tabs: [{ id: "General", name: "General", path: "", type: "general" }],
+      activeTabPath: "",
+    })
+    store.openTab({ id: "new-space", name: "New Space", path: "/fixtures/new-space", type: "space" })
+    const panel = store.spaceState("/fixtures/new-space")?.panels[0]
+    expect(panel).toMatchObject({
+      directory: "/fixtures/old-home/spaces/new-space",
+      slotState: "bound",
+      boundSessionId: "session-old",
+    })
+    expect(store.snapshot().spaces["/fixtures/old-home/spaces/new-space"]).toBeUndefined()
+  })
   test("hydrates and snapshots layout without sharing mutable input objects", () => {
     const input = fixture()
     const store = createWorkbenchStore()
@@ -64,6 +151,7 @@ describe("WorkbenchStore", () => {
   test("backfills the stable id for tabs persisted before the id field existed", () => {
     // Legacy layout: tabs carry only name/path/type (no id). Hydration must
     // backfill id = path (General uses its name) so the type contract holds.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- exercises pre-id persisted data
     const legacy = {
       schemaVersion: 2,
       display: { showTitlebar: true, showStatusbar: true, showSpaceRail: true, showFileViewer: true },
@@ -160,7 +248,7 @@ describe("WorkbenchStore", () => {
     // Close Space A tab while keeping space state in store.spaces
     store.removeSpace("/fixtures/space-a")
     expect(store.spaceState("/fixtures/space-a")).toBeUndefined()
-    
+
     // Manually ensure space state exists without tab
     store.ensureSpace("/fixtures/space-a")
     store.bindSessionToPanel("/fixtures/space-a", "panel-a", {

@@ -58,11 +58,6 @@ shift 2>/dev/null || true
 # Shared version resolution for CLI / Desktop builds.
 source "$PROJECT_ROOT/scripts/lib/version.sh"
 
-# Keep the @wopal/cli-capability-schema dependency floor in lockstep with
-# .ci/versions.json before resolving MIN_WOPAL_CLI_VERSION, so compile-time
-# schema types match the runtime floor during development and verification.
-sync_min_wopal_cli_version "$PROJECT_ROOT"
-
 # ── DSH runtime manifest freshness ────────────────────────────────
 # The CLI binary inlines generated/dsh-runtime-manifest.json at bundle time
 # (static JSON import in @wopal/ellamaka-cordis/runtime). Release builds
@@ -198,13 +193,6 @@ function build_cli() {
     export ELLAMAKA_CHANNEL="$CHANNEL"
   fi
 
-  # Inject the effective minimum wopal-cli version (same resolution as
-  # build_desktop: max of .ci/versions.json and the @wopal/cli-capability-
-  # schema dependency floor) so the release bundle inlines the protocol
-  # floor at compile time. Packaged artifacts must never depend on a
-  # runtime env var or the source-tree file fallback.
-  export MIN_WOPAL_CLI_VERSION="${MIN_WOPAL_CLI_VERSION:-$(resolve_min_wopal_cli_version "$PROJECT_ROOT")}"
-
   BINARY_NAME="$BINARY_NAME" bun "$PROJECT_ROOT/packages/ellamaka-release/src/cli/build.ts" "${BUILD_ARGS[@]}"
 
   if $INSTALL; then
@@ -325,11 +313,6 @@ function build_desktop() {
   fi
 
   export ELLAMAKA_CHANNEL="$CHANNEL"
-
-  # Inject the effective minimum wopal-cli version (auto-follows the
-  # @wopal/cli-capability-schema dependency floor, config override wins when
-  # higher) so the packaged app enforces the runtime protocol floor.
-  export MIN_WOPAL_CLI_VERSION="${MIN_WOPAL_CLI_VERSION:-$(resolve_min_wopal_cli_version "$PROJECT_ROOT")}"
 
   if [[ -n "${CUSTOM_VERSION:-}" ]]; then
     export ELLAMAKA_VERSION="$CUSTOM_VERSION"

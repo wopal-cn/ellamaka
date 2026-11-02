@@ -44,6 +44,8 @@ export type BoundWorkbenchPanel = ActiveWorkbenchTarget & {
 }
 
 export type WorkbenchActionStorePort = {
+  /** Move a persisted Space identity as one transaction; implementation owns its Panel limit. */
+  reconcileSpaceIdentity?: (from: SpaceScope, to: SpaceScope) => boolean
   panel: (scope: SpaceScope, panelID: string) => WorkbenchActionPanel | undefined
   panels: (scope: SpaceScope) => readonly WorkbenchActionPanel[]
   boundPanels: (sessionID: string) => readonly BoundWorkbenchPanel[]
@@ -55,15 +57,22 @@ export type WorkbenchActionStorePort = {
   removePanel: (scope: SpaceScope, panelID: string) => boolean
   removeSpace: (scope: SpaceScope) => boolean
   commitSessionBinding: (scope: SpaceScope, panelID: string, session: WorkbenchActionSession) => void
+  commitPanelDirectory?: (scope: SpaceScope, panelID: string, directory: string) => void
   commitSessionUnbinding: (scope: SpaceScope, panelID: string) => boolean
   commitPanelPty: (scope: SpaceScope, panelID: string, kind: WorkbenchActionPtyKind, ptyID?: string) => void
   commitPanelMode?: (scope: SpaceScope, panelID: string, mode: string) => void
   commitSplitTerminal?: (scope: SpaceScope, panelID: string, open: boolean) => void
   spacePaths: () => string[]
-  pushDiagnostic?: (type: "info" | "warning" | "error", text: string, options?: { id?: string; autoDismiss?: boolean }) => string
+  pushDiagnostic?: (
+    type: "info" | "warning" | "error",
+    text: string,
+    options?: { id?: string; autoDismiss?: boolean },
+  ) => string
 }
 
 export type WorkbenchActionPtyPort = {
+  /** Finish old-scope PTY bookkeeping before the Space identity moves. */
+  reconcileSpaceIdentity?: (from: SpaceScope, to: SpaceScope) => Promise<void>
   disposePanel: (input: { scope: SpaceScope; panel: WorkbenchActionPanel }) => Promise<void>
   ensure: (input: {
     scope: SpaceScope
@@ -84,7 +93,12 @@ export type WorkbenchActionPtyPort = {
 }
 
 export type WorkbenchActionSessionPort = {
-  create: (input: { scope: SpaceScope; panel: WorkbenchActionPanel; initialView?: "chat" | "tui" }) => Promise<WorkbenchActionSession>
+  create: (input: {
+    scope: SpaceScope
+    panel: WorkbenchActionPanel
+    initialView?: "chat" | "tui"
+    relativeDirectory?: string
+  }) => Promise<WorkbenchActionSession>
   get: (input: { scope: SpaceScope; sessionID: string; directory: string }) => Promise<WorkbenchActionSession>
   project: (input: { scope: SpaceScope; session: WorkbenchActionSession }) => void
   rename: (input: { scope: SpaceScope; sessionID: string; directory: string; title: string }) => Promise<void>
@@ -178,6 +192,12 @@ export function createWorkbenchActions(input: {
   const [panelActionsRevision, bumpPanelActionsRevision] = createSignal(0)
   const disposingPanels = new Map<string, number>()
   const panelKey = (scope: SpaceScope, panelID: string) => `${scopeKey(scope)}\n${panelID}`
+  const invalidateScope = (scope: SpaceScope) => {
+    const prefix = `${scopeKey(scope)}\n`
+    for (const key of generations.keys())
+      if (key.startsWith(prefix)) generations.set(key, (generations.get(key) ?? 0) + 1)
+    for (const key of disposingPanels.keys()) if (key.startsWith(prefix)) disposingPanels.delete(key)
+  }
   const nextGeneration = (scope: SpaceScope, panelID: string) => {
     const key = panelKey(scope, panelID)
     const generation = (generations.get(key) ?? 0) + 1
@@ -242,6 +262,14 @@ export function createWorkbenchActions(input: {
   }
 
   return {
+    async reconcileSpaceIdentity(from: SpaceScope, to: SpaceScope) {
+      invalidateScope(from)
+      await input.pty.reconcileSpaceIdentity?.(from, to)
+      if (!(input.store.reconcileSpaceIdentity?.(from, to) ?? false)) {
+        throw new Error(`Unable to reconcile Space identity: ${scopePath(from)}`)
+      }
+      return true
+    },
     activeTarget: input.store.active,
     addPanel(scope: SpaceScope) {
       return input.store.addPanel(scope)
@@ -295,11 +323,7 @@ export function createWorkbenchActions(input: {
       input.store.commitPanelMode?.(options.scope, options.panelID, "chat")
       return { status: "committed", panelID: options.panelID }
     },
-    async exitTui(options: {
-      scope: SpaceScope
-      panelID: string
-      ptyID: string
-    }): Promise<WorkbenchActionResult> {
+    async exitTui(options: { scope: SpaceScope; panelID: string; ptyID: string }): Promise<WorkbenchActionResult> {
       // TUI process exited normally (WS code 1000). The backend's proc.onExit
       // handler already called remove(id) on its side, so we do NOT issue a
       // DELETE here — that would race with the backend cleanup and surface a
@@ -320,12 +344,18 @@ export function createWorkbenchActions(input: {
       scope: SpaceScope
       panelID: string
       initialView?: "chat" | "tui"
+      relativeDirectory?: string
     }): Promise<WorkbenchActionResult> {
       if (!runtime.canWrite()) return { status: "offline", panelID: options.panelID }
       const panel = panelOrThrow(options.scope, options.panelID)
       const generation = nextGeneration(options.scope, options.panelID)
       const panelSnap = snapshotPanel(panel)
-      const session = await input.session.create({ scope: options.scope, panel, initialView: options.initialView })
+      const session = await input.session.create({
+        scope: options.scope,
+        panel,
+        initialView: options.initialView,
+        relativeDirectory: options.relativeDirectory,
+      })
       if (!isCurrent(options.scope, options.panelID, generation)) {
         await input.session.remove({ scope: options.scope, session })
         return { status: "stale", panelID: options.panelID }
@@ -348,10 +378,7 @@ export function createWorkbenchActions(input: {
       }
       return { status: "committed", panelID: options.panelID }
     },
-    async closePanel(options: {
-      scope: SpaceScope
-      panelID: string
-    }): Promise<WorkbenchActionResult> {
+    async closePanel(options: { scope: SpaceScope; panelID: string }): Promise<WorkbenchActionResult> {
       if (!runtime.canWrite()) return { status: "offline", panelID: options.panelID }
       const panel = input.store.panel(options.scope, options.panelID)
       if (!panel) return { status: "unchanged", panelID: options.panelID }
@@ -380,17 +407,12 @@ export function createWorkbenchActions(input: {
       input.store.removePanel(options.scope, options.panelID)
       return { status: "committed", panelID: options.panelID }
     },
-    unbindSession(options: {
-      scope: SpaceScope
-      panelID: string
-    }) {
-      if (!runtime.canWrite()) return Promise.resolve({ status: "offline", panelID: options.panelID } satisfies WorkbenchActionResult)
+    unbindSession(options: { scope: SpaceScope; panelID: string }) {
+      if (!runtime.canWrite())
+        return Promise.resolve({ status: "offline", panelID: options.panelID } satisfies WorkbenchActionResult)
       return unbindPanel(options.scope, options.panelID)
     },
-    async startDraftSession(options: {
-      scope: SpaceScope
-      panelID: string
-    }): Promise<WorkbenchActionResult> {
+    async startDraftSession(options: { scope: SpaceScope; panelID: string }): Promise<WorkbenchActionResult> {
       if (!runtime.canWrite()) return { status: "offline", panelID: options.panelID }
       const panel = input.store.panel(options.scope, options.panelID)
       if (!panel) return { status: "stale", panelID: options.panelID }
@@ -560,15 +582,17 @@ export function createWorkbenchActions(input: {
       if (!panel || panel.boundSessionId !== options.sessionID) {
         return { status: "stale", panelID: options.panelID }
       }
-      const unavailableReason = typeof session.timeArchived === "number"
-        ? "archived" as const
-        : session.parentID
-          ? "child" as const
-          : undefined
+      const unavailableReason =
+        typeof session.timeArchived === "number"
+          ? ("archived" as const)
+          : session.parentID
+            ? ("child" as const)
+            : undefined
       if (unavailableReason) {
-        return { ...await unbindPanel(options.scope, options.panelID), unavailableReason }
+        return { ...(await unbindPanel(options.scope, options.panelID)), unavailableReason }
       }
       input.session.project({ scope: options.scope, session })
+      input.store.commitPanelDirectory?.(options.scope, options.panelID, session.directory)
       return { status: "committed", panelID: options.panelID }
     },
     async loadSessionIntoPanel(options: {
@@ -587,20 +611,17 @@ export function createWorkbenchActions(input: {
       if (!isCurrent(options.scope, options.panelID, generation)) {
         return { status: "stale", panelID: options.panelID }
       }
-      const unavailableReason = typeof session.timeArchived === "number"
-        ? "archived" as const
-        : session.parentID
-          ? "child" as const
-          : undefined
+      const unavailableReason =
+        typeof session.timeArchived === "number"
+          ? ("archived" as const)
+          : session.parentID
+            ? ("child" as const)
+            : undefined
       if (unavailableReason) {
         return { status: "unchanged", panelID: options.panelID, unavailableReason }
       }
       const panel = panelOrThrow(options.scope, options.panelID)
-      if (
-        panel.slotState === "bound" &&
-        panel.boundSessionId === session.id &&
-        panel.directory === session.directory
-      ) {
+      if (panel.slotState === "bound" && panel.boundSessionId === session.id && panel.directory === session.directory) {
         input.session.project({ scope: options.scope, session })
         return { status: "unchanged", panelID: options.panelID }
       }
@@ -633,8 +654,7 @@ export function createWorkbenchActions(input: {
       // 2. Unbound → locate an empty Panel, otherwise add one (max 3).
       const panels = input.store.panels(options.scope)
       const emptyPanel = panels.find((panel) => panel.slotState === "empty")
-      const targetPanelID =
-        emptyPanel?.id ?? (panels.length < 3 ? input.store.addPanel(options.scope) : undefined)
+      const targetPanelID = emptyPanel?.id ?? (panels.length < 3 ? input.store.addPanel(options.scope) : undefined)
 
       if (!targetPanelID) {
         // All Panels are bound. Without confirmation we must not silently
@@ -650,7 +670,12 @@ export function createWorkbenchActions(input: {
           })
           if (result.status === "stale") return { status: "stale" }
           if (result.unavailableReason) {
-            return { status: "unavailable", reason: result.unavailableReason, panelID: activeID, scopePath: scopePathValue }
+            return {
+              status: "unavailable",
+              reason: result.unavailableReason,
+              panelID: activeID,
+              scopePath: scopePathValue,
+            }
           }
           return { status: "loaded", panelID: activeID, scopePath: scopePathValue }
         }
@@ -671,16 +696,16 @@ export function createWorkbenchActions(input: {
       })
       if (result.status === "stale") return { status: "stale" }
       if (result.unavailableReason) {
-        return { status: "unavailable", reason: result.unavailableReason, panelID: targetPanelID, scopePath: scopePathValue }
+        return {
+          status: "unavailable",
+          reason: result.unavailableReason,
+          panelID: targetPanelID,
+          scopePath: scopePathValue,
+        }
       }
       return { status: "loaded", panelID: targetPanelID, scopePath: scopePathValue }
     },
-    renameSession(options: {
-      scope: SpaceScope
-      sessionID: string
-      directory: string
-      title: string
-    }) {
+    renameSession(options: { scope: SpaceScope; sessionID: string; directory: string; title: string }) {
       if (!runtime.canWrite()) return Promise.resolve({ status: "offline" } satisfies WorkbenchActionStatus)
       return input.session.rename(options)
     },
@@ -758,10 +783,7 @@ export function createWorkbenchActions(input: {
       input.store.commitPanelPty(options.scope, options.panelID, options.kind, createdPtyID)
       return { status: "committed", panelID: options.panelID, ptyID: createdPtyID }
     },
-    async closeSplitTerminal(options: {
-      scope: SpaceScope
-      panelID: string
-    }): Promise<WorkbenchActionResult> {
+    async closeSplitTerminal(options: { scope: SpaceScope; panelID: string }): Promise<WorkbenchActionResult> {
       if (!runtime.canWrite()) return { status: "offline", panelID: options.panelID }
       const panel = panelOrThrow(options.scope, options.panelID)
       const existingPtyID = ptyID(panel, "split")
@@ -795,7 +817,8 @@ export function createWorkbenchActions(input: {
         return { status: "stale", panelID: options.panelID }
       }
       const generation = nextGeneration(options.scope, options.panelID)
-      const probe = await (input.pty.probe?.({ directory: panel.directory, ptyID: options.ptyID }) ?? Promise.resolve("unknown"))
+      const probe = await (input.pty.probe?.({ directory: panel.directory, ptyID: options.ptyID }) ??
+        Promise.resolve("unknown"))
       if (!isCurrent(options.scope, options.panelID, generation)) {
         return { status: "stale", panelID: options.panelID }
       }
@@ -845,7 +868,11 @@ export function createWorkbenchActions(input: {
         // Clear ptyManager memory
         input.pty.clearMemory?.()
         // Add diagnostic hint
-        input.store.pushDiagnostic?.("info", "Sidecar restarted — PTY sessions have been reset. Re-open TUI/Terminal as needed.", { id: "sidecar-restart-pty-reset", autoDismiss: true })
+        input.store.pushDiagnostic?.(
+          "info",
+          "Sidecar restarted — PTY sessions have been reset. Re-open TUI/Terminal as needed.",
+          { id: "sidecar-restart-pty-reset", autoDismiss: true },
+        )
       })
     },
     clearPtyEverywhere(ptyID: string) {

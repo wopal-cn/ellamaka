@@ -751,10 +751,6 @@ const scenarios: Scenario[] = [
     .get("/wopal-space/spaces", "wopalSpace.spaces")
     .json(200, object, "status"),
   http.protected
-    .get("/workbench/session-groups", "workbench.sessionGroups")
-    .global()
-    .json(200, object, "status"),
-  http.protected
     .get("/workbench/session-tree", "workbench.sessionTree")
     .status(503),
   http.protected

@@ -1,6 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises"
-import { dirname, join } from "node:path"
-import { applyEdits, modify, parse } from "jsonc-parser"
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
+import { parse } from "jsonc-parser"
+import { SettingsRegistryError, updateSettingsEntry } from "./settings-registry"
 
 export const DSH_WEB_ENABLED_KEY = "wopal.dsh.web.enabled"
 
@@ -16,13 +17,13 @@ export function parseDshWebEnabled(text: string): boolean | undefined {
   const raw = parse(text, errors, { allowTrailingComma: true, disallowComments: false }) as unknown
   if (errors.length) throw new ProductSettingsError("settings.jsonc is not valid JSONC")
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined
-  const wopal = (raw as Record<string, unknown>).wopal
+  const wopal = "wopal" in raw ? raw.wopal : undefined
   if (!wopal || typeof wopal !== "object" || Array.isArray(wopal)) return undefined
-  const dsh = (wopal as Record<string, unknown>).dsh
+  const dsh = "dsh" in wopal ? wopal.dsh : undefined
   if (!dsh || typeof dsh !== "object" || Array.isArray(dsh)) return undefined
-  const web = (dsh as Record<string, unknown>).web
+  const web = "web" in dsh ? dsh.web : undefined
   if (!web || typeof web !== "object" || Array.isArray(web)) return undefined
-  const enabled = (web as Record<string, unknown>).enabled
+  const enabled = "enabled" in web ? web.enabled : undefined
   return typeof enabled === "boolean" ? enabled : undefined
 }
 
@@ -31,7 +32,7 @@ export async function readDshWebEnabled(wopalHome: string): Promise<boolean> {
   try {
     return parseDshWebEnabled(await readFile(file, "utf8")) ?? true
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return true
     throw error
   }
 }
@@ -41,23 +42,13 @@ export async function updateDshWebEnabled(input: {
   enabled: boolean
 }): Promise<{ changed: boolean; apply: "restart-required" }> {
   const file = join(input.wopalHome, "config", "settings.jsonc")
-  let current = "{}\n"
   try {
-    current = await readFile(file, "utf8")
+    const changed = updateSettingsEntry(file, ["wopal", "dsh", "web", "enabled"], input.enabled, {
+      validate: parseDshWebEnabled,
+    })
+    return { changed, apply: "restart-required" }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    if (error instanceof SettingsRegistryError) throw new ProductSettingsError(error.message)
+    throw error
   }
-  if (parseDshWebEnabled(current) === input.enabled) {
-    return { changed: false, apply: "restart-required" }
-  }
-  const edits = modify(current, ["wopal", "dsh", "web", "enabled"], input.enabled, {
-    formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
-  })
-  const next = applyEdits(current, edits)
-  const dir = dirname(file)
-  await mkdir(dir, { recursive: true })
-  const temporary = join(dir, `.settings.jsonc.${process.pid}.${crypto.randomUUID()}.tmp`)
-  await writeFile(temporary, next, "utf8")
-  await rename(temporary, file)
-  return { changed: true, apply: "restart-required" }
 }

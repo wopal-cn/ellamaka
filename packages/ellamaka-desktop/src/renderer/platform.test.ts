@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
 
 describe("desktop renderer platform", () => {
   test("platform type is desktop", () => {
@@ -43,11 +44,10 @@ describe("desktop renderer platform", () => {
     expect(platformKeys).not.toContain("setWslEnabled")
   })
 
-  test("default route is /workbench", () => {
-    // MemoryRouter should be configured with initialURL="/workbench"
-    // This is a structural test - the main entry bypasses the upstream
-    // home route and goes directly to the Workbench.
-    const defaultRoute = "/workbench"
-    expect(defaultRoute).toBe("/workbench")
+  test("default route is the neutral startup surface", () => {
+    // The shared Application Startup Gate chooses Onboarding or Workbench
+    // after consulting Setup facts; the Desktop shell must not preselect one.
+    const router = readFileSync(new URL("./desktop-router.tsx", import.meta.url), "utf8")
+    expect(router).toContain('value: "/startup"')
   })
 })

@@ -1,8 +1,10 @@
-import type { Event, SessionStatus } from "@wopal/ellamaka-sdk/v2/client"
+import type { Event } from "@wopal/ellamaka-sdk/v2/client"
 import { batch } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
-export type SessionActivity = { directory: string; sessionID: string; status: SessionStatus }
+/** Only the status discriminator crosses the API boundary here. */
+export type ActivityStatus = { readonly type: string }
+export type SessionActivity = { directory: string; sessionID: string; status: ActivityStatus }
 type ActivityEvent = { directory: string; event: Event }
 
 /** Read-only server projection. No directory SDK or child-store creation belongs here. */
@@ -70,7 +72,7 @@ export function createSessionActivity(input: {
       if (pending) pending.push(entry)
       apply(entry)
     },
-    status(sessionID: string): SessionStatus {
+    status(sessionID: string): ActivityStatus {
       return state.sessions[sessionID]?.status ?? { type: "idle" }
     },
     entries: () => Object.values(state.sessions),

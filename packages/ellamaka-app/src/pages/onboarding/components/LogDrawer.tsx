@@ -1,96 +1,80 @@
-import { createSignal, Show, For, createEffect } from "solid-js"
-import { zhCN } from "../content/zh-CN"
+import { createEffect, createSignal, For, Show } from "solid-js"
 
-export interface LogEntry {
+export interface LogDrawerEntry {
   text: string
   isError?: boolean
-  timestamp?: string
 }
 
 export interface LogDrawerProps {
-  logs: LogEntry[]
+  logs: LogDrawerEntry[]
+  /** Current phase text, shown in the header while a step runs. */
   statusMsg?: string
   onClear?: () => void
-  onCopy?: () => void
 }
 
 const STORAGE_KEY = "wopal_onboarding_log_drawer_expanded"
 
-function getInitialExpandedState(): boolean {
+/**
+ * Collapsible run log for the setup wizard.
+ *
+ * A failed setup is exactly when the structured error banner above is least
+ * useful — it carries one wrapped message, not the sequence of actions that
+ * led there. The log is therefore always reachable from the wizard, and the
+ * drawer remembers whether the user left it open.
+ */
+function initialExpanded(): boolean {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved !== null) {
-      return saved === "true"
-    }
+    return localStorage.getItem(STORAGE_KEY) !== "false"
   } catch {
-    // ignore localStorage errors
-  }
-  return false // Default collapsed per user requirement
-}
-
-function saveExpandedState(expanded: boolean) {
-  try {
-    localStorage.setItem(STORAGE_KEY, String(expanded))
-  } catch {
-    // ignore localStorage write errors
+    return true
   }
 }
 
 export function LogDrawer(props: LogDrawerProps) {
-  const [expanded, setExpandedSignal] = createSignal(getInitialExpandedState())
-  const errorCount = () => props.logs.filter((l) => l.isError).length
+  const [expanded, setExpanded] = createSignal(initialExpanded())
   let bodyRef: HTMLDivElement | undefined
+  const errorCount = () => props.logs.filter((entry) => entry.isError).length
 
-  const toggleExpanded = () => {
-    const next = !expanded()
-    setExpandedSignal(next)
-    saveExpandedState(next)
-  }
-
-  // Auto-scroll to bottom when logs change
+  // Follow the tail while a step is streaming, but only when the drawer is
+  // open — a collapsed body has no scroll height to pin.
   createEffect(() => {
     props.logs.length
-    if (bodyRef && expanded()) {
-      bodyRef.scrollTop = bodyRef.scrollHeight
-    }
+    if (!expanded()) return
+    queueMicrotask(() => {
+      if (bodyRef) bodyRef.scrollTop = bodyRef.scrollHeight
+    })
   })
 
-  const handleCopy = async (e: MouseEvent) => {
-    e.stopPropagation()
-    const text = props.logs.map((l) => l.text).join("\n")
+  const toggle = () => {
+    const next = !expanded()
+    setExpanded(next)
     try {
-      await navigator.clipboard.writeText(text)
+      localStorage.setItem(STORAGE_KEY, String(next))
     } catch {
-      // fallback: select text
+      // A denied localStorage must not break the drawer.
     }
-    props.onCopy?.()
   }
 
-  const handleClear = (e: MouseEvent) => {
-    e.stopPropagation()
+  const clear = (event: MouseEvent) => {
+    event.stopPropagation()
     props.onClear?.()
   }
 
   return (
     <div class="ob-log-drawer">
-      <div class="ob-log-header" onClick={toggleExpanded} style={{ cursor: "pointer" }}>
+      <div class="ob-log-header" onClick={toggle}>
         <div class="ob-log-header-left">
-          <span class="ob-log-icon">{expanded() ? "▼" : "▲"}</span>
+          <span class="ob-log-icon">{expanded() ? "▾" : "▸"}</span>
           <span class="ob-log-title">日志</span>
           <Show when={errorCount() > 0}>
             <span class="ob-log-error-badge">{errorCount()} 错误</span>
           </Show>
         </div>
-        <div class="ob-log-header-status">
-          {props.statusMsg || ""}
-        </div>
-        <div class="ob-log-header-actions" onClick={(e) => e.stopPropagation()}>
+        <div class="ob-log-header-status">{props.statusMsg ?? ""}</div>
+        <div class="ob-log-header-actions" onClick={(event) => event.stopPropagation()}>
           <Show when={expanded()}>
-            <button class="ob-log-action-btn" onClick={handleCopy} title={zhCN.actions.copy}>
-              {zhCN.actions.copy}
-            </button>
-            <button class="ob-log-action-btn" onClick={handleClear} title={zhCN.actions.clear}>
-              {zhCN.actions.clear}
+            <button type="button" class="ob-log-action-btn" onClick={clear}>
+              清空
             </button>
           </Show>
         </div>
@@ -98,11 +82,7 @@ export function LogDrawer(props: LogDrawerProps) {
       <Show when={expanded()}>
         <div class="ob-log-body" ref={bodyRef}>
           <For each={props.logs}>
-            {(log) => (
-              <div class={log.isError ? "ob-log-line ob-log-err" : "ob-log-line"}>
-                {log.text}
-              </div>
-            )}
+            {(entry) => <div class={entry.isError ? "ob-log-line ob-log-err" : "ob-log-line"}>{entry.text}</div>}
           </For>
         </div>
       </Show>

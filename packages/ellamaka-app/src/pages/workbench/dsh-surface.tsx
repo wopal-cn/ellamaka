@@ -215,10 +215,15 @@ export function DshSurface(props: { children: JSX.Element }): JSX.Element {
   const language = useLanguage()
   const [iframeSrc, setIframeSrc] = createSignal<string>()
   const readyGeneration = () => (runtime.dshWebReady ? resolveServerHealthKey(server.key, server.current) : undefined)
-  const [entry, { refetch }] = createResource(readyGeneration, async (key) => {
-    const response = await sdk.client.workbench.dshUrl()
-    return { key, url: response.data?.url }
-  })
+  // The entry request also mounts DSH after onboarding. Waiting for DSH to
+  // report ready before making that request would leave it disabled forever.
+  const [entry, { refetch }] = createResource(
+    () => resolveServerHealthKey(server.key, server.current),
+    async (key) => {
+      const response = await sdk.bff.workbench.dshUrl()
+      return { key, url: response.data?.url ?? undefined }
+    },
+  )
   // The packaged desktop renderer lives on the privileged `oc://renderer`
   // origin, where Chromium refuses WebSocket URLs; the DSH realtime channel
   // needs WebSocket, so the iframe targets the main-process standard-HTTP

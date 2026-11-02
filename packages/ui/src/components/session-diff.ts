@@ -25,15 +25,26 @@ export type ViewDiff = {
 }
 
 const diffCacheLimit = 16
+const fileDiffCache = new Map<string, FileDiffMetadata>()
 const patchFileDiffCache = new Map<string, FileDiffMetadata>()
 
 export function resolveFileDiff(diff: DiffSource) {
-  if (typeof diff.patch === "string") return fileDiffFromPatch(diff.file, diff.patch)
-  return fileDiffFromContent(
-    diff.file,
-    typeof diff.before === "string" ? diff.before : "",
-    typeof diff.after === "string" ? diff.after : "",
-  )
+  const before = typeof diff.before === "string" ? diff.before : ""
+  const after = typeof diff.after === "string" ? diff.after : ""
+  const key = JSON.stringify([diff.file, typeof diff.patch === "string" ? diff.patch : null, before, after])
+  const hit = fileDiffCache.get(key)
+  if (hit) {
+    fileDiffCache.delete(key)
+    fileDiffCache.set(key, hit)
+    return hit
+  }
+  const value =
+    typeof diff.patch === "string"
+      ? fileDiffFromPatch(diff.file, diff.patch)
+      : fileDiffFromContent(diff.file, before, after)
+  fileDiffCache.set(key, value)
+  while (fileDiffCache.size > diffCacheLimit) fileDiffCache.delete(fileDiffCache.keys().next().value!)
+  return value
 }
 
 export function normalize(diff: ReviewDiff): ViewDiff {

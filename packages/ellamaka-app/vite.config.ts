@@ -20,6 +20,7 @@ const sentry =
     : false
 
 export default defineConfig({
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Vite accepts a heterogeneous plugin tuple
   plugins: [desktopPlugin, sentry] as any,
   // Files carrying a `@jsxImportSource` pragma (the workbench status-bar
   // diagnostics module and virtua's solid entry) are compiled by
@@ -40,15 +41,6 @@ export default defineConfig({
     // never carry it after the token exchange. Desktop and production serve
     // the frontend and the mount from one origin and are unaffected.
     proxy: {
-      // Dev-only: the onboarding surface is mounted on the backend origin
-      // (`ellamaka serve` :4096, or the desktop sidecar when its proxy target
-      // env var points there). Proxying keeps the frontend on same-origin
-      // relative requests — the same shape production serve and the Desktop
-      // embedded renderer use.
-      "/api/onboarding": {
-        target: process.env.ELLAMAKA_DSH_PROXY_TARGET ?? "http://127.0.0.1:4096",
-        changeOrigin: true,
-      },
       "/dsh": {
         target: process.env.ELLAMAKA_DSH_PROXY_TARGET ?? "http://127.0.0.1:4097",
         changeOrigin: true,
@@ -65,7 +57,10 @@ export default defineConfig({
           // The handler signature is (proxyReq, req, ...): the browser Origin
           // lives on the original request, the proxyReq is the outgoing
           // ClientRequest (its `headers` are not readable pre-send).
-          const rewrite = (proxyReq: { setHeader(key: string, value: string): void }, req: { headers: Record<string, string | string[] | undefined> }) => {
+          const rewrite = (
+            proxyReq: { setHeader(key: string, value: string): void },
+            req: { headers: Record<string, string | string[] | undefined> },
+          ) => {
             if (req.headers.origin) proxyReq.setHeader("origin", target)
           }
           proxy.on("proxyReq", rewrite)

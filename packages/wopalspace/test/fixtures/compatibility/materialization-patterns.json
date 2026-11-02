@@ -1,0 +1,19 @@
+[
+  "/.gitignore",
+  "/AGENTS.md",
+  "/AGENTS.zh-CN.md",
+  "/LICENSE",
+  "/README.en.md",
+  "/README.md",
+  "/agents/wopal.md",
+  "/assembly/archetypes/coding.yaml",
+  "/assembly/schemas/coding-space-schema.yaml",
+  "/assembly/templates/",
+  "/commands/init.md",
+  "/commands/wopal/memo.md",
+  "/config/",
+  "/docs/",
+  "/plugins/wopal-plugin/",
+  "/rules/typescript.md",
+  "/skills/dev-flow/"
+]

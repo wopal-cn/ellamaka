@@ -146,7 +146,6 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
   const [refreshing, setRefreshing] = createSignal(false)
 
   function handleRefresh() {
-    if (!runtime.canUseSpaceControl()) return
     if (refreshing()) return
     setRefreshing(true)
     wb.triggerRefresh()
@@ -211,12 +210,7 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
   // second click of a double-click (the row's dblclick opens a new panel).
   // closeSoon defers the hide past the OS double-click interval; requestClose
   // fires when a double-click completes so the flyout hides immediately then.
-  function handleFlyoutSessionClick(sessionId: string) {
-    flyout.closeSoon()
-    handleSessionClick(sessionId)
-  }
-
-  function handleFlyoutSessionDblClick(sessionId: string) {
+  function handleFlyoutSessionDblClick() {
     flyout.requestClose()
   }
 
@@ -325,7 +319,7 @@ export function SpaceRail(props: { onFileClick?: (file: FileNode) => void }) {
                   </svg>
                 }
                 aria-label={t("workbench.sidebar.refresh")}
-                disabled={!runtime.canUseSpaceControl()}
+                disabled={!runtime.canReadSpaces()}
                 onClick={handleRefresh}
               />
             </div>

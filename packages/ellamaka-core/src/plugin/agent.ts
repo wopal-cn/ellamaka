@@ -8,8 +8,6 @@ import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 
-const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
-
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
 Your strengths:
@@ -102,7 +100,7 @@ export const Plugin = PluginV2.define({
     const agent = yield* AgentV2.Service
     const location = yield* Location.Service
     const worktree = location.directory
-    const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
+    const whitelistedDirs = [path.join(Global.Path.data, "tool-output", "*"), path.join(Global.Path.tmp, "*")]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { permission: "external_directory", pattern: "*", action: "ask" },
       ...whitelistedDirs.map(

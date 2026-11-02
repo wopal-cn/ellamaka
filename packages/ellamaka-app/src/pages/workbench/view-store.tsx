@@ -274,6 +274,7 @@ export function initWorkbenchState() {
     },
     spaceState: workbench.spaceState,
     ensureSpace: workbench.ensureSpace,
+    reconcileSpacePath: workbench.reconcileSpacePath,
     addPanel: workbench.addPanel,
     removePanel: workbench.removePanel,
     setPanelMode: workbench.setPanelMode,

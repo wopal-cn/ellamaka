@@ -72,7 +72,6 @@ function planDesktop(args: string[], env: Record<string, string> = {}): DesktopP
     require_stopped() { :; }
     require_free_ports() { echo "free_ports=$*"; }
     choose_free_port() { SELECTED_PORT=4097; }
-    sync_min_wopal_cli_version() { :; }
     start_process() {
       for arg in "$@"; do
         case "$arg" in
@@ -104,7 +103,6 @@ function planDesktop(args: string[], env: Record<string, string> = {}): DesktopP
         ...process.env,
         ELLAMAKA_DESKTOP_CDP_PORT: "",
         WOPAL_HOME: dir,
-        MIN_WOPAL_CLI_VERSION: "0.0.0",
         ...env,
         CDP_TEST_DIR: dir,
       },

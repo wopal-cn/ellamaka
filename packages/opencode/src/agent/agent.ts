@@ -94,8 +94,9 @@ export const layer = Layer.effect(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
+        const truncationGlob = Truncate.glob()
         const whitelistedDirs = [
-          Truncate.GLOB,
+          truncationGlob,
           path.join(Global.Path.tmp, "*"),
           ...skillDirs.map((dir) => path.join(dir, "*")),
         ]
@@ -310,19 +311,19 @@ export const layer = Layer.effect(
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }
 
-        // Ensure Truncate.GLOB is allowed unless explicitly configured
+        // Ensure the current Home's truncation glob is allowed unless explicitly configured.
         for (const name in agents) {
           const agent = agents[name]
           const explicit = agent.permission.some((r) => {
             if (r.permission !== "external_directory") return false
             if (r.action !== "deny") return false
-            return r.pattern === Truncate.GLOB
+            return r.pattern === truncationGlob
           })
           if (explicit) continue
 
           agents[name].permission = Permission.merge(
             agents[name].permission,
-            Permission.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
+            Permission.fromConfig({ external_directory: { [truncationGlob]: "allow" } }),
           )
         }
 
@@ -399,11 +400,7 @@ export const layer = Layer.effect(
           version: 1,
           sections: [{ kind: "custom", content: PROMPT_GENERATE }],
         }
-        yield* plugin.trigger(
-          "experimental.chat.system.transform",
-          { model: resolved, systemMetadata },
-          { system },
-        )
+        yield* plugin.trigger("experimental.chat.system.transform", { model: resolved, systemMetadata }, { system })
         const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
         // TODO: clean this up so provider specific logic doesnt bleed over

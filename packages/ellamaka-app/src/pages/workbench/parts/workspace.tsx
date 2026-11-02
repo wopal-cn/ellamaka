@@ -1,5 +1,3 @@
-import { Icon as IconV2 } from "@wopal/ui/v2/components/icon.jsx"
-import { IconButtonV2 } from "@wopal/ui/v2/components/icon-button-v2.jsx"
 import { Button } from "@wopal/ui/button"
 import { Dialog } from "@wopal/ui/dialog"
 import { useDialog } from "@wopal/ui/context/dialog"
@@ -8,18 +6,18 @@ import { useLanguage } from "@/context/language"
 import { useWorkbenchState } from "../view-store"
 import { Panel } from "./panel"
 import { useWorkbenchActions } from "../workbench-actions"
-import { scopeFromTab, GENERAL_SCOPE_NAME } from "../workbench-scope"
+import { scopeFromTab } from "../workbench-scope"
 import { WorkbenchPanelDirectoryProvider } from "../workbench-directory-provider"
 import { createSpaceMount } from "./space-mount"
+import { useSessionStore } from "../session-store"
 
 import type { WorkbenchPanel } from "../view-store"
 
 export function Workspace() {
   const wb = useWorkbenchState()
+  const sessions = useSessionStore()
   const language = useLanguage()
   const t = (k: string) => language.t(k)
-
-  const dialog = useDialog()
 
   const activePath = createMemo(() => wb.activeTab()?.path ?? "")
 
@@ -27,13 +25,6 @@ export function Workspace() {
     const path = activePath()
     if (wb.activeTab()) wb.ensureSpace(path)
   })
-
-  const currentSpace = () => {
-    if (!wb.activeTab()) return undefined
-    return wb.spaceState(activePath())
-  }
-
-  const currentPanels = () => currentSpace()?.panels ?? []
 
   const handlePanelResizeStart = (
     e: MouseEvent & { currentTarget: HTMLDivElement },
@@ -123,10 +114,6 @@ export function Workspace() {
     document.addEventListener("mouseup", onMouseUp)
   }
 
-  const handleCloseTab = (name: string, path: string) => {
-    void dialog.show(() => <DialogCloseTab name={name} path={path} />)
-  }
-
   return (
     <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-v2-background-bg-base relative z-10">
       <div class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -160,7 +147,12 @@ export function Workspace() {
                           <WorkbenchPanelDirectoryProvider
                             panelID={panel.id}
                             directory={panel.directory}
-                            runtime={panel.slotState === "bound" && !!panel.boundSessionId}
+                            runtime={
+                              isTabActive() &&
+                              panel.slotState === "bound" &&
+                              !!panel.boundSessionId &&
+                              sessions.getSession(panel.boundSessionId)?.projectPath === panel.directory
+                            }
                           >
                             {() => (
                               <ErrorBoundary
@@ -255,13 +247,22 @@ function PanelErrorFallback(props: { error: Error; reset: () => void }) {
   // gets an inline retry affordance.
   const language = useLanguage()
   const t: typeof language.t = (key, params) => language.t(key, params)
+  // Solid boundaries can receive non-Error throws (for example a rejected
+  // response object). Preserve the actual diagnostic instead of rendering the
+  // generic "Unknown error" and losing the information the user needs.
+  const detail = () => {
+    if (props.error instanceof Error && props.error.message) return props.error.message
+    try {
+      const serialized = JSON.stringify(props.error)
+      if (serialized && serialized !== "{}") return serialized
+    } catch {}
+    return String(props.error || t("workbench.error.unknownError"))
+  }
   return (
     <div class="flex h-full flex-col items-center justify-center gap-3 bg-v2-background-bg-deep text-v2-text-text-base p-6">
       <div class="text-center max-w-sm">
         <div class="text-14-medium text-v2-text-text-strong mb-2">{t("workbench.error.panelLoadFailed")}</div>
-        <div class="text-12-regular text-v2-text-text-muted mb-4 break-words">
-          {props.error.message || t("workbench.error.unknownError")}
-        </div>
+        <div class="text-12-regular text-v2-text-text-muted mb-4 break-words">{detail()}</div>
         <button
           type="button"
           class="rounded-md bg-v2-icon-icon-brand px-3 py-1.5 text-12-bold text-white hover:opacity-90 transition-opacity"

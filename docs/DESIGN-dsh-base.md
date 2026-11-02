@@ -216,9 +216,9 @@ DSH 步骤发送 `@wopal/ellamaka-core` 的统一 `CorePreparationEvent`，不�
 
 | 入口 | Preparation | Runtime Activation |
 | --- | --- | --- |
-| `ellamaka serve` / `web` | 读取当前 CLI build descriptor；按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个 |
-| Desktop | 读取当前 embedded sidecar descriptor；按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；窗口不等待任一 profile |
-| 默认 TUI | 读取当前 build descriptor；仅在 `ELLAMAKA_DSH_TOOLS` 允许时准备 Tools | Tools 加载成功后由 Space adapter 采用；加载失败时 Native Tools 保持可用 |
+| `ellamaka serve` / `web` | Setup 未完成时不挂载 DSH，由 Onboarding 触发 host preparation；Setup 已完成时读取当前 CLI build descriptor，按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个 |
+| Desktop | 首次启动（Setup 未完成）不预挂 DSH，由 Onboarding 触发；已完成后读取当前 embedded sidecar descriptor，按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；窗口不等待任一 profile |
+| 默认 TUI | 无 Setup presentation，启动时兜底：读取当前 build descriptor，仅在 `ELLAMAKA_DSH_TOOLS` 允许时准备 Tools（不准备 Web） | Tools 加载成功后由 Space adapter 采用；加载失败时 Native Tools 保持可用 |
 | `wopal setup` | 自身不执行 DSH Preparation；它启动/reuse 的 `ellamaka serve` 按 `serve` 行处理当前 build | 打开 Web Onboarding |
 | `ellamaka run` | 永久跳过 DSH 分支 | 纯 Ellamaka Core；不探测、复用或挂载 DSH |
 | `run --attach` | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载 | 使用远端 Runtime |

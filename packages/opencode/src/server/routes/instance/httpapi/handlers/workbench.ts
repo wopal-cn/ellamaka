@@ -1,93 +1,42 @@
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { HttpServerRequest } from "effect/unstable/http"
-import { InstanceHttpApi, RootHttpApi } from "../api"
-import {
-  InvalidSpaceTarget,
-  type ProvisionError,
-  SessionDirectoryUnavailable,
-  SessionProvisioner,
-  WorkbenchRequestConflict,
-} from "@/workbench/session-provisioner"
-import { SessionProjection, WorkbenchSpaceNotFound } from "@/workbench/session-projection"
+import { AppBffInstanceApi, AppBffRootApi } from "../api"
+import { type ProvisionError, SessionProvisioner } from "@/workbench/session-provisioner"
+import { SessionProjection, WorkbenchSpaceNotFound, WorkbenchSpaceQueryFailed } from "@/workbench/session-projection"
 import { SessionDirectoryHealth } from "@/workbench/session-directory-health"
 import { WorkbenchDshUrl } from "@/workbench/dsh-url"
+import { ensureDshMounted } from "@/workbench/dsh-mount-registry"
 import {
-  SpaceFiles,
-  SpaceFilesAccessDenied,
-  SpaceFilesNotFound,
-  SpaceFilesSpaceNotFound,
-  type SpaceFilesError,
-} from "@/workbench/space-files"
-import { SessionStatus } from "@/session/status"
-import { SessionID } from "@/session/schema"
-import { CapabilityContractError as CapabilityContractFailure, SpaceControlUnavailable } from "@/wopal/cli-schema"
-import {
-  CapabilityContractError,
   InvalidSpaceTargetError,
   SessionDirectoryUnavailableError,
-  SpaceControlUnavailableError,
   WorkbenchRequestConflictError,
-  WorkbenchSpaceFileAccessDeniedError,
-  WorkbenchSpaceFileNotFoundError,
   WorkbenchSpaceNotFoundError,
+  WorkbenchSpaceQueryError,
 } from "../groups/workbench"
 
-export const workbenchHandlers = HttpApiBuilder.group(RootHttpApi, "workbench", (handlers) =>
+export const workbenchHandlers = HttpApiBuilder.group(AppBffRootApi, "workbench", (handlers) =>
   Effect.gen(function* () {
-    const projection = yield* SessionProjection.Service
     const dshUrl = yield* WorkbenchDshUrl
-    const status = yield* SessionStatus.Service
-    const spaceFiles = yield* SpaceFiles.Service
-    const sessionGroups = Effect.fn("WorkbenchHttpApi.sessionGroups")(function* () {
-      const groups = yield* projection
-        .getSessionGroups()
-        .pipe(Effect.catch((error) => Effect.fail(controlApiError(error))))
-      return {
-        groups: groups.map((group) => ({
-          id: group.id,
-          title: group.title,
-          type: group.type,
-          sessionCount: group.sessionCount,
-          sessions: group.sessions,
-        })),
-      }
-    })
     const dshUrlHandler = Effect.fn("WorkbenchHttpApi.dshUrl")(function* () {
       // The entry composes on the origin the browser is actually talking to
       // (its Host header) — a wildcard bind (`0.0.0.0` / mdns) must not leak
       // a non-routable authority into the launch-token URL, or the minted
       // cookie can never match and the Workbench Basic auth dialog loops.
       const request = yield* HttpServerRequest.HttpServerRequest
+      // Prepare on use (DESIGN-onboarding.md `## Core Preparation Timing`).
+      // A serve process that skipped the eager mount — because application
+      // Setup was unfinished — mounts here the first time the Workbench asks
+      // for its DSH entry. This is the same idempotent prepare the eager path
+      // calls, merely later; when the runtime is already mounted it is a no-op.
+      yield* Effect.promise(() => ensureDshMounted())
       return { url: dshUrl.get(request.headers.host) }
     })
-    const sessionStatuses = Effect.fn("WorkbenchHttpApi.sessionStatuses")(function* () {
-      return yield* status.snapshot()
-    })
-    const sessionSummary = Effect.fn("WorkbenchHttpApi.sessionSummary")(function* (ctx: {
-      params: { sessionID: SessionID }
-    }) {
-      return yield* projection.getSessionSummary(ctx.params)
-    })
-    const files = Effect.fn("WorkbenchHttpApi.files")(function* (ctx: { query: { spacePath: string; path?: string } }) {
-      return yield* spaceFiles.list(ctx.query).pipe(Effect.catch((error) => Effect.fail(spaceFilesApiError(error))))
-    })
-    const fileContent = Effect.fn("WorkbenchHttpApi.fileContent")(function* (ctx: {
-      query: { spacePath: string; path: string }
-    }) {
-      return yield* spaceFiles.read(ctx.query).pipe(Effect.catch((error) => Effect.fail(spaceFilesApiError(error))))
-    })
-    return handlers
-      .handle("sessionGroups", sessionGroups)
-      .handle("dshUrl", dshUrlHandler)
-      .handle("sessionStatuses", sessionStatuses)
-      .handle("sessionSummary", sessionSummary)
-      .handle("files", files)
-      .handle("fileContent", fileContent)
+    return handlers.handle("dshUrl", dshUrlHandler)
   }),
 )
 
-export const workbenchInstanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "workbench-instance", (handlers) =>
+export const workbenchInstanceHandlers = HttpApiBuilder.group(AppBffInstanceApi, "workbench-instance", (handlers) =>
   Effect.gen(function* () {
     const provisioner = yield* SessionProvisioner.Service
     const projection = yield* SessionProjection.Service
@@ -136,7 +85,7 @@ export const workbenchInstanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "
     }) {
       return yield* projection
         .getSessionTree(ctx.query)
-        .pipe(Effect.catch((error) => Effect.fail(controlApiError(error))))
+        .pipe(Effect.catch((error) => Effect.fail(spaceApiError(error))))
     })
 
     const locations = Effect.fn("WorkbenchHttpApi.locations")(function* (ctx: {
@@ -154,14 +103,11 @@ export const workbenchInstanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "
   }),
 )
 
-function controlApiError(error: SpaceControlUnavailable | CapabilityContractFailure) {
-  if (error._tag === "SpaceControlUnavailable") {
-    return new SpaceControlUnavailableError({ message: error.message, reason: error.reason })
-  }
-  return new CapabilityContractError({
+function spaceApiError(error: WorkbenchSpaceQueryFailed) {
+  return new WorkbenchSpaceQueryError({
+    code: error.code,
     message: error.message,
-    capability: error.capability,
-    detail: error.detail,
+    ...(error.suggestion ? { suggestion: error.suggestion } : {}),
   })
 }
 
@@ -175,25 +121,12 @@ function provisionApiError(error: ProvisionError) {
   if (error._tag === "WorkbenchRequestConflict") {
     return new WorkbenchRequestConflictError({ message: error.message, requestID: error.requestID })
   }
-  return controlApiError(error)
+  return spaceApiError(error)
 }
 
-function locationApiError(error: WorkbenchSpaceNotFound | SpaceControlUnavailable | CapabilityContractFailure) {
+function locationApiError(error: WorkbenchSpaceNotFound | WorkbenchSpaceQueryFailed) {
   if (error._tag === "WorkbenchSpaceNotFound") {
     return new WorkbenchSpaceNotFoundError({ message: error.message, spacePath: error.spacePath })
   }
-  return controlApiError(error)
-}
-
-function spaceFilesApiError(error: SpaceFilesError) {
-  if (error._tag === "SpaceFilesSpaceNotFound") {
-    return new WorkbenchSpaceNotFoundError({ message: error.message, spacePath: error.spacePath })
-  }
-  if (error._tag === "SpaceFilesAccessDenied") {
-    return new WorkbenchSpaceFileAccessDeniedError({ message: error.message, path: error.path })
-  }
-  if (error._tag === "SpaceFilesNotFound") {
-    return new WorkbenchSpaceFileNotFoundError({ message: error.message, path: error.path })
-  }
-  return controlApiError(error)
+  return spaceApiError(error)
 }

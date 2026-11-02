@@ -144,9 +144,9 @@ describe("forced trace selection", () => {
 
 /**
  * The env-name contract of the unified mechanism: the only level variable is
- * `ELLAMAKA_LOG_LEVEL`, and the Desktop variables use the double-L prefix that
- * the onboarding reader already expects. A source scan keeps a future caller
- * from reintroducing an upstream name or a second desktop prefix.
+ * `ELLAMAKA_LOG_LEVEL`, and Desktop variables use the double-L prefix. A
+ * source scan keeps a future caller from reintroducing an upstream name or a
+ * second desktop prefix.
  */
 describe("unified level env contract", () => {
   const root = resolve(import.meta.dir, "../../../..")
@@ -167,12 +167,10 @@ describe("unified level env contract", () => {
     expect(hits).toEqual([])
   })
 
-  test("desktop main and onboarding share the double-L desktop prefix", () => {
+  test("desktop main uses the double-L desktop prefix", () => {
     const sidecar = readFileSync(join(root, "packages/ellamaka-desktop/src/main/sidecar.ts"), "utf8")
-    const onboarding = readFileSync(join(root, "packages/ellamaka-onboarding/src/machine-runner.ts"), "utf8")
     const desktopIndex = readFileSync(join(root, "packages/ellamaka-desktop/src/main/index.ts"), "utf8")
     expect(sidecar).toContain("ELLAMAKA_DESKTOP_DEV")
-    expect(onboarding).toContain("ELLAMAKA_DESKTOP_DEV")
     expect(desktopIndex).toContain("ELLAMAKA_DESKTOP_CDP")
   })
 })

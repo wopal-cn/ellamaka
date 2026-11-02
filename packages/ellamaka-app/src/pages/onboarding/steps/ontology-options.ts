@@ -44,3 +44,15 @@ export const ONTOLOGY_MODES: readonly OntologyModeOption[] = [
     requiresGithubAuth: true,
   },
 ]
+
+export function defaultOntologyMode(githubConfigured: boolean): "fork" | "clone" {
+  return githubConfigured ? "fork" : "clone"
+}
+
+export function ontologyModes(githubConfigured: boolean): readonly OntologyModeOption[] {
+  const preferred = defaultOntologyMode(githubConfigured)
+  return ONTOLOGY_MODES.filter((mode) => githubConfigured || mode.id === "clone").map((mode) => ({
+    ...mode,
+    recommended: mode.id === preferred,
+  }))
+}

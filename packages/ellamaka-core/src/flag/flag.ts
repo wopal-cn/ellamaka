@@ -40,7 +40,13 @@ export const Flag = {
   ),
   OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT:
     copy === undefined ? process.platform === "win32" : truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT"),
-  OPENCODE_DB: process.env["OPENCODE_DB"],
+  get OPENCODE_DB() {
+    return process.env["OPENCODE_DB"]
+  },
+  set OPENCODE_DB(value: string | undefined) {
+    if (value === undefined) delete process.env["OPENCODE_DB"]
+    else process.env["OPENCODE_DB"] = value
+  },
 
   OPENCODE_WORKSPACE_ID: process.env["OPENCODE_WORKSPACE_ID"],
   OPENCODE_EXPERIMENTAL_WORKSPACES: enabledByExperimental("OPENCODE_EXPERIMENTAL_WORKSPACES"),

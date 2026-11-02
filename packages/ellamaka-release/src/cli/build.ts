@@ -21,22 +21,6 @@ const generated = await import("../../../opencode/script/generate.ts")
 import { Script } from "../build-env"
 import pkg from "../../../opencode/package.json"
 
-// Resolve the effective minimum wopal-cli version for the inlined define.
-// scripts/build.sh exports the resolved value (the max of .ci/versions.json
-// and the @wopal/cli-capability-schema dependency floor, see
-// scripts/lib/version.sh); this is the fallback for direct invocations.
-// Release binaries MUST inline this value — the runtime fails closed when
-// neither the injected value nor a source-tree fallback is available, so a
-// build missing this define would crash every end user. Never remove this
-// define entry.
-function readMinWopalCliVersion(): string {
-  try {
-    const versions = JSON.parse(fs.readFileSync(path.resolve(dir, "../../.ci/versions.json"), "utf8"))
-    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
-  } catch {}
-  throw new Error("cannot read minWopalCli from .ci/versions.json")
-}
-
 // The channel is resolved by build-env (D-03): release builds derive it from
 // the version shape, dev builds take the channel passed via ELLAMAKA_CHANNEL
 // (build.sh cli --channel main|local; dev.sh sets local), so the binary's
@@ -127,7 +111,7 @@ type WebUiOption = (typeof webUiOptions)[number]
 const webUiIndex = process.argv.indexOf("--web-ui")
 const webUiArg = webUiIndex === -1 ? "ellamaka-app" : process.argv[webUiIndex + 1]
 
-if (!webUiOptions.includes(webUiArg as WebUiOption)) {
+if (!webUiOptions.some((option) => option === webUiArg)) {
   console.error(`Invalid --web-ui value: ${webUiArg ?? "<missing>"}`)
   console.error(`Expected one of: ${webUiOptions.join(", ")}`)
   process.exit(1)
@@ -139,7 +123,7 @@ if (skipEmbedWebUi && webUiIndex !== -1 && webUiArg !== "none") {
   process.exit(1)
 }
 
-const webUi = (skipEmbedWebUi ? "none" : webUiArg) as WebUiOption
+const webUi: WebUiOption = skipEmbedWebUi ? "none" : webUiArg === "ellamaka-app" ? "ellamaka-app" : "none"
 
 const createEmbeddedWebUIBundle = async (webUi: Exclude<WebUiOption, "none">) => {
   console.log(`Building ${webUi} Web UI to embed in the binary`)
@@ -173,7 +157,7 @@ let targets: BuildTarget[]
 try {
   targets = filterTargets({ platformArg, archArg, singleFlag, baselineFlag })
 } catch (err) {
-  console.error((err as Error).message)
+  console.error(err instanceof Error ? err.message : String(err))
   process.exit(1)
 }
 
@@ -221,6 +205,7 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Bun's target union narrows at runtime
       target: name.replace(BINARY_NAME, "bun") as any,
       outfile: `${distDir}/${name}/bin/${BINARY_NAME}`,
       execArgv: [`--user-agent=${BINARY_NAME}/${Script.version}`, "--use-system-ca", "--"],
@@ -241,11 +226,6 @@ for (const item of targets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
-      // Inline the effective minimum wopal-cli version (exported by
-      // scripts/build.sh via scripts/lib/version.sh; fall back to
-      // .ci/versions.json when unset) so packaged binaries enforce the
-      // protocol floor without runtime env or source-tree dependencies.
-      "process.env.MIN_WOPAL_CLI_VERSION": `'${process.env.MIN_WOPAL_CLI_VERSION || readMinWopalCliVersion()}'`,
       // Embed a structured ReleaseIdentity at build time. Release builds
       // (ELLAMAKA_RELEASE=1) with a release-context path produce a release
       // identity; otherwise a development identity is embedded. See
@@ -273,12 +253,7 @@ for (const item of targets) {
     const binaryPath = `${distDir}/${name}/bin/${BINARY_NAME}`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
-      // Scrub the injected floor from the smoke environment: a packaged
-      // artifact must carry the build-time inlined value, so the probe must
-      // not see the build script's exported env — otherwise a missing
-      // define would pass here and crash end users instead.
-      const smokeEnv = { ...process.env, MIN_WOPAL_CLI_VERSION: "" }
-      const versionOutput = await $`${binaryPath} --version`.env(smokeEnv).text()
+      const versionOutput = await $`${binaryPath} --version`.text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
       console.error(`Smoke test failed for ${name}:`, e)

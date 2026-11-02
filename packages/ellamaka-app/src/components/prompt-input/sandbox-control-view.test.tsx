@@ -17,7 +17,6 @@ const fetchSandboxSurface = async (input: RequestInfo | URL, init?: RequestInit)
     return Response.json({
       healthy: true,
       version: "test",
-      cli: { state: "ok", requiredVersion: "test" },
       dsh: { web: "ready", tools: "ready" },
     })
   }
@@ -51,7 +50,6 @@ const checkHealth: ReturnType<typeof useCheckServerHealth> = async () => {
   return {
     healthy: true,
     version: "test",
-    cli: { state: "ok", requiredVersion: "test" },
     dsh: { web: "ready", tools: "ready" },
   }
 }

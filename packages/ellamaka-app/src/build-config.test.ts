@@ -32,10 +32,18 @@ describe("ellamaka-app server env is ELLAMAKA-branded", () => {
   // sets them, and the engine never reads them), so the OPENCODE_* spelling is
   // pure upstream residue. Assert every producer and consumer agrees, so a
   // half-rename cannot reintroduce a silently-ignored env var.
-  const PRODUCERS = ["scripts/dev.sh", "packages/ellamaka-app/playwright.config.ts", "packages/ellamaka-app/script/e2e-local.ts"]
+  const PRODUCERS = [
+    "scripts/dev.sh",
+    "packages/ellamaka-app/playwright.config.ts",
+    "packages/ellamaka-app/script/e2e-local.ts",
+  ]
 
   test("no VITE_OPENCODE_* producer or consumer survives", async () => {
-    for (const relative of [...PRODUCERS, "packages/ellamaka-app/src/entry.tsx", "packages/ellamaka-app/src/env.d.ts"]) {
+    for (const relative of [
+      ...PRODUCERS,
+      "packages/ellamaka-app/src/entry.tsx",
+      "packages/ellamaka-app/src/env.d.ts",
+    ]) {
       const file = relative.startsWith("packages/ellamaka-app")
         ? join(root, relative.replace("packages/ellamaka-app/", ""))
         : join(root, "..", "..", relative)
@@ -63,5 +71,21 @@ describe("ellamaka-app server env is ELLAMAKA-branded", () => {
     expect(desktopMain).not.toContain("OPENCODE_PORT")
     expect(desktopVite).not.toContain("OPENCODE_PORT")
     expect(dev).not.toContain("OPENCODE_PORT")
+  })
+})
+
+describe("development Home bootstrap isolation", () => {
+  test("dev.sh never preloads global config before Onboarding selects the Home", async () => {
+    const dev = await Bun.file(join(root, "..", "..", "scripts", "dev.sh")).text()
+    expect(dev).not.toContain("warmup_config")
+    expect(dev).not.toContain("/global/config")
+    expect(dev).toContain('local url="http://127.0.0.1:$port/onboarding"')
+  })
+
+  test("Onboarding keeps global config bootstrap disabled until it leaves that surface", async () => {
+    const app = await Bun.file(join(root, "src", "app.tsx")).text()
+    const sync = await Bun.file(join(root, "src", "context", "server-sync.tsx")).text()
+    expect(app).toContain("globalConfigBootstrap={() => !isOnboarding()}")
+    expect(sync).toContain("enabled: globalConfigBootstrap()")
   })
 })

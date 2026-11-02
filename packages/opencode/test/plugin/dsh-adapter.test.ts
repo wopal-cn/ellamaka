@@ -67,6 +67,16 @@ function setup() {
 }
 
 describe("built-in adapter engine registration", () => {
+  let environment: Disposable
+
+  beforeEach(() => {
+    environment = scopedEnv({ ELLAMAKA_DSH_TOOLS: "1" })
+  })
+
+  afterEach(() => {
+    environment[Symbol.dispose]()
+  })
+
   it.instance("takes legacy inline options without installing the external package", () =>
     Effect.gen(function* () {
       setup()

@@ -215,8 +215,9 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
         if (match.found) return syncStore.session[match.index]
       }
-      return serverSDK.client.workbench
-        .sessionSummary({ sessionID })
+      // The Runtime root read accesses storage without creating a directory instance.
+      return serverSDK.client.global.session
+        .get({ sessionID }, { throwOnError: true })
         .then((x) => x.data)
         .catch((error) => {
           console.warn("Failed to read notification session summary", error)

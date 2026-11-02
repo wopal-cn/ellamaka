@@ -110,7 +110,7 @@ describe("B-01: production mount sites inject the closure-resolved runtime", () 
     // serve: with the web container in the child, the in-process watcher
     // covers the tools unit; the web unit replays through the child rebuild.
     expect(serve).toMatch(/pluginService = startDshPluginService/)
-    expect(desktop).toMatch(/dshHost\.pluginActivation\?\.bind\(\(\) => dshPluginService!\.replay\(\)\)/)
+    expect(desktop).toMatch(/dshHost\?\.pluginActivation\?\.bind\(\(\) => dshPluginService!\.replay\(\)\)/)
     expect(desktop).toMatch(/dshHost = \{[\s\S]*?pluginActivation: host\.pluginActivation,/)
   })
 
@@ -133,13 +133,22 @@ describe("Home runtime lease audit", () => {
   const root = join(import.meta.dir, "..", "..", "..")
 
   test("serve and TUI gate DSH_HOME mutation behind CorePreparation readiness and retain a shared lease", () => {
-    for (const relative of [
-      "packages/opencode/src/cli/cmd/dsh-mount.ts",
-      "packages/opencode/src/cli/cmd/tui/dsh-mount.ts",
-    ]) {
-      const source = readFileSync(join(root, relative), "utf-8")
-      const prepare = source.indexOf("const preparation = await prepareDshHost")
-      const readyGate = source.indexOf('if (preparation.status !== "prepared") return undefined')
+    const entries = [
+      {
+        relative: "packages/opencode/src/cli/cmd/dsh-mount.ts",
+        prepare: "const preparation = await prepareDshProfiles",
+        gate: 'if (preparation.web.status !== "prepared" && preparation.tools.status !== "prepared") return undefined',
+      },
+      {
+        relative: "packages/opencode/src/cli/cmd/tui/dsh-mount.ts",
+        prepare: "const preparation = await prepareDshHost",
+        gate: 'if (preparation.status !== "prepared") return undefined',
+      },
+    ]
+    for (const entry of entries) {
+      const source = readFileSync(join(root, entry.relative), "utf-8")
+      const prepare = source.indexOf(entry.prepare)
+      const readyGate = source.indexOf(entry.gate)
       const envWrite = source.indexOf("process.env.DSH_HOME =")
       expect(prepare).toBeGreaterThanOrEqual(0)
       expect(readyGate).toBeGreaterThan(prepare)

@@ -18,7 +18,6 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { ModelID, ProviderID } from "../../src/provider/schema"
 import type { Config } from "@/config/config"
 import { Session as SessionNs } from "@/session/session"
-import { MIN_WOPAL_CLI_VERSION } from "@/wopal/cli-contract"
 import { errorMessage } from "../../src/util/error"
 import { TestLLMServer } from "../lib/llm-server"
 import path from "path"
@@ -266,13 +265,13 @@ httpapiInstance(
         global: true,
         space: true,
         local: "$KEEP_LITERAL",
-        sandbox: { mode: "workspace-write" },
+        sandbox: { enabled: true, mode: "workspace-write" },
       })
     }),
 )
 
 httpapiInstance(
-  "keeps the config-v2 response shape and an empty wopal table outside a space",
+  "keeps the config-v2 response shape and compatibility plugin config outside General or a space",
   { serverPath: "raw" },
   ({ sdk, directory }) =>
     Effect.gen(function* () {
@@ -539,12 +538,8 @@ describe("HttpApi SDK", () => {
       const log = yield* call(() => sdk.app.log({ service: "httpapi-sdk-test", level: "info", message: "hello" }))
 
       expect(health.response.status).toBe(200)
-      expect(health.data).toMatchObject({
-        healthy: true,
-        cli: {
-          requiredVersion: MIN_WOPAL_CLI_VERSION,
-        },
-      })
+      expect(health.data).toMatchObject({ healthy: true })
+      expect(health.data).not.toHaveProperty("cli")
       // Web and Tools have independent runtime status; no mount in this test
       // process means both holders default to disabled.
       expect(health.data?.dsh).toEqual({ web: "disabled", tools: "disabled" })

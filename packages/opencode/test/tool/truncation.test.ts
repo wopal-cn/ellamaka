@@ -10,6 +10,7 @@ import path from "path"
 import { testEffect } from "../lib/effect"
 import { writeFileStringScoped } from "../lib/filesystem"
 import { TestConfig } from "../fixture/config"
+import type { Agent } from "../../src/agent/agent"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "fixtures")
 const ROOT = path.resolve(import.meta.dir, "..", "..")
@@ -188,7 +189,7 @@ describe("Truncate", () => {
         expect(result.outputPath).toContain("tool_")
 
         const fsys = yield* AppFileSystem.Service
-        const written = yield* fsys.readFileString(result.outputPath!)
+        const written = yield* fsys.readFileString(result.outputPath)
         expect(written).toBe(lines)
       }),
     )
@@ -197,8 +198,13 @@ describe("Truncate", () => {
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
         const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-        const agent = { permission: [{ permission: "task", pattern: "*", action: "allow" as const }] }
-        const result = yield* svc.output(lines, { maxLines: 10 }, agent as any)
+        const agent: Agent.Info = {
+          name: "test",
+          mode: "all",
+          permission: [{ permission: "task", pattern: "*", action: "allow" }],
+          options: {},
+        }
+        const result = yield* svc.output(lines, { maxLines: 10 }, agent)
 
         expect(result.truncated).toBe(true)
         expect(result.content).toContain("Grep")
@@ -210,8 +216,13 @@ describe("Truncate", () => {
       Effect.gen(function* () {
         const svc = yield* Truncate.Service
         const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
-        const agent = { permission: [{ permission: "task", pattern: "*", action: "deny" as const }] }
-        const result = yield* svc.output(lines, { maxLines: 10 }, agent as any)
+        const agent: Agent.Info = {
+          name: "test",
+          mode: "all",
+          permission: [{ permission: "task", pattern: "*", action: "deny" }],
+          options: {},
+        }
+        const result = yield* svc.output(lines, { maxLines: 10 }, agent)
 
         expect(result.truncated).toBe(true)
         expect(result.content).toContain("Grep")
@@ -248,10 +259,10 @@ describe("Truncate", () => {
         const svc = yield* Truncate.Service
         const fs = yield* FileSystem.FileSystem
 
-        yield* fs.makeDirectory(Truncate.DIR, { recursive: true })
+        yield* fs.makeDirectory(Truncate.dir(), { recursive: true })
 
-        const old = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 10 * DAY_MS))
-        const recent = path.join(Truncate.DIR, Identifier.create("tool", "ascending", Date.now() - 3 * DAY_MS))
+        const old = path.join(Truncate.dir(), Identifier.create("tool", "ascending", Date.now() - 10 * DAY_MS))
+        const recent = path.join(Truncate.dir(), Identifier.create("tool", "ascending", Date.now() - 3 * DAY_MS))
 
         yield* writeFileStringScoped(old, "old content")
         yield* writeFileStringScoped(recent, "recent content")

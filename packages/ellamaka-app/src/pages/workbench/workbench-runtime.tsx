@@ -2,13 +2,7 @@ import { createSimpleContext } from "@wopal/ui/context"
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
-import {
-  type DshRuntimeStatus,
-  type WopalCliHealth,
-  resolveServerHealthKey,
-  useCheckServerHealth,
-} from "@/utils/server-health"
-import { canUseSpaceControl } from "./cli-health"
+import { type DshRuntimeStatus, resolveServerHealthKey, useCheckServerHealth } from "@/utils/server-health"
 
 export type WorkbenchRuntimeStatus = "online" | "degraded" | "recovering" | "offline"
 
@@ -29,9 +23,7 @@ const WorkbenchRuntimeContext = createSimpleContext({
     const sdk = useServerSDK()
     const checkHealth = useCheckServerHealth()
     const [status, setStatus] = createSignal<WorkbenchRuntimeStatus>("recovering")
-    const [cli, setCli] = createSignal<WopalCliHealth>()
     const [unauthorized, setUnauthorized] = createSignal(false)
-    const [repairingCli, setRepairingCli] = createSignal(false)
     const [dshWeb, setDshWeb] = createSignal<DshRuntimeStatus>()
     const [dshTools, setDshTools] = createSignal<DshRuntimeStatus>()
     const [dshWebReady, setDshWebReady] = createSignal(false)
@@ -47,7 +39,6 @@ const WorkbenchRuntimeContext = createSimpleContext({
       if (!current) {
         setStatus("offline")
         setUnauthorized(false)
-        setCli(undefined)
         setDshWebReady(false)
         setDshToolsReady(false)
         lastHealthy = false
@@ -64,7 +55,6 @@ const WorkbenchRuntimeContext = createSimpleContext({
         const health = await checkHealth(current.http, { signal: generationAbort?.signal, retryCount: 0 })
         if (id !== request || generationAbort?.signal.aborted) return false
         lastHealthy = health.healthy
-        setCli(health.cli)
         setUnauthorized(health.unauthorized === true)
         if (health.healthy && health.dsh) {
           setDshWeb(health.dsh.web)
@@ -124,14 +114,8 @@ const WorkbenchRuntimeContext = createSimpleContext({
       get status() {
         return status()
       },
-      get cli() {
-        return cli()
-      },
       get unauthorized() {
         return unauthorized()
-      },
-      get repairingCli() {
-        return repairingCli()
       },
       get dshWeb() {
         return dshWeb()
@@ -150,21 +134,10 @@ const WorkbenchRuntimeContext = createSimpleContext({
         return value !== undefined && value !== "disabled"
       },
       canWrite: () => status() === "online" || status() === "degraded",
-      canUseSpaceControl: () => canUseSpaceControl(cli()),
+      // Space queries are a Public Platform capability: they only need a
+      // reachable Server, not a Wopal CLI installation.
+      canReadSpaces: () => status() === "online" || status() === "degraded",
       retry: refresh,
-      repairCli: async () => {
-        if (repairingCli()) return false
-        setRepairingCli(true)
-        return sdk.client.global.cli
-          .repair()
-          .then(async (result) => {
-            if (result.error) return false
-            await refresh()
-            return result.data?.cli.state === "ok"
-          })
-          .catch(() => false)
-          .finally(() => setRepairingCli(false))
-      },
     }
   },
 })

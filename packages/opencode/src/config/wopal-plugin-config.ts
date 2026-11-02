@@ -3,6 +3,7 @@ export * as ConfigWopalPluginConfig from "./wopal-plugin-config"
 import path from "path"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { isRecord } from "@/util/record"
+import { Filesystem } from "@/util/filesystem"
 import { ConfigParse } from "./parse"
 
 const log = Log.create({ service: "config" })
@@ -22,6 +23,23 @@ export interface PluginConfigMerge {
   sources: PluginConfigSources
 }
 
+export function isGeneralTaskDirectory(directory: string, wopalHome: string): boolean {
+  const root = path.join(Filesystem.resolve(wopalHome), "general_tasks")
+  const relative = path.relative(root, Filesystem.resolve(directory))
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+}
+
+function builtinPluginConfigDefaults(): PluginConfigTable {
+  return {
+    "dsh-adapter": {
+      sandbox: {
+        enabled: true,
+        mode: "workspace-write",
+      },
+    },
+  }
+}
+
 export function settingsFileSource(filePath: string): PluginConfigSource {
   return path.basename(filePath) === "settings.local.jsonc" ? "space-local" : "space"
 }
@@ -32,12 +50,32 @@ export function settingsFileSource(filePath: string): PluginConfigSource {
 export function mergePluginConfig(layers: PluginConfigLayer[]): PluginConfigMerge {
   const pluginConfig: PluginConfigTable = {}
   const sources: PluginConfigSources = {}
+  mergeLayers(pluginConfig, sources, layers)
+  return { pluginConfig, sources }
+}
+
+/**
+ * Product-effective plugin config for a Runtime Instance.
+ *
+ * Built-in plugin defaults are runtime defaults, not a persisted config
+ * layer, so they intentionally do not occupy `sources`. Every Instance may
+ * merge the global layer over them; WopalSpace Instances additionally merge
+ * Space and Space-local leaves in the normal precedence order. Persisted
+ * layers remain the only writable/source-attributed values.
+ */
+export function mergeEffectivePluginConfig(layers: PluginConfigLayer[]): PluginConfigMerge {
+  const pluginConfig = builtinPluginConfigDefaults()
+  const sources: PluginConfigSources = {}
+  mergeLayers(pluginConfig, sources, layers)
+  return { pluginConfig, sources }
+}
+
+function mergeLayers(pluginConfig: PluginConfigTable, sources: PluginConfigSources, layers: PluginConfigLayer[]): void {
   for (const layer of layers) {
     const section = extractPluginConfigSection(layer)
     if (!section) continue
     mergeEntries(pluginConfig, sources, section, layer.source, "")
   }
-  return { pluginConfig, sources }
 }
 
 function extractPluginConfigSection(layer: PluginConfigLayer): Record<string, unknown> | undefined {

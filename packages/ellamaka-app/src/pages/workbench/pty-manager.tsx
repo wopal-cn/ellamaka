@@ -1,12 +1,13 @@
 import type { Pty } from "@wopal/ellamaka-sdk/v2/client"
 import { reportWorkbenchError } from "./workbench-error"
+import { nestedStatus } from "./typed-value"
 
 export type PtyKind = "tui" | "term" | "split"
 
-type PtySDK = {
+export type PtySDK = {
   client: {
     pty: {
-      get: (input: { ptyID: string }) => Promise<{ data?: Pty }>
+      get: (input: { ptyID: string }) => Promise<{ data?: Partial<Pty> }>
       remove: (input: { ptyID: string; directory?: string }) => Promise<{ data?: boolean }>
     }
   }
@@ -54,7 +55,13 @@ function getKindEntry<T>(panelMap: PanelMap<T> | undefined, panelId: string, kin
   return panelMap?.get(panelId)?.[kind]
 }
 
-function setKindEntry<T>(spaceMap: SpaceMap<T>, spacePath: string, panelId: string, kind: PtyKind, value: T | undefined) {
+function setKindEntry<T>(
+  spaceMap: SpaceMap<T>,
+  spacePath: string,
+  panelId: string,
+  kind: PtyKind,
+  value: T | undefined,
+) {
   const panelMap = ensurePanelMap(spaceMap, spacePath)
   const entry = panelMap.get(panelId)
   if (entry) {
@@ -73,7 +80,13 @@ function setKindEntry<T>(spaceMap: SpaceMap<T>, spacePath: string, panelId: stri
 }
 
 function deleteKindEntry<T>(spaceMap: SpaceMap<T>, spacePath: string, panelId: string, kind: PtyKind) {
-  setKindEntry(spaceMap, spacePath, panelId, kind, undefined)
+  const panelMap = spaceMap.get(spacePath)
+  if (!panelMap) return
+  const entry = panelMap.get(panelId)
+  if (!entry) return
+  delete entry[kind]
+  if (kinds.every((key) => entry[key] === undefined)) panelMap.delete(panelId)
+  if (panelMap.size === 0) spaceMap.delete(spacePath)
 }
 
 function deletePanelEntry<T>(spaceMap: SpaceMap<T>, spacePath: string, panelId: string) {
@@ -100,6 +113,11 @@ export class PtyManager {
   // DELETE/GET against that PTY — NOT the workbench spacePath, which can be
   // an empty string (the General space) and does not match the PTY cwd.
   private ptyDirectories = new Map<string, string>()
+  // Old aliases have no authority after identity migration. They may probe a
+  // persisted ID, but never cache a result (not even a newly created one).
+  private retiredScopes = new Set<string>()
+  /** Backend IDs that were destroyed are never accepted from an old cache. */
+  private retiredIds = new Set<string>()
 
   delete(spacePath: string, panelId: string, kind: PtyKind) {
     deleteKindEntry(this.activePtys, spacePath, panelId, kind)
@@ -115,6 +133,22 @@ export class PtyManager {
     directory: string
     createFn: () => Promise<string>
   }): Promise<string> {
+    if (this.retiredScopes.has(opts.spacePath)) {
+      if (opts.existingPtyId) {
+        const alive = await opts.sdk.client.pty
+          .get({ ptyID: opts.existingPtyId })
+          .then(() => true)
+          .catch(() => false)
+        if (alive && !this.retiredIds.has(opts.existingPtyId)) return opts.existingPtyId
+      }
+      // A retired alias is not a layout. Its probe/create result cannot be
+      // cached, so it always revalidates the backend on the next call.
+      const created = await opts.createFn()
+
+      this.activePtys.delete(opts.spacePath)
+      this.pendingEnsures.delete(opts.spacePath)
+      return created
+    }
     if (!opts.existingPtyId) {
       deleteKindEntry(this.activePtys, opts.spacePath, opts.panelId, opts.kind)
     }
@@ -150,7 +184,15 @@ export class PtyManager {
       setKindEntry(this.activePtys, opts.spacePath, opts.panelId, opts.kind, newPtyId)
       this.ptyDirectories.set(newPtyId, opts.directory)
       return newPtyId
-    })()
+    })().then((id) => {
+      // Work started before migration may finish after it. Preserve the
+      // returned live ID for stale disposal, but clear its captured alias key.
+      if (this.retiredScopes.has(opts.spacePath)) {
+        deleteKindEntry(this.activePtys, opts.spacePath, opts.panelId, opts.kind)
+        deleteKindEntry(this.pendingEnsures, opts.spacePath, opts.panelId, opts.kind)
+      }
+      return id
+    })
 
     setKindEntry(this.pendingEnsures, opts.spacePath, opts.panelId, opts.kind, promise)
     try {
@@ -174,13 +216,17 @@ export class PtyManager {
   }
 
   async disposePanel(spacePath: string, panelId: string, sdk: PtySDK, known: PtyReferences = {}): Promise<void> {
-    await Promise.all(kinds.map((kind) => this.disposePty({
-      spacePath,
-      panelId,
-      kind,
-      sdk,
-      knownPtyId: known[kind],
-    })))
+    await Promise.all(
+      kinds.map((kind) =>
+        this.disposePty({
+          spacePath,
+          panelId,
+          kind,
+          sdk,
+          knownPtyId: known[kind],
+        }),
+      ),
+    )
     // Panel entry is now empty; remove it from both maps to avoid stale residue.
     deletePanelEntry(this.activePtys, spacePath, panelId)
     deletePanelEntry(this.pendingEnsures, spacePath, panelId)
@@ -217,9 +263,9 @@ export class PtyManager {
       }
     }
 
-    await Promise.all(targets.map(({ panelId, kind }) =>
-      this.disposeKey(spacePath, panelId, kind, sdk, known.get(panelId)?.[kind]),
-    ))
+    await Promise.all(
+      targets.map(({ panelId, kind }) => this.disposeKey(spacePath, panelId, kind, sdk, known.get(panelId)?.[kind])),
+    )
 
     // Space is being torn down; drop the empty space entry.
     this.activePtys.delete(spacePath)
@@ -230,6 +276,35 @@ export class PtyManager {
     this.activePtys.clear()
     this.pendingEnsures.clear()
     this.ptyDirectories.clear()
+    this.retiredScopes.clear()
+    this.retiredIds.clear()
+  }
+
+  /** Retire the alias key while leaving its backend resources for safe verification. */
+  async transferSpace(
+    from: string,
+    to: string,
+    panelFor: (panelID: string) => { id: string } | undefined,
+    canonicalPanel: (panelID: string) => { id: string } | undefined,
+  ) {
+    if (from === to) return
+    const active = this.activePtys.get(from)
+    if (active) {
+      for (const [panelID, entry] of active) {
+        if (!panelFor(panelID)) continue
+        const target = canonicalPanel(panelID)?.id ?? panelID
+        for (const kind of kinds) {
+          const value = entry[kind]
+          if (value !== undefined) setKindEntry(this.activePtys, to, target, kind, value)
+        }
+      }
+      this.activePtys.delete(from)
+    }
+    // The old alias is no longer an addressable layout. Any late old-scope
+    // completion is discarded from cache but can still be probed for cleanup.
+    this.retiredScopes.add(from)
+    this.retiredScopes.delete(to)
+    this.pendingEnsures.delete(from)
   }
 
   private async disposeKey(
@@ -254,25 +329,27 @@ export class PtyManager {
       deleteKindEntry(this.activePtys, spacePath, panelId, kind)
     }
 
-    await Promise.all(Array.from(ptyIds, async (ptyId) => {
-      try {
-        await sdk.client.pty.remove({
-          ptyID: ptyId,
-          directory: this.ptyDirectories.get(ptyId),
-        })
-      } catch (err) {
-        // 404 PtyNotFoundError is expected when the backend already reaped
-        // the session (e.g. the ellamaka TUI process exited and the backend
-        // proc.onExit handler called remove(id) before our DELETE arrived).
-        // Treat it as idempotent success, not a real error.
-        const status = (err as { response?: { status?: number } })?.response?.status
-          ?? (err as { cause?: { status?: number } })?.cause?.status
-        if (status !== 404) {
-          reportWorkbenchError("dispose pty", err, { silent: true })
+    await Promise.all(
+      Array.from(ptyIds, async (ptyId) => {
+        try {
+          await sdk.client.pty.remove({
+            ptyID: ptyId,
+            directory: this.ptyDirectories.get(ptyId),
+          })
+        } catch (err) {
+          // 404 PtyNotFoundError is expected when the backend already reaped
+          // the session (e.g. the ellamaka TUI process exited and the backend
+          // proc.onExit handler called remove(id) before our DELETE arrived).
+          // Treat it as idempotent success, not a real error.
+          const status = nestedStatus(err, "response") ?? nestedStatus(err, "cause")
+          if (status !== 404) {
+            reportWorkbenchError("dispose pty", err, { silent: true })
+          }
         }
-      }
-      this.ptyDirectories.delete(ptyId)
-    }))
+        if (knownPtyId === ptyId) this.retiredIds.add(ptyId)
+        this.ptyDirectories.delete(ptyId)
+      }),
+    )
   }
 }
 

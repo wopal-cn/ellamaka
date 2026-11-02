@@ -2,6 +2,32 @@ import { expect, test } from "bun:test"
 import { buildSessionPort, probePtyRequest, type SessionServerSDK } from "./workbench-actions-ports"
 import { createSessionProjection } from "./session-store"
 
+const globalClient = {
+  global: { session: { get: async () => ({ data: { id: "unused", directory: "", time: { created: 1 } } }) } },
+}
+
+test("restores session metadata without activating the stale directory", async () => {
+  const projection = createSessionProjection()
+  const sdk: SessionServerSDK = {
+    client: {
+      global: {
+        session: { get: async () => ({ data: { id: "s1", directory: "/real/project", time: { created: 1 } } }) },
+      },
+    },
+    bff: { workbench: { createSession: async () => ({ data: { directory: "" } }) } },
+    createClient: () => {
+      throw new Error("instance client must not be used for restore")
+    },
+  }
+  const port = buildSessionPort(sdk, projection.reader, projection.writer)
+  const session = await port.get({
+    scope: { kind: "space", name: "A", path: "/alias" },
+    sessionID: "s1",
+    directory: "/old/project",
+  })
+  expect(session.directory).toBe("/real/project")
+})
+
 test("creates a session when crypto.randomUUID is unavailable (insecure context)", async () => {
   const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto")
   const secureDescriptor = Object.getOwnPropertyDescriptor(globalThis, "isSecureContext")
@@ -17,13 +43,16 @@ test("creates a session when crypto.randomUUID is unavailable (insecure context)
     const projection = createSessionProjection()
     const requests: unknown[] = []
     const serverSDK: SessionServerSDK = {
-      createClient: () => ({
+      client: globalClient,
+      bff: {
         workbench: {
           createSession: async (input) => {
             requests.push(input)
             return { data: { id: "session-created", directory: "", timeCreated: 1, timeUpdated: 1 } }
           },
         },
+      },
+      createClient: () => ({
         session: {
           get: async () => ({ data: { id: "unused", directory: "", time: { created: 1 } } }),
           update: async () => {},
@@ -61,10 +90,13 @@ test("renaming a session patches the projection without invalidating the tree", 
   })
   const updates: Array<{ sessionID: string; title: string }> = []
   const serverSDK: SessionServerSDK = {
-    createClient: () => ({
+    client: globalClient,
+    bff: {
       workbench: {
         createSession: async () => ({ data: { id: "unused", directory: "", timeCreated: 1, timeUpdated: 1 } }),
       },
+    },
+    createClient: () => ({
       session: {
         get: async () => ({ data: { id: "unused", directory: "", time: { created: 1 } } }),
         update: async (input) => {
@@ -74,11 +106,7 @@ test("renaming a session patches the projection without invalidating the tree", 
       },
     }),
   }
-  const port = buildSessionPort(
-    serverSDK,
-    projection.reader,
-    projection.writer,
-  )
+  const port = buildSessionPort(serverSDK, projection.reader, projection.writer)
 
   await port.rename({
     scope: { kind: "general" },
@@ -96,13 +124,18 @@ test("creates a Space session with a request ID and canonical relative directory
   const projection = createSessionProjection()
   const requests: unknown[] = []
   const serverSDK: SessionServerSDK = {
-    createClient: () => ({
+    client: globalClient,
+    bff: {
       workbench: {
         createSession: async (input) => {
           requests.push(input)
-          return { data: { id: "session-created", directory: "/fixtures/space-a/project", timeCreated: 1, timeUpdated: 1 } }
+          return {
+            data: { id: "session-created", directory: "/fixtures/space-a/project", timeCreated: 1, timeUpdated: 1 },
+          }
         },
       },
+    },
+    createClient: () => ({
       session: {
         get: async () => ({ data: { id: "unused", directory: "", time: { created: 1 } } }),
         update: async () => {},
@@ -113,7 +146,7 @@ test("creates a Space session with a request ID and canonical relative directory
   const port = buildSessionPort(serverSDK, projection.reader, projection.writer)
 
   const session = await port.create({
-    scope: { kind: "space", name: "Same name", path: "/fixtures/space-a" },
+    scope: { kind: "space", name: "Same name", path: "/alias/space-a" },
     panel: {
       id: "p-1",
       slotState: "empty",
@@ -122,12 +155,13 @@ test("creates a Space session with a request ID and canonical relative directory
       width: 1,
     },
     initialView: "tui",
+    relativeDirectory: "project",
   })
 
   expect(requests).toHaveLength(1)
   expect(requests[0]).toMatchObject({
     requestID: expect.any(String),
-    target: { type: "space", spacePath: "/fixtures/space-a", directory: "project" },
+    target: { type: "space", spacePath: "/alias/space-a", directory: "project" },
   })
   expect(session.type).toBe("tui")
 })

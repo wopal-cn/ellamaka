@@ -4,13 +4,6 @@ import { createSdkForServer } from "./server"
 import { Accessor, createEffect, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
-export type WopalCliHealth = {
-  state: "ok" | "missing" | "incompatible" | "broken"
-  requiredVersion: string
-  actualVersion?: string
-  reason?: string
-}
-
 export type DshRuntimeStatus = "disabled" | "preparing" | "ready" | "degraded"
 export type DshRuntimeHealth = {
   web: DshRuntimeStatus
@@ -25,11 +18,30 @@ export function resolveServerHealthKey(
   return current ? ServerConnection.key(current) : key
 }
 
+export type CorePreparationState = "READY" | "NEEDS_PREPARATION" | "PREPARING" | "BUSY" | "DEGRADED"
+
+/** One Core Preparation step, as reported by `/global/health`. */
+export type CorePreparationStep = {
+  step: string
+  state: CorePreparationState
+  code?: string
+}
+
+/**
+ * Runtime Core Preparation facts. Read live from health on every probe and
+ * never persisted into Setup state (DESIGN-onboarding.md).
+ */
+export type CorePreparationHealth = {
+  state: CorePreparationState
+  steps: readonly CorePreparationStep[]
+  run?: { step: string; phase: string; elapsedMs: number }
+}
+
 export type ServerHealth = {
   healthy: boolean
   version?: string
-  cli?: WopalCliHealth
   dsh?: DshRuntimeHealth
+  preparation?: CorePreparationHealth
   /** The server rejected the stored credentials (HTTP 401). */
   unauthorized?: boolean
 }
@@ -89,6 +101,58 @@ function wait(ms: number, signal?: AbortSignal) {
   })
 }
 
+/**
+ * Narrow the SDK's `preparation` payload to the shape the wizard renders.
+ *
+ * The SDK type is the wire contract; this keeps a single reading site so the
+ * UI never indexes into an untyped response. Unknown states are dropped rather
+ * than guessed — a step the client cannot interpret must not gate navigation.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function readStep(value: unknown): CorePreparationStep | undefined {
+  if (!isRecord(value)) return undefined
+  if (typeof value.step !== "string" || !isPreparationState(value.state)) return undefined
+  return {
+    step: value.step,
+    state: value.state,
+    ...(typeof value.code === "string" ? { code: value.code } : {}),
+  }
+}
+
+function readRun(value: unknown): CorePreparationHealth["run"] {
+  if (!isRecord(value)) return undefined
+  if (typeof value.step !== "string" || typeof value.phase !== "string") return undefined
+  return {
+    step: value.step,
+    phase: value.phase,
+    elapsedMs: typeof value.elapsedMs === "number" ? value.elapsedMs : 0,
+  }
+}
+
+function readPreparation(value: unknown): CorePreparationHealth | undefined {
+  if (!isRecord(value) || !isPreparationState(value.state)) return undefined
+  const steps: CorePreparationStep[] = []
+  for (const entry of Array.isArray(value.steps) ? value.steps : []) {
+    const step = readStep(entry)
+    if (step) steps.push(step)
+  }
+  const run = readRun(value.run)
+  return { state: value.state, steps, ...(run ? { run } : {}) }
+}
+
+function isPreparationState(value: unknown): value is CorePreparationState {
+  return (
+    value === "READY" ||
+    value === "NEEDS_PREPARATION" ||
+    value === "PREPARING" ||
+    value === "BUSY" ||
+    value === "DEGRADED"
+  )
+}
+
 function retryable(error: unknown, signal?: AbortSignal) {
   if (signal?.aborted) return false
   if (!(error instanceof Error)) return false
@@ -129,8 +193,10 @@ export async function checkServerHealth(
           : {
               healthy: x.data?.healthy ?? false,
               version: x.data?.version,
-              ...(x.data?.cli ? { cli: x.data.cli } : {}),
               ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
+              ...(readPreparation(x.data?.preparation) !== undefined
+                ? { preparation: readPreparation(x.data.preparation) }
+                : {}),
             },
       )
       .catch((error) => next(count, error))

@@ -759,4 +759,3 @@ Workbench    Ellamaka sidecar   Release identity
 DSH Desktop 对 Ellamaka 最有价值的不是“另一个完整 Desktop 产品”，而是它在 Electron Host、login-shell、subprocess、更新、平台生命周期和发布验证上已经沉淀的一批成熟工程机制。
 
 Ellamaka 当前的核心产品价值仍然在自己的 Workbench、Ellamaka Server、WopalSpace integration、Runtime/PTY、发布体系与品牌体验。Desktop 基础设施应尽量少重复踩 DSH 已经解决的问题，但吸收方式应保持 Ellamaka 的现有产品边界和正式设计所有权。
-

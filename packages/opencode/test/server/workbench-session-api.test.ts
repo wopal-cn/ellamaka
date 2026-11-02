@@ -1,12 +1,53 @@
 import { describe, expect } from "bun:test"
 import { realpathSync } from "node:fs"
+import * as fs from "node:fs/promises"
+import path from "node:path"
 import { Effect, Layer } from "effect"
 import { testEffect } from "../lib/effect"
 import { SessionProvisioner } from "../../src/workbench/session-provisioner"
 import { SessionProjection } from "../../src/workbench/session-projection"
 import { SessionDirectoryHealth } from "../../src/workbench/session-directory-health"
-import { SpaceRegistry } from "../../src/wopal/space-registry"
-import { CliAdapter } from "../../src/wopal/cli-adapter"
+import { WopalSpaceHostService, type WopalSpaceHost } from "../../src/wopal/wopal-space-host"
+import { TestInstance } from "../fixture/fixture"
+/** Only the Space queries the provisioner consumes; the rest stay unimplemented. */
+function testHost(spaces: Array<{ id: string; name: string; path: string }>, projectPath?: string): WopalSpaceHost {
+  return {
+    host: { wopalHome: "/unused" },
+    rebindHome: () => {},
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the provisioner never queries ontology
+    ontology: {} as never,
+    findSpace: () => undefined,
+    space: {
+      list: () => {
+        const items = spaces.map((space) => ({
+          name: space.id,
+          displayName: space.name,
+          path: space.path,
+          branch: "space/" + space.id,
+          type: "local",
+          facts: { present: true, snapshot: "ok" as const, worktree: true, mismatch: [] },
+        }))
+        return { items, total: items.length }
+      },
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the provisioner only lists Spaces
+      resolve: () => ({}) as never,
+      availableTypes: () => [],
+      init: () => Promise.reject(new Error("unused")),
+      projectsList: () => ({
+        items: projectPath ? [{ id: "project", name: "project", path: projectPath, worktrees: [] }] : [],
+        total: projectPath ? 1 : 0,
+      }),
+      filesList: () => ({ items: [], total: 0 }),
+      filesRead: () => ({ type: "binary", content: "" }),
+      search: () => ({ items: [], total: 0, offset: 0, limit: 50, hasMore: false }),
+      scan: () => ({ space: { name: "", path: "" }, repositories: [], agentRules: [] }),
+      status: () => Promise.reject(new Error("unused")),
+      sync: () => Promise.reject(new Error("unused")),
+      capabilityAdd: () => Promise.reject(new Error("unused")),
+      capabilityRemove: () => Promise.reject(new Error("unused")),
+    },
+  } satisfies import("../../src/wopal/wopal-space-host").WopalSpaceHost
+}
 import { SessionShare } from "../../src/share/session"
 import { Session } from "../../src/session/session"
 import { InstanceStore } from "../../src/project/instance-store"
@@ -33,18 +74,18 @@ const provisionerIt = testEffect(
       Layer.mock(SessionDirectoryHealth.Service, {
         check: () => Effect.succeed("healthy" as const),
       }),
-      Layer.mock(SpaceRegistry.Service, {
-        getSpaces: () =>
-          Effect.succeed({ spaces: [{ id: "main", name: "main", path: "/tmp" }], refreshedAt: 0 } as never),
-      }),
+      Layer.succeed(WopalSpaceHostService.Service, testHost([{ id: "main", name: "main", path: "/tmp" }])),
       Layer.mock(SessionShare.Service, {
         create: (input) =>
-          Effect.gen(function* () {
-            createCount += 1
-            createInput = input
-            yield* Effect.sleep("10 millis")
-            return { id: "ses_1", directory: "/tmp", title: "New session - 2026-07-12T00:00:00.000Z" } as never
-          }),
+          Effect.tap(Effect.sleep("10 millis"), () =>
+            Effect.sync(() => {
+              createCount += 1
+              createInput = input
+            }),
+          ).pipe(
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- SessionShare fixture omits unused session fields
+            Effect.as({ id: "ses_1", directory: "/tmp", title: "New session - 2026-07-12T00:00:00.000Z" } as never),
+          ),
       }),
       Layer.mock(Session.Service, {
         list: () => Effect.succeed([]),
@@ -59,8 +100,7 @@ const it = testEffect(
     SessionProvisioner.defaultLayer,
     SessionProjection.defaultLayer,
     SessionDirectoryHealth.defaultLayer,
-    CliAdapter.defaultLayer,
-    SpaceRegistry.defaultLayer,
+    WopalSpaceHostService.layer,
   ).pipe(
     Layer.provide([
       sessionShareLayer,
@@ -69,7 +109,7 @@ const it = testEffect(
     ]),
   ),
 )
-
+const isolatedIt = testEffect(Layer.empty)
 // Legacy `spaceName` matching must use the stable space id (D-06), not the
 // display name. This layer registers a space whose id and name differ so the
 // two behaviors are distinguishable.
@@ -79,18 +119,18 @@ const legacySpaceNameIt = testEffect(
       Layer.mock(SessionDirectoryHealth.Service, {
         check: () => Effect.succeed("healthy" as const),
       }),
-      Layer.mock(SpaceRegistry.Service, {
-        getSpaces: () =>
-          Effect.succeed({ spaces: [{ id: "main", name: "主空间", path: "/tmp" }], refreshedAt: 0 } as never),
-      }),
+      Layer.succeed(WopalSpaceHostService.Service, testHost([{ id: "main", name: "主空间", path: "/tmp" }])),
       Layer.mock(SessionShare.Service, {
         create: (input) =>
-          Effect.gen(function* () {
-            createCount += 1
-            createInput = input
-            yield* Effect.sleep("10 millis")
-            return { id: "ses_1", directory: "/tmp", title: "New session - 2026-07-12T00:00:00.000Z" } as never
-          }),
+          Effect.tap(Effect.sleep("10 millis"), () =>
+            Effect.sync(() => {
+              createCount += 1
+              createInput = input
+            }),
+          ).pipe(
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- SessionShare fixture omits unused session fields
+            Effect.as({ id: "ses_1", directory: "/tmp", title: "New session - 2026-07-12T00:00:00.000Z" } as never),
+          ),
       }),
       Layer.mock(Session.Service, {
         list: () => Effect.succeed([]),
@@ -101,6 +141,82 @@ const legacySpaceNameIt = testEffect(
 )
 
 describe("workbench-session-api", () => {
+  isolatedIt.instance("creates through an alias at the selected canonical subdirectory", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const root = path.join(instance.directory, "space")
+      const alias = path.join(instance.directory, "alias")
+      const project = path.join(root, "projects", "one")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project, { recursive: true })
+        await fs.symlink(root, alias)
+      })
+      const expected = yield* Effect.promise(() => fs.realpath(project))
+      let createdAt: string | undefined
+      const layer = SessionProvisioner.layer.pipe(
+        Layer.provide([
+          Layer.mock(SessionDirectoryHealth.Service, { check: () => Effect.succeed("healthy" as const) }),
+          Layer.succeed(WopalSpaceHostService.Service, testHost([{ id: "one", name: "One", path: alias }])),
+          Layer.mock(SessionShare.Service, {
+            create: () =>
+              Effect.sync(() => {
+                // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- SessionShare omits unused fields
+                return { id: "ses_alias", directory: expected, title: "Alias" } as never
+              }),
+          }),
+          Layer.mock(InstanceStore.Service, {
+            provide: (input, effect) =>
+              Effect.flatMap(
+                Effect.sync(() => {
+                  createdAt = input.directory
+                }),
+                () => effect,
+              ),
+          }),
+        ]),
+      )
+      const result = yield* SessionProvisioner.Service.use((provisioner) =>
+        provisioner.provisionSpace({ spacePath: alias, relativeDirectory: "projects/one" }),
+      ).pipe(Effect.provide(layer))
+      expect(result.directory).toBe(expected)
+      expect(createdAt).toBe(expected)
+    }),
+  )
+  isolatedIt.instance("rejects an ambiguous canonical Space root", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const dir = path.join(instance.directory, "root")
+      const alias = path.join(instance.directory, "alias")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(dir)
+        await fs.symlink(dir, alias)
+      })
+      const layer = SessionProvisioner.layer.pipe(
+        Layer.provide([
+          Layer.mock(SessionDirectoryHealth.Service, { check: () => Effect.succeed("healthy" as const) }),
+          Layer.succeed(
+            WopalSpaceHostService.Service,
+            testHost([
+              { id: "one", name: "One", path: dir },
+              { id: "two", name: "Two", path: alias },
+            ]),
+          ),
+          sessionShareLayer,
+          instanceStoreLayer,
+        ]),
+      )
+      const error = yield* Effect.gen(function* () {
+        const provisioner = yield* SessionProvisioner.Service
+        return yield* provisioner.provisionSpace({ spacePath: alias }).pipe(Effect.flip)
+      }).pipe(Effect.provide(layer))
+      expect(error._tag).toBe("InvalidSpaceTarget")
+      if (error._tag === "InvalidSpaceTarget") {
+        expect(error.message).toBe("Multiple registered Spaces resolve to the requested path")
+        expect(error.detail).toBe(alias)
+      }
+    }),
+  )
+
   provisionerIt.live("provisioner delegates session creation without assigning a fixed title", () =>
     Effect.gen(function* () {
       resetCreateCapture()

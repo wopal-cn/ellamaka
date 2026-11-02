@@ -3,12 +3,19 @@ import { onCleanup, onMount } from "solid-js"
 import { useServerSDK } from "./server-sdk"
 import { createSessionActivity } from "./session-activity"
 
+/**
+ * Running-session activity across every Workbench directory.
+ *
+ * The Runtime root snapshot reads only existing instances and never starts a
+ * directory for passive Workbench status display.
+ */
 export const { use: useSessionActivity, provider: SessionActivityProvider } = createSimpleContext({
   name: "SessionActivity",
   init: () => {
     const sdk = useServerSDK()
+
     const activity = createSessionActivity({
-      snapshot: async () => (await sdk.client.workbench.sessionStatuses({ throwOnError: true })).data ?? [],
+      snapshot: async () => (await sdk.client.global.session.status({ throwOnError: true })).data ?? [],
       onError: (error) => console.warn("Failed to refresh session activity", error),
     })
     onCleanup(

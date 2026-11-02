@@ -29,11 +29,7 @@ export function directoryLabel(location: Location): string {
   return basename ?? location.path
 }
 
-export function PanelLoader(props: {
-  panel: WorkbenchPanel
-  spaceName: string
-  spacePath: string
-}) {
+export function PanelLoader(props: { panel: WorkbenchPanel; spaceName: string; spacePath: string }) {
   const actions = useWorkbenchActions()
   const wb = useWorkbenchState()
   const sdk = useServerSDK()
@@ -43,10 +39,10 @@ export function PanelLoader(props: {
   const [selectedLocation, setSelectedLocation] = createSignal<Location>()
   const isGeneral = () => props.spacePath === ""
   const [locations] = createResource(
-    () => isGeneral() ? undefined : props.spacePath,
+    () => (isGeneral() ? undefined : props.spacePath),
     async (spacePath): Promise<Location[]> => {
       if (!spacePath) return []
-      const result = await sdk.client.workbench.locations({ spacePath })
+      const result = await sdk.bff.workbench.locations({ spacePath })
       return result.data?.items ?? []
     },
   )
@@ -82,6 +78,7 @@ export function PanelLoader(props: {
         scope: scopeFromTab({ name: props.spaceName, path: props.spacePath }),
         panelID: props.panel.id,
         initialView,
+        relativeDirectory: location?.relativeDirectory,
       })
       if (result.status === "offline") setError("服务暂不可用，恢复连接后再试")
     } catch (cause) {
@@ -97,7 +94,10 @@ export function PanelLoader(props: {
       <div class="flex flex-col gap-2 max-w-sm">
         <div class="text-16-bold text-v2-text-text-strong">未装载会话</div>
         <div class="text-12-regular text-v2-text-text-muted leading-relaxed">
-          当前空间: <span class="text-v2-text-text-base [font-weight:530]">{props.spaceName === GENERAL_SCOPE_NAME ? "Sessions" : props.spaceName}</span>
+          当前空间:{" "}
+          <span class="text-v2-text-text-base [font-weight:530]">
+            {props.spaceName === GENERAL_SCOPE_NAME ? "Sessions" : props.spaceName}
+          </span>
           <br />
           <Show when={!isGeneral()} fallback="你可以创建独立 Chat 或 TUI 会话，也可以从左侧会话树恢复历史会话。">
             选择当前 Space 内的受控目录，然后创建 Chat 或 TUI 会话。
@@ -113,7 +113,9 @@ export function PanelLoader(props: {
               class="w-full rounded-md border border-v2-border-border-base bg-v2-background-bg-deep px-2 py-1.5 text-12-regular text-v2-text-text-base"
               disabled={locations.loading || locations.error !== undefined || creating()}
               value={selectedLocation()?.key ?? ""}
-              onChange={(event) => setSelectedLocation(locations()?.find((item) => item.key === event.currentTarget.value))}
+              onChange={(event) =>
+                setSelectedLocation(locations()?.find((item) => item.key === event.currentTarget.value))
+              }
             >
               <option value="">{locations.loading ? "正在加载目录..." : "选择目录"}</option>
               <ForLocations locations={locations} />
@@ -129,7 +131,9 @@ export function PanelLoader(props: {
           disabled={creating() || !runtime.canWrite()}
           onClick={() => void handleStartSession("chat")}
         >
-          <Show when={!creating()} fallback="创建中...">新建 Chat 会话</Show>
+          <Show when={!creating()} fallback="创建中...">
+            新建 Chat 会话
+          </Show>
         </button>
         <button
           type="button"

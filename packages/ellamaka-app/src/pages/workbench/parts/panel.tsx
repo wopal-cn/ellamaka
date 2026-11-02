@@ -205,12 +205,14 @@ export function Panel(props: {
   const restoringSessionIDs = new Set<string>()
 
   createEffect(() => {
+    if (!props.isSpaceActive) return
     const sessionID = props.panel.boundSessionId
+    const localSession = sessionID && sessionStore.getSession(sessionID)
     if (
       !shouldRestoreBoundSession({
         slotState: props.panel.slotState,
         boundSessionId: sessionID,
-        hasLocalSession: !!(sessionID && sessionStore.getSession(sessionID)),
+        hasLocalSession: !!localSession && localSession.projectPath === props.panel.directory,
       })
     ) {
       return
@@ -469,7 +471,7 @@ export function Panel(props: {
                     }}
                   >
                     <Show when={props.panel.boundSessionId} keyed>
-                      {(sessionId) => (
+                      {(_sessionId) => (
                         <Show when={viewDef}>
                           {(def) => (
                             <PanelViewContainer

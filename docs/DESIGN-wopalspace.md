@@ -1,7 +1,7 @@
 # WopalSpace Application Domain
 
 > **Status**: Active
-> **Updated**: 2026-10-29
+> **Updated**: 2026-10-31
 > **Parent**: `./DESIGN.md`
 > **Scope**: private `@wopal/wopalspace` 的目标态架构、能力范围、公开契约、核心流程与状态归属
 > **Sibling DESIGNs**:
@@ -23,11 +23,11 @@
 
 ## Scope
 
-| 能力域 | 负责什么 |
-| --- | --- |
-| Setup | 首次初始化、初始化状态、初始化计划，以及 Home/Ontology/Space/credential 的共享初始化业务 |
-| Ontology | Ontology 仓库安装、复用、检查、同步、贡献和能力池查询 |
-| Space | Space 定位、注册、初始化/修复、装配物化、状态、同步和能力选择 |
+| 能力域           | 负责什么                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| Setup            | 首次初始化、初始化状态、初始化计划，以及 Home/Ontology/Space/credential 的共享初始化业务       |
+| Ontology         | Ontology 仓库安装、复用、检查、同步、贡献和能力池查询                                          |
+| Space            | Space 定位、注册、初始化/修复、装配物化、状态、同步和能力选择                                  |
 | Product Settings | 受 schema 约束的 Wopal 产品级 canonical setting 写入；当前正式键为全局 `wopal.dsh.web.enabled` |
 
 以下能力不属于 `@wopal/wopalspace`：
@@ -124,7 +124,7 @@ WopalSpace 的长期公开协议由本节与后续各领域章节共同定义。
 - 公开错误统一包含稳定 `code`、`message` 与可选 `suggestion`，并由同一 `HttpApiEndpoint` 声明对应 HTTP status。
 - inspect/list/search/status/scan/plan 等只读 operation 不得隐式执行 fetch、创建 Runtime instance、修复文件、改写 registry 或改变 Git refs。
 - 写 operation 在第一处持久化前重新读取决定本次动作的关键 facts。preview 与 apply 使用同一判定逻辑；preview 不产生本地或远端写入。
-- HTTP operation 解释 Server 所在机器的路径与 `$WOPAL_HOME`；trusted-local transport 使用 Worker 注入的本机上下文。调用参数不能替换宿主根目录或获得任意文件系统能力。
+- HTTP operation 解释 Server 所在机器的路径与 effective `$WOPAL_HOME`；trusted-local transport 使用 Worker 注入的本机上下文。普通 operation 的调用参数不能替换宿主根目录或获得任意文件系统能力。唯一例外是 Onboarding 在 Host Home 尚未锁定时调用受控的 `setup.home.select`；它只能完成一次 Home 确认，锁定后同样不能切换宿主根目录。
 - path-bearing operation 在读写前执行规范化、registered-root/realpath confinement 与 Git target validation。
 - secret 只进入需要它的执行调用，不出现在 plan、持久状态、事件、日志或错误详情。
 
@@ -146,28 +146,29 @@ DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.
 
 ### Setup Endpoints
 
-| Operation | Method/path | Contract |
-| --- | --- | --- |
-| `setup.inspect` | `GET /wopal-space/setup/inspect` | 返回 application Setup 状态与各目标实时 facts；零写入 |
-| `setup.plan` | `POST /wopal-space/setup/plan` | 输入 `goals`；返回宿主内保存的 `planId` 与有序 actions；零写入业务资源 |
-| `setup.execute` | `POST /wopal-space/setup/runs` | 输入 `planId/actionId` 与该 action 必需的临时 credential；返回 `SetupRun` |
-| `setup.progress` | `GET /wopal-space/setup/runs/:runId` | 返回当前 run 快照 |
-| `setup.progress.events` | `GET /wopal-space/setup/runs/:runId/events` | SSE；返回带单调 `sequence` 的进度事件 |
-| `setup.cancel` | `POST /wopal-space/setup/runs/:runId/cancel` | 请求取消并等待当前安全提交/清理边界结束后返回 run 状态 |
-| `setup.complete` | `POST /wopal-space/setup/complete` | 输入 `planId`；重验 application 目标并持久化 completed |
+| Operation               | Method/path                                  | Contract                                                                                       |
+| ----------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `setup.inspect`         | `GET /wopal-space/setup/inspect`             | 返回 application Setup 状态与各目标实时 facts；零写入                                          |
+| `setup.home.select`     | `POST /wopal-space/setup/home`               | Home 未锁定时确认本次 Host 的 effective Home；正常模式持久化用户环境，开发模式仅当前进程树生效 |
+| `setup.plan`            | `POST /wopal-space/setup/plan`               | 输入 `goals`；返回宿主内保存的 `planId` 与有序 actions；零写入业务资源                         |
+| `setup.execute`         | `POST /wopal-space/setup/runs`               | 输入 `planId/actionId` 与该 action 必需的临时 credential；返回 `SetupRun`                      |
+| `setup.progress`        | `GET /wopal-space/setup/runs/:runId`         | 返回当前 run 快照                                                                              |
+| `setup.progress.events` | `GET /wopal-space/setup/runs/:runId/events`  | SSE；返回带单调 `sequence` 的进度事件                                                          |
+| `setup.cancel`          | `POST /wopal-space/setup/runs/:runId/cancel` | 请求取消并等待当前安全提交/清理边界结束后返回 run 状态                                         |
+| `setup.complete`        | `POST /wopal-space/setup/complete`           | 输入 `planId`；重验 application 目标并持久化 completed                                         |
 
-`SetupGoal` 至少覆盖 foundation、ontology、space、github、provider 与 preset。`SetupAction` 包含稳定 `actionId`、goal 与 `requiresInput`；`SetupRun` 包含 `runId/actionId/status` 与可选稳定错误。
+`SetupGoal` 覆盖 foundation、github、ontology、space 与 provider，顺序即依赖顺序：GitHub 身份先于 Ontology，因为 fork 依赖已认证身份。`SetupAction` 包含稳定 `actionId`、goal 与 `requiresInput`；`SetupRun` 包含 `runId/actionId/status` 与可选稳定错误。
 
 ### Ontology Endpoints
 
-| Operation | Method/path | Contract |
-| --- | --- | --- |
-| `ontology.list` | `GET /wopal-space/ontologies` | 返回已注册 Ontology；只读本地 registry/facts |
-| `ontology.install` | `POST /wopal-space/ontologies` | 输入 source/name 与 clone-or-fork 模式；返回注册身份及 created/reused 事实 |
-| `ontology.inspect` | `GET /wopal-space/ontologies/:name/status` | 返回本地仓库、remote topology、工作区与同步 facts，以及本次 refresh 的 PR 查询结果与查询诊断；不联网 |
-| `ontology.refresh` | `POST /wopal-space/ontologies/:name/refresh` | 受控 fetch remote refs，并按贡献分支查询 GitHub PR；分别返回 Git 与 PR 刷新结果，不改本地分支/工作区 |
-| `ontology.sync` | `POST /wopal-space/ontologies/:name/sync` | `confirm:false` preview，`confirm:true` apply；返回本地与远端各阶段结果 |
-| `ontology.capability.list` | `GET /wopal-space/ontologies/:name/capabilities` | 返回 Ontology 完整能力池；不做 Runtime 权限过滤 |
+| Operation                  | Method/path                                      | Contract                                                                                             |
+| -------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `ontology.list`            | `GET /wopal-space/ontologies`                    | 返回已注册 Ontology；只读本地 registry/facts                                                         |
+| `ontology.install`         | `POST /wopal-space/ontologies`                   | 输入 source/name 与 clone-or-fork 模式；返回注册身份及 created/reused 事实                           |
+| `ontology.inspect`         | `GET /wopal-space/ontologies/:name/status`       | 返回本地仓库、remote topology、工作区与同步 facts，以及本次 refresh 的 PR 查询结果与查询诊断；不联网 |
+| `ontology.refresh`         | `POST /wopal-space/ontologies/:name/refresh`     | 受控 fetch remote refs，并按贡献分支查询 GitHub PR；分别返回 Git 与 PR 刷新结果，不改本地分支/工作区 |
+| `ontology.sync`            | `POST /wopal-space/ontologies/:name/sync`        | `confirm:false` preview，`confirm:true` apply；返回本地与远端各阶段结果                              |
+| `ontology.capability.list` | `GET /wopal-space/ontologies/:name/capabilities` | 返回 Ontology 完整能力池；不做 Runtime 权限过滤                                                      |
 
 ### Space Endpoints
 
@@ -195,7 +196,7 @@ WopalSpace Setup 只有一个用户 presentation：`@wopal/ellamaka-app` 的 `/o
 共享初始化状态保存在：
 
 ```text
-$WOPAL_HOME/ellamaka/state/onboarding.json
+$WOPAL_HOME/.setup/ellamaka.json
 ```
 
 它只保存 Setup 流程恢复位置和 `completed` 等 application 状态，不缓存：
@@ -208,44 +209,48 @@ $WOPAL_HOME/ellamaka/state/onboarding.json
 
 `wopal setup` 不是第二套 Setup client。它只启动或复用 `ellamaka serve`、传递 host/port/password 等 Server 参数并打开 `/onboarding`。
 
+### Home Binding
+
+Setup 把 Home 确认视为普通 planner/action 之前的 Host bootstrap。它不新增 Home 持久化文件；正常模式的持久真相仍是当前用户的 `WOPAL_HOME` shell/user environment，开发模式只使用 `WOPAL_DEV=1` 标识的一次性进程覆盖。
+
+`setup.inspect` 的 `home.binding` 返回 `mode`（`normal | development`）、`source`（`shell | default | selected`）、`locked` 与 `selectable`。正常模式启动时已经取得用户 `WOPAL_HOME`，则 `source=shell`、`locked=true`、`selectable=false`；变量缺失时默认路径只作为候选，`locked=false`、`selectable=true`。开发模式下启动环境或默认路径只是候选，Home 在用户确认前始终可选。
+
+`setup.home.select` 输入 `path`。Host 规范化并校验路径后执行一次 compare-and-set：正常模式先把路径持久化到用户 shell/user environment，成功后再锁定；开发模式跳过持久化，直接把路径注入当前进程树并锁定。锁定动作同时更新当前 Host 的 effective Home，并使后续 WopalSpace/Runtime composition 全部从该锁定值构建。锁定后对同一路径重复调用可幂等返回，任何不同路径都返回 `SETUP_HOME_LOCKED`。
+
+Home 未锁定时，`setup.plan`、`setup.execute` 与 `setup.complete` 返回 `SETUP_HOME_UNCONFIRMED`；此时不得创建 `$WOPAL_HOME`、`$WOPAL_HOME/.setup/ellamaka.json`、Runtime 私有目录或其他 Setup 资源。正常模式持久化失败返回 `SETUP_HOME_PERSIST_FAILED`，无效路径返回 `SETUP_HOME_INVALID`，两种失败都保持未锁定。
+
+Host 生命周期内不重新读取 shell 来改变 effective Home。Workbench 与所有 Host 子进程显式继承锁定后的 `WOPAL_HOME`，因此从 Home 确认直到 Workbench/Runtime 使用都只有一个根目录。
+
 ### Flow
 
-```text
-inspect current machine
-  -> ensure WOPAL_HOME foundation
-  -> ensure/reuse Ontology
-  -> create/reconcile Space
-       -> .wopal materialized
-       -> prepare this Space instance plugin dependencies
-  -> optional credential/provider bootstrap
-  -> re-inspect completion
-  -> complete
-```
+application flow 的唯一说明在 `DESIGN-onboarding.md` 的 Initialization Flow 一节；本节只定义 Setup API 的 operation 语义。
 
 Setup 不安装或更新 Wopal CLI、Ellamaka CLI、Desktop stable/beta。能够进入 Onboarding，意味着承载该页面的 Server 产品已经存在；其他产品安装/升级继续由 Wopal CLI Product 命令显式完成。
 
 `completed=true` 只表示首次 application 初始化完成，不表示当前或未来的 Runtime/Space instance 永久 Ready。
 
-Home foundation 包括受控目录、用户 capability roots、初始配置与所需工具资源；已有用户内容保留。窄范围 credential bootstrap 复用 Runtime credential writer 和受控 GitHub credential adapter，不引入完整 Config Plane。credential 不进入 plan、state、events 或错误详情。
+`foundation` 只准备 `$WOPAL_HOME` 根目录，不创建能力目录、不预建 Runtime 私有目录、不写初始配置；Setup recovery 写入 `$WOPAL_HOME/.setup/ellamaka.json`，因此官方 Onboarding 在 Ontology 安装与 Home seed 完成之前不会为了恢复状态创建 `$WOPAL_HOME/ellamaka/**`。本体默认配置（`ellamaka` 块）与 Home 能力根目录由本体安装后的步骤处理，见 `DESIGN-onboarding.md` 的“Home 基础配置与能力根目录”。已有用户内容保留。Ontology/Home seed 提交后，Space instance preparation 与 Core Preparation 可以按其 Runtime 职责创建私有目录。窄范围 credential bootstrap 复用 Runtime credential writer 和受控 GitHub credential adapter，不引入完整 Config Plane；官方 Onboarding 将 Provider bootstrap 排在 Core Preparation 之后。credential 不进入 plan、state、events 或错误详情。
 
 Setup service 在当前宿主中只执行一个 action，重复请求复用或返回 busy；底层共享 Git/文件写入沿用各资源现有锁。plan 只读，execute 在写入前重验实际 facts；complete 与执行使用同一写入边界，持久完成记录成功后才返回完成。进程退出后的 in-progress 只作为恢复提示，重新 inspect 后继续，不能据此认定 action 成功。
 
 ### Operation Semantics
 
-- `setup.inspect` 每次从 Home、Ontology registry/Git、Space registry/assembly 与受控 credential presence 读取实时 facts，再与 `onboarding.json` 的流程恢复信息组合。损坏 state 作为明确事实返回，不在 inspect 中改名、覆盖或修复。
+- `setup.inspect` 每次从 Home、Ontology registry/Git、Space registry/assembly 与受控 credential presence 读取实时 facts，再与 `$WOPAL_HOME/.setup/ellamaka.json` 的流程恢复信息组合。损坏 state 作为明确事实返回，不在 inspect 中改名、覆盖或修复。
+- `setup.inspect` 在 Home 尚未锁定时只返回 bootstrap Home facts，不读取候选路径下的 Setup/Ontology/Space 持久状态，也不产生写入。
+- `setup.home.select` 只在 Home 可选状态工作；正常模式完成用户环境持久化后锁定，开发模式只锁定当前进程树。它本身不执行 foundation。
 - `setup.plan` 把用户 goals 与 inspect facts 比较，只生成仍需执行的 actions，并在当前 Server 内保存生成计划时使用的关键 fact fingerprint。计划中不得复制 credential。
-- `setup.execute` 先重新 inspect 并比较 plan fingerprint；关键事实变化时返回 `SETUP_PLAN_STALE`。同宿主已有另一 action 时返回或复用对应 run，否则建立单一 run，调用 foundation/Ontology/Space/credential/preset 的真实 owner。每个持久步骤完成后发布事件。
+- `setup.execute` 先重新 inspect 并比较 plan fingerprint；关键事实变化时返回 `SETUP_PLAN_STALE`。同宿主已有另一 action 时返回或复用对应 run，否则建立单一 run，调用 foundation/Ontology/Space/credential 的真实 owner。每个持久步骤完成后发布事件。
 - `setup.progress` 只读 run snapshot；SSE 从 caller 指定或 Server 可恢复的 sequence 继续发送，重连不能把缺失事件解释为成功。
 - `setup.cancel` 设置 operation cancellation signal。已进入原子 Git/文件提交边界的步骤完成提交或回滚后才结束；随后返回 `cancelled`、`failed` 或已经完成的真实状态。
 - `setup.complete` 重新 inspect 当前 application facts，并验证 plan 中用户明确要求的 goals。满足后写入 `completed=true`；写入失败返回 `SETUP_STATE_WRITE_FAILED`，目标不足返回 `SETUP_INCOMPLETE`。DSH degraded 与产品 inventory 不属于 completion 条件。
 
-稳定 Setup 错误至少包括 `SETUP_PLAN_NOT_FOUND`、`SETUP_PLAN_STALE`、`SETUP_OPERATION_BUSY`、`SETUP_INCOMPLETE`、`SETUP_STATE_WRITE_FAILED`。
+稳定 Setup 错误至少包括 `SETUP_HOME_UNCONFIRMED`、`SETUP_HOME_LOCKED`、`SETUP_HOME_INVALID`、`SETUP_HOME_PERSIST_FAILED`、`SETUP_PLAN_NOT_FOUND`、`SETUP_PLAN_STALE`、`SETUP_OPERATION_BUSY`、`SETUP_INCOMPLETE`、`SETUP_STATE_WRITE_FAILED`。
 
 ## Core Preparation
 
 Core Preparation 属于 `@wopal/ellamaka-core`。它解决的是：**当前真正运行的 Ellamaka 产品/build，或某个具体 Space instance，在使用对应能力前是否具备所需运行资源。**
 
-它不是“整机产品全集”的准备器，也不是 Setup planner 的一个步骤。
+它不是“整机产品全集”的准备器，也不是 Setup planner 的一个步骤。它只有一份幂等实现；Onboarding 在 Space 之后触发 host target，`space.init` 在 `.wopal` 物化后触发 instance target（见 `DESIGN-onboarding.md` 的 Core Preparation Timing）。
 
 ### Product-Bound Preparation
 
@@ -273,7 +278,7 @@ ellamaka run
 
 当前产品需要的 DSH manifest、`closureVersion` 与 preparation resources 由该 build 自己携带和验证。没有要求把这些信息做成可供另一个产品离线读取的跨产品 Descriptor contract。
 
-`wopal setup` 不调用 CorePreparation。它启动的 `ellamaka serve` 会按照上面的正常产品启动路径准备自己。
+`wopal setup` 自身不调用 CorePreparation。它启动的 `ellamaka serve` 在 Setup 未完成时不挂载 DSH，host preparation 由 Onboarding 在 Space 之后执行；Setup 已完成时才按正常产品启动路径准备。两条分支调用同一个 `prepare`。
 
 ### Instance Preparation
 
@@ -317,28 +322,28 @@ DSH Home 的保护归 Runtime 所有，不归 Setup。每个产品构建携带�
 
 Core Preparation 使用统一事实状态：
 
-| 状态 | 含义 |
-| --- | --- |
-| `READY` | 当前目标满足运行条件 |
-| `NEEDS_PREPARATION` | 当前事实要求准备 |
-| `PREPARING` | 同一目标已有准备任务，调用方加入同一任务 |
-| `BUSY` | 当前暂时不允许安全准备 |
-| `DEGRADED` | 准备/检查有问题，但已有基础能力不必整体停机 |
+| 状态                | 含义                                        |
+| ------------------- | ------------------------------------------- |
+| `READY`             | 当前目标满足运行条件                        |
+| `NEEDS_PREPARATION` | 当前事实要求准备                            |
+| `PREPARING`         | 同一目标已有准备任务，调用方加入同一任务    |
+| `BUSY`              | 当前暂时不允许安全准备                      |
+| `DEGRADED`          | 准备/检查有问题，但已有基础能力不必整体停机 |
 
 状态是实时事实，不写入 Onboarding completed 状态。
 
 ### Entry Rules
 
-| 入口 | Core Preparation / Activation |
-| --- | --- |
-| `ellamaka serve` / `web` | 启动时检查当前 build；需要时准备；Ready 后激活该入口所需 DSH 能力 |
-| Desktop | sidecar 检查 embedded build；需要时准备；Ready 后激活 Desktop 所需 DSH 能力 |
-| 默认 TUI | 检查当前 build；进入具体 Space 时另外检查 instance |
-| `wopal setup` | 只启动/reuse `ellamaka serve` 并打开 `/onboarding`；自身不执行 CorePreparation |
-| `space.init` | `.wopal` 物化成功后立即准备该 Space plugin dependencies |
-| Space Runtime activation | `inspect(instance)`；不 Ready 时 fallback prepare，只影响该 Space |
-| `ellamaka run` | 固定 DSH-disabled；不做任何 DSH Preparation，不创建/复用/探测 DSH 容器，不读写 DSH Home/profile，不暴露 DSH tools |
-| `run --attach` | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载；远端 Runtime 自己负责 |
+| 入口                     | Core Preparation / Activation                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ellamaka serve` / `web` | Setup 未完成：不挂载 DSH，host preparation 由 Onboarding 在 Space 之后执行；Setup 已完成：启动时检查，需要时准备，Ready 后激活 |
+| Desktop                  | 首次启动（Setup 未完成）：不预挂 DSH，由 Onboarding 准备；已完成后 sidecar 检查 embedded build，需要时准备，Ready 后激活       |
+| 默认 TUI                 | 无 Setup presentation，启动时兜底准备 Tools profile；进入具体 Space 时另外检查 instance                                        |
+| `wopal setup`            | 只启动/reuse `ellamaka serve` 并打开 `/onboarding`；自身不执行 CorePreparation                                                 |
+| `space.init`             | `.wopal` 物化成功后立即准备该 Space plugin dependencies                                                                        |
+| Space Runtime activation | `inspect(instance)`；不 Ready 时 fallback prepare，只影响该 Space                                                              |
+| `ellamaka run`           | 固定 DSH-disabled；不做任何 DSH Preparation，不创建/复用/探测 DSH 容器，不读写 DSH Home/profile，不暴露 DSH tools              |
+| `run --attach`           | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载；远端 Runtime 自己负责                              |
 
 独立的 `ellamaka dsh init` 不属于目标态。DSH preparation 由真正需要 DSH 的产品入口按需完成。
 
@@ -479,18 +484,18 @@ Official App BFF 可以直接调用 private WopalSpace query service 与 Runtime
 
 ## State Ownership
 
-| 状态/事实 | Owner |
-| --- | --- |
-| Setup 流程状态 | `@wopal/wopalspace` setup |
-| 产品安装/update 事实与事务 | Wopal CLI Product |
-| Core readiness / preparation run | `@wopal/ellamaka-core` |
-| DSH closure/Home/profile mechanics | `@wopal/ellamaka-cordis` |
-| Ontology Git 内容/history | Ontology repository |
-| Ontology registry/lifecycle | `@wopal/wopalspace` ontology |
-| 基础 Space registry/assembly lifecycle | `@wopal/wopalspace` space |
+| 状态/事实                                  | Owner                            |
+| ------------------------------------------ | -------------------------------- |
+| Setup 流程状态                             | `@wopal/wopalspace` setup        |
+| 产品安装/update 事实与事务                 | Wopal CLI Product                |
+| Core readiness / preparation run           | `@wopal/ellamaka-core`           |
+| DSH closure/Home/profile mechanics         | `@wopal/ellamaka-cordis`         |
+| Ontology Git 内容/history                  | Ontology repository              |
+| Ontology registry/lifecycle                | `@wopal/wopalspace` ontology     |
+| 基础 Space registry/assembly lifecycle     | `@wopal/wopalspace` space        |
 | Evolution 的提案、提交、采用清单调整及恢复 | Wopal CLI 本机 Evolution service |
-| Runtime Session/Agent/PTY/Tool | Ellamaka Runtime |
-| GUI Onboarding / Workbench view state | `@wopal/ellamaka-app` |
+| Runtime Session/Agent/PTY/Tool             | Ellamaka Runtime                 |
+| GUI Onboarding / Workbench view state      | `@wopal/ellamaka-app`            |
 
 ## Invariants
 

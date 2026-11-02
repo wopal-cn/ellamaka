@@ -1,11 +1,7 @@
 import { ptyManager, ptyReferences } from "./pty-manager"
-import { scopePath, scopeName } from "./workbench-scope"
+import { scopePath, scopeName, type SpaceScope } from "./workbench-scope"
 import { uuid } from "@/utils/uuid"
-import type {
-  WorkbenchActionPtyPort,
-  WorkbenchActionSessionPort,
-  WorkbenchActionStorePort,
-} from "./workbench-actions"
+import type { WorkbenchActionPtyPort, WorkbenchActionSessionPort, WorkbenchActionStorePort } from "./workbench-actions"
 
 type ServerSDK = ReturnType<typeof import("@/context/server-sdk").useServerSDK>
 type SessionStore = ReturnType<typeof import("./session-store").useSessionStore>
@@ -13,7 +9,25 @@ type SessionProjectionWriter = ReturnType<typeof import("./session-store").useSe
 type WorkbenchState = ReturnType<typeof import("./view-store").useWorkbenchState>
 
 export type SessionServerSDK = {
-  createClient: (input: { directory: string; throwOnError: boolean }) => {
+  client: {
+    global: {
+      session: {
+        get: (
+          input: { sessionID: string },
+          options: { throwOnError: true },
+        ) => Promise<{
+          data?: {
+            id?: string
+            parentID?: string
+            title?: string
+            directory: string
+            time: { created: number; updated?: number; archived?: number }
+          }
+        }>
+      }
+    }
+  }
+  bff: {
     workbench: {
       createSession: (input: {
         requestID: string
@@ -29,6 +43,8 @@ export type SessionServerSDK = {
         }
       }>
     }
+  }
+  createClient: (input: { directory: string; throwOnError: boolean }) => {
     session: {
       get: (input: { sessionID: string }) => Promise<{
         data?: {
@@ -71,6 +87,8 @@ export function buildStorePort(wb: WorkbenchState): WorkbenchActionStorePort {
     removePanel: (scope, panelID) => wb.removePanel(scopePath(scope), panelID),
     removeSpace: (scope) => wb.removeSpace(scopePath(scope)),
     commitSessionBinding: (scope, panelID, session) => wb.bindSessionToPanel(scopePath(scope), panelID, session),
+    reconcileSpaceIdentity: (from, to) => wb.reconcileSpacePath(scopePath(from), scopePath(to)),
+    commitPanelDirectory: (scope, panelID, directory) => wb.setPanelDirectory(scopePath(scope), panelID, directory),
     commitSessionUnbinding: (scope, panelID) => wb.unbindSessionFromPanel(scopePath(scope), panelID),
     commitPanelPty: (scope, panelID, kind, ptyID) => wb.setPanelPtyId(scopePath(scope), panelID, kind, ptyID),
     commitPanelMode: (scope, panelID, mode) => wb.setPanelViewMode(scopePath(scope), panelID, mode),
@@ -80,15 +98,21 @@ export function buildStorePort(wb: WorkbenchState): WorkbenchActionStorePort {
   }
 }
 
-export function buildPtyPort(
-  serverSDK: ServerSDK,
-  store: WorkbenchActionStorePort,
-): WorkbenchActionPtyPort {
+export function buildPtyPort(serverSDK: ServerSDK, store: WorkbenchActionStorePort): WorkbenchActionPtyPort {
+  const transfer = async (from: SpaceScope, to: SpaceScope) => {
+    await ptyManager.transferSpace(
+      scopePath(from),
+      scopePath(to),
+      (panelID) => store.panel(from, panelID),
+      (panelID) => store.panel(to, panelID),
+    )
+  }
   const sdkForDirectory = (directory: string) => ({
     client: serverSDK.createClient({ directory, throwOnError: true }),
   })
 
   return {
+    reconcileSpaceIdentity: transfer,
     disposePanel: ({ scope, panel }) =>
       ptyManager.disposePanel(scopePath(scope), panel.id, sdkForDirectory(panel.directory), ptyReferences(panel)),
     ensure: ({ scope, panel, kind, directory, create }) =>
@@ -96,8 +120,7 @@ export function buildPtyPort(
         spacePath: scopePath(scope),
         panelId: panel.id,
         kind,
-        existingPtyId:
-          kind === "tui" ? panel.tuiPtyId : kind === "term" ? panel.termPtyId : panel.splitPtyId,
+        existingPtyId: kind === "tui" ? panel.tuiPtyId : kind === "term" ? panel.termPtyId : panel.splitPtyId,
         sdk: sdkForDirectory(directory),
         directory,
         createFn: create,
@@ -123,18 +146,16 @@ export function buildSessionPort(
   projection: SessionProjectionWriter,
 ): WorkbenchActionSessionPort {
   return {
-    create: async ({ scope, panel, initialView }) => {
-      const client = serverSDK.createClient({ directory: panel.directory, throwOnError: true })
-      const target = scope.kind === "general"
-        ? { type: "general" as const }
-        : {
-          type: "space" as const,
-          spacePath: scope.path,
-          directory: panel.directory.startsWith(`${scope.path}/`)
-            ? panel.directory.slice(scope.path.length + 1)
-            : undefined,
-        }
-      const result = await client.workbench.createSession({ requestID: uuid(), target })
+    create: async ({ scope, initialView, relativeDirectory }) => {
+      const target =
+        scope.kind === "general"
+          ? { type: "general" as const }
+          : {
+              type: "space" as const,
+              spacePath: scope.path,
+              directory: relativeDirectory,
+            }
+      const result = await serverSDK.bff.workbench.createSession({ requestID: uuid(), target })
       if (!result.data?.id) throw new Error("Session creation returned no session id")
       const createdAt = typeof result.data.timeCreated === "number" ? result.data.timeCreated : Date.now()
       return {
@@ -147,9 +168,8 @@ export function buildSessionPort(
         lastActiveAt: typeof result.data.timeUpdated === "number" ? result.data.timeUpdated : createdAt,
       }
     },
-    get: async ({ sessionID, directory }) => {
-      const client = serverSDK.createClient({ directory, throwOnError: true })
-      const result = await client.session.get({ sessionID })
+    get: async ({ sessionID }) => {
+      const result = await serverSDK.client.global.session.get({ sessionID }, { throwOnError: true })
       if (!result.data?.id) throw new Error(`Forked Session not found: ${sessionID}`)
       return {
         id: result.data.id,

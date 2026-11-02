@@ -63,3 +63,8 @@ export { setDshUrlGetter } from "@/workbench/dsh-url"
 export { setDshStatus } from "@/workbench/dsh-status"
 export type { DshRuntimeStatus } from "@/workbench/dsh-status"
 export { prepareDshHost, prepareDshProfiles, getCorePreparationHealth } from "@/core/preparation"
+
+export { installDshMountController, ensureDshMounted } from "@/workbench/dsh-mount-registry"
+export { setupCompleted } from "@/cli/cmd/dsh-mount-controller"
+export { isWopalHomeLockedAtStartup } from "@wopal/ellamaka-core/wopal-home-env"
+export { Global } from "@wopal/ellamaka-core/global"

@@ -7,7 +7,11 @@ import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
+import { isWopalHomeLockedAtStartup } from "@wopal/ellamaka-core/wopal-home-env"
 import { workbenchAuthUrl } from "./serve"
+import { createDshMountController, setupCompleted } from "./dsh-mount-controller"
+import { installDshMountController } from "@/workbench/dsh-mount-registry"
+import { setDshStatus } from "@/workbench/dsh-status"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -48,20 +52,24 @@ export const WebCommand = effectCmd({
     UI.println(UI.logo("  "))
     UI.empty()
 
-    // Optional dsh engine, same assembly as `serve` (single-port scheme,
-    // DESIGN-dsh-base.md). The unified Runtime Manager gates on
-    // profile-specific Web setting / `ELLAMAKA_DSH_TOOLS` intent and `disabled`/`degraded` never
-    // block the server. The dynamic import keeps the dsh closure out of the
-    // desktop sidecar bundle. Mount BEFORE opening the browser: this block
-    // must not suspend, the open() below and the final Effect.never own the
-    // command's lifetime.
-    let dshDispose: (() => Promise<void>) | undefined
-    {
-      const { mountDshEngine } = yield* Effect.promise(() => import("./dsh-mount"))
-      const handle = yield* Effect.promise(() => mountDshEngine(server, { entry: "web", cors: opts.cors }))
-      if (handle) {
-        dshDispose = () => handle.dispose()
-      }
+    // Same lifecycle as `serve`: an unfinished Setup (and every development
+    // bootstrap) must not mount DSH from the launch Home candidate. Workbench
+    // mounts on first use after the Host has locked its effective Home.
+    const controller = createDshMountController({
+      server,
+      cors: opts.cors,
+      mountEngine: (wopalHome) =>
+        import("./dsh-mount").then(({ mountDshEngine }) =>
+          mountDshEngine(server, { entry: "web", cors: opts.cors, wopalHome }),
+        ),
+    })
+    const setupReady = isWopalHomeLockedAtStartup() && setupCompleted()
+    installDshMountController(controller, setupReady)
+    if (setupReady) {
+      yield* Effect.promise(() => controller.ensure())
+    } else {
+      setDshStatus("web", "disabled")
+      setDshStatus("tools", "disabled")
     }
 
     if (opts.hostname === "0.0.0.0") {
@@ -101,7 +109,7 @@ export const WebCommand = effectCmd({
     yield* Effect.never.pipe(
       Effect.ensuring(
         Effect.promise(async () => {
-          await dshDispose?.()
+          await controller.dispose()
         }),
       ),
     )

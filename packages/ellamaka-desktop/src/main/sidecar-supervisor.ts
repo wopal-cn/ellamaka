@@ -304,6 +304,7 @@ export class SidecarSupervisor {
 
   private async spawnAndWait(): Promise<void> {
     const { hostname, port, password } = this.deps
+    let spawned = false
 
     try {
       const result = await this.deps.spawn(hostname, port, password, {
@@ -313,9 +314,15 @@ export class SidecarSupervisor {
         onStderr: this.deps.onStderr,
         onExit: (code: number) => {
           this.deps.onExit?.(code)
+          // While the spawn factory is still pending, its rejection owns the
+          // startup failure. utilityProcess also emits `exit` for that same
+          // failure; treating it as a second loss races away the concrete
+          // diagnosis and leaves only EXIT_1.
+          if (!spawned) return
           this.handleExit(code)
         },
       })
+      spawned = true
 
       this.currentSpawn = result
 

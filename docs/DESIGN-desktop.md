@@ -1,7 +1,7 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-30
+> **Updated**: 2026-11-02
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -200,7 +200,7 @@ Electron Main 以 Host Environment 为基础创建 sidecar env，再叠加 Deskt
 
 同一份 sidecar env 同时成为 Native Ellamaka Runtime 与 DSH/Cordis 的宿主父环境。Native 与 DSH 不分别接收 Desktop IPC 环境副本，也不各自重新探测 login shell；任何 profile 或工具子进程只在这个共同父环境之上执行自己的既有 overlay / child-env 规则。
 
-Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。sidecar 再检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源。DSH Web 与 Tools 是两个独立 profile：Web 是否请求由全局 `wopal.dsh.web.enabled` 决定，Tools 是否请求由 sidecar 进程的 `ELLAMAKA_DSH_TOOLS` 决定。任一 profile 处于 `PREPARING/DEGRADED` 时只影响自身能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
+Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。Renderer 通过共享 Application Startup Gate 判断 Setup 阶段。Setup 完成时，sidecar 检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源；Setup 未完成时，Onboarding 在 Space 之后触发可见的 host preparation。DSH Web 与 Tools 是两个独立 profile：Web 是否请求由全局 `wopal.dsh.web.enabled` 决定，Tools 是否请求由 sidecar 进程的 `ELLAMAKA_DSH_TOOLS` 决定。任一 profile 处于 `PREPARING/DEGRADED` 时只影响自身能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
 
 Renderer 连接同一个 Server：Setup/Onboarding 与 Runtime/WopalSpace 平台能力通过 `@wopal/ellamaka-sdk/http`，Workbench 产品专用 projection/use case 通过 `ellamaka-app` 的 private BFF client。Desktop Main 不维护第二套 Setup 状态机，也不负责产品安装。
 
@@ -219,8 +219,10 @@ Electron Main
   -> wait Server health (listener + native Runtime + WopalSpace API)
   -> create and show the window
   -> Renderer connects through public SDK + app-private BFF client
-  -> WopalSpace setup.plan decides /onboarding vs /workbench
-sidecar (background)
+  -> shared Application Startup Gate reads WopalSpace Setup facts
+       -> Home unlocked or Setup incomplete: /onboarding
+       -> Setup complete: /workbench
+sidecar (when Setup is complete, including transition after Onboarding)
   -> resolve DSH profile intent
        -> Web: $WOPAL_HOME/config/settings.jsonc -> wopal.dsh.web.enabled
        -> Tools: ELLAMAKA_DSH_TOOLS
@@ -559,10 +561,11 @@ Desktop 没有独立 Onboarding lifecycle，也没有独立 Onboarding backend�
 ```text
 Desktop cold start
   -> start packaged Ellamaka Server
-  -> sidecar prepare current embedded build as startup fallback
-  -> Renderer reads WopalSpace Setup state through @wopal/ellamaka-sdk/http
+  -> show neutral startup surface while Renderer reads WopalSpace Setup facts through @wopal/ellamaka-sdk/http
        Setup incomplete -> /onboarding
        Setup complete   -> /workbench
+  -> Setup incomplete: Onboarding runs host preparation after Space
+  -> Setup complete: sidecar prepares and activates requested profiles
 ```
 
 `$WOPAL_HOME/ellamaka/state/onboarding.json` 由 private `@wopal/wopalspace/setup` 管理。Desktop Main 不拥有或清除该状态。某个 Space 的 plugin dependency 变化只影响该 instance。

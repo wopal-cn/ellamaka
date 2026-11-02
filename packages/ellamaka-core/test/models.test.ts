@@ -7,6 +7,7 @@ import { ModelsDev } from "@wopal/ellamaka-core/models-dev"
 import { EventV2 } from "@wopal/ellamaka-core/event"
 import { Flock } from "@wopal/ellamaka-core/util/flock"
 import { it } from "./lib/effect"
+import { existsSync } from "fs"
 import { mkdtemp, readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
 import os from "os"
 import path from "path"
@@ -214,6 +215,24 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.live("get() can fetch before Runtime Preparation without creating Runtime cache or lock directories", () =>
+    enableFetch(
+      Effect.gen(function* () {
+        yield* Effect.promise(() => rm(testCachePath, { recursive: true, force: true }))
+        yield* Effect.promise(() => rm(testStatePath, { recursive: true, force: true }))
+        const state = yield* Ref.make(initialState)
+        const result = yield* provided(
+          state,
+          ModelsDev.Service.use((s) => s.get()),
+        )
+
+        expect(result).toEqual(fixture)
+        expect(existsSync(testCachePath)).toBe(false)
+        expect(existsSync(testStatePath)).toBe(false)
+      }),
+    ),
+  )
+
   it.live("get() replaces a malformed default cache with a valid network catalog", () =>
     enableFetch(
       Effect.gen(function* () {
@@ -226,9 +245,7 @@ describe("ModelsDev Service", () => {
         expect(result).toEqual(fixture)
         expect(yield* readCacheText()).toBe(JSON.stringify(fixture))
         const final = yield* Ref.get(state)
-        // Layer startup also schedules a refresh once fetch is enabled, so it
-        // may race the first get(). Both calls must use the recovered catalog.
-        expect(final.calls.length).toBeGreaterThanOrEqual(1)
+        expect(final.calls.length).toBe(1)
       }),
     ),
   )

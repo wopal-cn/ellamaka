@@ -8,12 +8,13 @@ import { ConfigParse } from "@/config/parse"
 import { ConfigWopalPluginConfig } from "@/config/wopal-plugin-config"
 import type { PluginConfigTable } from "@/config/wopal-plugin-config"
 import { loadWopalSpaceSettingsFiles } from "@/config/wopal-space-settings"
+import { isRecord } from "@/util/record"
 import type { Info } from "./tui"
 
 const log = Log.create({ service: "tui.config" })
 
 export interface WopalSpaceDeps {
-  readConfigFile: (filepath: string) => Effect.Effect<string | undefined, never, never>
+  readConfigFile: (filepath: string) => Effect.Effect<string | undefined>
   loadConfig: (text: string, configFilepath: string) => Effect.Effect<Info>
   merge: (source: string, next: Info) => Effect.Effect<void>
 }
@@ -34,7 +35,7 @@ export function tryLoadWopalSpaceTuiConfig(deps: WopalSpaceDeps, ctx: { director
     // the global settings file plus the already-loaded space layer texts.
     const globalSettingsPath = path.join(Global.Path.config, "settings.jsonc")
     const globalSettings = yield* deps.readConfigFile(globalSettingsPath)
-    const { pluginConfig } = ConfigWopalPluginConfig.mergePluginConfig([
+    const { pluginConfig } = ConfigWopalPluginConfig.mergeEffectivePluginConfig([
       { source: "global", path: globalSettingsPath, text: globalSettings },
       ...loaded.files.map((file) => ({
         source: ConfigWopalPluginConfig.settingsFileSource(file.path),
@@ -44,7 +45,8 @@ export function tryLoadWopalSpaceTuiConfig(deps: WopalSpaceDeps, ctx: { director
     ])
 
     for (const file of loaded.files) {
-      const raw = ConfigParse.jsonc(file.text, file.path) as Record<string, unknown>
+      const raw = ConfigParse.jsonc(file.text, file.path)
+      if (!isRecord(raw)) continue
       if (!raw.tui || typeof raw.tui !== "object") continue
       yield* deps.merge(
         file.path,

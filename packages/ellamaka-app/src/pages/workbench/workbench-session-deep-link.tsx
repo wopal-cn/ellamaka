@@ -14,7 +14,7 @@ import { coordinateWorkbenchSessionLink, type WorkbenchSessionGroupSummary } fro
 // ── Workbench-mounted coordinator ──────────────────────────────────────
 // Runs inside the Workbench Provider tree. Waits for the persisted Workbench
 // state and the registered Space list, parses the `?session=` query, resolves
-// the target Space via the server session-groups projection, then delegates
+// the target Space via the server session-tree projection, then delegates
 // the Tab/Panel mutation to `coordinateWorkbenchSessionLink` (pure logic).
 
 function OverwriteConfirmDialog(props: { index: number; onConfirm: () => void; onCancel: () => void }) {
@@ -77,7 +77,7 @@ export function WorkbenchSessionDeepLink() {
       if (!isCurrent()) return
       let raw
       try {
-        raw = await sdk.client.workbench.sessionGroups()
+        raw = await sdk.bff.workbench.sessionTree()
       } catch {
         consume()
         return
@@ -86,16 +86,21 @@ export function WorkbenchSessionDeepLink() {
         consume()
         return
       }
-      const groups: WorkbenchSessionGroupSummary[] = (raw.data?.groups ?? []).map((group) => ({
-        id: group.id,
-        title: group.title,
-        type: group.type,
-        sessions: (group.sessions ?? []).map((session) => ({
-          id: session.id,
-          title: session.title,
-          directory: session.directory,
-          directoryHealth: session.directoryHealth,
-        })),
+      // The canonical session tree is the only private session projection; the
+      // deep link flattens its locations back into the Space/General grouping
+      // this resolver has always consumed.
+      const groups: WorkbenchSessionGroupSummary[] = (raw.data?.scopes ?? []).map((scope) => ({
+        id: scope.path,
+        title: scope.name,
+        type: scope.kind,
+        sessions: (scope.locations ?? []).flatMap((location) =>
+          (location.sessions ?? []).map((session) => ({
+            id: session.id,
+            title: session.title,
+            directory: session.directory,
+            directoryHealth: session.directoryHealth,
+          })),
+        ),
       }))
 
       await coordinateWorkbenchSessionLink({

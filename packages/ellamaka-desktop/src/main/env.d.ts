@@ -1,6 +1,5 @@
 interface ImportMetaEnv {
   readonly ELLAMAKA_CHANNEL: string
-  readonly MIN_WOPAL_CLI_VERSION: string
 }
 
 interface ImportMeta {
@@ -8,6 +7,14 @@ interface ImportMeta {
 }
 
 declare module "virtual:opencode-server" {
+  export const ensureDshMounted: () => Promise<boolean>
+  export const installDshMountController: (
+    controller: { ensure(): Promise<boolean>; current(): undefined; dispose(): Promise<void> },
+    setupReady: boolean,
+  ) => void
+  export const setupCompleted: (wopalHome?: string) => boolean
+  export const isWopalHomeLockedAtStartup: typeof import("@wopal/ellamaka-core/wopal-home-env").isWopalHomeLockedAtStartup
+  export const Global: typeof import("@wopal/ellamaka-core/global").Global
   export namespace Server {
     export const listen: typeof import("../../../opencode/dist/types/src/node").Server.listen
     export type Listener = import("../../../opencode/dist/types/src/node").Server.Listener

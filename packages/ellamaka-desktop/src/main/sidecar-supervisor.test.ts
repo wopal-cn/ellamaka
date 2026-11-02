@@ -188,8 +188,25 @@ describe("SidecarSupervisor", () => {
 
     const state = supervisor.getState()
     expect(state.status).toBe("lost")
-    expect(state.errorCode).toBeDefined()
+    expect(state.errorCode).toBe("spawn failed")
     expect(states).toContain("lost")
+  })
+
+  test("startup exit does not overwrite the concrete spawn failure", async () => {
+    const supervisor = createSupervisor(mockSpawner)
+
+    const startPromise = supervisor.start()
+    await tick()
+
+    // A real utilityProcess emits exit while the spawn promise is rejecting.
+    // The spawn rejection carries the useful startup diagnosis; EXIT_1 does not.
+    mockSpawner.triggerExit(1)
+    mockSpawner.reject(new Error("config bootstrap failed"))
+    await startPromise
+
+    const state = supervisor.getState()
+    expect(state.status).toBe("lost")
+    expect(state.errorCode).toBe("config bootstrap failed")
   })
 
   // ── ready → lost (sidecar exits) ───────────────────────────────────────

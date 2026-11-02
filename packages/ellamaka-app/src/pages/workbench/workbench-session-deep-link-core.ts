@@ -4,7 +4,7 @@ import type { WopalSpace } from "./space-store"
 
 // ── Pure coordination logic (unit-tested directly) ──────────────────────
 // Resolves a notification deep link into a Space scope via the server-side
-// session-groups projection, then delegates the actual Tab/Panel/Projection/
+// session-tree projection, then delegates the actual Tab/Panel/Projection/
 // PTY mutation to the single `revealSession` transaction on WorkbenchActions.
 // Kept free of Solid/router imports so it can be unit-tested in isolation.
 

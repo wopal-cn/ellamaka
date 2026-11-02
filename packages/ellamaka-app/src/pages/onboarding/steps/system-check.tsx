@@ -1,225 +1,116 @@
-import { createSignal, onMount, Show } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { usePlatform } from "@/context/platform"
-import { useOnboardingClient } from "../onboarding-client-context"
+import type { SetupInspect } from "../setup-client"
 
-export interface StepProps {
-  userName?: string
-  onComplete: () => void
-  onError: (msg: string | null) => void
-  onStatusChange?: (status: "idle" | "working" | "success" | "error") => void
+export interface FoundationStepProps {
+  facts: SetupInspect
+  working: boolean
+  onRun: (homePath?: string) => void
 }
 
-export function SystemCheckStep(props: StepProps) {
-  const client = useOnboardingClient()
+export function FoundationStep(props: FoundationStepProps) {
   const platform = usePlatform()
-  const [isRunning, setIsRunning] = createSignal<boolean>(true)
-  const [isPassed, setIsPassed] = createSignal<boolean>(false)
-  const [errorMsg, setErrorMsg] = createSignal<string | null>(null)
-  const [wopalHome, setWopalHome] = createSignal<string>("")
-  const [sysInfo, setSysInfo] = createSignal<{
-    platform?: string
-    arch?: string
-    nodeVer?: string
-    gitVer?: string
-  }>({})
+  const [homePath, setHomePath] = createSignal(props.facts.home.binding.path || props.facts.home.path)
+  const [formError, setFormError] = createSignal<string | null>(null)
+  const selectable = () => props.facts.home.binding.selectable
+  const ready = () => props.facts.home.binding.locked && props.facts.home.foundation.ready && props.facts.home.writable
 
-  // Read-only probe: inspects the current home WITHOUT advancing state or
-  // writing any onboarding file. Only called on mount to show system info.
-  const probe = async (targetPath?: string) => {
-    const checkHome = targetPath ?? wopalHome()
-    try {
-      const res = await client.probe("system-info")
-      const data = (res as Record<string, unknown>) || {}
-      setSysInfo({
-        platform: (data.platform as string) || "darwin",
-        arch: (data.arch as string) || "arm64",
-        nodeVer: (data.nodeVersion as string) || "v24.x",
-        gitVer: (data.gitVersion as string) || "git version 2.x",
-      })
-      if (checkHome) setWopalHome(checkHome)
-    } catch {
-      // ignore probe failure — system info is cosmetic
-    }
-  }
-
-  // Confirmation-time check: runs the system-check execute (which persists
-  // WOPAL_HOME and writes onboarding state). Only called when the user
-  // explicitly clicks "下一步".
-  const runCheck = async (targetPath?: string): Promise<boolean> => {
-    props.onError(null)
-    props.onStatusChange?.("working")
-    setIsRunning(true)
-    setIsPassed(false)
-    setErrorMsg(null)
-    const checkHome = targetPath ?? wopalHome()
-    try {
-      const res = await client.executeStep("system-check", {
-        customHomePath: checkHome || undefined,
-      })
-      if (res.status === "completed" || res.status === "reused") {
-        setIsPassed(true)
-        props.onStatusChange?.("success")
-        const data = (res.result as Record<string, string>) || {}
-        setSysInfo({
-          platform: data.platform || "darwin",
-          arch: data.arch || "arm64",
-          nodeVer: data.embeddedNodeVersion || data.nodeVersion || "v24.x",
-          gitVer: data.gitVersion || data.gitStatus || "git version 2.x",
-        })
-        if (data.wopalHome) {
-          setWopalHome(data.wopalHome)
-        }
-        return true
-      } else {
-        const msg = res.error?.message ?? "系统环境检查失败。"
-        setErrorMsg(msg)
-        props.onStatusChange?.("error")
-        props.onError(msg)
-        return false
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setErrorMsg(msg)
-      props.onStatusChange?.("error")
-      props.onError(msg)
-      return false
-    } finally {
-      setIsRunning(false)
-    }
-  }
-
-  onMount(async () => {
-    props.onStatusChange?.("working")
-    setIsRunning(true)
-    try {
-      const probeRes = await client.probe("home")
-      const realHome =
-        typeof probeRes.homePath === "string"
-          ? probeRes.homePath
-          : typeof probeRes.wopalHome === "string"
-            ? probeRes.wopalHome
-            : ""
-      const home = realHome || ""
-      setWopalHome(home)
-      await probe(home || undefined)
-    } catch {
-      // ignore probe error
-    } finally {
-      setIsRunning(false)
-      // Restore the root "idle" state so the 下一步 button re-enables after
-      // the read-only probe completes. Without this, onMount's "working"
-      // leaves the button permanently disabled.
-      props.onStatusChange?.("idle")
-    }
-  })
-
-  const handleBrowseHome = async () => {
-    if (!platform.openDirectoryPickerDialog) return
-    try {
-      const result = await platform.openDirectoryPickerDialog({
-        title: "选择 WOPAL_HOME 工作目录",
-      })
-      const selected = typeof result === "string" ? result : Array.isArray(result) ? result[0] : null
-      if (selected) {
-        setWopalHome(selected)
-        setIsPassed(false)
-        setErrorMsg(null)
-        // Browse only selects the path — the actual check/write happens on "下一步".
-        await probe(selected)
-      }
-    } catch {
-      // ignore dialog cancel
-    }
-  }
-
-  const handleInputChange = (val: string) => {
-    setWopalHome(val)
-    setIsPassed(false)
-    setErrorMsg(null)
-  }
-
-  const handleSubmit = async (event: Event) => {
+  const submit = (event: Event) => {
     event.preventDefault()
-    if (isRunning()) return
-    const trimmed = wopalHome().trim()
-    if (!trimmed) {
-      setErrorMsg("请输入或选择一个工作目录。")
-      props.onError("请输入或选择一个工作目录。")
+    if (props.working) return
+    if (!selectable()) return props.onRun()
+    const path = homePath().trim()
+    if (!path) {
+      setFormError("请选择或输入 Wopal Home 目录。")
       return
     }
-    // The chosen home rides the execute input (`customHomePath`); the server
-    // persists it as part of running the step.
-    const passed = await runCheck(trimmed)
-    if (passed) props.onComplete()
+    setFormError(null)
+    props.onRun(path)
+  }
+
+  const browse = async () => {
+    if (!platform.openDirectoryPickerDialog) return
+    try {
+      const result = await platform.openDirectoryPickerDialog({ title: "选择 Wopal Home 目录" })
+      const selected = typeof result === "string" ? result : Array.isArray(result) ? result[0] : undefined
+      if (selected) {
+        setHomePath(selected)
+        setFormError(null)
+      }
+    } catch {
+      // Dialog cancellation is not an error.
+    }
   }
 
   return (
-    <form
-      id="onboarding-step-system-check"
-      class="ob-syscheck-content"
-      onSubmit={handleSubmit}
-    >
-      {/* 1. Warm Greeting Header */}
+    <form id="onboarding-step-system-check" class="ob-syscheck-content" onSubmit={submit}>
       <div class="ob-syscheck-hero">
         <div class="ob-syscheck-emoji">👋</div>
-        <h3 class="ob-syscheck-title">
-          {props.userName ? `嗨，${props.userName}！欢迎来到 WopalSpace` : "欢迎来到 WopalSpace"}
-        </h3>
+        <h3 class="ob-syscheck-title">欢迎来到 WopalSpace</h3>
       </div>
 
-      {/* 2. Environment Inspection Card */}
       <div class="ob-syscheck-card">
-        <div class="ob-result-row">
-          <span class="ob-result-label">系统架构</span>
-          <span class="ob-result-value">{sysInfo().platform || "darwin"} ({sysInfo().arch || "arm64"})</span>
-        </div>
-        <div class="ob-result-row">
-          <span class="ob-result-label">Git</span>
-          <span class="ob-result-value">{sysInfo().gitVer || "已准备"}</span>
-        </div>
+        <Show
+          when={selectable()}
+          fallback={
+            <>
+              <div class="ob-result-row">
+                <span class="ob-result-label">工作主目录</span>
+                <span class="ob-result-value ob-result-mono">{props.facts.home.binding.path}</span>
+              </div>
+              <div class="ob-result-subtitle">当前 Host 已锁定该 WOPAL_HOME；如需更改，请修改用户环境后重启。</div>
+            </>
+          }
+        >
+          <div class="ob-form-group">
+            <label class="ob-label" for="wopal-home-input">
+              Wopal Home
+            </label>
+            <input
+              id="wopal-home-input"
+              class="ob-input"
+              value={homePath()}
+              disabled={props.working}
+              placeholder="例如 ~/.wopal"
+              onInput={(event) => {
+                setHomePath(event.currentTarget.value)
+                setFormError(null)
+              }}
+            />
+            <Show when={platform.openDirectoryPickerDialog !== undefined}>
+              <button type="button" class="ob-button ob-button-secondary" onClick={browse} disabled={props.working}>
+                选择目录…
+              </button>
+            </Show>
+            <div class="ob-result-subtitle">
+              {props.facts.home.binding.mode === "development"
+                ? "开发测试模式：本次选择只对当前进程树生效，不会修改你的 Shell 环境。"
+                : "首次确认后会写入当前用户的 WOPAL_HOME；后续启动将直接使用该目录。"}
+            </div>
+            <Show when={formError()}>{(message) => <p class="ob-field-error">{message()}</p>}</Show>
+          </div>
+        </Show>
+        <Show when={props.facts.home.binding.locked}>
+          <div class="ob-result-row">
+            <span class="ob-result-label">目录权限</span>
+            <span class="ob-result-value">{props.facts.home.writable ? "可写" : "不可写"}</span>
+          </div>
+        </Show>
       </div>
 
-      {/* 3. Working Directory Card */}
-      <div class="ob-syscheck-card">
-        <label class="ob-syscheck-home-label" for="syscheck-home-input">工作主目录 (WOPAL_HOME)</label>
-        <input
-          id="syscheck-home-input"
-          type="text"
-          class="ob-input ob-syscheck-home-input"
-          value={wopalHome()}
-          onInput={(e) => handleInputChange(e.currentTarget.value)}
-          placeholder="~/.wopal"
-          disabled={isRunning()}
-        />
-        <div class="ob-syscheck-home-actions">
-          <Show when={platform.openDirectoryPickerDialog !== undefined}>
-            <button
-              type="button"
-              class="ob-button ob-button-secondary ob-syscheck-browse"
-              onClick={handleBrowseHome}
-              disabled={isRunning()}
-            >
-              <span>📁</span>
-              <span>选择 / 更改工作目录…</span>
-            </button>
-          </Show>
-        </div>
-      </div>
-
-      <Show when={isRunning()}>
-        <div class="ob-progress-container" style={{ padding: "16px 0" }}>
-          <div class="ob-spinner" />
-          <div class="ob-progress-phase">正在初始化并检查环境（首次检查需 5-10 秒）…</div>
+      <Show when={props.facts.home.binding.locked && !ready() && props.facts.home.foundation.missing.length > 0}>
+        <div class="ob-syscheck-card">
+          <div class="ob-result-label">工作主目录尚未准备</div>
+          <div class="ob-result-subtitle">
+            本步骤只创建 WOPAL_HOME 根目录，不预建配置、能力目录或 Runtime 私有目录。
+          </div>
         </div>
       </Show>
 
-      <Show when={!isRunning() && errorMsg()}>
-        <div class="ob-syscheck-error">
-          <span class="ob-syscheck-error-icon">✗</span>
-          <div>
-            <div class="ob-syscheck-error-title">环境检查未通过</div>
-            <div class="ob-syscheck-error-message">{errorMsg()}</div>
-          </div>
+      <Show when={ready()}>
+        <div class="ob-syscheck-card">
+          <div class="ob-result-title">工作目录已经就绪</div>
+          <div class="ob-result-subtitle">继续检查能力本体与工作空间。</div>
         </div>
       </Show>
     </form>

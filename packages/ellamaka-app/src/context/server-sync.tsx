@@ -1,21 +1,12 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@wopal/ellamaka-sdk/v2/client"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { showServerToast } from "@/utils/server-toast"
-import {
-  batch,
-  createContext,
-  getOwner,
-  onCleanup,
-  onMount,
-  type Accessor,
-  type ParentProps,
-  untrack,
-  useContext,
-} from "solid-js"
+import { batch, getOwner, onCleanup, onMount, type Accessor, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
 import { useServerSDK } from "./server-sdk"
+import { scheduleServerSdkEventStart } from "./server-sdk-start"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
@@ -109,13 +100,22 @@ function makeQueryOptionsApi(
   }
 }
 
-export function createServerSyncContext(input: { instanceBootstrap?: boolean | Accessor<boolean> } = {}) {
+export function createServerSyncContext(
+  input: {
+    instanceBootstrap?: boolean | Accessor<boolean>
+    globalConfigBootstrap?: boolean | Accessor<boolean>
+  } = {},
+) {
   const serverSDK = useServerSDK()
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
   const instanceBootstrap = () => {
     const value = input.instanceBootstrap
+    return typeof value === "function" ? value() : (value ?? true)
+  }
+  const globalConfigBootstrap = () => {
+    const value = input.globalConfigBootstrap
     return typeof value === "function" ? value() : (value ?? true)
   }
 
@@ -142,7 +142,7 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
     const enabled = instanceBootstrap()
     return {
       queries: [
-        queryOptionsApi.globalConfig(),
+        { ...queryOptionsApi.globalConfig(), enabled: globalConfigBootstrap() },
         { ...queryOptionsApi.providers(null), enabled },
         { ...queryOptionsApi.path(null), enabled },
       ],
@@ -178,13 +178,8 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
 
   let bootedAt = 0
   let bootingRoot = false
-  let eventFrame: number | undefined
-  let eventTimer: ReturnType<typeof setTimeout> | undefined
 
-  onCleanup(() => {
-    if (eventFrame !== undefined) cancelAnimationFrame(eventFrame)
-    if (eventTimer !== undefined) clearTimeout(eventTimer)
-  })
+  onCleanup(() => {})
 
   const setProjects = (next: Project[] | ((draft: Project[]) => Project[])) => {
     setGlobalStore("project", next)
@@ -192,6 +187,7 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
 
   const setBootStore = ((...input: unknown[]) => {
     if (input[0] === "project" && Array.isArray(input[1])) {
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy store setter overload
       setProjects(input[1] as Project[])
       return input[1]
     }
@@ -218,6 +214,7 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
 
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy store setter overload
       setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
       return input[1]
     }
@@ -418,7 +415,7 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
         project: globalStore.project,
         refresh: () => {
           if (recent) return
-          bootstrap.refetch()
+          void bootstrap.refetch()
         },
         setGlobalProject: setProjects,
       })
@@ -462,20 +459,8 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
   })
 
   onMount(() => {
-    if (typeof requestAnimationFrame === "function") {
-      eventFrame = requestAnimationFrame(() => {
-        eventFrame = undefined
-        eventTimer = setTimeout(() => {
-          eventTimer = undefined
-          void serverSDK.event.start()
-        }, 0)
-      })
-    } else {
-      eventTimer = setTimeout(() => {
-        eventTimer = undefined
-        void serverSDK.event.start()
-      }, 0)
-    }
+    const cancelStart = scheduleServerSdkEventStart(() => serverSDK.event.start())
+    onCleanup(cancelStart)
   })
 
   const projectApi = {
@@ -491,11 +476,11 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
   const updateConfigMutation = useMutation(() => ({
     mutationFn: (config: Config) => serverSDK.client.global.config.update({ config }),
     onSuccess: () => {
-      bootstrap.refetch()
+      void bootstrap.refetch()
       // Invalidate all provider queries so newly configured custom providers
       // appear immediately in the available provider list across all directories.
-      queryClient.invalidateQueries({ queryKey: [null, "providers"] })
-      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
+      void queryClient.invalidateQueries({ queryKey: [null, "providers"] })
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[1] === "providers" })
     },
   }))
 
@@ -522,9 +507,13 @@ export function createServerSyncContext(input: { instanceBootstrap?: boolean | A
   }
 }
 
+// oxlint-disable-next-line typescript-eslint/unbound-method -- context hook does not use this
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
-  init: (props: { instanceBootstrap?: boolean | Accessor<boolean> }) => {
+  init: (props: {
+    instanceBootstrap?: boolean | Accessor<boolean>
+    globalConfigBootstrap?: boolean | Accessor<boolean>
+  }) => {
     const sync = createServerSyncContext(props)
 
     return {

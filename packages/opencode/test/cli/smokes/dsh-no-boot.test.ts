@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 
@@ -112,12 +112,12 @@ describe("dsh CLI: no-engine-boot contract", () => {
   )
 
   cliIt.live(
-    "dsh plugin add github spec: rejected fast with npm guidance, no boot trace",
+    "dsh plugin enable without a package: rejected without engine boot",
     ({ opencode }) =>
       Effect.gen(function* () {
-        const r = yield* opencode.spawn(["dsh", "plugin", "add", "github:owner/repo", "--print-logs"])
+        const r = yield* opencode.spawn(["dsh", "plugin", "enable", "--print-logs"])
         expect(r.exitCode).not.toBe(0)
-        expect(r.stderr + r.stdout).toContain("npm")
+        expect(r.stderr + r.stdout).toContain("requires a <package> argument")
         for (const trace of BOOT_TRACES) {
           expect(r.stderr).not.toContain(trace)
         }

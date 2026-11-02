@@ -59,11 +59,11 @@ CLI 的 host-wide 操作与原生管理服务的 current-profile 操作使用明
 
 用户命令由 Ellamaka 的 dsh 适配入口解析，安装结果与 Web 管理服务共用同一声明事实。
 
-| 命令面                            | 契约                                                    |
-| --------------------------------- | ------------------------------------------------------- |
-| plugin add / remove / install     | 精确声明、受控安装和明确作用域                          |
-| plugin enable / disable / list    | 用户补丁启停与已装清单                                  |
-| dump-config / dump-default-config | 实际完整层或仅 bundle 层；显式 patch 缺失时报配置错误   |
+| 命令面                            | 契约                                                  |
+| --------------------------------- | ----------------------------------------------------- |
+| plugin add / remove / install     | 精确声明、受控安装和明确作用域                        |
+| plugin enable / disable / list    | 用户补丁启停与已装清单                                |
+| dump-config / dump-default-config | 实际完整层或仅 bundle 层；显式 patch 缺失时报配置错误 |
 
 plugin 的 profile 选项归子命令；根级选项出现在 plugin 之前时遵循现有冲突语义。程序启动由 serve/web/TUI/Desktop 产品入口拥有，用户插件安装不转发到外部包管理工具。
 
@@ -90,7 +90,7 @@ plugin 的 profile 选项归子命令；根级选项出现在 plugin 之前时�
 
 Web 的 preset 目录由 agent-preset 声明与 agent-preset-registry 服务组成。声明是普通 bundle 插件行，包含 id、展示元数据和 plugins；官方 Web bundle 提供 standard、ptc、minimal、cordis 的定义。
 
-用户 preset 与 shipped preset 的覆盖通过声明 id 表达。用户默认值保存在 agent-preset-registry.selectedDefault。读取、选择、启停与配置持久化使用 profile 用户补丁和官方管理接口。
+用户 preset 与 shipped preset 的覆盖通过声明 id 表达。用户默认值保存在 agent-preset-registry.selectedDefault，preset 查看、选择与新任务默认值设置由 DSH Web 原生界面和管理接口负责。
 
 声明更新产生新的 revision，已有 Agent 保留使用中的 revision，新绑定使用当前定义。无法导入、等待不可用服务或泄漏全局服务的定义按原生 broken-definition 语义提供诊断。默认定义通过可绑定验收后，宿主发布 Web 挂载成功。
 
@@ -156,7 +156,7 @@ dsh/agents-presets/
 
 1. **能力包与 Profile 职责分离**：本体仓库（`dsh/`）仅维护跨版本的声明式预设包（`dsh/agents-presets`）与扩展插件包（`dsh/plugins/*`），不维护 `web` 或 `ellamaka-tools` 的 profile 基线目录。
 2. **Profile 初始化**：CorePreparation（`dsh.profiles` 步骤）在固定核心 Home `$WOPAL_HOME/dsh/home/profiles/<profile>/` 使用官方文件格式准备 profile：Web 使用官方模板，tools 使用产品最小插件声明。每次准备与启动前将合成根锚点 `cordis.yml` 重置为 `[]\n`。已有用户声明文件保持不变。
-3. **预设与插件安装**：WopalSpace Onboarding 或插件管理命令在用户启用相关增强时，通过官方 `pluginManager` 流水线将本体仓库提供的 `@wopal/dsh-presets` 及扩展插件以 `file:` 本地包快照方式安装到 `web` profile，保持本地目录物理独立。
+3. **预设与插件安装**：插件管理入口在用户启用相关增强时，通过官方 `pluginManager` 流水线将本体仓库提供的 `@wopal/dsh-presets` 及扩展插件以 `file:` 本地包快照方式安装到 `web` profile，保持本地目录物理独立。
 4. **准备与激活**：`serve`、Desktop 与默认 TUI 共用 CorePreparation；`ellamaka run` 固定跳过 DSH。Runtime 使用统一 `closureVersion` 检查固定核心 Home，较新版本写入前先备份；Home lock 防止版本切换与运行中的 DSH 并发。Web 与 Tools 只按各自启用事实请求 profile；两者都关闭时整个 DSH 分支跳过。细节归 [DSH 基础设计](./DESIGN-dsh-base.md#closure-and-startup-lifecycle)。
 
 ## Core Profile Hosting

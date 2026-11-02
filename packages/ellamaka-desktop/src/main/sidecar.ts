@@ -97,9 +97,6 @@ const sidecarLogLevel = {
     return currentSidecarLogLevel()
   },
 }
-/** Disposer for the /api/onboarding mount; runs before the listener stops. */
-let disposeOnboarding: (() => void) | undefined
-
 /**
  * The dsh runtime initialised once per launch (W-02). The manager's
  * profile-specific preparation still shares one closure/Home and one loaded
@@ -208,43 +205,46 @@ async function start(command: StartCommand) {
       }),
     )
     listener = serverListener
-    // Onboarding HTTP surface (Plan #230): the same /api/onboarding mount the
-    // CLI `serve` command registers, installed directly on the Ellamaka
-    // listener. The package is compiled into this bundle, so the dynamic import
-    // resolves to the inlined module. `home` follows the start command's
-    // WOPAL_HOME (the same value dshLaunch resolves) and the password captured
-    // from the command (the env credentials are already cleared) puts the
-    // surface behind the same credential the rest of the sidecar enforces. The
-    // mount is removed in stop() before the listener closes.
-    {
-      const { mountOnboarding } = await import("@wopal/ellamaka-onboarding/mount")
-      disposeOnboarding = mountOnboarding(serverListener, {
-        home: command.wopalHome,
-        serverPassword: command.password,
-      })
-    }
     // Server readiness is independent from DSH readiness: the window and the
     // native Runtime must not wait for DSH preparation (DESIGN-desktop.md).
     currentStartCommand = command
-    const { resolveDshProfileIntent, setDshStatus } = await import("virtual:opencode-server")
-    dshIntent = await resolveDshProfileIntent(dshLaunch(command).wopalHome, process.env)
-    setDshStatus("web", dshIntent.web ? "preparing" : "disabled")
-    setDshStatus("tools", dshIntent.tools ? "preparing" : "disabled")
+    const { installDshMountController, setupCompleted, isWopalHomeLockedAtStartup, Global, setDshStatus } =
+      await import("virtual:opencode-server")
+    const setupReady = isWopalHomeLockedAtStartup() && setupCompleted()
+    setDshStatus("web", "disabled")
+    setDshStatus("tools", "disabled")
+    installDshMountController(
+      {
+        async ensure() {
+          if (dshInitialization) {
+            await dshInitialization
+            return true
+          }
+          const wopalHome = Global.Path.wopalHome
+          const effectiveCommand = {
+            ...command,
+            wopalHome,
+            ...(command.wopalHome !== wopalHome ? { pluginLogDir: undefined, runtimeLogFile: undefined } : {}),
+          }
+          currentStartCommand = effectiveCommand
+          const { resolveDshProfileIntent } = await import("virtual:opencode-server")
+          dshIntent = await resolveDshProfileIntent(effectiveCommand.wopalHome, process.env)
+          setDshStatus("web", dshIntent.web ? "preparing" : "disabled")
+          setDshStatus("tools", dshIntent.tools ? "preparing" : "disabled")
+          dshInitialization = initializeDsh(effectiveCommand)
+          await dshInitialization
+          return true
+        },
+        current: () => undefined,
+        dispose: async () => {},
+      },
+      setupReady,
+    )
     parentPort.postMessage({ type: "ready" })
-
-    // Optional dsh engine (single-process, DESIGN-dsh-base.md). The
-    // unified CorePreparation host service (consumed via `virtual:opencode-server`,
-    // which the opencode sidecar bundle exports) uses the profile-specific Web setting and `ELLAMAKA_DSH_TOOLS` intent
-    // (`=0` → disabled with zero file access) and materialises the closure on
-    // demand; `disabled`/`degraded` never block the sidecar — the server runs
-    // untouched. The web VirtualWebServer mounts onto the Ellamaka listener
-    // under /dsh; the tool container (ellamaka-tools profile) feeds the
-    // dsh-adapter so Workbench sessions can adopt container tools. A single
-    // initialisation per launch is shared by both mounts (W-02); each mount is
-    // wrapped in a degrade boundary so a broken closure never exits the
-    // sidecar (B-06).
-    dshInitialization = initializeDsh(command)
-    await dshInitialization
+    if (setupReady) {
+      const { ensureDshMounted } = await import("virtual:opencode-server")
+      await ensureDshMounted()
+    }
   } catch (error) {
     parentPort.postMessage({ type: "error", error: serializeError(error) })
     setImmediate(() => process.exit(1))
@@ -491,6 +491,9 @@ async function initDshLaunch(
     tools: toolsStatus,
     ...(reason ? { reason } : {}),
   })
+  const { setDshStatus } = await import("virtual:opencode-server")
+  if (webStatus === "degraded") setDshStatus("web", "degraded")
+  if (toolsStatus === "degraded") setDshStatus("tools", "degraded")
   if (webStatus !== "ready" && toolsStatus !== "ready") {
     dshLaunchState = { webStatus, toolsStatus, ...intent, ...(reason ? { reason } : {}) }
     return dshLaunchState
@@ -654,9 +657,6 @@ async function stop() {
     dshHost = undefined
     if (dshHomeAccess) await dshHomeAccess.lease.release()
     dshHomeAccess = undefined
-    // Unregister the onboarding mount before the listener closes (Plan #230).
-    disposeOnboarding?.()
-    disposeOnboarding = undefined
     await listener?.stop()
   } finally {
     listener = undefined

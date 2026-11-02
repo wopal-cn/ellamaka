@@ -1,14 +1,18 @@
 import path from "path"
-import { Effect, Layer, Record, Result, Schema, Context } from "effect"
+import { Effect, Layer, Record as EffectRecord, Result, Schema, Context } from "effect"
 import { NonNegativeInt } from "@wopal/ellamaka-core/schema"
 import { Global } from "@wopal/ellamaka-core/global"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
-const file = path.join(Global.Path.data, "auth.json")
+const authFile = () => path.join(Global.Path.data, "auth.json")
 
 const fail = (message: string) => (cause: unknown) => new AuthError({ message, cause })
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
 
 export class Oauth extends Schema.Class<Oauth>("OAuth")({
   type: Schema.Literal("oauth"),
@@ -58,11 +62,12 @@ export const layer = Layer.effect(
       if (process.env.OPENCODE_AUTH_CONTENT) {
         try {
           return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
-        } catch (err) {}
+        } catch {}
       }
 
-      const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>
-      return Record.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
+      const raw = yield* fsys.readJson(authFile()).pipe(Effect.orElseSucceed(() => ({})))
+      const data = isRecord(raw) ? raw : {}
+      return EffectRecord.filterMap(data, (value) => Result.fromOption(decode(value), () => undefined))
     })
 
     const get = Effect.fn("Auth.get")(function* (providerID: string) {
@@ -75,7 +80,7 @@ export const layer = Layer.effect(
       if (norm !== key) delete data[key]
       delete data[norm + "/"]
       yield* fsys
-        .writeJson(file, { ...data, [norm]: info }, 0o600)
+        .writeJson(authFile(), { ...data, [norm]: info }, 0o600)
         .pipe(Effect.mapError(fail("Failed to write auth data")))
     })
 
@@ -84,7 +89,7 @@ export const layer = Layer.effect(
       const data = yield* all()
       delete data[key]
       delete data[norm]
-      yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+      yield* fsys.writeJson(authFile(), data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
     })
 
     return Service.of({ get, all, set, remove })

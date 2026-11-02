@@ -7,8 +7,9 @@ import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { Log } from "./node"
 import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 import { resolveLogLevel } from "./cli/log-level"
+import { Global } from "@wopal/ellamaka-core/global"
 
-const cli = yargs(hideBin(process.argv))
+const _cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName(BINARY_NAME)
   .wrap(100)
@@ -30,6 +31,9 @@ const cli = yargs(hideBin(process.argv))
     type: "boolean",
   })
   .middleware(async (opts) => {
+    // This standalone TUI entry bypasses src/index.ts, so it owns the Runtime
+    // materialization boundary itself instead of relying on DI side effects.
+    await Global.ensure()
     // Resolve the level through the unified composition only after yargs has
     // parsed the explicit `--log-level`, so this entry cannot bypass the
     // precedence chain (`--log-level` > env > config > INFO) with a stale

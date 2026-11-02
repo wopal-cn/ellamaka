@@ -110,10 +110,10 @@ function isRecord(input: unknown): input is Record<string, unknown> {
   return typeof input === "object" && input !== null && !Array.isArray(input)
 }
 
-function catalogFromUnknown(input: unknown): Record<string, Provider> | undefined {
-  if (!isRecord(input)) return
+function isProviderCatalog(input: unknown): input is Record<string, Provider> {
+  if (!isRecord(input)) return false
   const entries = Object.entries(input)
-  if (entries.length === 0) return
+  if (entries.length === 0) return false
 
   for (const [id, provider] of entries) {
     if (
@@ -126,14 +126,20 @@ function catalogFromUnknown(input: unknown): Record<string, Provider> | undefine
       Object.keys(provider.models).length === 0 ||
       !Object.values(provider.models).every(isRecord)
     ) {
-      return
+      return false
     }
   }
 
+  return true
+}
+
+function catalogFromUnknown(input: unknown): Record<string, Provider> | undefined {
+  if (!isProviderCatalog(input)) return undefined
+
   // The upstream catalog evolves faster than the runtime's complete Model
-  // schema. Validate the provider-record boundary without rejecting a valid
-  // new model field that this runtime can safely ignore.
-  return input as Record<string, Provider>
+  // schema. Validate only the provider-record boundary so additive model
+  // fields remain forward-compatible with newer catalog revisions.
+  return input
 }
 
 export const Event = {
@@ -168,15 +174,15 @@ export const layer = Layer.effect(
     )
 
     const source = Flag.ELLAMAKA_MODELS_URL || "https://models.opencode.ai"
-    const filepath = path.join(
-      Global.Path.cache,
-      source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
-    )
+    const filepath = () =>
+      path.join(
+        Global.Path.cache,
+        source === "https://models.opencode.ai" ? "models.json" : `models-${Hash.fast(source)}.json`,
+      )
     const ttl = Duration.minutes(5)
-    const lockKey = `models-dev:${filepath}`
+    const lockKey = () => `models-dev:${filepath()}`
     const explicitPath = Flag.ELLAMAKA_MODELS_PATH
     const fallbackPath = Flag.ELLAMAKA_MODELS_FALLBACK_PATH
-    const diskPath = explicitPath ?? filepath
     const fetchEnabled = !process.argv.includes("--get-yargs-completions")
 
     const fetchApi = Effect.fn("ModelsDev.fetchApi")(function* () {
@@ -209,17 +215,29 @@ export const layer = Layer.effect(
       return undefined
     })
 
-    const loadFromDisk = () => loadFromFile(diskPath, explicitPath === undefined)
-    const loadDefaultCache = () => loadFromFile(filepath, true)
-    const loadFallback = () =>
-      fallbackPath === undefined ? Effect.succeed(undefined) : loadFromFile(fallbackPath)
+    const loadFromDisk = () => loadFromFile(explicitPath ?? filepath(), explicitPath === undefined)
+    const loadDefaultCache = () => loadFromFile(filepath(), true)
+    const loadFallback = () => (fallbackPath === undefined ? Effect.succeed(undefined) : loadFromFile(fallbackPath))
 
     const loadSnapshot = Effect.sync(() =>
       typeof ELLAMAKA_MODELS_DEV === "undefined" ? undefined : catalogFromUnknown(ELLAMAKA_MODELS_DEV),
     )
 
+    const runtimeCacheReady = () =>
+      fs.stat(Global.Path.cache).pipe(
+        Effect.as(true),
+        Effect.catch(() => Effect.succeed(false)),
+      )
+
+    const fetchEphemeralCatalog = Effect.fn("ModelsDev.fetchEphemeralCatalog")(function* () {
+      const text = yield* fetchApi()
+      const catalog = yield* parseCatalog(text)
+      if (!catalog) return yield* Effect.fail(new Error("Invalid provider catalog response"))
+      return catalog
+    })
+
     const fresh = Effect.fnUntraced(function* () {
-      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const stat = yield* fs.stat(filepath()).pipe(Effect.catch(() => Effect.succeed(undefined)))
       if (!stat) return false
       const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
       if (Date.now() - mtime >= Duration.toMillis(ttl)) return false
@@ -231,9 +249,10 @@ export const layer = Layer.effect(
       const catalog = yield* parseCatalog(text)
       if (!catalog) return yield* Effect.fail(new Error("Invalid provider catalog response"))
 
-      const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
+      const target = filepath()
+      const tempfile = `${target}.${process.pid}.${Date.now()}.tmp`
       yield* fs.writeWithDirs(tempfile, text).pipe(
-        Effect.andThen(fs.rename(tempfile, filepath)),
+        Effect.andThen(fs.rename(tempfile, target)),
         Effect.catch((error) =>
           Effect.gen(function* () {
             yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
@@ -251,7 +270,7 @@ export const layer = Layer.effect(
     const fetchWithLock = () =>
       Effect.scoped(
         Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
+          yield* Flock.effect(lockKey())
           return yield* fetchAndWrite()
         }),
       )
@@ -284,6 +303,29 @@ export const layer = Layer.effect(
     })
 
     const populate = Effect.gen(function* () {
+      // Onboarding mounts the provider routes before Core Runtime Preparation.
+      // A premature provider request may read/fetch the catalog, but it must
+      // not materialize the Runtime cache/state tree merely by observing it.
+      if (!(yield* runtimeCacheReady())) {
+        if (fallbackPath !== undefined && explicitPath === undefined) {
+          if (!fetchEnabled) return (yield* loadFallback()) ?? (yield* loadSnapshot) ?? {}
+          return yield* fetchEphemeralCatalog().pipe(
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                return (yield* loadFallback()) ?? (yield* loadSnapshot) ?? {}
+              }),
+            ),
+          )
+        }
+
+        const fromExplicit = explicitPath === undefined ? undefined : yield* loadFromFile(explicitPath)
+        if (fromExplicit) return fromExplicit
+        const snapshot = yield* loadSnapshot
+        if (snapshot) return snapshot
+        if (!fetchEnabled) return {}
+        return yield* fetchEphemeralCatalog()
+      }
+
       // The development launcher supplies a fallback snapshot explicitly. In
       // that mode the network is authoritative: a successful request exposes
       // new providers immediately, while a failure still has local recovery.
@@ -301,15 +343,19 @@ export const layer = Layer.effect(
       return yield* fetchWithLock()
     }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
 
-    const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
+    const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.hours(1))
 
     const get = (): Effect.Effect<Record<string, Provider>> => cachedGet
 
     const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+      if (!(yield* runtimeCacheReady())) {
+        yield* invalidate
+        return
+      }
       if (!force && (yield* fresh())) return
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* Flock.effect(lockKey)
+          yield* Flock.effect(lockKey())
           // Re-check under the lock: another process may have refreshed between
           // our outer check and lock acquisition.
           if (!force && (yield* fresh())) return
@@ -327,11 +373,6 @@ export const layer = Layer.effect(
         Effect.ignore,
       )
     })
-
-    if (fetchEnabled) {
-      // Schedule.spaced runs the effect once, then waits between completions.
-      yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced("60 minutes")), Effect.ignore))
-    }
 
     return Service.of({ get, refresh })
   }),

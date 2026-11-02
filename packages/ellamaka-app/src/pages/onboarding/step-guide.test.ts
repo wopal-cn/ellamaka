@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import {
-  prepareStepGuideMarkdown,
-  resolveStepGuideId,
-  resolveStepGuideImageSource,
-  STEP_GUIDE_IDS,
-} from "./step-guide"
+import { prepareStepGuideMarkdown, resolveStepGuideId, resolveStepGuideImageSource, STEP_GUIDE_IDS } from "./step-guide"
 
 describe("onboarding step guide", () => {
   test("allows HTTPS image URLs and adds privacy and loading attributes", () => {
@@ -22,18 +17,17 @@ describe("onboarding step guide", () => {
   })
 
   test("supports valid Markdown image URLs containing parentheses", () => {
-    const result = prepareStepGuideMarkdown(
-      "![流程图](https://cdn.example.com/onboarding/diagram_(v2).webp)",
-      {},
-    )
+    const result = prepareStepGuideMarkdown("![流程图](https://cdn.example.com/onboarding/diagram_(v2).webp)", {})
 
     expect(result).toContain('src="https://cdn.example.com/onboarding/diagram_(v2).webp"')
   })
 
   test("resolves bundled image aliases without exposing filesystem paths", () => {
-    expect(resolveStepGuideImageSource("asset:ontology/fork.webp", {
-      "ontology/fork.webp": "app://renderer/assets/fork-a1b2.webp",
-    })).toBe("app://renderer/assets/fork-a1b2.webp")
+    expect(
+      resolveStepGuideImageSource("asset:ontology/fork.webp", {
+        "ontology/fork.webp": "app://renderer/assets/fork-a1b2.webp",
+      }),
+    ).toBe("app://renderer/assets/fork-a1b2.webp")
   })
 
   test("rejects insecure and executable external image protocols", () => {
@@ -55,19 +49,15 @@ describe("onboarding step guide", () => {
   })
 
   test("escapes image alternative text before generating HTML", () => {
-    const result = prepareStepGuideMarkdown(
-      "![说明 & <测试>](https://cdn.example.com/image.png)",
-      {},
-    )
+    const result = prepareStepGuideMarkdown("![说明 & <测试>](https://cdn.example.com/image.png)", {})
 
     expect(result).toContain('alt="说明 &amp; &lt;测试&gt;"')
     expect(result).not.toContain('alt="说明 & <测试>"')
   })
 
-  test("maps legacy onboarding steps to their canonical guides", () => {
-    expect(resolveStepGuideId("github-auth")).toBe("ontology-setup")
-    expect(resolveStepGuideId("install-wopal-cli")).toBe("install-cli")
-    expect(resolveStepGuideId("install-ellamaka-cli")).toBe("install-cli")
+  test("keeps GitHub as its own canonical guide", () => {
+    expect(resolveStepGuideId("github-auth")).toBe("github-auth")
+    expect(resolveStepGuideId("install-cli")).toBeNull()
     expect(resolveStepGuideId("star-guide")).toBe("done")
     expect(resolveStepGuideId("unknown-step")).toBeNull()
   })

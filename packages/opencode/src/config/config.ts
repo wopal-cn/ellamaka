@@ -16,7 +16,7 @@ import type { ConsoleState } from "./console-state"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { Npm } from "@wopal/ellamaka-core/npm"
 import { InstanceState } from "@/effect/instance-state"
-import { Context, Duration, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { EffectFlock } from "@wopal/ellamaka-core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
@@ -42,7 +42,7 @@ import { ConfigVariable } from "./variable"
 import { tryLoadWopalSpaceConfig } from "./wopal-space"
 import { resolveWopalSpaceRoot } from "./wopal-space-settings"
 import { preparePluginDependencies } from "@/core/plugin-dependency-preparation"
-import type { PluginConfigSources, PluginConfigTable } from "./wopal-plugin-config"
+import { ConfigWopalPluginConfig, type PluginConfigSources, type PluginConfigTable } from "./wopal-plugin-config"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { ConfigExperimental } from "@wopal/ellamaka-core/config/experimental"
 
@@ -51,9 +51,11 @@ const log = Log.create({ service: "config" })
 // Custom merge function that concatenates array fields instead of replacing them
 // Keep remeda's deep conditional merge type out of hot config-loading paths; TS profiling showed it dominates here.
 function mergeConfig(target: Info, source: Info): Info {
-  return mergeDeep(target, stripUndefined(source) as Info) as Info
+  return mergeDeep(target, stripUndefined(source)) as Info
 }
 
+function stripUndefined(value: Info): Info
+function stripUndefined(value: unknown): unknown
 function stripUndefined(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripUndefined)
   if (!isRecord(value)) return value
@@ -469,6 +471,10 @@ export const layer = Layer.effect(
       if (isRecord(raw) && isRecord(raw.ellamaka)) {
         return yield* loadConfig(JSON.stringify(raw.ellamaka), { dir: path.dirname(filepath), source: filepath })
       }
+      if (isRecord(raw) && ("ontologies" in raw || "spaces" in raw || "wopal" in raw)) {
+        const { ontologies: _ontologies, spaces: _spaces, wopal: _wopal, ...engineConfig } = raw
+        return yield* loadConfig(JSON.stringify(engineConfig), { dir: path.dirname(filepath), source: filepath })
+      }
       return yield* loadConfig(text, { dir: path.dirname(filepath), source: filepath })
     })
 
@@ -476,18 +482,13 @@ export const layer = Layer.effect(
       return yield* loadSettingsFile(globalConfigFile())
     })
 
-    const [cachedGlobal, invalidateGlobal] = yield* Effect.cachedInvalidateWithTTL(
-      loadGlobal().pipe(
+    const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+      return yield* loadGlobal().pipe(
         Effect.tapError((error) =>
           Effect.sync(() => log.error("failed to load global config, using defaults", { error: String(error) })),
         ),
         Effect.orElseSucceed((): Info => ({})),
-      ),
-      Duration.infinity,
-    )
-
-    const getGlobal = Effect.fn("Config.getGlobal")(function* () {
-      return yield* cachedGlobal
+      )
     })
 
     const makeDependencyPreparation = Effect.fnUntraced(function* (input: {
@@ -817,6 +818,14 @@ export const layer = Layer.effect(
         }
 
         const dependencyPreparation = yield* makeDependencyPreparation({ directories })
+        const general = ConfigWopalPluginConfig.isGeneralTaskDirectory(ctx.directory, Global.Path.wopalHome)
+        const globalSettingsPath = globalConfigFile()
+        const globalSettings = general ? yield* readConfigFile(globalSettingsPath) : undefined
+        const { pluginConfig, sources: pluginConfigSources } = general
+          ? ConfigWopalPluginConfig.mergeEffectivePluginConfig([
+              { source: "global", path: globalSettingsPath, text: globalSettings },
+            ])
+          : { pluginConfig: {}, sources: {} }
 
         return {
           config: result,
@@ -828,8 +837,8 @@ export const layer = Layer.effect(
             switchableOrgCount: 0,
           },
           isWopalSpace: false,
-          pluginConfig: {},
-          pluginConfigSources: {},
+          pluginConfig,
+          pluginConfigSources,
         }
       },
       Effect.provideService(AppFileSystem.Service, fs),
@@ -871,7 +880,9 @@ export const layer = Layer.effect(
     })
 
     const invalidate = Effect.fn("Config.invalidate")(function* () {
-      yield* invalidateGlobal
+      // Global config is read on demand. Instance disposal performed by the
+      // caller is what refreshes effective per-directory config state.
+      return
     })
 
     const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {

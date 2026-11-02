@@ -332,61 +332,6 @@ highest_released_tag() {
   return 0
 }
 
-# check_min_wopal_cli_released — 发布门禁：wopal-cli 协议地板必须可用。
-#
-# minWopalCli（.ci/versions.json）是 ellamaka 运行时对 wopal-cli 的**最低协议
-# 版本**（>= 语义，与 packages/ellamaka-desktop/src/main/version-check.ts 的
-# checkWopalCliVersion 一致）。因此只需确认远端 wopal-cli **已发布最高版本 >=
-# minWopalCli** 即可——更高的版本必然包含地板版本的全部协议能力；反过来，
-# 精确检查旧版 tag 存在与否是错的：旧版本被 release 清理后，哪怕更高版本在，
-# 版本越新反而永远无法发布（死锁）。
-check_min_wopal_cli_released() {
-  local req_ver="${MIN_WOPAL_CLI_VERSION:-}"
-  [ -n "$req_ver" ] || die "MIN_WOPAL_CLI_VERSION 未设置，无法校验 wopal-cli 协议下界（fail-closed）"
-  echo "→ 检查 minWopalCli (v${req_ver}) 是否已满足：wopal-cli 远端最高已发布版本..."
-  local wopal_repo="https://github.com/wopal-cn/wopal-cli.git"
-  local ok=""
-  ok=$(git ls-remote --tags "$wopal_repo" 2>/dev/null | node -e "
-const req = process.argv[1].split('.').map(Number)
-let best = null
-const cmp3 = (a, b) => a[0]-b[0] || a[1]-b[1] || a[2]-b[2]
-for (const line of require('fs').readFileSync(0, 'utf8').split('\n')) {
-  const m = line.match(/refs\/tags\/v(\d+)\.(\d+)\.(\d+)\$/)
-  if (!m) continue // 只统计稳定 tag，忽略 -rc/-beta/dev 候选
-  const v = [Number(m[1]), Number(m[2]), Number(m[3])]
-  if (!best || cmp3(v, best) > 0) best = v
-}
-if (!best) { console.log(''); process.exit(0) }
-// best >= req 才通过
-process.stdout.write(cmp3(best, req) >= 0 ? 'yes' : 'no')
-" "$req_ver")
-  [ "$ok" = "yes" ] || die "终止发布: wopal-cli 仓库无满足 minWopalCli v${req_ver} 的已发布版本（远端最高稳定版本不可用）。请确认 wopal-cli 已发布 ≥ v${req_ver} 的 stable，或同步 .ci/versions.json。"
-  echo "  ✓ 已确认 wopal-cli 已发布版本满足 ≥ v${req_ver}"
-}
-
-check_dep_floor_synced() {
-  local dep_floor="" config_floor=""
-  dep_floor=$(node -e "
-    const pkg = require('$REPO_ROOT/packages/opencode/package.json')
-    const range = pkg.dependencies && pkg.dependencies['@wopal/cli-capability-schema']
-    if (!range) { console.log(''); process.exit(0) }
-    const m = String(range).match(/(\d+)\.(\d+)\.(\d+)/)
-    console.log(m ? m[1] + '.' + m[2] + '.' + m[3] : '')
-  " 2>/dev/null || true)
-  config_floor=$(node -e "
-    const v = require('$REPO_ROOT/.ci/versions.json')
-    console.log(typeof v.minWopalCli === 'string' ? v.minWopalCli : '')
-  " 2>/dev/null || true)
-  [ -n "$dep_floor" ] && [ -n "$config_floor" ] || return 0
-  node -e "
-    const norm = (s) => { const m = String(s).match(/(\d+)\.(\d+)\.(\d+)/); return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null }
-    const na = norm(process.argv[1]), nb = norm(process.argv[2])
-    if (!na || !nb) process.exit(0)
-    const cmp = na[0]-nb[0] || na[1]-nb[1] || na[2]-nb[2]
-    process.exit(cmp > 0 ? 1 : 0)
-  " "$config_floor" "$dep_floor" || die "依赖下界未同步：@wopal/cli-capability-schema (^$dep_floor) 低于 .ci/versions.json minWopalCli ($config_floor)。请先运行 ./scripts/build.sh cli 或 dev.sh 完成同步并提交。"
-}
-
 # ── dispatch / 监控 ───────────────────────────────────────
 
 HAVE_GH=false
@@ -516,14 +461,6 @@ run_release() {
     echo "→ 检查工作区..."
     check_workspace_clean || WORKSPACE_DIRTY=true
   fi
-
-  # 统一下界来源：与 build/dev 一致走 resolve_min_wopal_cli_version（node 读取，
-  # 不依赖 jq）。fail-closed：解析失败必须终止发布，禁止静默跳过门禁。
-  MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$REPO_ROOT")"
-  [ "$MIN_WOPAL_CLI_VERSION" != "0.0.0" ] || die "无法解析 minWopalCli 生效下界：请检查 .ci/versions.json 与 packages/opencode/package.json 的 @wopal/cli-capability-schema 依赖下界"
-  export MIN_WOPAL_CLI_VERSION
-  check_min_wopal_cli_released
-  check_dep_floor_synced
 
   # ── 通道级分支预检（resolve 之前）：非 main 只许 prerelease ──
   # 显式版本参数（$VERSION）可能带 rc/beta 后缀，会覆盖 AUTO_BUMP 的通道意图，

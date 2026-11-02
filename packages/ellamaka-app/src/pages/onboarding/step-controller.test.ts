@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import {
   createStepController,
+  canNavigateToPhase,
+  requiresRuntimePreparation,
+  applyRuntimePreparationGate,
+  getPhaseForStep,
   getStepMetadata,
   isExplicitActionStep,
   isOptionalStep,
@@ -12,14 +16,33 @@ import {
 } from "./step-controller"
 
 describe("step-controller", () => {
-  test("ONBOARDING_STEPS contains 6 steps in order", () => {
-    expect(ONBOARDING_STEPS.length).toBe(6)
+  test("cannot jump to launch while runtime preparation is in progress or failed", () => {
+    expect(canNavigateToPhase("runtime-preparation", 4, false)).toBe(false)
+    expect(canNavigateToPhase("runtime-preparation", 2, false)).toBe(true)
+    expect(canNavigateToPhase("runtime-preparation", 2, true)).toBe(false)
+    expect(requiresRuntimePreparation(false)).toBe(true)
+    expect(requiresRuntimePreparation(true)).toBe(false)
+    expect(applyRuntimePreparationGate("done", false)).toBe("runtime-preparation")
+    expect(applyRuntimePreparationGate("ai-provider", false)).toBe("runtime-preparation")
+    expect(applyRuntimePreparationGate("done", true)).toBe("done")
+  })
+  test("ONBOARDING_STEPS contains the seven application steps in order", () => {
+    expect(ONBOARDING_STEPS.length).toBe(7)
     expect(ONBOARDING_STEPS[0]).toBe("system-check")
-    expect(ONBOARDING_STEPS[1]).toBe("install-cli")
+    expect(ONBOARDING_STEPS[1]).toBe("github-auth")
     expect(ONBOARDING_STEPS[2]).toBe("ontology-setup")
     expect(ONBOARDING_STEPS[3]).toBe("create-space")
-    expect(ONBOARDING_STEPS[4]).toBe("ai-provider")
-    expect(ONBOARDING_STEPS[5]).toBe("done")
+    expect(ONBOARDING_STEPS[4]).toBe("runtime-preparation")
+    expect(ONBOARDING_STEPS[5]).toBe("ai-provider")
+    expect(ONBOARDING_STEPS[6]).toBe("done")
+  })
+
+  test("the space & model phase groups create-space, runtime-preparation and ai-provider", () => {
+    expect(getPhaseForStep("create-space").phase).toBe(3)
+    expect(getPhaseForStep("create-space").steps).toEqual(["create-space", "runtime-preparation", "ai-provider"])
+    // Runtime preparation is the last heavy step and runs after Space
+    // (DESIGN-onboarding.md `## Core Preparation Timing`).
+    expect(getPhaseForStep("runtime-preparation").phase).toBe(3)
   })
 
   test("isOptionalStep correctly identifies optional steps", () => {
@@ -27,7 +50,6 @@ describe("step-controller", () => {
     expect(isOptionalStep("create-space")).toBe(false)
     expect(isOptionalStep("create-space", { hasExistingSpaces: true })).toBe(true)
     expect(isOptionalStep("system-check")).toBe(false)
-    expect(isOptionalStep("install-cli")).toBe(false)
   })
 
   test("stepController handles next/prev/skip navigation", () => {
@@ -37,18 +59,22 @@ describe("step-controller", () => {
     expect(controller.getProgressPercent()).toBe(25)
 
     controller.next()
-    expect(controller.getCurrentStep()).toBe("install-cli")
+    expect(controller.getCurrentStep()).toBe("github-auth")
 
-    controller.skip() // install-cli is not optional, stays at install-cli
-    expect(controller.getCurrentStep()).toBe("install-cli")
+    controller.skip() // github is not an optional generic step; explicit clone continuation owns that choice
+    expect(controller.getCurrentStep()).toBe("github-auth")
   })
 
-  test("stepController walks the six-step journey and returns from done", () => {
-    const controller = createStepController("ontology-setup")
+  test("stepController walks the application journey and returns from done", () => {
+    const controller = createStepController("github-auth")
 
     expect(controller.getProgressPercent()).toBe(50)
     controller.next()
+    expect(controller.getCurrentStep()).toBe("ontology-setup")
+    controller.next()
     expect(controller.getCurrentStep()).toBe("create-space")
+    controller.next()
+    expect(controller.getCurrentStep()).toBe("runtime-preparation")
     controller.next()
     expect(controller.getCurrentStep()).toBe("ai-provider")
     controller.next()
@@ -67,7 +93,9 @@ describe("step-controller", () => {
 
   test("resolveForwardMode never resubmits a successful step", () => {
     expect(resolveForwardMode({ done: false, working: false, success: undefined })).toBe("submit")
-    expect(resolveForwardMode({ done: false, working: false, success: undefined, submitFromNavigation: false })).toBe("disabled")
+    expect(resolveForwardMode({ done: false, working: false, success: undefined, submitFromNavigation: false })).toBe(
+      "disabled",
+    )
     expect(resolveForwardMode({ done: false, working: false, success: true })).toBe("advance")
     expect(resolveForwardMode({ done: false, working: false, success: false })).toBe("disabled")
     expect(resolveForwardMode({ done: false, working: true, success: undefined })).toBe("disabled")
@@ -76,6 +104,7 @@ describe("step-controller", () => {
 
   test("credential steps require an explicit action before navigation", () => {
     expect(isExplicitActionStep("ai-provider")).toBe(true)
+    expect(isExplicitActionStep("github-auth")).toBe(true)
     expect(isExplicitActionStep("ontology-setup")).toBe(true)
     expect(isExplicitActionStep("create-space")).toBe(true)
     expect(isExplicitActionStep("system-check")).toBe(false)
@@ -89,10 +118,10 @@ describe("step-controller", () => {
     expect(resolveFeedbackMode({ hasError: false, working: false, success: true })).toBe("hidden")
   })
 
-  test("failed CLI installation exposes retry in the bottom action bar", () => {
-    expect(isRetryActionVisible("install-cli", { working: false, success: false })).toBe(true)
-    expect(isRetryActionVisible("install-cli", { working: true, success: false })).toBe(false)
-    expect(isRetryActionVisible("install-cli", { working: false, success: true })).toBe(false)
+  test("a failed setup action exposes retry in the bottom action bar", () => {
+    expect(isRetryActionVisible("ontology-setup", { working: false, success: false })).toBe(true)
+    expect(isRetryActionVisible("ontology-setup", { working: true, success: false })).toBe(false)
+    expect(isRetryActionVisible("ontology-setup", { working: false, success: true })).toBe(false)
     expect(isRetryActionVisible("done", { working: false, success: false })).toBe(false)
   })
 })
@@ -108,7 +137,7 @@ describe("resolveRestoreTarget", () => {
 
   test("an unfinished run resumes at its saved step", () => {
     expect(resolveRestoreTarget({ completed: false, currentStep: "ontology-setup" })).toBe("ontology-setup")
-    expect(resolveRestoreTarget({ completed: false, currentStep: "install-cli" })).toBe("install-cli")
+    expect(resolveRestoreTarget({ completed: false, currentStep: "ontology-setup" })).toBe("ontology-setup")
   })
 
   test("done is a legitimate resting place until the health gate passes", () => {

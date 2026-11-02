@@ -26,13 +26,13 @@ import {
   onMount,
   type ParentProps,
   Show,
-  Suspense,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider } from "@/context/server-sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider } from "@/context/server-sync"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
@@ -43,7 +43,7 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
-import { SettingsProvider, useSettings } from "@/context/settings"
+import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import DirectoryLayout from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
@@ -51,7 +51,7 @@ import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { ServersProvider } from "./context/servers"
 import { setNavigate } from "@/utils/notification-click"
-import { createOnboardingClient, credentialsFromConnection } from "@/lib/onboarding-client"
+import { StartupGate } from "./startup-gate"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -143,63 +143,39 @@ function SessionProviders(props: ParentProps) {
 
 function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   const location = useLocation()
+  const sdk = useServerSDK()
+  const navigate = useNavigate()
   onMount(() => {
     try {
       const navigate = useNavigate()
       setNavigate(navigate)
-    } catch (e) {
+    } catch {
       // Ignore useNavigate failure in server-side/test environments
     }
   })
-  const isBareSurface = () =>
-    location.pathname.startsWith("/workbench") || location.pathname.startsWith("/onboarding")
+  const isOnboarding = () => location.pathname.startsWith("/onboarding")
+  const isBareSurface = () => location.pathname.startsWith("/workbench") || isOnboarding()
 
   return (
-    <ServerSyncProvider instanceBootstrap={() => !isBareSurface()}>
-      <AppShellProviders instanceBootstrap={() => !isBareSurface()}>
-        {props.appChildren}
-        <OnboardingGate />
-        <Show when={isBareSurface()} fallback={<Layout>{props.children}</Layout>}>
-          {props.children}
-        </Show>
-      </AppShellProviders>
-    </ServerSyncProvider>
+    <StartupGate
+      path={() => location.pathname}
+      navigate={(path) => navigate(path, { replace: true })}
+      inspect={async () => {
+        const result = await sdk.client.wopalSpace.setup.inspect()
+        if (result.error || !result.data) throw new Error("Setup inspection failed")
+        return { locked: result.data.home.binding.locked, completed: result.data.state.completed }
+      }}
+    >
+      <ServerSyncProvider instanceBootstrap={() => !isBareSurface()} globalConfigBootstrap={() => !isOnboarding()}>
+        <AppShellProviders instanceBootstrap={() => !isBareSurface()}>
+          {props.appChildren}
+          <Show when={isBareSurface()} fallback={<Layout>{props.children}</Layout>}>
+            {props.children}
+          </Show>
+        </AppShellProviders>
+      </ServerSyncProvider>
+    </StartupGate>
   )
-}
-
-/**
- * First-launch gate: once the server is reachable, consult the onboarding
- * state exactly once and route an unfinished setup to `/onboarding`. A failed
- * check is deliberately silent — an unreachable or older server must never
- * pin the app on a redirect loop.
- */
-function OnboardingGate() {
-  const server = useServer()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [checked, setChecked] = createSignal(false)
-
-  createEffect(() => {
-    if (checked()) return
-    if (!server.ready()) return
-    const connection = server.current
-    if (!connection) return
-    setChecked(true)
-
-    void (async () => {
-      try {
-        const client = createOnboardingClient({ credentials: credentialsFromConnection(connection.http) })
-        const state = await client.getState()
-        if (!state.completed && !location.pathname.startsWith("/onboarding")) {
-          navigate("/onboarding")
-        }
-      } catch {
-        // Silent: onboarding is an enhancement, not a startup blocker.
-      }
-    })()
-  })
-
-  return null
 }
 
 function EllamakaThemeBootstrap() {
@@ -409,6 +385,7 @@ export function AppInterface(props: {
                   root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
                 >
                   <Route path="/" component={HomeRoute} />
+                  <Route path="/startup" component={() => null} />
                   <Route path="/onboarding" component={OnboardingPage} />
                   <Route path="/workbench" component={WorkbenchPage} />
                   <Route path="/:dir" component={DirectoryLayout}>

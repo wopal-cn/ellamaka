@@ -1,4 +1,5 @@
-import { createSignal, onCleanup, onMount, Show, Switch, Match, For } from "solid-js"
+import { createSignal, For, onCleanup, onMount, Show, Switch, Match } from "solid-js"
+import { useNavigate } from "@solidjs/router"
 import {
   createStepController,
   getStepMetadata,
@@ -6,23 +7,35 @@ import {
   ONBOARDING_STEPS,
   PHASE_CONFIGS,
   getPhaseForStep,
-  isRetryActionVisible,
+  canNavigateToPhase,
+  requiresRuntimePreparation,
+  applyRuntimePreparationGate,
   isOptionalStep,
-  resolveRestoreTarget,
   type OnboardingStepName,
 } from "./step-controller"
-import { SystemCheckStep } from "./steps/system-check"
-import { InstallCliStep } from "./steps/install-cli"
-import { OntologySetupStep } from "./steps/ontology-setup"
+import { FoundationStep } from "./steps/system-check"
+import { GithubAuthStep } from "./steps/github-auth"
+import { OntologySetupStep, type OntologySetupInput } from "./steps/ontology-setup"
 import { AiProviderStep } from "./steps/ai-provider"
-import { CreateSpaceStep } from "./steps/create-space"
+import { CreateSpaceStep, type CreateSpaceInput } from "./steps/create-space"
+import { RuntimePreparationStep } from "./steps/runtime-preparation"
 import { DoneStep } from "./steps/done"
-import { LogDrawer } from "./components/LogDrawer"
 import { ProgressDisplay } from "./components/ProgressDisplay"
+import { LogDrawer } from "./components/LogDrawer"
 import { StepGuide } from "./components/StepGuide"
-import { zhCN } from "./content/zh-CN"
 import { getStepGuideSource, STEP_GUIDE_ASSETS } from "./content/step-guides"
 import { useOnboardingClient } from "./onboarding-client-context"
+import {
+  goalsForSetup,
+  githubForkReady,
+  resolveSetupStep,
+  setupErrorView,
+  setupFailureRecovery,
+  setupActionLabel,
+  type SetupErrorView,
+  type SetupStep,
+} from "./setup-flow"
+import { type SetupActionId, type SetupEventView, type SetupInspect, type SetupRun } from "./setup-client"
 import "./onboarding.css"
 
 export interface LogEntry {
@@ -30,285 +43,412 @@ export interface LogEntry {
   isError?: boolean
 }
 
-// Step categorization for nav button behavior
-const FORM_SUBMIT_STEPS = new Set<OnboardingStepName>([
-  "system-check",
-  "install-cli",
-  "ontology-setup",
-  "create-space",
-  "ai-provider",
-])
+const FORM_SUBMIT_STEPS = new Set<OnboardingStepName>(["system-check", "ontology-setup", "create-space", "ai-provider"])
+
+function stepFromSetup(step: SetupStep): OnboardingStepName | "done" {
+  if (step === "foundation") return "system-check"
+  if (step === "github") return "github-auth"
+  if (step === "ontology") return "ontology-setup"
+  if (step === "space") return "create-space"
+  if (step === "provider") return "ai-provider"
+  return "done"
+}
+
+function runError(run: SetupRun) {
+  if (run.status === "failed") {
+    return Object.assign(new Error(run.error?.message ?? "Setup action failed."), {
+      cause: { body: run.error ?? { code: "SETUP_OPERATION_FAILED", message: "Setup action failed." } },
+    })
+  }
+  if (run.status === "cancelled") {
+    return Object.assign(new Error(run.error?.message ?? "Setup action was cancelled."), {
+      cause: { body: run.error ?? { code: "SETUP_OPERATION_CANCELLED", message: "Setup action was cancelled." } },
+    })
+  }
+  return undefined
+}
 
 export function OnboardingRoot() {
   const client = useOnboardingClient()
+  const navigate = useNavigate()
   const [currentStep, setCurrentStep] = createSignal<OnboardingStepName | "done">("system-check")
-  const [progressMsg, setProgressMsg] = createSignal<string>("")
-  const [errorInfo, setErrorInfo] = createSignal<{ code?: string; message: string; details?: string } | null>(null)
-  const [logs, setLogs] = createSignal<LogEntry[]>([{ text: "[system] 初始化 Ellamaka Onboarding 环境..." }])
-  const [working, setWorking] = createSignal(false)
-  const [stepResult, setStepResult] = createSignal<{ success: boolean } | null>(null)
-  const [doneLaunching, setDoneLaunching] = createSignal<boolean>(false)
-  // The done step publishes its launch action here; the nav bar owns the only
-  // button and calls this closure directly (no DOM query — §交互模型).
-  let doneLaunch: (() => void) | null = null
-  const [hasExistingSpaces, setHasExistingSpaces] = createSignal(false)
-  const [maxUnlockedPhase, setMaxUnlockedPhase] = createSignal<number>(1)
+  const [facts, setFacts] = createSignal<SetupInspect>()
   const [initialized, setInitialized] = createSignal(false)
-  const [systemUserName, setSystemUserName] = createSignal<string>("")
-  const [primaryLabelOverride, setPrimaryLabelOverride] = createSignal<string | null>(null)
-
+  const [working, setWorking] = createSignal(false)
+  const [progressMsg, setProgressMsg] = createSignal("")
+  const [logs, setLogs] = createSignal<LogEntry[]>([{ text: "正在读取初始化状态。" }])
+  const [errorInfo, setErrorInfo] = createSignal<SetupErrorView | null>(null)
+  const [runId, setRunId] = createSignal<string>()
+  const [providerSkipped, setProviderSkipped] = createSignal(false)
+  const [ontologyMode, setOntologyMode] = createSignal<"fork" | "clone">("clone")
+  // Runtime readiness gates navigation only; it is never persisted as Setup state.
+  const [runtimeReady, setRuntimeReady] = createSignal(false)
+  const [launching, setLaunching] = createSignal(false)
+  const [completionError, setCompletionError] = createSignal<string | null>(null)
+  let doneLaunch: (() => void) | null = null
+  let followAbort: AbortController | undefined
+  let ontologyModeChosen = false
   const controller = createStepController("system-check")
 
-  // UI-only log buffer. The server owns progress/log events and ships them
-  // over SSE; the UI appends what it observes locally without writing back.
   const appendLog = (text: string, isError = false) => {
     if (!text.trim()) return
     const clean = text.replace(/\x1b\[[0-9;]*m/g, "")
-    setLogs((prev) => [...prev.slice(-200), { text: `[${new Date().toLocaleTimeString()}] ${clean}`, isError }])
+    setLogs((previous) => [...previous.slice(-200), { text: `[${new Date().toLocaleTimeString()}] ${clean}`, isError }])
+  }
+
+  const providerWasSkipped = () => providerSkipped() || facts()?.state.steps.provider === "skipped"
+
+  const selection = (action?: SetupActionId) => ({
+    ontologyMode: action === "github" ? ("fork" as const) : ontologyMode(),
+    provider: action === "provider" || !providerWasSkipped(),
+  })
+
+  const applyFacts = (next: SetupInspect) => {
+    setFacts(next)
+    if (!ontologyModeChosen) {
+      setOntologyMode(next.ontology.items[0]?.mode ?? (githubForkReady(next) ? "fork" : "clone"))
+    }
+  }
+
+  const setVisibleStep = (next: OnboardingStepName | "done") => {
+    if (currentStep() !== next) {
+      setProgressMsg("")
+      appendLog(`进入：${getStepMetadata(next).title}`)
+    }
+    setCurrentStep(next)
+    controller.setCurrentStep(next)
+  }
+
+  const reload = async (options: { preserveStep?: boolean } = {}) => {
+    const next = await client.inspect()
+    applyFacts(next)
+    if (!options.preserveStep) {
+      setVisibleStep(applyRuntimePreparationGate(stepFromSetup(resolveSetupStep(next)), runtimeReady()))
+    }
+    return next
+  }
+
+  const handleEvent = (event: SetupEventView) => {
+    setProgressMsg(event.message)
+    appendLog(event.message, event.phase === "failed")
+    if (event.error?.suggestion) appendLog(`建议: ${event.error.suggestion}`, event.phase === "failed")
+  }
+
+  const runAction = async (actionId: SetupActionId, input?: Record<string, unknown>) => {
+    setWorking(true)
+    setErrorInfo(null)
+    setCompletionError(null)
+    setProgressMsg("正在检查初始化状态…")
+    appendLog("正在检查初始化状态并准备执行。")
+    followAbort?.abort()
+    followAbort = new AbortController()
+    let heartbeat: ReturnType<typeof setInterval> | undefined
+    try {
+      const fresh = await client.inspect()
+      applyFacts(fresh)
+      const plan = await client.plan(goalsForSetup(fresh, selection(actionId)))
+      const action = plan.actions.find((candidate) => candidate.actionId === actionId)
+      if (!action) {
+        appendLog("该步骤已完成，复用现有结果。")
+        return fresh
+      }
+
+      const actionTitle = setupActionLabel(actionId, input, getStepMetadata(currentStep()).title)
+      appendLog(`开始执行：${actionTitle}`)
+      setProgressMsg(`正在执行：${actionTitle}`)
+      let elapsed = 0
+      heartbeat = setInterval(() => {
+        elapsed += 10
+        appendLog(`${actionTitle}正在进行，已用时 ${elapsed} 秒。`)
+      }, 10_000)
+      const started = await client.execute({ planId: plan.planId, actionId, ...(input ? { input } : {}) })
+      setRunId(started.runId)
+      const final = await client.follow(started.runId, handleEvent, {
+        signal: followAbort.signal,
+        after: 0,
+      })
+      const failure = runError(final)
+      if (failure) throw failure
+      const next = await client.inspect()
+      applyFacts(next)
+      return next
+    } catch (error) {
+      const view = setupErrorView(error)
+      setErrorInfo(view)
+      setProgressMsg("")
+      appendLog(`${view.code ? `${view.code}: ` : ""}${view.message}`, true)
+      const recovery = setupFailureRecovery(actionId, view)
+      let refreshed: SetupInspect | undefined
+      if (recovery.refreshFacts) {
+        try {
+          refreshed = await reload({ preserveStep: true })
+        } catch {
+          // Keep the original action error visible when refresh also fails.
+        }
+      }
+      if (recovery.deriveStepFromFacts && refreshed) {
+        setVisibleStep(stepFromSetup(resolveSetupStep(refreshed)))
+      }
+      return undefined
+    } finally {
+      if (heartbeat) clearInterval(heartbeat)
+      setWorking(false)
+      setRunId(undefined)
+    }
+  }
+
+  // Runtime preparation always runs after Space, even when provider is already
+  // configured: it is the last heavy step and must stay visible.
+  const afterSpace = () => setVisibleStep("runtime-preparation")
+
+  const advanceAfter = (step: SetupStep, next: SetupInspect) => {
+    if (step === "foundation")
+      return setVisibleStep(applyRuntimePreparationGate(stepFromSetup(resolveSetupStep(next)), runtimeReady()))
+    if (step === "github") return setVisibleStep("ontology-setup")
+    if (step === "ontology")
+      return setVisibleStep(next.space.items.some((item) => item.verified) ? "runtime-preparation" : "create-space")
+    if (step === "space") return afterSpace()
+    if (step === "provider") return setVisibleStep("done")
+  }
+
+  const runFoundation = async (homePath?: string) => {
+    const current = facts()
+    if (current && !current.home.binding.locked) {
+      if (!homePath) return
+      setWorking(true)
+      setErrorInfo(null)
+      setProgressMsg("正在确认 Wopal Home…")
+      appendLog(`正在确认 Wopal Home：${homePath}`)
+      try {
+        const selected = await client.selectHome(homePath)
+        appendLog(
+          selected.mode === "development"
+            ? `已锁定开发测试 Home：${selected.path}（不会写入 Shell）`
+            : `已保存并锁定 WOPAL_HOME：${selected.path}`,
+        )
+        await reload({ preserveStep: true })
+      } catch (error) {
+        const view = setupErrorView(error)
+        setErrorInfo(view)
+        setProgressMsg("")
+        appendLog(`${view.code ? `${view.code}: ` : ""}${view.message}`, true)
+        setWorking(false)
+        return
+      } finally {
+        setWorking(false)
+      }
+    }
+    const next = await runAction("foundation")
+    if (next) advanceAfter("foundation", next)
+  }
+
+  const refreshGithubIdentity = async () => {
+    setWorking(true)
+    setErrorInfo(null)
+    setProgressMsg("正在重新检测 GitHub 登录…")
+    try {
+      const next = await reload({ preserveStep: true })
+      if (githubForkReady(next)) {
+        appendLog(`已检测到 GitHub 身份：${next.credentials.github.account ?? "已登录"}`)
+        setProgressMsg("")
+        setVisibleStep("ontology-setup")
+      } else {
+        setProgressMsg("")
+        appendLog("仍未检测到本机 gh 登录。")
+      }
+    } catch (error) {
+      const view = setupErrorView(error)
+      setErrorInfo(view)
+      setProgressMsg("")
+      appendLog(view.message, true)
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  const continueWithClone = async () => {
+    const next = await runAction("github", { skip: true })
+    if (!next) return
+    ontologyModeChosen = true
+    setOntologyMode("clone")
+    setErrorInfo(null)
+    advanceAfter("github", next)
+  }
+
+  const runOntology = async (input: OntologySetupInput) => {
+    ontologyModeChosen = true
+    setOntologyMode(input.mode)
+    const next = await runAction("ontology", {
+      mode: input.mode,
+      ...(input.source ? { source: input.source } : {}),
+    })
+    if (next) advanceAfter("ontology", next)
+  }
+
+  const runSpace = async (input: CreateSpaceInput) => {
+    const next = await runAction("space", { name: input.name, path: input.path, type: input.type })
+    if (next) advanceAfter("space", next)
+  }
+
+  const runProvider = async (input: { providerId: string; apiKey: string }) => {
+    const next = await runAction("provider", input)
+    if (next) advanceAfter("provider", next)
+  }
+
+  const skipProvider = async () => {
+    const next = await runAction("provider", { skip: true })
+    if (!next) return
+    setProviderSkipped(true)
+    advanceAfter("provider", next)
+  }
+
+  const launch = async () => {
+    if (launching()) return
+    setLaunching(true)
+    setCompletionError(null)
+    appendLog("正在检查初始化结果并启动工作台。")
+    try {
+      const fresh = await client.inspect()
+      applyFacts(fresh)
+      if (requiresRuntimePreparation(runtimeReady())) {
+        setCompletionError("请先完成运行环境准备。")
+        setVisibleStep("runtime-preparation")
+        return
+      }
+      const plan = await client.plan(goalsForSetup(fresh, selection()))
+      if (plan.actions.length > 0) {
+        setCompletionError(`仍有未完成的初始化步骤：${plan.actions.map((action) => action.actionId).join(", ")}。`)
+        return
+      }
+      await client.complete(plan.planId)
+      navigate("/workbench")
+    } catch (error) {
+      const view = setupErrorView(error)
+      setCompletionError(view.message)
+      setErrorInfo(view)
+      appendLog(view.message, true)
+    } finally {
+      setLaunching(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    const id = runId()
+    if (!id) return
+    try {
+      const run = await client.cancel(id)
+      setProgressMsg(run.error?.message ?? `任务状态：${run.status}`)
+      if (run.status === "cancelled") {
+        setErrorInfo({ code: "SETUP_OPERATION_CANCELLED", message: run.error?.message ?? "初始化已取消。" })
+      }
+      await reload({ preserveStep: true })
+    } catch (error) {
+      setErrorInfo(setupErrorView(error))
+    } finally {
+      followAbort?.abort()
+      setRunId(undefined)
+      setWorking(false)
+    }
   }
 
   onMount(() => {
-    const unsubscribe = client.subscribe((event) => {
-      if (event.type !== "progress") return
-      const msg = event.message || event.phase || ""
-      if (msg) {
-        setProgressMsg(msg)
-        appendLog(msg, event.phase === "failed")
-      }
-      if (event.suggestion) appendLog(`建议: ${event.suggestion}`, event.phase === "failed")
-      if (event.details) appendLog(event.details, event.phase === "failed")
-    })
-    onCleanup(unsubscribe)
-
     void (async () => {
       try {
-        const [state, userProbe] = await Promise.all([
-          client.getState(),
-          client.probe("system-user").catch(() => null),
-        ])
-
-        const name = typeof userProbe?.userName === "string" ? userProbe.userName.trim() : ""
-        if (name) setSystemUserName(name)
-
-        if (state) {
-          const savedStep = resolveRestoreTarget(state)
-          if (savedStep !== currentStep()) {
-            setCurrentStep(savedStep)
-            controller.setCurrentStep(savedStep)
-            updateUnlockedPhase(savedStep)
-            appendLog(
-              state.completed
-                ? "[system] 配置已完成，已回到启动页"
-                : `[system] 已从服务端恢复当前进度: ${savedStep}`,
-            )
-          }
+        const next = await client.inspect()
+        applyFacts(next)
+        setVisibleStep(applyRuntimePreparationGate(stepFromSetup(resolveSetupStep(next)), runtimeReady()))
+        if (next.state.status === "corrupt") {
+          setErrorInfo({
+            code: "SETUP_STATE_CORRUPT",
+            message: "初始化状态文件不可读取；请修复或移除该文件后再继续。",
+          })
         }
-      } catch (err) {
-        appendLog(`[warning] 获取步骤恢复状态失败: ${err instanceof Error ? err.message : String(err)}`)
+      } catch (error) {
+        setErrorInfo(setupErrorView(error))
       } finally {
         setInitialized(true)
       }
     })()
   })
 
-  const updateUnlockedPhase = (step: OnboardingStepName | "done") => {
-    const p = getPhaseForStep(step).phase
-    if (p > maxUnlockedPhase()) {
-      setMaxUnlockedPhase(p)
-    }
-  }
+  onCleanup(() => followAbort?.abort())
 
-  const handleNext = () => {
-    setErrorInfo(null)
-    setStepResult(null)
-    controller.setCurrentStep(currentStep())
-    controller.next()
-    const nextStep = controller.getCurrentStep()
-    setCurrentStep(nextStep)
-    updateUnlockedPhase(nextStep)
-    appendLog(`[step] 进入步骤: ${getStepMetadata(nextStep).title}`)
-  }
-
-  const handlePrev = () => {
-    setErrorInfo(null)
-    setStepResult(null)
-    controller.setCurrentStep(currentStep())
-    controller.prev()
-    const prevStep = controller.getCurrentStep()
-    setCurrentStep(prevStep)
-    appendLog(`[step] 返回步骤: ${getStepMetadata(prevStep).title}`)
-  }
-
-  const handleJumpPhase = (phaseNum: 1 | 2 | 3 | 4) => {
-    if (phaseNum > maxUnlockedPhase()) return
-    setErrorInfo(null)
-    setStepResult(null)
-    const config = PHASE_CONFIGS.find((p) => p.phase === phaseNum)
-    if (!config || config.steps.length === 0) return
-    const target = config.steps[0]
-    setCurrentStep(target)
-    controller.setCurrentStep(target)
-    appendLog(`[step] 切换到阶段 ${phaseNum}: ${config.title}`)
-  }
-
-  const handleSkip = async () => {
-    setErrorInfo(null)
-    setStepResult(null)
-    const step = currentStep()
-    if (step !== "done") {
-      const res = await client.executeStep(step as OnboardingStepName, { skip: true })
-      if (res.status === "failed") {
-        handleError({ message: res.error?.message ?? "跳过失败" })
-        return
-      }
-    }
-    handleNext()
-  }
-
-  const handleError = (err: { code?: string; message: string; details?: string } | string | null) => {
-    if (!err) {
-      setErrorInfo(null)
-      setStepResult(null)
-      return
-    }
-    const info = typeof err === "string" ? { message: err } : err
-    setErrorInfo(info)
-    setStepResult({ success: false })
-    appendLog(`[ERROR] ${info.message}`, true)
-    if (info.details) {
-      appendLog(info.details, true)
-    }
-  }
-
-  const handleRetry = () => {
-    setErrorInfo(null)
-    setStepResult(null)
-    const step = currentStep()
-    if (step === "done") return
-    // Trigger the step's own form submit / re-run logic
-    const form = document.getElementById(`onboarding-step-${step}`)
-    if (form instanceof HTMLFormElement) {
-      form.requestSubmit()
-    } else {
-      // For steps without a form (e.g. runtime-setup wraps in a form but may not match),
-      // fallback: dispatch a custom event so auto-advance steps can re-mount
-      const event = new CustomEvent("ob-retry", { bubbles: true })
-      document.dispatchEvent(event)
-    }
-  }
-
-  const handleStepStatusChange = (status: "idle" | "working" | "success" | "error") => {
-    if (status === "working") {
-      setWorking(true)
-      setStepResult(null)
-    } else if (status === "idle") {
-      setWorking(false)
-      setStepResult(null)
-    } else if (status === "success") {
-      setWorking(false)
-      setStepResult({ success: true })
-    } else {
-      setWorking(false)
-      setStepResult({ success: false })
-    }
-  }
-
+  // The form-only calls below are guarded by `!isDone()`.
+  // oxlint-disable-next-line typescript-eslint/no-unnecessary-type-assertion
+  const stepName = () => currentStep() as OnboardingStepName
   const currentPhase = () => getPhaseForStep(currentStep())
   const meta = () => getStepMetadata(currentStep())
   const content = () => getStepContent(currentStep())
   const guideSource = () => getStepGuideSource(currentStep())
-
   const isDone = () => currentStep() === "done"
+  const isCurrentOptional = () => isDone() || isOptionalStep(stepName())
 
-  const isCurrentOptional = () => {
-    if (isDone()) return false
-    const step = currentStep()
-    // create-space optionality is determined by the component itself (existing spaces)
-    if (step === "create-space") return false
-    return isOptionalStep(step as OnboardingStepName, { hasExistingSpaces: hasExistingSpaces() })
-  }
-
-  // --- Navigation button state derivation ---
-  const stepName = () => currentStep() as OnboardingStepName
-
-  // Previous button: enabled when there is a real previous step and not working
-  const prevEnabled = () => {
-    if (isDone()) return true // allow going back from done
-    const idx = ONBOARDING_STEPS.indexOf(stepName())
-    return idx > 0 && !working()
-  }
-
-  // Retry button: visible when step failed; disabled while working
-  const retryVisible = () => {
-    return isRetryActionVisible(currentStep(), {
-      working: working(),
-      success: stepResult()?.success,
-    })
-  }
-
-  const retryEnabled = () => !working() && !isDone()
-
-  const retryLabel = () => (stepName() === "install-cli" ? "重试安装" : "重试")
-
-  // Next button: visible on all steps, including done (launches workbench)
-  const nextVisible = () => {
-    if (isDone()) return true
-    if (stepResult()?.success === false) return false
-    return true
-  }
-
-  const nextEnabled = () => {
-    if (working()) return false
-    if (isDone()) return !doneLaunching()
-    // For form-submit steps: enabled when step succeeded (advance) or idle (submit)
-    if (FORM_SUBMIT_STEPS.has(stepName())) {
-      if (stepResult()?.success === true) return true // advance to next step
-      if (stepResult()?.success === false) return false // need retry first
-      return true // idle — submit
+  const stepSatisfied = () => {
+    const value = facts()
+    if (!value) return false
+    if (currentStep() === "system-check") {
+      return value.home.foundation.ready && value.home.writable
     }
+    if (currentStep() === "github-auth") return githubForkReady(value)
+    if (currentStep() === "ontology-setup")
+      return (
+        value.ontology.status === "ready" &&
+        value.ontology.items.length > 0 &&
+        value.home.settings.valid &&
+        value.home.settings.ellamaka.valid &&
+        value.home.capabilities.ready
+      )
+    if (currentStep() === "create-space") return value.space.items.some((item) => item.verified)
+    if (currentStep() === "runtime-preparation") return runtimeReady()
+    if (currentStep() === "ai-provider") return value.credentials.providers.length > 0 || providerWasSkipped()
     return false
   }
 
+  const prevEnabled = () => {
+    if (isDone()) return true
+    const index = ONBOARDING_STEPS.indexOf(stepName())
+    return index > 0 && !working()
+  }
+
+  const handlePrev = () => {
+    setErrorInfo(null)
+    controller.setCurrentStep(currentStep())
+    controller.prev()
+    setVisibleStep(controller.getCurrentStep())
+  }
+
   const nextLabel = () => {
-    if (isDone()) {
-      return doneLaunching() ? "正在启动…" : "🚀 启动工作台"
-    }
-    if (stepResult()?.success === true) return "下一步"
-    // Steps may override the primary action's label when their submit semantics
-    // differ from the step name (e.g. create-space reusing an existing space).
-    const override = primaryLabelOverride()
-    if (override) return override
-    // Step-specific action labels for the primary submit action
-    const step = stepName()
-    if (step === "system-check") return "下一步"
-    if (step === "install-cli") return "开始安装"
-    if (step === "ontology-setup") return "准备能力本体"
-    if (step === "ai-provider") return "保存配置"
-    if (step === "create-space") return "创建工作空间"
+    if (isDone()) return launching() ? "正在启动…" : "🚀 启动工作台"
+    if (stepSatisfied()) return "下一步"
+    if (stepName() === "system-check") return "初始化工作目录"
+    if (stepName() === "github-auth") return "重新检测 GitHub 登录"
+    if (stepName() === "ontology-setup") return "准备能力本体"
+    if (stepName() === "create-space") return "创建工作空间"
+    if (stepName() === "runtime-preparation") return "继续"
+    if (stepName() === "ai-provider") return "保存配置"
     return "下一步"
   }
 
-  const handleNextClick = () => {
+  const submitVisibleForm = () => {
+    const form = document.getElementById(`onboarding-step-${stepName()}`)
+    if (form instanceof HTMLFormElement) form.requestSubmit()
+  }
+
+  const handleNext = () => {
     if (isDone()) {
       doneLaunch?.()
       return
     }
-    // If step already succeeded, advance to next step directly
-    if (stepResult()?.success === true) {
-      handleNext()
+    if (stepSatisfied()) {
+      const next = ONBOARDING_STEPS[ONBOARDING_STEPS.indexOf(stepName()) + 1] ?? "done"
+      setVisibleStep(next)
       return
     }
-    if (FORM_SUBMIT_STEPS.has(stepName())) {
-      // Step not yet executed: submit the form to trigger step logic
-      const form = document.getElementById(`onboarding-step-${stepName()}`)
-      if (form instanceof HTMLFormElement) {
-        form.requestSubmit()
-      } else {
-        handleNext()
-      }
-    } else {
-      handleNext()
+    if (stepName() === "github-auth") {
+      void refreshGithubIdentity()
+      return
     }
+    if (FORM_SUBMIT_STEPS.has(stepName())) submitVisibleForm()
   }
 
   return (
@@ -321,36 +461,25 @@ export function OnboardingRoot() {
             src="/ellamaka-text-logo.png?v=2"
             class="ob-brand-logo"
             alt="Ellamaka Logo"
-            onError={(e) => (e.currentTarget.style.display = "none")}
+            onError={(event) => (event.currentTarget.style.display = "none")}
           />
           <span style={{ "font-weight": "700", "font-size": "15px", color: "#fff" }}>WopalSpace 配置向导</span>
         </div>
 
-        {/* 4-Phase Tracker Bar */}
         <div class="ob-tracker">
           <For each={PHASE_CONFIGS}>
-            {(phaseConfig) => {
-              const isActive = () => currentPhase().phase === phaseConfig.phase
-              const isPast = () => currentPhase().phase > phaseConfig.phase
-              const isLocked = () => phaseConfig.phase > maxUnlockedPhase()
-              return (
-                <button
-                  class={`ob-step-nav-pill ${isActive() ? "active" : ""} ${isPast() ? "completed" : ""} ${isLocked() ? "locked" : ""}`}
-                  onClick={() => handleJumpPhase(phaseConfig.phase)}
-                  disabled={isLocked() || working()}
-                  title={
-                    isLocked()
-                      ? `阶段 ${phaseConfig.phase}: 完成前置阶段后解锁`
-                      : `阶段 ${phaseConfig.phase}: ${phaseConfig.title}`
-                  }
-                >
-                  <span>
-                    {isLocked() ? "🔒 " : isPast() ? "✓ " : ""}
-                    {phaseConfig.phase}. {phaseConfig.title}
-                  </span>
-                </button>
-              )
-            }}
+            {(phase) => (
+              <button
+                class={`ob-step-nav-pill ${currentPhase().phase === phase.phase ? "active" : ""} ${currentPhase().phase > phase.phase ? "completed" : ""}`}
+                onClick={() => setVisibleStep(phase.steps[0] ?? "done")}
+                disabled={phase.steps.length === 0 || !canNavigateToPhase(currentStep(), phase.phase, working())}
+              >
+                <span>
+                  {currentPhase().phase > phase.phase ? "✓ " : ""}
+                  {phase.phase}. {phase.title}
+                </span>
+              </button>
+            )}
           </For>
         </div>
       </header>
@@ -359,7 +488,6 @@ export function OnboardingRoot() {
         <div class="ob-main-content">
           <div class="ob-wizard-stage">
             <div class="ob-grid-layout">
-              {/* Left: Phase Info */}
               <div class="ob-step-info">
                 <div class="ob-step-info-card">
                   <div class="ob-step-number">
@@ -370,20 +498,16 @@ export function OnboardingRoot() {
                 </div>
               </div>
 
-              {/* Right: Card View */}
               <div class="ob-card">
                 <details class="ob-step-guide-mobile">
                   <summary>查看本步骤说明</summary>
                   <div class="ob-step-guide-mobile-content">
-                    <div class="ob-step-number">
-                      阶段 {currentPhase().phase} / 4 · {currentPhase().title}
-                    </div>
                     <h3 class="ob-step-info-title">{meta().title}</h3>
                     <StepGuide step={currentStep()} source={guideSource()} assets={STEP_GUIDE_ASSETS} />
                   </div>
                 </details>
 
-                <Show when={currentStep() !== "done" && currentStep() !== "system-check"}>
+                <Show when={!isDone() && currentStep() !== "system-check"}>
                   <div class="ob-card-header" style={{ "justify-content": "center", "text-align": "center" }}>
                     <div class="ob-card-heading">
                       <h2 class="ob-card-title" style={{ "text-align": "center" }}>
@@ -393,9 +517,7 @@ export function OnboardingRoot() {
                         <span class="ob-optional-tag">可选</span>
                       </Show>
                     </div>
-                    <Show when={currentStep() !== "ontology-setup"}>
-                      <p class="ob-card-description">{content()?.goal ?? meta().description}</p>
-                    </Show>
+                    <p class="ob-card-description">{content()?.goal ?? meta().description}</p>
                   </div>
                 </Show>
 
@@ -411,86 +533,82 @@ export function OnboardingRoot() {
                           </Show>
                         </div>
                         <div class="ob-error-message">{errorInfo()?.message}</div>
+                        <Show when={errorInfo()?.suggestion}>
+                          <div class="ob-error-message">{errorInfo()?.suggestion}</div>
+                        </Show>
                       </div>
-                      <button
-                        type="button"
-                        class="ob-error-close"
-                        aria-label="关闭错误提示"
-                        onClick={() => setErrorInfo(null)}
-                      >
-                        ×
-                      </button>
                     </div>
                   </div>
                 </Show>
 
-                {/* Card Body - Scrollable */}
                 <div class="ob-card-body">
-                  <Show
-                    when={initialized()}
-                    fallback={
-                      <div class="ob-progress-container" style={{ padding: "40px 0", "text-align": "center" }}>
-                        <div
-                          class="ob-spinner"
-                          style={{ width: "24px", height: "24px", "border-width": "2px", margin: "0 auto 12px" }}
-                        />
-                        <div style={{ "font-size": "13px", color: "var(--ob-text-subtle)" }}>正在恢复当前配置进度…</div>
-                      </div>
-                    }
-                  >
-                    <Switch>
-                      {/* Phase 1 Steps - rendered directly so currentStep reflects sub-step */}
-                      <Match when={currentStep() === "system-check"}>
-                        <SystemCheckStep
-                          userName={systemUserName()}
-                          onComplete={handleNext}
-                          onError={handleError}
-                          onStatusChange={handleStepStatusChange}
-                        />
-                      </Match>
-                      <Match when={currentStep() === "install-cli"}>
-                        <InstallCliStep
-                          onComplete={handleNext}
-                          onError={handleError}
-                          onStatusChange={handleStepStatusChange}
-                        />
-                      </Match>
-
-                      {/* Phase 2 Steps */}
-                      <Match when={currentStep() === "ontology-setup"}>
-                        <OntologySetupStep
-                          onComplete={handleNext}
-                          onError={handleError}
-                          onStatusChange={handleStepStatusChange}
-                        />
-                      </Match>
-
-                      {/* Phase 3 Steps */}
-                      <Match when={currentStep() === "create-space"}>
-                        <CreateSpaceStep
-                          onComplete={handleNext}
-                          onError={handleError}
-                          onStatusChange={handleStepStatusChange}
-                          onPrimaryLabelChange={setPrimaryLabelOverride}
-                        />
-                      </Match>
-                      <Match when={currentStep() === "ai-provider"}>
-                        <AiProviderStep
-                          onComplete={handleNext}
-                          onError={handleError}
-                          onStatusChange={handleStepStatusChange}
-                        />
-                      </Match>
-
-                      {/* Phase 4 Steps */}
-                      <Match when={currentStep() === "done"}>
-                        <DoneStep onLaunchingChange={setDoneLaunching} onRegisterLaunch={(fn) => (doneLaunch = fn)} />
-                      </Match>
-                    </Switch>
+                  <Show when={working() && progressMsg()}>
+                    <ProgressDisplay phase={progressMsg()} />
+                  </Show>
+                  <Show when={initialized()} fallback={<ProgressDisplay phase="正在读取 Setup 服务状态…" />}>
+                    <Show when={facts()} fallback={<ProgressDisplay phase="正在读取 Setup 服务状态…" />}>
+                      <Switch>
+                        <Match when={currentStep() === "system-check"}>
+                          <FoundationStep
+                            facts={facts()!}
+                            working={working()}
+                            onRun={(homePath) => void runFoundation(homePath)}
+                          />
+                        </Match>
+                        <Match when={currentStep() === "github-auth"}>
+                          <GithubAuthStep
+                            facts={facts()!}
+                            working={working()}
+                            onRefreshIdentity={() => void refreshGithubIdentity()}
+                            onContinueClone={() => void continueWithClone()}
+                          />
+                        </Match>
+                        <Match when={currentStep() === "ontology-setup"}>
+                          <OntologySetupStep
+                            facts={facts()!}
+                            working={working()}
+                            onRun={(input) => void runOntology(input)}
+                          />
+                        </Match>
+                        <Match when={currentStep() === "create-space"}>
+                          <CreateSpaceStep
+                            facts={facts()!}
+                            working={working()}
+                            onRun={(input) => void runSpace(input)}
+                          />
+                        </Match>
+                        <Match when={currentStep() === "runtime-preparation"}>
+                          <RuntimePreparationStep
+                            onStart={() => setRuntimeReady(false)}
+                            onReady={() => setRuntimeReady(true)}
+                            onFailed={(message) => setErrorInfo({ code: "SETUP_RUNTIME_FAILED", message })}
+                            onProgress={(message) => {
+                              setProgressMsg(message)
+                              appendLog(message)
+                            }}
+                          />
+                        </Match>
+                        <Match when={currentStep() === "ai-provider"}>
+                          <AiProviderStep
+                            facts={facts()!}
+                            working={working()}
+                            onSubmit={(input) => void runProvider(input)}
+                            onSkip={() => void skipProvider()}
+                          />
+                        </Match>
+                        <Match when={currentStep() === "done"}>
+                          <DoneStep
+                            launch={launch}
+                            launching={launching()}
+                            error={completionError()}
+                            onRegisterLaunch={(fn) => (doneLaunch = fn)}
+                          />
+                        </Match>
+                      </Switch>
+                    </Show>
                   </Show>
                 </div>
 
-                {/* Fixed Navigation Bar — always visible at card bottom */}
                 <div class="ob-fixed-nav">
                   <button
                     type="button"
@@ -500,48 +618,38 @@ export function OnboardingRoot() {
                   >
                     上一步
                   </button>
-
                   <div class="ob-fixed-nav-center">
-                    <Show when={isCurrentOptional() && !working() && stepResult()?.success !== true}>
-                      <button type="button" class="ob-button ob-button-secondary" onClick={handleSkip}>
-                        跳过本步骤
+                    <Show when={working() && currentStep() !== "done" && runId()}>
+                      <button type="button" class="ob-button ob-button-secondary" onClick={() => void handleCancel()}>
+                        取消初始化
                       </button>
                     </Show>
                   </div>
-
-                  <Show when={!working() && retryVisible()}>
-                    <button
-                      type="button"
-                      class="ob-button ob-retry-button"
-                      onClick={handleRetry}
-                      disabled={!retryEnabled()}
-                    >
-                      {retryLabel()}
-                    </button>
-                  </Show>
-
-                  <Show when={!working() && nextVisible()}>
-                    <button
-                      type="button"
-                      class="ob-button ob-nav-next"
-                      onClick={handleNextClick}
-                      disabled={!nextEnabled()}
-                    >
-                      {nextLabel()}
-                    </button>
-                  </Show>
+                  <button
+                    type="button"
+                    class="ob-button ob-nav-next"
+                    onClick={handleNext}
+                    disabled={
+                      working() ||
+                      !initialized() ||
+                      (isDone() && launching()) ||
+                      (currentStep() === "runtime-preparation" && !runtimeReady())
+                    }
+                  >
+                    {nextLabel()}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <LogDrawer logs={logs()} statusMsg={progressMsg() || "系统就绪"} onClear={() => setLogs([])} />
+          <LogDrawer
+            logs={logs()}
+            statusMsg={progressMsg() || (errorInfo() ? "需要处理" : "系统就绪")}
+            onClear={() => setLogs([])}
+          />
         </div>
       </main>
-
-      <footer class="ob-footer">
-        <div>Wopal.cn &copy; 2026</div>
-      </footer>
     </div>
   )
 }

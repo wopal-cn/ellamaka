@@ -1,6 +1,7 @@
 import { ErrorBoundary, Show, createEffect, createMemo, onMount, onCleanup, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { SpaceStoreProvider } from "./space-store"
+import { useSpaceStore } from "./space-store"
 import { WorkbenchStateProvider, useWorkbenchState } from "./view-store"
 import { SessionStoreProvider, useSessionProjectionWriter, useSessionStore } from "./session-store"
 import { WorkbenchTitlebar } from "./parts/top-bar"
@@ -40,7 +41,6 @@ import { DshSurface } from "./dsh-surface"
 import { WorkbenchSurfaceProvider } from "./workbench-surface-context"
 import { ViewRegistryProvider, useViewRegistry, registerDefaultViews } from "./view-registry"
 import { reportWorkbenchError, WORKBENCH_ERROR_EVENT } from "./workbench-error"
-import { CliRepairDialog } from "./parts/cli-repair-dialog"
 import { useCommand } from "@/context/command"
 import { useDialog } from "@wopal/ui/context/dialog"
 import { Toast } from "@wopal/ui/toast"
@@ -69,9 +69,10 @@ function WorkbenchShell() {
   const actions = useWorkbenchActions()
   const command = useCommand()
   useWorkbenchCommands()
-  const spaceStore = useSessionStore()
+  const sessionStore = useSessionStore()
+  const spaceStore = useSpaceStore()
   const projection = useSessionProjectionWriter()
-  const allStoresReady = () => wb.ready()
+  const allStoresReady = () => wb.ready() && !spaceStore.reconciling
   const display = () => wb.display()
   const sdk = useServerSDK()
   const runtime = useWorkbenchRuntime()
@@ -116,17 +117,6 @@ function WorkbenchShell() {
     setSurfaceStore("activeKey", result.activeKey)
   }
 
-  const requestCliRepair = (cli: NonNullable<typeof runtime.cli>) => {
-    void dialog.show(() => (
-      <CliRepairDialog
-        cli={cli}
-        repair={runtime.repairCli}
-        onRepaired={() => wb.removeDiagnostic("wopal-cli-status")}
-      />
-    ))
-    return false
-  }
-
   createEffect(() => {
     if (!workbenchSurface) return
     if (runtime.status === "offline") {
@@ -134,26 +124,6 @@ function WorkbenchShell() {
       return
     }
     workbenchSurface.removeAttribute("inert")
-  })
-
-  createEffect(() => {
-    const cli = runtime.cli
-    if (!cli || cli.state === "ok") {
-      wb.removeDiagnostic("wopal-cli-status")
-      return
-    }
-    const text =
-      cli.state === "missing"
-        ? t("workbench.cli.missing", { required: cli.requiredVersion })
-        : cli.state === "incompatible"
-          ? t("workbench.cli.incompatible", { actual: cli.actualVersion ?? "unknown", required: cli.requiredVersion })
-          : t("workbench.cli.broken", { required: cli.requiredVersion })
-    wb.pushDiagnostic("error", text, {
-      id: "wopal-cli-status",
-      autoDismiss: false,
-      onRetry: () => requestCliRepair(cli),
-      source: "Wopal CLI",
-    })
   })
 
   // Task 3 (O18): Register default views during Shell init instead of at
@@ -170,7 +140,7 @@ function WorkbenchShell() {
         projection.invalidate()
         if (session.sessionId) {
           const sessionID = session.sessionId
-          const title = spaceStore.getSession(sessionID)?.title ?? session.title ?? sessionID
+          const title = sessionStore.getSession(sessionID)?.title ?? session.title ?? sessionID
           void actions
             .unbindSessionEverywhere(sessionID)
             .then((result) => {
@@ -207,7 +177,7 @@ function WorkbenchShell() {
           type: session.type,
           sessionId: session.sessionId,
           title: session.title,
-          localTitle: spaceStore.getSession(session.sessionId ?? "")?.title,
+          localTitle: sessionStore.getSession(session.sessionId ?? "")?.title,
         })
       ) {
         projection.patch(session.sessionId!, { title: session.title! })
@@ -371,6 +341,14 @@ function WorkbenchErrorFallback(props: { error: Error; reset: () => void }) {
   // server-credentials dialog instead; saving fresh credentials remounts the
   // tree and the boundary resets without a manual page reload.
   const unauthorized = isUnauthorizedError(props.error)
+  const detail = () => {
+    if (props.error instanceof Error && props.error.message) return props.error.message
+    try {
+      const serialized = JSON.stringify(props.error)
+      if (serialized && serialized !== "{}") return serialized
+    } catch {}
+    return String(props.error || t("workbench.error.unknownError"))
+  }
   return (
     <div class="flex h-dvh flex-col items-center justify-center gap-6 bg-v2-background-bg-deep text-v2-text-text-base p-8">
       <div class="flex flex-col items-center max-w-md text-center gap-4">
@@ -382,7 +360,7 @@ function WorkbenchErrorFallback(props: { error: Error; reset: () => void }) {
           {unauthorized ? t("workbench.runtime.unauthorizedTitle") : t("workbench.error.shellLoadFailed")}
         </h2>
         <p class="text-14-regular text-v2-text-text-muted break-words bg-v2-background-bg-base/60 border border-v2-border-border-base p-3.5 rounded-lg text-left w-full font-mono text-xs max-h-40 overflow-y-auto">
-          {props.error.message || t("workbench.error.unknownError")}
+          {detail()}
         </p>
 
         <div class="flex items-center gap-3 mt-2">

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { PtyManager } from "./pty-manager"
+import type { PtySDK } from "./pty-manager"
 
 function createSDK() {
   const removed: string[] = []
@@ -22,6 +23,123 @@ function createSDK() {
 }
 
 describe("PtyManager", () => {
+  test("a deferred live probe cannot be replayed after the canonical owner disposes its PTY", async () => {
+    const manager = new PtyManager()
+    let finishProbe!: () => void
+    let getCalls = 0
+    let createCalls = 0
+    const removed: string[] = []
+    const sdk: PtySDK = {
+      client: {
+        pty: {
+          get: async ({ ptyID }) => {
+            getCalls += 1
+            if (getCalls === 1) await new Promise<void>((resolve) => (finishProbe = resolve))
+            if (removed.includes(ptyID)) throw new Error("PTY not found")
+            return { data: { id: ptyID } }
+          },
+          remove: async ({ ptyID }) => {
+            removed.push(ptyID)
+            return { data: true }
+          },
+        },
+      },
+    }
+    const old = manager.ensure({
+      spacePath: "/alias",
+      panelId: "panel-1",
+      kind: "term",
+      existingPtyId: "pty-shared",
+      sdk,
+      directory: "/real/project",
+      createFn: async () => {
+        createCalls += 1
+        return "unexpected-create"
+      },
+    })
+    await manager.transferSpace(
+      "/alias",
+      "/real",
+      () => ({ id: "panel-1" }),
+      () => ({ id: "panel-1" }),
+    )
+    finishProbe()
+    expect(await old).toBe("pty-shared")
+    expect(
+      await manager.ensure({
+        spacePath: "/real",
+        panelId: "panel-1",
+        kind: "term",
+        existingPtyId: "pty-shared",
+        sdk,
+        directory: "/real/project",
+        createFn: async () => {
+          createCalls += 1
+          return "unexpected-create"
+        },
+      }),
+    ).toBe("pty-shared")
+    await manager.disposePty({ spacePath: "/real", panelId: "panel-1", kind: "term", sdk, knownPtyId: "pty-shared" })
+    expect(
+      await manager.ensure({
+        spacePath: "/alias",
+        panelId: "panel-1",
+        kind: "term",
+        existingPtyId: "pty-shared",
+        sdk,
+        directory: "/real/project",
+        createFn: async () => {
+          createCalls += 1
+          return "pty-new"
+        },
+      }),
+    ).toBe("pty-new")
+    expect({ getCalls, createCalls, removed }).toEqual({ getCalls: 3, createCalls: 1, removed: ["pty-shared"] })
+  })
+  test("does not reuse an old pending PTY after Space identity migration", async () => {
+    const manager = new PtyManager()
+    const { removed, sdk } = createSDK()
+    let finish!: (id: string) => void
+    let creates = 0
+    const old = manager.ensure({
+      spacePath: "/alias",
+      panelId: "panel-1",
+      kind: "split",
+      existingPtyId: undefined,
+      sdk,
+      directory: "/alias",
+      createFn: () => {
+        creates += 1
+        return new Promise((resolve) => {
+          finish = resolve
+        })
+      },
+    })
+    await manager.transferSpace(
+      "/alias",
+      "/real",
+      () => ({ id: "panel-1" }),
+      () => ({ id: "panel-1" }),
+    )
+    finish("pty-old")
+    await old
+    await manager.disposePty({ spacePath: "/alias", panelId: "panel-1", kind: "split", sdk, knownPtyId: "pty-old" })
+    const next = await manager.ensure({
+      spacePath: "/real",
+      panelId: "panel-1",
+      kind: "split",
+      existingPtyId: undefined,
+      sdk,
+      directory: "/real",
+      createFn: async () => {
+        creates += 1
+        return "pty-new"
+      },
+    })
+    expect(next).toBe("pty-new")
+    expect(creates).toBe(2)
+    expect(removed).toEqual(["pty-old"])
+  })
   test("destroys a persisted panel PTY even when it is not in the in-memory registry", async () => {
     const manager = new PtyManager()
     const { removed, sdk } = createSDK()
@@ -45,9 +163,10 @@ describe("PtyManager", () => {
       existingPtyId: undefined,
       sdk,
       directory: "/space",
-      createFn: () => new Promise<string>((resolve) => {
-        resolveCreation = resolve
-      }),
+      createFn: () =>
+        new Promise<string>((resolve) => {
+          resolveCreation = resolve
+        }),
     })
     const disposing = manager.disposePty({
       spacePath: "/space",
@@ -90,10 +209,12 @@ describe("PtyManager", () => {
     })
     await manager.disposePanel("", "panel-1", sdk, { tui: "pty-panel" })
 
-    expect(removals).toEqual([{
-      ptyID: "pty-panel",
-      directory: "/real/session/directory",
-    }])
+    expect(removals).toEqual([
+      {
+        ptyID: "pty-panel",
+        directory: "/real/session/directory",
+      },
+    ])
   })
 
   test("delete removes PTY from active registry without tracking for unload cleanup", async () => {

@@ -82,17 +82,22 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
   const runtimeLogFile = opts.runtimeLogFile ?? join(logDir, "dsh-runtime.log")
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST
   const home = join(wopalHome, "dsh")
+  const toolsEnabled = process.env.ELLAMAKA_DSH_TOOLS !== "0"
+  setDshStatus("tools", toolsEnabled ? "preparing" : "disabled")
 
   const preparation = await prepareDshHost({
     wopalHome,
     runtimeLogFile,
     logLevel: toDshLogLevel(process.env.ELLAMAKA_LOG_LEVEL),
     print: process.argv.includes("--print-logs"),
-    profiles: process.env.ELLAMAKA_DSH_TOOLS === "0" ? [] : ["ellamaka-tools"],
+    profiles: toolsEnabled ? ["ellamaka-tools"] : [],
     ...(opts.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
   })
   reportDshPreparationFailure(preparation)
-  if (preparation.status !== "prepared") return undefined
+  if (preparation.status !== "prepared") {
+    setDshStatus("tools", preparation.status === "disabled" ? "disabled" : "degraded")
+    return undefined
+  }
 
   // Runtime admission is separate from preparation. Hold this shared lease
   // for the whole lifetime of every in-process DSH Home consumer so a newer

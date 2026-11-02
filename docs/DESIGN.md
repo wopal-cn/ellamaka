@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-10-29
+> **Updated**: 2026-11-02
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -160,6 +160,8 @@ Ellamaka 运行时包含两种模式：
 - **非 WopalSpace**：当前 instance 没有 `wopalSpaceRoot`。配置入口由 WOPAL_HOME 所有，capability loading 保持 OpenCode-compatible 的目录发现和覆盖机制，并在末层叠加 WOPAL_HOME 全局能力。
 - **WopalSpace**：当前 instance 的 `wopalSpaceRoot` 是空间根。当前 directory 可以是空间根或其任意子目录，配置和能力始终从这个根加载。
 
+Workbench 管理的 General 与 WopalSpace Instance 共享同一套 `wopal.pluginConfig` 产品级基线。General/Assistant 的 `$WOPAL_HOME/general_tasks/...` Instance 合并 Ellamaka 内置插件默认值与 `$WOPAL_HOME/config/settings.jsonc`；WopalSpace Instance 在同一基线上再叠加 Space public / Space local 两层覆盖。其它 OpenCode-compatible 非 WopalSpace Instance 保持兼容配置链，不因 Workbench 的沙箱默认值改变行为。
+
 WopalSpace 模式下配置加载优先级（低→高）：
 
 | 层级                 | 来源                                                                          |
@@ -218,11 +220,11 @@ HttpApiEndpoint.patch("configUpdate", "/config-v2", {
 }
 ```
 
-- 端点挂实例作用域中间件（Instance Context + Workspace Routing + Authorization），两种运行模式通用。`effective.wopal.dsh.web.enabled` 始终来自用户全局 `$WOPAL_HOME/config/settings.jsonc`，缺省为 `true`，不读取 Space override；`effective.wopal.pluginConfig` 继续按当前 Instance 的配置链求值。
+- 端点挂实例作用域中间件（Instance Context + Workspace Routing + Authorization），两种运行模式通用。`effective.wopal.dsh.web.enabled` 始终来自用户全局 `$WOPAL_HOME/config/settings.jsonc`，缺省为 `true`，不读取 Space override；`effective.wopal.pluginConfig` 继续按当前 Instance 的配置链求值：General 为“内置默认 + 用户全局”，Space 为“内置默认 + 用户全局 + Space public + Space local”，其它非 WopalSpace Instance 保持兼容链。
 - `effective.ellamaka` 与 `/config` 同源同值（`$VAR` 已在加载时代换）；`effective.wopal.pluginConfig` 为配置文件镜像，`$VAR` 不代换，引用解析发生在消费方插件内部。
 - `PATCH /config-v2` 当前只接受 `target="global"` 的 `wopal.dsh.web.enabled` 布尔写入。writer 保留 JSONC 注释、未知字段与其他 Wopal 配置；不支持的 key 或 Space target 明确拒绝。成功写入只改变下次 Server/sidecar 启动的 Web profile 意图，因此返回 `restart-required`。
 - DSH Web Tab 的运行时显隐只认 `/global/health.dsh.web`，不直接把磁盘修改伪装成已生效 runtime 状态。Workbench Settings 可以在写入后提示并触发现有的 Local Server 重启入口。
-- 沙箱选择器只在 `dsh.tools=ready` 且 `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true` 时提供 DSH 模式；默认模式取 `sandbox.mode`。Tools profile 加载失败时使用 Native Tools，单次 DSH 工具调用失败不改变 profile 状态或触发 Native 重试。
+- General 与 Space 使用同一套沙箱采用判据：沙箱选择器只在 `dsh.tools=ready` 且当前 Instance 的 `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true` 时提供 DSH 模式；默认模式取 `sandbox.mode`。Tools profile 加载失败时使用 Native Tools，单次 DSH 工具调用失败不改变 profile 状态或触发 Native 重试。
 - 更广泛的多 key、global/space mutation、来源标签、reset-key 与 DSH native 配置投影仍由 [DESIGN-config-engine.md](./DESIGN-config-engine.md) 的 Draft 方向承载，不属于这个窄写面。
 
 ### External Capability Directories
@@ -349,7 +351,7 @@ Ellamaka CLI 构建为多平台 standalone binary，Desktop 构建为原生安�
 
 构建入口：CI 中 `publish-ellamaka-cli.yml` 调用 `scripts/build.sh cli`（内部走 `packages/ellamaka-release/src/cli/build.ts`）并注入 env；本地开发使用 `packages/ellamaka-release/src/cli/build.ts` 包装脚本。
 
-Onboarding 是 private `@wopal/wopalspace/setup` 的唯一用户形态，通过 `@wopal/ellamaka-sdk/http` 由统一 Server 承载。`wopal setup` 只是启动/reuse `ellamaka serve` 并打开 `/onboarding` 的便利入口；不存在 Terminal Setup 向导，也不安装/更新产品。
+Onboarding 是 private `@wopal/wopalspace/setup` 的唯一用户形态，通过 `@wopal/ellamaka-sdk/http` 由统一 Server 承载。Browser 与 Desktop 共用 Application Startup Gate，依据 Home 锁定状态和 Setup facts 选择配置阶段或运行阶段；详细时序与失败处理见 [Onboarding](./DESIGN-onboarding.md#application-startup-gate)。`wopal setup` 只是启动/reuse `ellamaka serve` 并打开 `/onboarding` 的便利入口；不存在 Terminal Setup 向导，也不安装/更新产品。
 
 详细 artifact contract 见 `docs/DESIGN-distribution.md`。
 
@@ -386,7 +388,7 @@ SDK/root调用模型的MAJOR变化不自动改变PluginInput.client。现有插�
 | 空间 ontology                    | `<space>/.wopal/`                                     | Space Ontology，ellamaka 加载                                                         |
 | 空间运行态                       | `<space>/.wopal-space/`                               | space runtime；wopal-plugin 按 instance root 写日志，Ellamaka engine 不拥有其目录结构 |
 
-`WOPAL_HOME` 遵循 WopalSpace 产品级路径契约：显式环境变量优先；macOS/Linux 默认 `~/.wopal`，Windows 默认 `%USERPROFILE%\.wopal`。Ellamaka 只消费该路径契约，不拥有另一套解析规则。临时目录使用系统临时目录下的 `ellamaka/`。
+`WOPAL_HOME` 遵循 WopalSpace 产品级路径契约：显式环境变量优先；macOS/Linux 默认 `~/.wopal`，Windows 默认 `%USERPROFILE%\\.wopal`。首次 Onboarding 在变量缺失时可以先让用户确认 Home：正常模式把选择持久化为用户 `WOPAL_HOME`，开发模式只做 `WOPAL_DEV=1` 进程覆盖；确认后当前 Host 生命周期冻结该值。Ellamaka 不维护第二份 Home 持久化事实。临时目录使用系统临时目录下的 `ellamaka/`。
 
 ### 环境变量来源
 
@@ -521,8 +523,8 @@ ellamaka Runtime host（唯一公开监听端口）
 
 | 入口 | Preparation | Activation |
 | --- | --- | --- |
-| CLI `serve` / `web` | 检查/准备当前 CLI build 需要的 Runtime resources；Web 读取全局设置，Tools 读取进程环境 | 两个 profile 独立激活；任一个加载失败不撤销另一个 |
-| Desktop sidecar | 检查/准备当前 embedded sidecar build；Web 读取全局设置，Tools 读取进程环境 | 两个 profile 独立激活并独立回报 health |
+| CLI `serve` / `web` | Setup 未完成时由 Onboarding 在 Space 后触发 host preparation；完成时检查/准备当前 CLI build | Setup 完成后独立激活两个 profile；任一个加载失败不撤销另一个 |
+| Desktop sidecar | Setup 未完成时由 Onboarding 在 Space 后触发 host preparation；完成时检查/准备当前 embedded sidecar build | Setup 完成后独立激活两个 profile 并独立回报 health |
 | 默认 TUI | 仅按 `ELLAMAKA_DSH_TOOLS` 检查/准备 Tools；Space plugin 另按 instance 检查 | Tools profile 加载失败时 TUI 使用 Native Tools；加载成功后调用失败不回退 |
 | directory instance | `.wopal` 物化后主动准备，首次使用时 fallback | instance Ready 后加载 path plugins |
 | `ellamaka run` | DSH 永久跳过 | 纯 native Core，不探测/复用/挂载任何 DSH |

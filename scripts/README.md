@@ -128,8 +128,6 @@ bun run scripts/scalar-doc.ts
 
 - `resolve_build_version <product> <suffix>` — 解析构建版本（下一 patch + 后缀 + 时间戳）
 - `current_version <cli|desktop|deps>` — 版本源读取（产品锚点 package.json 是唯一版本源）
-- `sync_min_wopal_cli_version` — 同步 `@wopal/cli-capability-schema` 依赖下界
-- `resolve_min_wopal_cli_version` — 解析有效 `MIN_WOPAL_CLI_VERSION`
 - `highest_release_tag` — 发布版本最高 tag 查询（failed-attempt 判定用）
 
 发布版本推断已迁移至 `packages/ellamaka-release/src/version-line.ts`（统一版本线模型），由 `scripts/lib/release.sh` 调用。

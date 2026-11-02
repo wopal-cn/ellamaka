@@ -16,7 +16,7 @@ import type { WopalSpaceDeps } from "@/config/wopal-space"
 import { Env } from "@/env"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { testEffect } from "../lib/effect"
-import { TestInstance, tmpdir } from "../fixture/fixture"
+import { TestInstance, provideInstance, tmpdir } from "../fixture/fixture"
 import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
@@ -167,6 +167,32 @@ describe("mergePluginConfig", () => {
   })
 })
 
+describe("mergeEffectivePluginConfig", () => {
+  test("includes the built-in dsh adapter when constructing product-effective plugin config", () => {
+    expect(ConfigWopalPluginConfig.mergeEffectivePluginConfig([])).toEqual({
+      pluginConfig: {
+        "dsh-adapter": {
+          sandbox: { enabled: true, mode: "workspace-write" },
+        },
+      },
+      sources: {},
+    })
+  })
+
+  test("keeps explicit space config authoritative over the built-in default", () => {
+    const result = ConfigWopalPluginConfig.mergeEffectivePluginConfig([
+      localLayer(settingsText({ "dsh-adapter": { sandbox: { enabled: false } } })),
+    ])
+
+    expect(result.pluginConfig).toEqual({
+      "dsh-adapter": {
+        sandbox: { enabled: false, mode: "workspace-write" },
+      },
+    })
+    expect(result.sources).toEqual({ "dsh-adapter.sandbox.enabled": "space-local" })
+  })
+})
+
 async function writeSpace(root: string, settings: Record<string, unknown>) {
   await fs.mkdir(path.join(root, ".wopal", "config"), { recursive: true })
   await fs.writeFile(path.join(root, ".wopal", ".git"), "")
@@ -211,6 +237,7 @@ describe("wopal-space engine plugin config", () => {
     const result = await Effect.runPromise(tryLoadWopalSpaceConfig(deps, { directory: tmp.path }))
 
     expect(result?.pluginConfig).toEqual({
+      "dsh-adapter": { sandbox: { enabled: true, mode: "workspace-write" } },
       app: { a: 1, b: 2, nested: { x: 99, y: 2, z: 3 }, list: ["s"] },
       other: { flag: true },
       g: { only: true },
@@ -236,7 +263,9 @@ describe("wopal-space engine plugin config", () => {
       tryLoadWopalSpaceConfig(createMockDeps({ [globalPath]: "{ not jsonc" }), { directory: tmp.path }),
     )
 
-    expect(result?.pluginConfig).toEqual({})
+    expect(result?.pluginConfig).toEqual({
+      "dsh-adapter": { sandbox: { enabled: true, mode: "workspace-write" } },
+    })
     expect(result?.pluginConfigSources).toEqual({})
   })
 
@@ -330,14 +359,36 @@ describe("Config.Interface.getPluginConfig", () => {
       )
 
       const pluginConfig = yield* Config.use.getPluginConfig()
-      expect(pluginConfig).toEqual({ app: { a: 1, b: 2, nested: { x: 1, y: 2, z: 3 }, list: ["s"] } })
+      expect(pluginConfig).toEqual({
+        "dsh-adapter": { sandbox: { enabled: true, mode: "workspace-write" } },
+        app: { a: 1, b: 2, nested: { x: 1, y: 2, z: 3 }, list: ["s"] },
+      })
 
       const config = yield* Config.use.get()
       expect(config.username).toBe("space-user")
     }),
   )
 
-  it.instance("returns an empty table outside a wopal space", () =>
+  it.instance("uses product defaults and global plugin config for General tasks", () =>
+    Effect.gen(function* () {
+      yield* Effect.promise(() =>
+        writeGlobalSettings({
+          ellamaka: {},
+          wopal: { pluginConfig: { app: { a: 1 }, "dsh-adapter": { sandbox: { mode: "read-only" } } } },
+        }),
+      )
+
+      const directory = path.join(Global.Path.wopalHome, "general_tasks", "config-test-general")
+      yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+      const pluginConfig = yield* Config.use.getPluginConfig().pipe(provideInstance(directory))
+      expect(pluginConfig).toEqual({
+        "dsh-adapter": { sandbox: { enabled: true, mode: "read-only" } },
+        app: { a: 1 },
+      })
+    }),
+  )
+
+  it.instance("keeps unrelated non-space instances on the compatibility plugin config path", () =>
     Effect.gen(function* () {
       const pluginConfig = yield* Config.use.getPluginConfig()
       expect(pluginConfig).toEqual({})

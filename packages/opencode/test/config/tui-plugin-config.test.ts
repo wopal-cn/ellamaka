@@ -9,7 +9,8 @@ import type { Info } from "@/config/config"
 import { CurrentWorkingDirectory } from "@/cli/cmd/tui/config/cwd"
 import { TuiConfig } from "../../src/cli/cmd/tui/config/tui"
 import { tryLoadWopalSpaceTuiConfig } from "../../src/cli/cmd/tui/config/wopal-space"
-import { TestInstance, tmpdir } from "../fixture/fixture"
+import { TestInstance, provideInstance, tmpdir } from "../fixture/fixture"
+import { scopedEnv } from "../fixture/process-env"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.mergeAll(Config.defaultLayer, AppFileSystem.defaultLayer))
@@ -43,18 +44,9 @@ const getTuiConfig = (directory: string) =>
 
 const withEnv = <A, E, R>(name: string, value: string | undefined, self: Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.env[name]
-      if (value === undefined) delete process.env[name]
-      else process.env[name] = value
-      return previous
-    }),
+    Effect.sync(() => scopedEnv({ [name]: value })),
     () => self,
-    (previous) =>
-      Effect.sync(() => {
-        if (previous === undefined) delete process.env[name]
-        else process.env[name] = previous
-      }),
+    (scope) => Effect.sync(() => scope[Symbol.dispose]()),
   )
 
 // The same three-layer fixture on both chains: global settings file + space
@@ -62,13 +54,23 @@ const withEnv = <A, E, R>(name: string, value: string | undefined, self: Effect.
 // independent merges.
 const fixtureGlobal = {
   ellamaka: {},
-  wopal: { pluginConfig: { app: { a: 1, nested: { x: 1 } }, other: { flag: true } } },
+  wopal: {
+    pluginConfig: {
+      "dsh-adapter": { sandbox: { mode: "read-only" } },
+      app: { a: 1, nested: { x: 1 } },
+      other: { flag: true },
+    },
+  },
 }
 const fixtureSpace = {
   "settings.jsonc": { ellamaka: {}, wopal: { pluginConfig: { app: { b: 2, nested: { y: 2 } } } } },
   "settings.local.jsonc": { wopal: { pluginConfig: { app: { nested: { z: 3 } } } } },
 }
-const fixtureTable = { app: { a: 1, b: 2, nested: { x: 1, y: 2, z: 3 } }, other: { flag: true } }
+const fixtureTable = {
+  "dsh-adapter": { sandbox: { enabled: true, mode: "read-only" } },
+  app: { a: 1, b: 2, nested: { x: 1, y: 2, z: 3 } },
+  other: { flag: true },
+}
 
 describe("TuiConfig dependency boundary", () => {
   test("reading TUI config does not start dependency installation", async () => {
@@ -136,17 +138,41 @@ describe("TuiConfig.Resolved.pluginConfig", () => {
     ),
   )
 
-  it.instance("reports an empty table outside a wopal space", () =>
+  it.instance("uses the same product defaults and global plugin config for General tasks", () =>
+    withEnv(
+      "WOPAL_SPACE",
+      "1",
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          writeGlobalSettings({
+            ellamaka: {},
+            wopal: { pluginConfig: { app: { a: 1 }, "dsh-adapter": { sandbox: { mode: "read-only" } } } },
+          }),
+        )
+
+        const directory = path.join(Global.Path.wopalHome, "general_tasks", "config-test-general")
+        yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+        const server = yield* Config.use.getPluginConfig().pipe(provideInstance(directory))
+        const tui = (yield* getTuiConfig(directory)).pluginConfig
+
+        const expected = {
+          "dsh-adapter": { sandbox: { enabled: true, mode: "read-only" } },
+          app: { a: 1 },
+        }
+        expect(server).toEqual(expected)
+        expect(tui).toEqual(expected)
+      }),
+    ),
+  )
+
+  it.instance("keeps unrelated non-space instances on the compatibility plugin config path", () =>
     withEnv(
       "WOPAL_SPACE",
       "1",
       Effect.gen(function* () {
         const test = yield* TestInstance
-        yield* Effect.promise(() => writeGlobalSettings({ ellamaka: {}, wopal: { pluginConfig: { app: { a: 1 } } } }))
-
         const server = yield* Config.use.getPluginConfig()
         const tui = (yield* getTuiConfig(test.directory)).pluginConfig
-
         expect(server).toEqual({})
         expect(tui).toEqual({})
       }),
@@ -203,6 +229,9 @@ describe("tryLoadWopalSpaceTuiConfig plugin config", () => {
       ),
     )
 
-    expect(result?.pluginConfig).toEqual({ app: { b: 2 } })
+    expect(result?.pluginConfig).toEqual({
+      "dsh-adapter": { sandbox: { enabled: true, mode: "workspace-write" } },
+      app: { b: 2 },
+    })
   })
 })

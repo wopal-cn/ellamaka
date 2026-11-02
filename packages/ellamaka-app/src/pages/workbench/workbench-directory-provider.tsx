@@ -4,6 +4,7 @@ import { selectActiveWorkbenchContext, type ActiveWorkbenchSnapshot } from "./ac
 import { useWorkbenchState } from "./view-store"
 import { scopeKey, type SpaceScope } from "./workbench-scope"
 import { sanitizeDirectory } from "./directory-utils"
+import { useSessionStore } from "./session-store"
 
 export type WorkbenchDirectoryTarget = {
   key: string
@@ -47,13 +48,16 @@ export function WorkbenchActiveDirectoryProvider(props: {
   fallback?: JSX.Element
 }) {
   const wb = useWorkbenchState()
-  const target = createMemo(() =>
-    selectWorkbenchDirectoryTarget({
+  const sessions = useSessionStore()
+  const target = createMemo(() => {
+    const active = selectActiveWorkbenchContext({
       spaces: wb.spaces,
       tabs: wb.tabs,
       activeTabPath: wb.activeTabPath,
-    }),
-  )
+    })
+    if (!active?.sessionID || sessions.getSession(active.sessionID)?.projectPath !== active.directory) return undefined
+    return selectWorkbenchDirectoryTarget({ spaces: wb.spaces, tabs: wb.tabs, activeTabPath: wb.activeTabPath })
+  })
 
   return (
     <Show when={target()} keyed fallback={props.fallback}>

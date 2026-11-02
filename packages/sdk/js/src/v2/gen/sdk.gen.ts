@@ -76,8 +76,6 @@ import type {
   FindTextResponses,
   FormatterStatusErrors,
   FormatterStatusResponses,
-  GlobalCliRepairErrors,
-  GlobalCliRepairResponses,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
   GlobalConfigUpdateErrors,
@@ -88,6 +86,12 @@ import type {
   GlobalEventResponses,
   GlobalHealthErrors,
   GlobalHealthResponses,
+  GlobalRuntimePrepareErrors,
+  GlobalRuntimePrepareResponses,
+  GlobalSessionGetErrors,
+  GlobalSessionGetResponses,
+  GlobalSessionStatusErrors,
+  GlobalSessionStatusResponses,
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeErrors,
@@ -286,26 +290,58 @@ import type {
   VcsStatusResponses,
   WopalSpaceModeErrors,
   WopalSpaceModeResponses,
-  WopalSpaceSpacesErrors,
-  WopalSpaceSpacesResponses,
-  WorkbenchCreateSessionErrors,
-  WorkbenchCreateSessionResponses,
-  WorkbenchDshUrlErrors,
-  WorkbenchDshUrlResponses,
-  WorkbenchFileContentErrors,
-  WorkbenchFileContentResponses,
-  WorkbenchFilesErrors,
-  WorkbenchFilesResponses,
-  WorkbenchLocationsErrors,
-  WorkbenchLocationsResponses,
-  WorkbenchSessionGroupsErrors,
-  WorkbenchSessionGroupsResponses,
-  WorkbenchSessionStatusesErrors,
-  WorkbenchSessionStatusesResponses,
-  WorkbenchSessionSummaryErrors,
-  WorkbenchSessionSummaryResponses,
-  WorkbenchSessionTreeErrors,
-  WorkbenchSessionTreeResponses,
+  WopalSpaceOntologyCapabilityListErrors,
+  WopalSpaceOntologyCapabilityListResponses,
+  WopalSpaceOntologyInspectErrors,
+  WopalSpaceOntologyInspectResponses,
+  WopalSpaceOntologyInstallErrors,
+  WopalSpaceOntologyInstallResponses,
+  WopalSpaceOntologyListErrors,
+  WopalSpaceOntologyListResponses,
+  WopalSpaceOntologyRefreshErrors,
+  WopalSpaceOntologyRefreshResponses,
+  WopalSpaceOntologySyncErrors,
+  WopalSpaceOntologySyncResponses,
+  WopalSpaceSetupCancelErrors,
+  WopalSpaceSetupCancelResponses,
+  WopalSpaceSetupCompleteErrors,
+  WopalSpaceSetupCompleteResponses,
+  WopalSpaceSetupExecuteErrors,
+  WopalSpaceSetupExecuteResponses,
+  WopalSpaceSetupHomeSelectErrors,
+  WopalSpaceSetupHomeSelectResponses,
+  WopalSpaceSetupInspectErrors,
+  WopalSpaceSetupInspectResponses,
+  WopalSpaceSetupPlanErrors,
+  WopalSpaceSetupPlanResponses,
+  WopalSpaceSetupProgressErrors,
+  WopalSpaceSetupProgressEventsErrors,
+  WopalSpaceSetupProgressEventsResponses,
+  WopalSpaceSetupProgressResponses,
+  WopalSpaceSpaceCapabilityAddErrors,
+  WopalSpaceSpaceCapabilityAddResponses,
+  WopalSpaceSpaceCapabilityRemoveErrors,
+  WopalSpaceSpaceCapabilityRemoveResponses,
+  WopalSpaceSpaceFilesListErrors,
+  WopalSpaceSpaceFilesListResponses,
+  WopalSpaceSpaceFilesReadErrors,
+  WopalSpaceSpaceFilesReadResponses,
+  WopalSpaceSpaceInitErrors,
+  WopalSpaceSpaceInitResponses,
+  WopalSpaceSpaceListErrors,
+  WopalSpaceSpaceListResponses,
+  WopalSpaceSpaceProjectsListErrors,
+  WopalSpaceSpaceProjectsListResponses,
+  WopalSpaceSpaceResolveErrors,
+  WopalSpaceSpaceResolveResponses,
+  WopalSpaceSpaceScanErrors,
+  WopalSpaceSpaceScanResponses,
+  WopalSpaceSpaceSearchErrors,
+  WopalSpaceSpaceSearchResponses,
+  WopalSpaceSpaceStatusErrors,
+  WopalSpaceSpaceStatusResponses,
+  WopalSpaceSpaceSyncErrors,
+  WopalSpaceSpaceSyncResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -585,16 +621,50 @@ export class App extends HeyApiClient {
   }
 }
 
-export class Cli extends HeyApiClient {
+export class Runtime extends HeyApiClient {
   /**
-   * Repair Wopal CLI
+   * Prepare host runtime resources
    *
-   * Update or reinstall the managed Wopal CLI after explicit user confirmation.
+   * Prepare enabled runtime profiles without activating them.
    */
-  public repair<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).post<GlobalCliRepairResponses, GlobalCliRepairErrors, ThrowOnError>({
-      url: "/global/cli/repair",
+  public prepare<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<
+      GlobalRuntimePrepareResponses,
+      GlobalRuntimePrepareErrors,
+      ThrowOnError
+    >({ url: "/global/runtime/prepare", ...options })
+  }
+}
+
+export class Session extends HeyApiClient {
+  /**
+   * Get active session statuses
+   *
+   * Read the in-memory status of active sessions without loading a directory instance.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalSessionStatusResponses, GlobalSessionStatusErrors, ThrowOnError>({
+      url: "/global/session/status",
       ...options,
+    })
+  }
+
+  /**
+   * Get session without loading a directory
+   *
+   * Read session metadata directly from storage without loading a directory instance.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).get<GlobalSessionGetResponses, GlobalSessionGetErrors, ThrowOnError>({
+      url: "/global/session/{sessionID}",
+      ...options,
+      ...params,
     })
   }
 }
@@ -698,9 +768,14 @@ export class Global extends HeyApiClient {
     })
   }
 
-  private _cli?: Cli
-  get cli(): Cli {
-    return (this._cli ??= new Cli({ client: this.client }))
+  private _runtime?: Runtime
+  get runtime(): Runtime {
+    return (this._runtime ??= new Runtime({ client: this.client }))
+  }
+
+  private _session?: Session
+  get session(): Session {
+    return (this._session ??= new Session({ client: this.client }))
   }
 
   private _config?: Config
@@ -709,19 +784,844 @@ export class Global extends HeyApiClient {
   }
 }
 
-export class WopalSpace extends HeyApiClient {
+export class Capability extends HeyApiClient {
   /**
-   * List WopalSpace spaces
+   * List ontology capabilities
    *
-   * Read the `spaces` registry from ~/.wopal/config/settings.jsonc (managed by wopal-cli). Returns all registered WopalSpace spaces with name, path, and type.
+   * Returns the ontology's full capability pool without Runtime permission filtering.
    */
-  public spaces<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<WopalSpaceSpacesResponses, WopalSpaceSpacesErrors, ThrowOnError>({
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      kind?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "kind" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      WopalSpaceOntologyCapabilityListResponses,
+      WopalSpaceOntologyCapabilityListErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/ontologies/{name}/capabilities",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Ontology extends HeyApiClient {
+  /**
+   * List registered ontologies
+   *
+   * Reads the local ontology registry and repository facts. No network access.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      WopalSpaceOntologyListResponses,
+      WopalSpaceOntologyListErrors,
+      ThrowOnError
+    >({ url: "/wopal-space/ontologies", ...options })
+  }
+
+  /**
+   * Install or reuse an ontology
+   *
+   * Clones or forks the requested ontology into this host and registers it.
+   */
+  public install<ThrowOnError extends boolean = false>(
+    parameters?: {
+      name?: string
+      source?: string
+      mode?: "fork" | "clone"
+      fork?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "source" },
+            { in: "body", key: "mode" },
+            { in: "body", key: "fork" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      WopalSpaceOntologyInstallResponses,
+      WopalSpaceOntologyInstallErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/ontologies",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Inspect an ontology
+   *
+   * Read-only local inspection of repository, remote topology and divergence. Does not fetch.
+   */
+  public inspect<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "name" }] }])
+    return (options?.client ?? this.client).get<
+      WopalSpaceOntologyInspectResponses,
+      WopalSpaceOntologyInspectErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/ontologies/{name}/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Refresh an ontology
+   *
+   * Fetches remote refs and queries contribution PR status, reporting Git and PR results separately.
+   */
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "name" }] }])
+    return (options?.client ?? this.client).post<
+      WopalSpaceOntologyRefreshResponses,
+      WopalSpaceOntologyRefreshErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/ontologies/{name}/refresh",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Sync an ontology
+   *
+   * confirm=false previews with zero writes; confirm=true re-validates and applies.
+   */
+  public sync<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      confirm?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "body", key: "confirm" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      WopalSpaceOntologySyncResponses,
+      WopalSpaceOntologySyncErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/ontologies/{name}/sync",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _capability?: Capability
+  get capability(): Capability {
+    return (this._capability ??= new Capability({ client: this.client }))
+  }
+}
+
+export class Projects extends HeyApiClient {
+  /**
+   * List Space projects
+   *
+   * Read-only project and worktree facts under the registered root.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "name" }] }])
+    return (options?.client ?? this.client).get<
+      WopalSpaceSpaceProjectsListResponses,
+      WopalSpaceSpaceProjectsListErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/projects",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Files extends HeyApiClient {
+  /**
+   * List Space files
+   *
+   * Lists a relative directory inside the registered root. Traversal and symlink escapes are rejected.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      WopalSpaceSpaceFilesListResponses,
+      WopalSpaceSpaceFilesListErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/files",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Read a Space file
+   *
+   * Reads a relative file inside the registered root. Traversal and symlink escapes are rejected.
+   */
+  public read<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      WopalSpaceSpaceFilesReadResponses,
+      WopalSpaceSpaceFilesReadErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/files/content",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Capability2 extends HeyApiClient {
+  /**
+   * Remove Space capabilities
+   *
+   * Removes capability selections with the same preview/apply decision.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      references?: Array<string>
+      local?: boolean
+      section?: string
+      confirm?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "body", key: "references" },
+            { in: "body", key: "local" },
+            { in: "body", key: "section" },
+            { in: "body", key: "confirm" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      WopalSpaceSpaceCapabilityRemoveResponses,
+      WopalSpaceSpaceCapabilityRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/capabilities",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Add Space capabilities
+   *
+   * Adds shared or local capability selections with the same preview/apply decision.
+   */
+  public add<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      references?: Array<string>
+      local?: boolean
+      section?: string
+      confirm?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "body", key: "references" },
+            { in: "body", key: "local" },
+            { in: "body", key: "section" },
+            { in: "body", key: "confirm" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      WopalSpaceSpaceCapabilityAddResponses,
+      WopalSpaceSpaceCapabilityAddErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/capabilities",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Space extends HeyApiClient {
+  /**
+   * Resolve a registered Space
+   *
+   * Resolves by stable name or by a server-side directory inside a registered root.
+   */
+  public resolve<ThrowOnError extends boolean = false>(
+    parameters?: {
+      name?: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      WopalSpaceSpaceResolveResponses,
+      WopalSpaceSpaceResolveErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/resolve",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List registered Spaces
+   *
+   * Reads the local Space registry with read-only disk facts. No Runtime bootstrap.
+   */
+  public list<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<WopalSpaceSpaceListResponses, WopalSpaceSpaceListErrors, ThrowOnError>({
       url: "/wopal-space/spaces",
       ...options,
     })
   }
 
+  /**
+   * Initialize or reconcile a Space
+   *
+   * Materializes and registers the Space, preserving user content, then reports instance preparation separately.
+   */
+  public init<ThrowOnError extends boolean = false>(
+    parameters?: {
+      name?: string
+      root?: string
+      ontology?: string
+      type?: string
+      displayName?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "name" },
+            { in: "body", key: "root" },
+            { in: "body", key: "ontology" },
+            { in: "body", key: "type" },
+            { in: "body", key: "displayName" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WopalSpaceSpaceInitResponses, WopalSpaceSpaceInitErrors, ThrowOnError>(
+      {
+        url: "/wopal-space/spaces",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Search a Space
+   *
+   * Search controlled repo/dir/file candidates inside the registered root.
+   */
+  public search<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      query?: string
+      type?: "dir" | "repo" | "file"
+      limit?: string
+      offset?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "query", key: "query" },
+            { in: "query", key: "type" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "offset" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      WopalSpaceSpaceSearchResponses,
+      WopalSpaceSpaceSearchErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/search",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Scan a Space
+   *
+   * Read-only scan of repositories and AGENTS rules. Does not start a Runtime.
+   */
+  public scan<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "name" }] }])
+    return (options?.client ?? this.client).post<WopalSpaceSpaceScanResponses, WopalSpaceSpaceScanErrors, ThrowOnError>(
+      {
+        url: "/wopal-space/spaces/{name}/scan",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Read Space status
+   *
+   * Git, assembly, selection, sparse and preparation facts for the registered Space.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "name" }] }])
+    return (options?.client ?? this.client).get<
+      WopalSpaceSpaceStatusResponses,
+      WopalSpaceSpaceStatusErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/spaces/{name}/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Sync a Space
+   *
+   * confirm=false previews with zero writes; confirm=true re-validates and applies.
+   */
+  public sync<ThrowOnError extends boolean = false>(
+    parameters: {
+      name: string
+      confirm?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "name" },
+            { in: "body", key: "confirm" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WopalSpaceSpaceSyncResponses, WopalSpaceSpaceSyncErrors, ThrowOnError>(
+      {
+        url: "/wopal-space/spaces/{name}/sync",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  private _projects?: Projects
+  get projects(): Projects {
+    return (this._projects ??= new Projects({ client: this.client }))
+  }
+
+  private _files?: Files
+  get files(): Files {
+    return (this._files ??= new Files({ client: this.client }))
+  }
+
+  private _capability?: Capability2
+  get capability(): Capability2 {
+    return (this._capability ??= new Capability2({ client: this.client }))
+  }
+}
+
+export class Home extends HeyApiClient {
+  /**
+   * Confirm the Host Home
+   *
+   * Selects WOPAL_HOME only while the Onboarding host is unlocked. Normal mode persists the user environment; development mode is process-only.
+   */
+  public select<ThrowOnError extends boolean = false>(
+    parameters?: {
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "path" }] }])
+    return (options?.client ?? this.client).post<
+      WopalSpaceSetupHomeSelectResponses,
+      WopalSpaceSetupHomeSelectErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/setup/home",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Progress extends HeyApiClient {
+  /**
+   * Stream setup progress
+   *
+   * Server-sent events with a monotonic sequence. Reconnecting with after=N replays only newer events; missing events are never reported as success.
+   */
+  public events<ThrowOnError extends boolean = false>(
+    parameters: {
+      runId: string
+      after?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "runId" },
+            { in: "query", key: "after" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).sse.get<
+      WopalSpaceSetupProgressEventsResponses,
+      WopalSpaceSetupProgressEventsErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/setup/runs/{runId}/events",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Setup extends HeyApiClient {
+  /**
+   * Inspect setup facts
+   *
+   * Reads Home, ontology, Space and credential facts with the persisted recovery position. Performs no writes; a corrupt state file is reported as-is.
+   */
+  public inspect<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<
+      WopalSpaceSetupInspectResponses,
+      WopalSpaceSetupInspectErrors,
+      ThrowOnError
+    >({ url: "/wopal-space/setup/inspect", ...options })
+  }
+
+  /**
+   * Plan setup actions
+   *
+   * Compares the requested goals with live facts and returns the actions still needed. Writes no business resource and copies no credential.
+   */
+  public plan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      goals?: Array<"foundation" | "github" | "ontology" | "space" | "provider">
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "goals" }] }])
+    return (options?.client ?? this.client).post<WopalSpaceSetupPlanResponses, WopalSpaceSetupPlanErrors, ThrowOnError>(
+      {
+        url: "/wopal-space/setup/plan",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  /**
+   * Execute one setup action
+   *
+   * Revalidates the plan facts, then runs the single pending action on this host. Secrets are accepted only here and never echoed back.
+   */
+  public execute<ThrowOnError extends boolean = false>(
+    parameters?: {
+      planId?: string
+      actionId?: "foundation" | "github" | "ontology" | "space" | "provider"
+      input?: {
+        [key: string]: unknown
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "planId" },
+            { in: "body", key: "actionId" },
+            { in: "body", key: "input" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      WopalSpaceSetupExecuteResponses,
+      WopalSpaceSetupExecuteErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/setup/runs",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Read setup progress
+   *
+   * Returns the current snapshot of one run, including its last emitted sequence.
+   */
+  public progress<ThrowOnError extends boolean = false>(
+    parameters: {
+      runId: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "runId" }] }])
+    return (options?.client ?? this.client).get<
+      WopalSpaceSetupProgressResponses,
+      WopalSpaceSetupProgressErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/setup/runs/{runId}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Cancel a setup run
+   *
+   * Requests cancellation and waits for the action's safe commit or cleanup boundary before returning the real run state.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      runId: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "runId" }] }])
+    return (options?.client ?? this.client).post<
+      WopalSpaceSetupCancelResponses,
+      WopalSpaceSetupCancelErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/setup/runs/{runId}/cancel",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Complete setup
+   *
+   * Re-reads application facts, verifies the goals the user requested, then persists completed. Runtime, DSH and product inventory are not completion gates.
+   */
+  public complete<ThrowOnError extends boolean = false>(
+    parameters?: {
+      planId?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "planId" }] }])
+    return (options?.client ?? this.client).post<
+      WopalSpaceSetupCompleteResponses,
+      WopalSpaceSetupCompleteErrors,
+      ThrowOnError
+    >({
+      url: "/wopal-space/setup/complete",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _home?: Home
+  get home(): Home {
+    return (this._home ??= new Home({ client: this.client }))
+  }
+
+  private _progress?: Progress
+  get progress2(): Progress {
+    return (this._progress ??= new Progress({ client: this.client }))
+  }
+}
+
+export class WopalSpace extends HeyApiClient {
   /**
    * Get WopalSpace mode
    *
@@ -751,241 +1651,20 @@ export class WopalSpace extends HeyApiClient {
       ...params,
     })
   }
-}
 
-export class Workbench extends HeyApiClient {
-  /**
-   * List legacy Workbench session groups
-   *
-   * Compatibility projection for existing consumers. New Workbench clients use session-tree.
-   */
-  public sessionGroups<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<
-      WorkbenchSessionGroupsResponses,
-      WorkbenchSessionGroupsErrors,
-      ThrowOnError
-    >({ url: "/workbench/session-groups", ...options })
+  private _ontology?: Ontology
+  get ontology(): Ontology {
+    return (this._ontology ??= new Ontology({ client: this.client }))
   }
 
-  /**
-   * List status snapshots for initialized sessions
-   *
-   * Returns non-idle busy or retry status snapshots from already initialized instances without loading a directory.
-   */
-  public sessionStatuses<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<
-      WorkbenchSessionStatusesResponses,
-      WorkbenchSessionStatusesErrors,
-      ThrowOnError
-    >({ url: "/workbench/session-statuses", ...options })
+  private _space?: Space
+  get space(): Space {
+    return (this._space ??= new Space({ client: this.client }))
   }
 
-  /**
-   * Read Workbench session notification metadata
-   *
-   * Reads canonical session metadata without loading a directory. Returns null when the session does not exist.
-   */
-  public sessionSummary<ThrowOnError extends boolean = false>(
-    parameters: {
-      sessionID: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
-    return (options?.client ?? this.client).get<
-      WorkbenchSessionSummaryResponses,
-      WorkbenchSessionSummaryErrors,
-      ThrowOnError
-    >({
-      url: "/workbench/session-summaries/{sessionID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * List files in a registered Space
-   *
-   * Lists a registered Space root or relative child directory without loading an instance. Traversal and symlink escapes are rejected.
-   */
-  public files<ThrowOnError extends boolean = false>(
-    parameters: {
-      spacePath: string
-      path?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "spacePath" },
-            { in: "query", key: "path" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<WorkbenchFilesResponses, WorkbenchFilesErrors, ThrowOnError>({
-      url: "/workbench/files",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Read a file in a registered Space
-   *
-   * Reads a relative file from a registered Space without loading an instance. Traversal and symlink escapes are rejected.
-   */
-  public fileContent<ThrowOnError extends boolean = false>(
-    parameters: {
-      spacePath: string
-      path: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "spacePath" },
-            { in: "query", key: "path" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<
-      WorkbenchFileContentResponses,
-      WorkbenchFileContentErrors,
-      ThrowOnError
-    >({
-      url: "/workbench/file-content",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Resolve the authenticated DSH iframe entry
-   *
-   * Returns the launch-token iframe URL for the mounted dsh web engine, or url: undefined when the engine is disabled or not yet mounted.
-   */
-  public dshUrl<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).get<WorkbenchDshUrlResponses, WorkbenchDshUrlErrors, ThrowOnError>({
-      url: "/workbench/dsh-url",
-      ...options,
-    })
-  }
-
-  /**
-   * Create an idempotent Workbench session
-   *
-   * Creates a General or registered-Space session. New clients use target.spacePath; legacy target.space remains supported for one release.
-   */
-  public createSession<ThrowOnError extends boolean = false>(
-    parameters?: {
-      requestID?: string
-      target?:
-        | {
-            type: "general"
-          }
-        | {
-            type: "space"
-            spacePath: string
-            directory?: string
-          }
-        | {
-            type: "space"
-            space: string
-            directory?: string
-          }
-      title?: string
-      agent?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "body", key: "requestID" },
-            { in: "body", key: "target" },
-            { in: "body", key: "title" },
-            { in: "body", key: "agent" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      WorkbenchCreateSessionResponses,
-      WorkbenchCreateSessionErrors,
-      ThrowOnError
-    >({
-      url: "/workbench/sessions",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * List sessions as Scope, location, session
-   *
-   * Returns General first, registered Spaces even when empty, and only active root sessions.
-   */
-  public sessionTree<ThrowOnError extends boolean = false>(
-    parameters?: {
-      limitPerScope?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "limitPerScope" }] }])
-    return (options?.client ?? this.client).get<
-      WorkbenchSessionTreeResponses,
-      WorkbenchSessionTreeErrors,
-      ThrowOnError
-    >({
-      url: "/workbench/session-tree",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * List controlled locations inside a Space
-   *
-   * Candidates are Space root, registered projects, recent session directories, and the directory-search capability; arbitrary filesystem browsing is not exposed.
-   */
-  public locations<ThrowOnError extends boolean = false>(
-    parameters: {
-      spacePath: string
-      query?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "spacePath" },
-            { in: "query", key: "query" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).get<WorkbenchLocationsResponses, WorkbenchLocationsErrors, ThrowOnError>({
-      url: "/workbench/locations",
-      ...options,
-      ...params,
-    })
+  private _setup?: Setup
+  get setup(): Setup {
+    return (this._setup ??= new Setup({ client: this.client }))
   }
 }
 
@@ -1301,7 +1980,7 @@ export class Console extends HeyApiClient {
   }
 }
 
-export class Session extends HeyApiClient {
+export class Session2 extends HeyApiClient {
   /**
    * List sessions
    *
@@ -1664,9 +2343,9 @@ export class Experimental extends HeyApiClient {
     return (this._console ??= new Console({ client: this.client }))
   }
 
-  private _session?: Session
-  get session(): Session {
-    return (this._session ??= new Session({ client: this.client }))
+  private _session?: Session2
+  get session(): Session2 {
+    return (this._session ??= new Session2({ client: this.client }))
   }
 
   private _resource?: Resource
@@ -3539,7 +4218,7 @@ export class Provider extends HeyApiClient {
   }
 }
 
-export class Session2 extends HeyApiClient {
+export class Session3 extends HeyApiClient {
   /**
    * List sessions
    *
@@ -4724,7 +5403,7 @@ export class Sync extends HeyApiClient {
   }
 }
 
-export class Session3 extends HeyApiClient {
+export class Session4 extends HeyApiClient {
   /**
    * List v2 sessions
    *
@@ -5027,9 +5706,9 @@ export class Provider2 extends HeyApiClient {
 }
 
 export class V2 extends HeyApiClient {
-  private _session?: Session3
-  get session(): Session3 {
-    return (this._session ??= new Session3({ client: this.client }))
+  private _session?: Session4
+  get session(): Session4 {
+    return (this._session ??= new Session4({ client: this.client }))
   }
 
   private _model?: Model
@@ -5518,11 +6197,6 @@ export class OpencodeClient extends HeyApiClient {
     return (this._wopalSpace ??= new WopalSpace({ client: this.client }))
   }
 
-  private _workbench?: Workbench
-  get workbench(): Workbench {
-    return (this._workbench ??= new Workbench({ client: this.client }))
-  }
-
   private _event?: Event
   get event(): Event {
     return (this._event ??= new Event({ client: this.client }))
@@ -5618,9 +6292,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._provider ??= new Provider({ client: this.client }))
   }
 
-  private _session?: Session2
-  get session(): Session2 {
-    return (this._session ??= new Session2({ client: this.client }))
+  private _session?: Session3
+  get session(): Session3 {
+    return (this._session ??= new Session3({ client: this.client }))
   }
 
   private _part?: Part

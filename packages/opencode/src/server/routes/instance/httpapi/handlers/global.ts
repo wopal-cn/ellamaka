@@ -3,12 +3,14 @@ import { GlobalBus, type GlobalEvent as GlobalBusEvent } from "@/bus/global"
 import { EffectBridge } from "@/effect/bridge"
 import { Bus } from "@/bus"
 import { Installation } from "@/installation"
-import { CliContract } from "@/wopal/cli-contract"
+import { Session } from "@/session/session"
+import { SessionStatus } from "@/session/status"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import { getDshStatus } from "@/workbench/dsh-status"
 import { getCorePreparationHealth } from "@/core/preparation"
+import { prepareOnboardingRuntime } from "@/core/onboarding-preparation"
 import { Effect, Queue, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
@@ -16,6 +18,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
+import * as SessionError from "./session-errors"
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -123,7 +126,8 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
   Effect.gen(function* () {
     const config = yield* Config.Service
     const installation = yield* Installation.Service
-    const cliContract = yield* CliContract.Service
+    const session = yield* Session.Service
+    const status = yield* SessionStatus.Service
     const bridge = yield* EffectBridge.make()
 
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
@@ -132,15 +136,10 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return {
         healthy: true as const,
         version: InstallationVersion,
-        cli: yield* cliContract.inspect(),
         ...(managedInstanceId ? { managedInstanceId } : {}),
         dsh: getDshStatus(),
         ...readiness,
       }
-    })
-
-    const cliRepair = Effect.fn("GlobalHttpApi.cliRepair")(function* () {
-      return yield* cliContract.repair()
     })
 
     const event = Effect.fn("GlobalHttpApi.event")(function* () {
@@ -215,7 +214,9 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
 
     return handlers
       .handle("health", health)
-      .handle("cliRepair", cliRepair)
+      .handle("runtimePrepare", () => Effect.promise(() => prepareOnboardingRuntime()))
+      .handle("sessionStatus", () => status.snapshot())
+      .handle("sessionGet", ({ params }) => session.get(params.sessionID).pipe(SessionError.mapStorageNotFound))
       .handleRaw("event", event)
       .handle("configGet", configGet)
       .handle("configUpdate", configUpdate)

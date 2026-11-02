@@ -6,18 +6,19 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { Installation } from "../../src/installation"
-import { ServerAuth } from "../../src/server/auth"
-import { CliContract } from "../../src/wopal/cli-contract"
-import { SpaceRegistry } from "../../src/wopal/space-registry"
-import { InstanceRef } from "../../src/effect/instance-ref"
+import { Session } from "../../src/session/session"
 import { SessionID } from "../../src/session/schema"
+import { ProjectID } from "../../src/project/schema"
+import { NotFoundError } from "../../src/storage/storage"
+import { ServerAuth } from "../../src/server/auth"
 import { SessionStatus } from "../../src/session/status"
 import { SessionProjection } from "../../src/workbench/session-projection"
-import { SpaceFiles } from "../../src/workbench/space-files"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { layer as workbenchDshUrlLayer } from "../../src/workbench/dsh-url"
 import { WorkbenchPaths } from "../../src/server/routes/instance/httpapi/groups/workbench"
-import { RootHttpApi } from "../../src/server/routes/instance/httpapi/api"
+import { AppBffRootApi, RootHttpApi } from "../../src/server/routes/instance/httpapi/api"
+import { SetupHostService } from "../../src/wopal/setup-host"
+import { WopalSpaceHostService } from "../../src/wopal/wopal-space-host"
 import { GlobalPaths } from "../../src/server/routes/instance/httpapi/groups/global"
 import { controlHandlers } from "../../src/server/routes/instance/httpapi/handlers/control"
 import { globalHandlers } from "../../src/server/routes/instance/httpapi/handlers/global"
@@ -26,16 +27,38 @@ import { workbenchHandlers } from "../../src/server/routes/instance/httpapi/hand
 import { authorizationLayer } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { schemaErrorLayer } from "../../src/server/routes/instance/httpapi/middleware/schema-error"
 import { testEffect } from "../lib/effect"
+import { TestInstance } from "../fixture/fixture"
 
 const routes = HttpRouter.serve(
-  HttpApiBuilder.layer(RootHttpApi).pipe(
-    Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers, workbenchHandlers]),
-    Layer.provide(workbenchDshUrlLayer),
-    Layer.provide([authorizationLayer, schemaErrorLayer]),
-  ),
+  Layer.mergeAll(
+    HttpApiBuilder.layer(RootHttpApi).pipe(
+      Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers]),
+      Layer.provide(WopalSpaceHostService.layer),
+      Layer.provide(SetupHostService.layer.pipe(Layer.provide(WopalSpaceHostService.layer))),
+    ),
+    // The Official App BFF is a private composition served on the same router.
+    HttpApiBuilder.layer(AppBffRootApi).pipe(Layer.provide(workbenchHandlers)),
+  ).pipe(Layer.provide(workbenchDshUrlLayer), Layer.provide([authorizationLayer, schemaErrorLayer])),
   { disableListenLog: true, disableLogger: true },
 ).pipe(
   Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provide(
+    Layer.mock(Session.Service)({
+      get: (id) =>
+        id === "ses_fixture"
+          ? Effect.succeed({
+              id,
+              slug: "fixture",
+              projectID: ProjectID.global,
+              directory: "/cold",
+              parentID: SessionID.make("ses_parent"),
+              title: "Cold session",
+              version: "test",
+              time: { created: 1, updated: 1 },
+            })
+          : Effect.fail(new NotFoundError({ message: "missing" })),
+    }),
+  ),
   Layer.provide(Layer.mock(Auth.Service)({})),
   Layer.provide(Layer.mock(Config.Service)({})),
   Layer.provide(
@@ -45,70 +68,86 @@ const routes = HttpRouter.serve(
       upgrade: () => Effect.void,
     }),
   ),
-  Layer.provide(CliContract.defaultLayer),
   Layer.provide(SessionProjection.defaultLayer),
-  Layer.provide(SpaceFiles.layer),
   Layer.provide(AppFileSystem.defaultLayer),
-  Layer.provide(SpaceRegistry.defaultLayer),
   Layer.provide(workbenchDshUrlLayer),
   // Raw HttpApi routes expose an opaque handler context at the web boundary.
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
   Layer.provide(Layer.succeedContext(Context.empty() as Context.Context<unknown>)),
 )
-const workbenchRoutes = routes.pipe(Layer.provideMerge(SessionStatus.defaultLayer))
+const workbenchRoutes = routes.pipe(
+  Layer.provideMerge(
+    Layer.mock(SessionStatus.Service)({
+      snapshot: () =>
+        Effect.succeed([{ directory: "/cold", sessionID: SessionID.make("ses_fixture"), status: { type: "busy" } }]),
+    }),
+  ),
+)
 const it = testEffect(
   workbenchRoutes.pipe(Layer.provide(ServerAuth.Config.layer({ password: Option.none(), username: "opencode" }))),
 )
-const itSecret = testEffect(
-  workbenchRoutes.pipe(
-    Layer.provide(ServerAuth.Config.layer({ password: Option.some("secret"), username: "opencode" })),
+
+const itReal = testEffect(
+  routes.pipe(
+    Layer.provideMerge(SessionStatus.defaultLayer),
+    Layer.provide(ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })),
   ),
 )
 
-const basic = (username: string, password: string) => ServerAuth.header({ username, password }) ?? ""
+describe("global session snapshot uses the shared runtime owner", () => {
+  itReal.instance("exposes statuses written by the actual SessionStatus service", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const status = yield* SessionStatus.Service
+      yield* status.set(SessionID.make("ses_live"), { type: "busy" })
+      const response = yield* HttpClient.get("/global/session/status")
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toContainEqual({
+        directory: instance.directory,
+        sessionID: "ses_live",
+        status: { type: "busy" },
+      })
+    }),
+  )
+})
 
 describe("global HttpApi", () => {
-  it.live("reads initialized workbench statuses without a directory or instance bootstrap", () =>
+  it.live("reads root session activity without a directory instance", () =>
     Effect.gen(function* () {
-      const status = yield* SessionStatus.Service
-      const instance = {
-        directory: "/already-initialized",
-        worktree: "/",
-        project: { id: "global" },
-      } as never
-      yield* status.set(SessionID.make("ses_busy"), { type: "busy" }).pipe(Effect.provideService(InstanceRef, instance))
-      yield* status.set(SessionID.make("ses_idle"), { type: "idle" }).pipe(Effect.provideService(InstanceRef, instance))
-
-      const response = yield* HttpClient.get(WorkbenchPaths.sessionStatuses)
-
+      const response = yield* HttpClient.get("/global/session/status")
       expect(response.status).toBe(200)
-      expect(yield* response.json).toEqual([
-        { directory: "/already-initialized", sessionID: "ses_busy", status: { type: "busy" } },
-      ])
+      expect(yield* response.json).toEqual([{ directory: "/cold", sessionID: "ses_fixture", status: { type: "busy" } }])
     }),
   )
 
-  itSecret.live("requires root authorization before returning workbench statuses", () =>
+  it.live("reads session metadata and missing sessions without a directory instance", () =>
     Effect.gen(function* () {
-      const missing = yield* HttpClient.get(WorkbenchPaths.sessionStatuses)
-      const authorized = yield* HttpClientRequest.get(WorkbenchPaths.sessionStatuses).pipe(
-        HttpClientRequest.setHeader("authorization", basic("opencode", "secret")),
-        HttpClient.execute,
-      )
-
-      expect(missing.status).toBe(401)
-      expect(authorized.status).toBe(200)
+      const found = yield* HttpClient.get("/global/session/ses_fixture")
+      expect(found.status).toBe(200)
+      expect(yield* found.json).toMatchObject({
+        id: "ses_fixture",
+        directory: "/cold",
+        parentID: "ses_parent",
+        title: "Cold session",
+      })
+      const missing = yield* HttpClient.get("/global/session/ses_missing")
+      expect(missing.status).toBe(404)
+      expect(yield* missing.json).toEqual({ name: "NotFoundError", data: { message: "missing" } })
     }),
   )
 
-  it.live("returns a missing session summary as null without a directory or instance bootstrap", () =>
-    Effect.gen(function* () {
-      const response = yield* HttpClient.get(WorkbenchPaths.sessionSummary.replace(":sessionID", "ses_missing"))
-
-      expect(response.status).toBe(200)
-      expect(yield* response.json).toBeNull()
-    }),
-  )
+  it.live("exposes only the fixed App BFF session operations", () => {
+    // DESIGN-workbench.md fixes the private BFF contract to createSession,
+    // sessionTree, locations and dshEntry. Runtime-owned status and metadata must
+    // not come back as a second private projection.
+    expect(Object.keys(WorkbenchPaths).sort()).toEqual(["dshUrl", "locations", "sessionTree", "sessions"])
+    // Paths are the contract surface; each one maps to exactly one operation.
+    // The three removed projections must stay gone from the served surface.
+    expect(Object.values(WorkbenchPaths).some((path) => path.includes("session-groups"))).toBe(false)
+    expect(Object.values(WorkbenchPaths).some((path) => path.includes("session-statuses"))).toBe(false)
+    expect(Object.values(WorkbenchPaths).some((path) => path.includes("session-summaries"))).toBe(false)
+    return Effect.void
+  })
 
   it.live("upgrades to latest when the request body is omitted", () =>
     Effect.gen(function* () {

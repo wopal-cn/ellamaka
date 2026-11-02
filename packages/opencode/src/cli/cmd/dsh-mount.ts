@@ -231,6 +231,13 @@ async function mountDshEngineImpl(
   const home = join(wopalHome, "dsh")
   const intent = await resolveDshProfileIntent(wopalHome)
 
+  // Runtime availability is owned by activation, not Core Preparation. The
+  // activation owner publishes the transition before it asks the preparation
+  // service for resources; a preparation-only caller (Onboarding) never
+  // touches these profile states.
+  setDshStatus("web", intent.web ? "preparing" : "disabled")
+  setDshStatus("tools", intent.tools ? "preparing" : "disabled")
+
   const preparation = await prepareDshProfiles({
     wopalHome,
     runtimeLogFile,
@@ -239,6 +246,8 @@ async function mountDshEngineImpl(
     onProgress: writeCorePreparationProgress,
     profiles: intent.profiles,
   })
+  if (intent.web && preparation.web.status !== "prepared") setDshStatus("web", "degraded")
+  if (intent.tools && preparation.tools.status !== "prepared") setDshStatus("tools", "degraded")
   if (preparation.web.status !== "prepared" && preparation.tools.status !== "prepared") return undefined
 
   const homeAccess = await acquireDshHomeRuntimeAccess({

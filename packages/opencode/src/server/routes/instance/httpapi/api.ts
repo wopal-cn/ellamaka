@@ -34,7 +34,6 @@ export const RootHttpApi = HttpApi.make("opencode-root")
   .addHttpApi(ControlApi)
   .addHttpApi(GlobalApi)
   .addHttpApi(WopalSpaceApi)
-  .addHttpApi(WorkbenchApi)
   .middleware(SchemaErrorMiddleware)
   .middleware(Authorization)
 
@@ -55,6 +54,17 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .addHttpApi(TuiApi)
   .addHttpApi(WorkspaceApi)
   .addHttpApi(WopalSpaceInstanceApi)
+  .middleware(SchemaErrorMiddleware)
+
+// Official App BFF: private composition served by the same Server with the same
+// auth. It is deliberately absent from OpenCodeHttpApi so it never reaches the
+// public /doc document or the published SDK.
+export const AppBffRootApi = HttpApi.make("ellamaka-app-bff-root")
+  .addHttpApi(WorkbenchApi)
+  .middleware(SchemaErrorMiddleware)
+  .middleware(Authorization)
+
+export const AppBffInstanceApi = HttpApi.make("ellamaka-app-bff-instance")
   .addHttpApi(WorkbenchInstanceApi)
   .middleware(SchemaErrorMiddleware)
 
@@ -65,5 +75,7 @@ export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(PtyConnectApi)
   .annotate(HttpApi.AdditionalSchemas, [EventSchema, ...SyncEventSchemas])
 
+export type AppBffRootApiType = typeof AppBffRootApi
+export type AppBffInstanceApiType = typeof AppBffInstanceApi
 export type RootHttpApiType = typeof RootHttpApi
 export type InstanceHttpApiType = typeof InstanceHttpApi

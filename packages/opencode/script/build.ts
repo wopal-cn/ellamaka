@@ -15,17 +15,6 @@ const p1Flag = process.argv.includes("--p1")
 
 process.chdir(dir)
 
-// Read the effective minimum wopal-cli version from .ci/versions.json.
-// Build scripts (scripts/build.sh / dev.sh) normally export
-// MIN_WOPAL_CLI_VERSION already; this is the fallback for direct invocations.
-function readMinWopalCliVersion(): string {
-  try {
-    const versions = JSON.parse(fs.readFileSync(path.resolve(dir, "../../.ci/versions.json"), "utf8"))
-    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
-  } catch {}
-  throw new Error("cannot read minWopalCli from .ci/versions.json")
-}
-
 const generated = await import("./generate.ts")
 
 // ── DSH runtime manifest freshness gate ─────────────────────────────
@@ -264,6 +253,7 @@ for (const item of buildTargets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Bun's target union narrows at runtime
       target: name.replace(BINARY_NAME, "bun") as any,
       outfile: `dist/${name}/bin/${BINARY_NAME}`,
       execArgv: [`--user-agent=${BINARY_NAME}/${Script.version}`, "--use-system-ca", "--"],
@@ -284,10 +274,6 @@ for (const item of buildTargets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
-      // Inline the effective minimum wopal-cli version (exported by
-      // scripts/build.sh via scripts/lib/version.sh; fall back to
-      // .ci/versions.json when unset) so the CLI enforces the protocol floor.
-      "process.env.MIN_WOPAL_CLI_VERSION": `'${process.env.MIN_WOPAL_CLI_VERSION || readMinWopalCliVersion()}'`,
     },
   })
 
@@ -296,12 +282,7 @@ for (const item of buildTargets) {
     const binaryPath = `dist/${name}/bin/${BINARY_NAME}`
     console.log(`Running smoke test: ${binaryPath} --version`)
     try {
-      // Scrub the injected floor from the smoke environment: a packaged
-      // artifact must carry the build-time inlined value, so the probe must
-      // not see the build script's exported env — otherwise a missing
-      // define would pass here and crash end users instead.
-      const smokeEnv = { ...process.env, MIN_WOPAL_CLI_VERSION: "" }
-      const versionOutput = await $`${binaryPath} --version`.env(smokeEnv).text()
+      const versionOutput = await $`${binaryPath} --version`.text()
       console.log(`Smoke test passed: ${versionOutput.trim()}`)
     } catch (e) {
       console.error(`Smoke test failed for ${name}:`, e)

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ONTOLOGY_MODES, ONTOLOGY_SOURCES } from "./ontology-options"
+import { defaultOntologyMode, ontologyModes, ONTOLOGY_MODES, ONTOLOGY_SOURCES } from "./ontology-options"
 
 describe("ontology onboarding options", () => {
   test("offers only remote official and custom sources", () => {
@@ -7,14 +7,16 @@ describe("ontology onboarding options", () => {
     expect(ONTOLOGY_SOURCES.some((source) => source.id === "local")).toBe(false)
   })
 
-  test("recommends clone and declares fork's GitHub requirement", () => {
+  test("gates fork on verified GitHub identity and chooses the matching default", () => {
     expect(ONTOLOGY_MODES).toHaveLength(2)
-    expect(ONTOLOGY_MODES.find((mode) => mode.id === "clone")).toMatchObject({
+    expect(defaultOntologyMode(false)).toBe("clone")
+    expect(ontologyModes(false).map((mode) => mode.id)).toEqual(["clone"])
+    expect(ontologyModes(false)[0]?.recommended).toBe(true)
+
+    expect(defaultOntologyMode(true)).toBe("fork")
+    expect(ontologyModes(true).map((mode) => mode.id)).toEqual(["clone", "fork"])
+    expect(ontologyModes(true).find((mode) => mode.id === "fork")).toMatchObject({
       recommended: true,
-      requiresGithubAuth: false,
-    })
-    expect(ONTOLOGY_MODES.find((mode) => mode.id === "fork")).toMatchObject({
-      recommended: false,
       requiresGithubAuth: true,
     })
   })
@@ -25,5 +27,12 @@ describe("ontology onboarding options", () => {
 
     expect(fork?.summary).toContain("进阶")
     expect(clone?.summary).not.toContain("进阶")
+  })
+
+  test("an existing ontology mode is a repository fact, not recomputed from current identity", () => {
+    expect(defaultOntologyMode(true)).toBe("fork")
+    // Existing-mode preservation is consumed by the Ontology step; this
+    // assertion keeps the fresh-install default separate from that fact.
+    expect(defaultOntologyMode(false)).toBe("clone")
   })
 })

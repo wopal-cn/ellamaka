@@ -12,7 +12,6 @@ import {
   type DshLogLevel,
 } from "@wopal/ellamaka-cordis/runtime"
 import { GlobalBus } from "@/bus/global"
-import { setDshStatus } from "@/workbench/dsh-status"
 import "./preparation-event"
 
 export type DshHostPreparationStatus = "disabled" | "prepared" | "degraded"
@@ -50,21 +49,6 @@ let disabledRuntime: DshRuntimeHealth | undefined
 
 function requestedProfiles(options: DshHostPreparationOptions) {
   return options.profiles ?? (["web", "ellamaka-tools"] as const)
-}
-
-function publishProfilePreparationStatus(
-  profiles: readonly ("web" | "ellamaka-tools")[],
-  status: "disabled" | "preparing" | "degraded",
-) {
-  if (profiles.length === 0) {
-    if (status === "disabled") {
-      setDshStatus("web", "disabled")
-      setDshStatus("tools", "disabled")
-    }
-    return
-  }
-  if (profiles.includes("web")) setDshStatus("web", status)
-  if (profiles.includes("ellamaka-tools")) setDshStatus("tools", status)
 }
 
 function hostKey(options: DshHostPreparationOptions): string {
@@ -124,7 +108,6 @@ export type DshHostPreparationResult = {
 export async function prepareDshHost(options: DshHostPreparationOptions): Promise<DshHostPreparationResult> {
   const profiles = requestedProfiles(options)
   if (profiles.length === 0) {
-    publishProfilePreparationStatus(profiles, "disabled")
     disabledRuntime = { closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion }
     const event: CorePreparationEvent = {
       runId: randomUUID(),
@@ -143,7 +126,6 @@ export async function prepareDshHost(options: DshHostPreparationOptions): Promis
   const runtime = getRuntime({ ...options, profiles })
   current = runtime
   runtime.preparing = true
-  publishProfilePreparationStatus(profiles, "preparing")
   try {
     const preparation = await runtime.service.prepare(
       { target: { kind: "host" }, reason: "product-startup" },
@@ -151,7 +133,6 @@ export async function prepareDshHost(options: DshHostPreparationOptions): Promis
     )
     runtime.lastResult = preparation
     if (preparation.state !== "READY") {
-      publishProfilePreparationStatus(profiles, "degraded")
       return { status: "degraded", preparation }
     }
     return { status: "prepared", preparation }

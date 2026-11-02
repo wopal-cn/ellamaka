@@ -146,6 +146,106 @@ export type CorePreparationResult = {
   }>
 }
 
+export type SessionStatus =
+  | {
+      type: "idle"
+    }
+  | {
+      type: "retry"
+      attempt: number
+      message: string
+      action?: {
+        reason: string
+        provider: string
+        title: string
+        message: string
+        label: string
+        link?: string
+      }
+      next: number
+    }
+  | {
+      type: "busy"
+    }
+
+export type SnapshotFileDiff = {
+  file?: string
+  patch?: string
+  additions: number
+  deletions: number
+  status?: "added" | "deleted" | "modified"
+}
+
+export type PermissionAction = "allow" | "deny" | "ask"
+
+export type PermissionRule = {
+  permission: string
+  pattern: string
+  action: PermissionAction
+}
+
+export type PermissionRuleset = Array<PermissionRule>
+
+export type Session = {
+  id: string
+  slug: string
+  projectID: string
+  workspaceID?: string
+  directory: string
+  path?: string
+  parentID?: string
+  summary?: {
+    additions: number
+    deletions: number
+    files: number
+    diffs?: Array<SnapshotFileDiff>
+  }
+  cost?: number
+  tokens?: {
+    input: number
+    output: number
+    reasoning: number
+    cache: {
+      read: number
+      write: number
+    }
+  }
+  share?: {
+    url: string
+  }
+  title: string
+  agent?: string
+  model?: {
+    id: string
+    providerID: string
+    variant?: string
+  }
+  version: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  time: {
+    created: number
+    updated: number
+    compacting?: number
+    archived?: number
+  }
+  permission?: PermissionRuleset
+  revert?: {
+    messageID: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+  }
+}
+
+export type NotFoundError = {
+  name: "NotFoundError"
+  data: {
+    message: string
+  }
+}
+
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -248,14 +348,6 @@ export type OutputFormatJsonSchema = {
 }
 
 export type OutputFormat = OutputFormatText | OutputFormatJsonSchema
-
-export type SnapshotFileDiff = {
-  file?: string
-  patch?: string
-  additions: number
-  deletions: number
-  status?: "added" | "deleted" | "modified"
-}
 
 export type UserMessage = {
   id: string
@@ -590,69 +682,6 @@ export type Part =
   | RetryPart
   | CompactionPart
 
-export type PermissionAction = "allow" | "deny" | "ask"
-
-export type PermissionRule = {
-  permission: string
-  pattern: string
-  action: PermissionAction
-}
-
-export type PermissionRuleset = Array<PermissionRule>
-
-export type Session = {
-  id: string
-  slug: string
-  projectID: string
-  workspaceID?: string
-  directory: string
-  path?: string
-  parentID?: string
-  summary?: {
-    additions: number
-    deletions: number
-    files: number
-    diffs?: Array<SnapshotFileDiff>
-  }
-  cost?: number
-  tokens?: {
-    input: number
-    output: number
-    reasoning: number
-    cache: {
-      read: number
-      write: number
-    }
-  }
-  share?: {
-    url: string
-  }
-  title: string
-  agent?: string
-  model?: {
-    id: string
-    providerID: string
-    variant?: string
-  }
-  version: string
-  metadata?: {
-    [key: string]: unknown
-  }
-  time: {
-    created: number
-    updated: number
-    compacting?: number
-    archived?: number
-  }
-  permission?: PermissionRuleset
-  revert?: {
-    messageID: string
-    partID?: string
-    snapshot?: string
-    diff?: string
-  }
-}
-
 export type EventTuiPromptAppend = {
   id: string
   type: "tui.prompt.append"
@@ -731,28 +760,6 @@ export type Project = {
   }
   sandboxes: Array<string>
 }
-
-export type SessionStatus =
-  | {
-      type: "idle"
-    }
-  | {
-      type: "retry"
-      attempt: number
-      message: string
-      action?: {
-        reason: string
-        provider: string
-        title: string
-        message: string
-        label: string
-        link?: string
-      }
-      next: number
-    }
-  | {
-      type: "busy"
-    }
 
 export type QuestionOption = {
   /**
@@ -1374,65 +1381,34 @@ export type Config = {
   }
 }
 
-export type SpaceControlUnavailable = {
-  _tag: "SpaceControlUnavailable"
+export type WopalSpaceRequestError = {
+  code: string
   message: string
-  reason?: string
+  suggestion?: string
 }
 
-export type CapabilityContractError = {
-  _tag: "CapabilityContractError"
+export type WopalSpaceNotFoundError = {
+  code: string
   message: string
-  capability?: string
-  detail?: string
+  suggestion?: string
 }
 
-export type FileNode = {
-  name: string
-  path: string
-  absolute: string
-  type: "file" | "directory"
-  ignored: boolean
-}
-
-export type WorkbenchSpaceNotFound = {
-  _tag: "WorkbenchSpaceNotFound"
+export type WopalSpaceForbiddenError = {
+  code: string
   message: string
-  spacePath: string
+  suggestion?: string
 }
 
-export type WorkbenchSpaceFileNotFound = {
-  _tag: "WorkbenchSpaceFileNotFound"
+export type WopalSpaceConflictError = {
+  code: string
   message: string
-  path: string
+  suggestion?: string
 }
 
-export type WorkbenchSpaceFileAccessDenied = {
-  _tag: "WorkbenchSpaceFileAccessDenied"
+export type WopalSpaceOperationError = {
+  code: string
   message: string
-  path: string
-}
-
-export type FileContent = {
-  type: "text" | "binary"
-  content: string
-  diff?: string
-  patch?: {
-    oldFileName: string
-    newFileName: string
-    oldHeader?: string
-    newHeader?: string
-    hunks: Array<{
-      oldStart: number
-      oldLines: number
-      newStart: number
-      newLines: number
-      lines: Array<string>
-    }>
-    index?: string
-  }
-  encoding?: "base64"
-  mimeType?: string
+  suggestion?: string
 }
 
 export type Model = {
@@ -1663,6 +1639,36 @@ export type Symbol = {
     uri: string
     range: Range
   }
+}
+
+export type FileNode = {
+  name: string
+  path: string
+  absolute: string
+  type: "file" | "directory"
+  ignored: boolean
+}
+
+export type FileContent = {
+  type: "text" | "binary"
+  content: string
+  diff?: string
+  patch?: {
+    oldFileName: string
+    newFileName: string
+    oldHeader?: string
+    newHeader?: string
+    hunks: Array<{
+      oldStart: number
+      oldLines: number
+      newStart: number
+      newLines: number
+      lines: Array<string>
+    }>
+    index?: string
+  }
+  encoding?: "base64"
+  mimeType?: string
 }
 
 export type File = {
@@ -1897,13 +1903,6 @@ export type ProviderAuthError1 = {
   }
 }
 
-export type NotFoundError = {
-  name: "NotFoundError"
-  data: {
-    message: string
-  }
-}
-
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -2082,24 +2081,6 @@ export type WorkspaceWarpError = {
   data: {
     message: string
   }
-}
-
-export type InvalidSpaceTarget = {
-  _tag: "InvalidSpaceTarget"
-  message: string
-  detail?: string
-}
-
-export type SessionDirectoryUnavailable = {
-  _tag: "SessionDirectoryUnavailable"
-  message: string
-  directory: string
-}
-
-export type WorkbenchRequestConflict = {
-  _tag: "WorkbenchRequestConflict"
-  message: string
-  requestID: string
 }
 
 export type EffectHttpApiErrorForbidden = {
@@ -4139,12 +4120,6 @@ export type GlobalHealthResponses = {
   200: {
     healthy: true
     version: string
-    cli: {
-      state: "ok" | "missing" | "incompatible" | "broken"
-      requiredVersion: string
-      actualVersion?: string
-      reason?: string
-    }
     managedInstanceId?: string
     dsh: {
       web: "disabled" | "preparing" | "ready" | "degraded"
@@ -4161,39 +4136,93 @@ export type GlobalHealthResponses = {
 
 export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
 
-export type GlobalCliRepairData = {
+export type GlobalRuntimePrepareData = {
   body?: never
   path?: never
   query?: never
-  url: "/global/cli/repair"
+  url: "/global/runtime/prepare"
 }
 
-export type GlobalCliRepairErrors = {
+export type GlobalRuntimePrepareErrors = {
   /**
    * Bad request
    */
   400: BadRequestError
 }
 
-export type GlobalCliRepairError = GlobalCliRepairErrors[keyof GlobalCliRepairErrors]
+export type GlobalRuntimePrepareError = GlobalRuntimePrepareErrors[keyof GlobalRuntimePrepareErrors]
 
-export type GlobalCliRepairResponses = {
+export type GlobalRuntimePrepareResponses = {
   /**
-   * Wopal CLI repair result
+   * Host runtime preparation result
    */
   200: {
-    started: boolean
-    cli: {
-      state: "ok" | "missing" | "incompatible" | "broken"
-      requiredVersion: string
-      actualVersion?: string
-      reason?: string
-    }
-    message?: string
+    status: "ready" | "degraded" | "disabled"
+    diagnostic?: string
   }
 }
 
-export type GlobalCliRepairResponse = GlobalCliRepairResponses[keyof GlobalCliRepairResponses]
+export type GlobalRuntimePrepareResponse = GlobalRuntimePrepareResponses[keyof GlobalRuntimePrepareResponses]
+
+export type GlobalSessionStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/session/status"
+}
+
+export type GlobalSessionStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalSessionStatusError = GlobalSessionStatusErrors[keyof GlobalSessionStatusErrors]
+
+export type GlobalSessionStatusResponses = {
+  /**
+   * Active session statuses
+   */
+  200: Array<{
+    directory: string
+    sessionID: string
+    status: SessionStatus
+  }>
+}
+
+export type GlobalSessionStatusResponse = GlobalSessionStatusResponses[keyof GlobalSessionStatusResponses]
+
+export type GlobalSessionGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/global/session/{sessionID}"
+}
+
+export type GlobalSessionGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type GlobalSessionGetError = GlobalSessionGetErrors[keyof GlobalSessionGetErrors]
+
+export type GlobalSessionGetResponses = {
+  /**
+   * Session information
+   */
+  200: Session
+}
+
+export type GlobalSessionGetResponse = GlobalSessionGetResponses[keyof GlobalSessionGetResponses]
 
 export type GlobalEventData = {
   body?: never
@@ -4330,264 +4359,1814 @@ export type GlobalUpgradeResponses = {
 
 export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
 
-export type WopalSpaceSpacesData = {
+export type WopalSpaceOntologyListData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/wopal-space/ontologies"
+}
+
+export type WopalSpaceOntologyListErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceOntologyListError = WopalSpaceOntologyListErrors[keyof WopalSpaceOntologyListErrors]
+
+export type WopalSpaceOntologyListResponses = {
+  /**
+   * Registered ontologies
+   */
+  200: {
+    items: Array<{
+      name: string
+      mode: "fork" | "clone"
+      path: string
+      remote: string
+      upstream?: string
+      available: boolean
+      repo: {
+        available: boolean
+        readable: boolean
+        branch?: string
+        head?: string
+        dirty: boolean
+        changes: Array<string>
+        branches: Array<string>
+        diagnostic?: string
+      }
+      spaces: Array<{
+        name: string
+        path: string
+        branch: string
+        type: string
+        ontology: string
+      }>
+    }>
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type WopalSpaceOntologyListResponse = WopalSpaceOntologyListResponses[keyof WopalSpaceOntologyListResponses]
+
+export type WopalSpaceOntologyInstallData = {
+  body?: {
+    name: string
+    source?: string
+    mode?: "fork" | "clone"
+    fork?: boolean
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/ontologies"
+}
+
+export type WopalSpaceOntologyInstallErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceOntologyInstallError = WopalSpaceOntologyInstallErrors[keyof WopalSpaceOntologyInstallErrors]
+
+export type WopalSpaceOntologyInstallResponses = {
+  /**
+   * Installed or reused ontology
+   */
+  200: {
+    name: string
+    mode: "fork" | "clone"
+    path: string
+    remote: string
+    upstream: string
+    status: "created" | "reused" | "upgraded"
+  }
+}
+
+export type WopalSpaceOntologyInstallResponse =
+  WopalSpaceOntologyInstallResponses[keyof WopalSpaceOntologyInstallResponses]
+
+export type WopalSpaceOntologyInspectData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/ontologies/{name}/status"
+}
+
+export type WopalSpaceOntologyInspectErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceOntologyInspectError = WopalSpaceOntologyInspectErrors[keyof WopalSpaceOntologyInspectErrors]
+
+export type WopalSpaceOntologyInspectResponses = {
+  /**
+   * Local ontology facts
+   */
+  200: {
+    name: string
+    mode: "fork" | "clone"
+    path: string
+    remote: string
+    available: boolean
+    spaces: Array<{
+      name: string
+      path: string
+      branch: string
+      type: string
+      ontology: string
+    }>
+    repo: {
+      available: boolean
+      readable: boolean
+      branch?: string
+      head?: string
+      dirty: boolean
+      changes: Array<string>
+      branches: Array<string>
+      diagnostic?: string
+    }
+    localRepo: string
+    remoteRepo: string
+    upstreamRepo?: string
+    repository: {
+      available: boolean
+      readable: boolean
+      branch?: string
+      head?: string
+      dirty: boolean
+      changes: Array<string>
+      branches: Array<string>
+      diagnostic?: string
+    }
+    downstream: Array<{
+      label: string
+      fromBranch: string
+      toBranch: string
+      upToDate: boolean
+      fileDiffs: Array<{
+        path: string
+        status: "added" | "modified" | "deleted"
+      }>
+      mergePrediction: "clean" | "conflict" | "no-common-base"
+      conflictFiles: Array<string>
+      kind: "merge" | "push"
+    }>
+    upstream: Array<{
+      label: string
+      fromBranch: string
+      toBranch: string
+      upToDate: boolean
+      fileDiffs: Array<{
+        path: string
+        status: "added" | "modified" | "deleted"
+      }>
+      mergePrediction: "clean" | "conflict" | "no-common-base"
+      conflictFiles: Array<string>
+      kind: "merge" | "push"
+    }>
+  }
+}
+
+export type WopalSpaceOntologyInspectResponse =
+  WopalSpaceOntologyInspectResponses[keyof WopalSpaceOntologyInspectResponses]
+
+export type WopalSpaceOntologyRefreshData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/ontologies/{name}/refresh"
+}
+
+export type WopalSpaceOntologyRefreshErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceOntologyRefreshError = WopalSpaceOntologyRefreshErrors[keyof WopalSpaceOntologyRefreshErrors]
+
+export type WopalSpaceOntologyRefreshResponses = {
+  /**
+   * Refresh result
+   */
+  200: {
+    git: {
+      status: "ok" | "failed" | "unavailable"
+      ok: boolean
+      diagnostics: Array<string>
+      error?: {
+        code: string
+        message: string
+        suggestion?: string
+      }
+      remotes: {
+        [key: string]: {
+          status: "ok" | "failed"
+          error?: string
+        }
+      }
+    }
+    pr: {
+      status: "ok" | "failed" | "unavailable"
+      ok: boolean
+      diagnostics: Array<string>
+      error?: {
+        code: string
+        message: string
+        suggestion?: string
+      }
+    }
+    contributions: Array<{
+      branch: string
+      origins: Array<"local" | "remote">
+      worktreePath?: string
+      localHead?: string
+      remoteHead?: string
+      pr?: {
+        number: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        url: string
+        state: "open" | "merged" | "closed"
+        headSha?: string
+        headMatchesBranch: boolean
+      }
+      prLookup: "found" | "missing" | "failed"
+      diagnostic?: string
+    }>
+    inspection: {
+      name: string
+      mode: "fork" | "clone"
+      path: string
+      remote: string
+      available: boolean
+      spaces: Array<{
+        name: string
+        path: string
+        branch: string
+        type: string
+        ontology: string
+      }>
+      repo: {
+        available: boolean
+        readable: boolean
+        branch?: string
+        head?: string
+        dirty: boolean
+        changes: Array<string>
+        branches: Array<string>
+        diagnostic?: string
+      }
+      localRepo: string
+      remoteRepo: string
+      upstreamRepo?: string
+      repository: {
+        available: boolean
+        readable: boolean
+        branch?: string
+        head?: string
+        dirty: boolean
+        changes: Array<string>
+        branches: Array<string>
+        diagnostic?: string
+      }
+      downstream: Array<{
+        label: string
+        fromBranch: string
+        toBranch: string
+        upToDate: boolean
+        fileDiffs: Array<{
+          path: string
+          status: "added" | "modified" | "deleted"
+        }>
+        mergePrediction: "clean" | "conflict" | "no-common-base"
+        conflictFiles: Array<string>
+        kind: "merge" | "push"
+      }>
+      upstream: Array<{
+        label: string
+        fromBranch: string
+        toBranch: string
+        upToDate: boolean
+        fileDiffs: Array<{
+          path: string
+          status: "added" | "modified" | "deleted"
+        }>
+        mergePrediction: "clean" | "conflict" | "no-common-base"
+        conflictFiles: Array<string>
+        kind: "merge" | "push"
+      }>
+    }
+  }
+}
+
+export type WopalSpaceOntologyRefreshResponse =
+  WopalSpaceOntologyRefreshResponses[keyof WopalSpaceOntologyRefreshResponses]
+
+export type WopalSpaceOntologySyncData = {
+  body?: {
+    confirm: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/ontologies/{name}/sync"
+}
+
+export type WopalSpaceOntologySyncErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceOntologySyncError = WopalSpaceOntologySyncErrors[keyof WopalSpaceOntologySyncErrors]
+
+export type WopalSpaceOntologySyncResponses = {
+  /**
+   * Ontology sync result
+   */
+  200: {
+    steps: Array<{
+      step: string
+      action: "skipped" | "merged" | "pushed" | "conflict" | "failed"
+      fileDiffs?: Array<{
+        path: string
+        status: "added" | "modified" | "deleted"
+      }>
+      conflictFiles?: Array<string>
+      summary?: string
+    }>
+    pushed: boolean
+    pushErrors?: Array<{
+      branch: string
+      message: string
+    }>
+  }
+}
+
+export type WopalSpaceOntologySyncResponse = WopalSpaceOntologySyncResponses[keyof WopalSpaceOntologySyncResponses]
+
+export type WopalSpaceOntologyCapabilityListData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    kind?: string
+  }
+  url: "/wopal-space/ontologies/{name}/capabilities"
+}
+
+export type WopalSpaceOntologyCapabilityListErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceOntologyCapabilityListError =
+  WopalSpaceOntologyCapabilityListErrors[keyof WopalSpaceOntologyCapabilityListErrors]
+
+export type WopalSpaceOntologyCapabilityListResponses = {
+  /**
+   * Ontology capability pool
+   */
+  200: {
+    items: Array<{
+      kind: "agents" | "skills" | "rules" | "commands" | "plugins"
+      name: string
+      description: string
+    }>
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type WopalSpaceOntologyCapabilityListResponse =
+  WopalSpaceOntologyCapabilityListResponses[keyof WopalSpaceOntologyCapabilityListResponses]
+
+export type WopalSpaceSpaceResolveData = {
+  body?: {
+    name?: string
+    directory?: string
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/spaces/resolve"
+}
+
+export type WopalSpaceSpaceResolveErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceResolveError = WopalSpaceSpaceResolveErrors[keyof WopalSpaceSpaceResolveErrors]
+
+export type WopalSpaceSpaceResolveResponses = {
+  /**
+   * Resolved Space
+   */
+  200: {
+    name: string
+    path: string
+    space: {
+      name: string
+      displayName: string
+      path: string
+      ontology?: string
+      branch: string
+      type: string
+      createdAt?: string
+    }
+    source: "name" | "directory"
+  }
+}
+
+export type WopalSpaceSpaceResolveResponse = WopalSpaceSpaceResolveResponses[keyof WopalSpaceSpaceResolveResponses]
+
+export type WopalSpaceSpaceListData = {
   body?: never
   path?: never
   query?: never
   url: "/wopal-space/spaces"
 }
 
-export type WopalSpaceSpacesErrors = {
+export type WopalSpaceSpaceListErrors = {
   /**
-   * Bad request
+   * WopalSpaceRequestError | InvalidRequestError
    */
-  400: BadRequestError
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
 }
 
-export type WopalSpaceSpacesError = WopalSpaceSpacesErrors[keyof WopalSpaceSpacesErrors]
+export type WopalSpaceSpaceListError = WopalSpaceSpaceListErrors[keyof WopalSpaceSpaceListErrors]
 
-export type WopalSpaceSpacesResponses = {
+export type WopalSpaceSpaceListResponses = {
   /**
-   * Registered WopalSpace spaces
+   * Registered Spaces
    */
   200: {
-    spaces: Array<{
+    items: Array<{
+      name: string
+      displayName: string
+      path: string
+      ontology?: string
+      branch: string
+      type: string
+      createdAt?: string
+      facts: {
+        present: boolean
+        snapshot: "ok" | "missing" | "invalid"
+        worktree: boolean
+        mismatch: Array<string>
+      }
+    }>
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
+}
+
+export type WopalSpaceSpaceListResponse = WopalSpaceSpaceListResponses[keyof WopalSpaceSpaceListResponses]
+
+export type WopalSpaceSpaceInitData = {
+  body?: {
+    name: string
+    root?: string
+    ontology?: string
+    type?: string
+    displayName?: string
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/spaces"
+}
+
+export type WopalSpaceSpaceInitErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceInitError = WopalSpaceSpaceInitErrors[keyof WopalSpaceSpaceInitErrors]
+
+export type WopalSpaceSpaceInitResponses = {
+  /**
+   * Initialized Space
+   */
+  200: {
+    space: {
+      name: string
+      displayName: string
+      path: string
+      ontology?: string
+      branch: string
+      type: string
+      createdAt?: string
+    }
+    materialized: {
+      condition: "create" | "noop" | "repair-worktree" | "repair-registry" | "repair-both" | "relink" | "invalid"
+      finalCondition: "create" | "noop" | "repair-worktree" | "repair-registry" | "repair-both" | "relink" | "invalid"
+      type: string
+      branch: string
+      steps: Array<{
+        step:
+          | "ontology"
+          | "assembly"
+          | "worktree"
+          | "materialize"
+          | "config"
+          | "range"
+          | "snapshot"
+          | "git"
+          | "register"
+        status: "created" | "repaired" | "reused" | "skipped" | "updated"
+        detail: string
+      }>
+      prunedSelections: Array<string>
+    }
+    preparation:
+      | {
+          status: "ready"
+          prepared: boolean
+          detail?: string
+        }
+      | {
+          status: "failed"
+          error: {
+            code: string
+            message: string
+            suggestion?: string
+          }
+        }
+      | {
+          status: "cancelled"
+        }
+      | {
+          status: "skipped"
+          reason: string
+        }
+  }
+}
+
+export type WopalSpaceSpaceInitResponse = WopalSpaceSpaceInitResponses[keyof WopalSpaceSpaceInitResponses]
+
+export type WopalSpaceSpaceProjectsListData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/spaces/{name}/projects"
+}
+
+export type WopalSpaceSpaceProjectsListErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceProjectsListError =
+  WopalSpaceSpaceProjectsListErrors[keyof WopalSpaceSpaceProjectsListErrors]
+
+export type WopalSpaceSpaceProjectsListResponses = {
+  /**
+   * Registered projects
+   */
+  200: {
+    items: Array<{
       id: string
       name: string
       path: string
-      type?: string
-    }>
-  }
-}
-
-export type WopalSpaceSpacesResponse = WopalSpaceSpacesResponses[keyof WopalSpaceSpacesResponses]
-
-export type WorkbenchSessionGroupsData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/workbench/session-groups"
-}
-
-export type WorkbenchSessionGroupsErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * CapabilityContractError
-   */
-  502: CapabilityContractError
-  /**
-   * SpaceControlUnavailable
-   */
-  503: SpaceControlUnavailable
-}
-
-export type WorkbenchSessionGroupsError = WorkbenchSessionGroupsErrors[keyof WorkbenchSessionGroupsErrors]
-
-export type WorkbenchSessionGroupsResponses = {
-  /**
-   * Legacy Workbench session groups
-   */
-  200: {
-    groups: Array<{
-      id: string
-      title: string
-      type: "space" | "general"
-      sessionCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      sessions: Array<{
-        id: string
-        title: string
-        directory: string
-        directoryHealth: "healthy" | "missing" | "unavailable"
-        agent?: string
-        timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      worktrees: Array<{
+        path: string
+        branch?: string
       }>
     }>
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
 }
 
-export type WorkbenchSessionGroupsResponse = WorkbenchSessionGroupsResponses[keyof WorkbenchSessionGroupsResponses]
+export type WopalSpaceSpaceProjectsListResponse =
+  WopalSpaceSpaceProjectsListResponses[keyof WopalSpaceSpaceProjectsListResponses]
 
-export type WorkbenchSessionStatusesData = {
-  body?: never
-  path?: never
-  query?: never
-  url: "/workbench/session-statuses"
-}
-
-export type WorkbenchSessionStatusesErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type WorkbenchSessionStatusesError = WorkbenchSessionStatusesErrors[keyof WorkbenchSessionStatusesErrors]
-
-export type WorkbenchSessionStatusesResponses = {
-  /**
-   * Running Workbench session statuses
-   */
-  200: Array<{
-    directory: string
-    sessionID: string
-    status: SessionStatus
-  }>
-}
-
-export type WorkbenchSessionStatusesResponse =
-  WorkbenchSessionStatusesResponses[keyof WorkbenchSessionStatusesResponses]
-
-export type WorkbenchSessionSummaryData = {
+export type WopalSpaceSpaceFilesListData = {
   body?: never
   path: {
-    sessionID: string
+    name: string
   }
-  query?: never
-  url: "/workbench/session-summaries/{sessionID}"
-}
-
-export type WorkbenchSessionSummaryErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type WorkbenchSessionSummaryError = WorkbenchSessionSummaryErrors[keyof WorkbenchSessionSummaryErrors]
-
-export type WorkbenchSessionSummaryResponses = {
-  /**
-   * Workbench session notification metadata
-   */
-  200: {
-    id: string
-    title: string
-    directory: string
-    parentID?: string
-    agent?: string
-  } | null
-}
-
-export type WorkbenchSessionSummaryResponse = WorkbenchSessionSummaryResponses[keyof WorkbenchSessionSummaryResponses]
-
-export type WorkbenchFilesData = {
-  body?: never
-  path?: never
-  query: {
-    spacePath: string
+  query?: {
     path?: string
   }
-  url: "/workbench/files"
+  url: "/wopal-space/spaces/{name}/files"
 }
 
-export type WorkbenchFilesErrors = {
+export type WopalSpaceSpaceFilesListErrors = {
   /**
-   * Bad request
+   * WopalSpaceRequestError | InvalidRequestError
    */
-  400: BadRequestError
+  400: WopalSpaceRequestError | InvalidRequestError
   /**
-   * WorkbenchSpaceFileAccessDenied
+   * WopalSpaceForbiddenError
    */
-  403: WorkbenchSpaceFileAccessDenied
+  403: WopalSpaceForbiddenError
   /**
-   * WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+   * WopalSpaceNotFoundError
    */
-  404: WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+  404: WopalSpaceNotFoundError
   /**
-   * CapabilityContractError
+   * WopalSpaceConflictError
    */
-  502: CapabilityContractError
+  409: WopalSpaceConflictError
   /**
-   * SpaceControlUnavailable
+   * WopalSpaceOperationError
    */
-  503: SpaceControlUnavailable
+  500: WopalSpaceOperationError
 }
 
-export type WorkbenchFilesError = WorkbenchFilesErrors[keyof WorkbenchFilesErrors]
+export type WopalSpaceSpaceFilesListError = WopalSpaceSpaceFilesListErrors[keyof WopalSpaceSpaceFilesListErrors]
 
-export type WorkbenchFilesResponses = {
+export type WopalSpaceSpaceFilesListResponses = {
   /**
-   * Files and directories in a registered Space
+   * Controlled Space directory listing
    */
-  200: Array<FileNode>
+  200: {
+    items: Array<{
+      name: string
+      path: string
+      absolute: string
+      type: "file" | "directory"
+      ignored: boolean
+    }>
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  }
 }
 
-export type WorkbenchFilesResponse = WorkbenchFilesResponses[keyof WorkbenchFilesResponses]
+export type WopalSpaceSpaceFilesListResponse =
+  WopalSpaceSpaceFilesListResponses[keyof WopalSpaceSpaceFilesListResponses]
 
-export type WorkbenchFileContentData = {
+export type WopalSpaceSpaceFilesReadData = {
   body?: never
-  path?: never
+  path: {
+    name: string
+  }
   query: {
-    spacePath: string
     path: string
   }
-  url: "/workbench/file-content"
+  url: "/wopal-space/spaces/{name}/files/content"
 }
 
-export type WorkbenchFileContentErrors = {
+export type WopalSpaceSpaceFilesReadErrors = {
   /**
-   * Bad request
+   * WopalSpaceRequestError | InvalidRequestError
    */
-  400: BadRequestError
+  400: WopalSpaceRequestError | InvalidRequestError
   /**
-   * WorkbenchSpaceFileAccessDenied
+   * WopalSpaceForbiddenError
    */
-  403: WorkbenchSpaceFileAccessDenied
+  403: WopalSpaceForbiddenError
   /**
-   * WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+   * WopalSpaceNotFoundError
    */
-  404: WorkbenchSpaceNotFound | WorkbenchSpaceFileNotFound
+  404: WopalSpaceNotFoundError
   /**
-   * CapabilityContractError
+   * WopalSpaceConflictError
    */
-  502: CapabilityContractError
+  409: WopalSpaceConflictError
   /**
-   * SpaceControlUnavailable
+   * WopalSpaceOperationError
    */
-  503: SpaceControlUnavailable
+  500: WopalSpaceOperationError
 }
 
-export type WorkbenchFileContentError = WorkbenchFileContentErrors[keyof WorkbenchFileContentErrors]
+export type WopalSpaceSpaceFilesReadError = WopalSpaceSpaceFilesReadErrors[keyof WopalSpaceSpaceFilesReadErrors]
 
-export type WorkbenchFileContentResponses = {
+export type WopalSpaceSpaceFilesReadResponses = {
   /**
-   * File content in a registered Space
+   * Controlled Space file content
    */
-  200: FileContent
+  200: {
+    type: "text" | "binary"
+    content: string
+    encoding?: "base64"
+    mimeType?: string
+  }
 }
 
-export type WorkbenchFileContentResponse = WorkbenchFileContentResponses[keyof WorkbenchFileContentResponses]
+export type WopalSpaceSpaceFilesReadResponse =
+  WopalSpaceSpaceFilesReadResponses[keyof WopalSpaceSpaceFilesReadResponses]
 
-export type WorkbenchDshUrlData = {
+export type WopalSpaceSpaceSearchData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: {
+    query?: string
+    type?: "dir" | "repo" | "file"
+    limit?: string
+    offset?: string
+  }
+  url: "/wopal-space/spaces/{name}/search"
+}
+
+export type WopalSpaceSpaceSearchErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceSearchError = WopalSpaceSpaceSearchErrors[keyof WopalSpaceSpaceSearchErrors]
+
+export type WopalSpaceSpaceSearchResponses = {
+  /**
+   * Space search results
+   */
+  200: {
+    items: Array<{
+      name: string
+      path: string
+      type: "dir" | "repo" | "file"
+    }>
+    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    offset: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    limit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    hasMore: boolean
+  }
+}
+
+export type WopalSpaceSpaceSearchResponse = WopalSpaceSpaceSearchResponses[keyof WopalSpaceSpaceSearchResponses]
+
+export type WopalSpaceSpaceScanData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/spaces/{name}/scan"
+}
+
+export type WopalSpaceSpaceScanErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceScanError = WopalSpaceSpaceScanErrors[keyof WopalSpaceSpaceScanErrors]
+
+export type WopalSpaceSpaceScanResponses = {
+  /**
+   * Space scan facts
+   */
+  200: {
+    space: {
+      name: string
+      path: string
+    }
+    repositories: Array<{
+      path: string
+      level: "repo"
+      type: "repo" | "worktree"
+      remote?: string
+      ref?: string
+      description?: {
+        text: string
+        source:
+          | "agents.frontmatter.description"
+          | "agents.first_paragraph"
+          | "readme.first_paragraph"
+          | "package.metadata.description"
+        confidence: "high" | "medium"
+        truncated?: boolean
+        sourcePath?: string
+      }
+      agentsFile?: string
+    }>
+    agentRules: Array<{
+      path: string
+      role: "module-rules"
+      repo: string
+      description?: {
+        text: string
+        source:
+          | "agents.frontmatter.description"
+          | "agents.first_paragraph"
+          | "readme.first_paragraph"
+          | "package.metadata.description"
+        confidence: "high" | "medium"
+        truncated?: boolean
+        sourcePath?: string
+      }
+      agentsFile?: string
+    }>
+  }
+}
+
+export type WopalSpaceSpaceScanResponse = WopalSpaceSpaceScanResponses[keyof WopalSpaceSpaceScanResponses]
+
+export type WopalSpaceSpaceStatusData = {
+  body?: never
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/spaces/{name}/status"
+}
+
+export type WopalSpaceSpaceStatusErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceStatusError = WopalSpaceSpaceStatusErrors[keyof WopalSpaceSpaceStatusErrors]
+
+export type WopalSpaceSpaceStatusResponses = {
+  /**
+   * Space status
+   */
+  200: {
+    space: {
+      name: string
+      path: string
+      branch: string
+      type: string
+    }
+    sync: {
+      contributions: Array<{
+        sha: string
+        subject: string
+      }>
+      behindCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      behindCommits: Array<{
+        sha: string
+        subject: string
+      }>
+      mergePrediction: "clean" | "conflict"
+      conflictFiles: Array<string>
+    }
+    assembly: {
+      schema: string
+      ontology: string
+      sparseConsistent: boolean
+      sparseViolations: Array<{
+        path: string
+        form: "stranded" | "drifted"
+      }>
+    }
+    selection: {
+      include: Array<string>
+      exclude: Array<string>
+      private: Array<string>
+    }
+    unregistered: Array<string>
+    rootState?: {
+      tracked: boolean
+      pendingChanges: boolean
+      lastCommit?: {
+        sha: string
+        subject: string
+      }
+    }
+    remote?: {
+      ahead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      behind: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    }
+    dirtyCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    preparation: {
+      status: "ready" | "needs-preparation" | "preparing" | "busy" | "degraded" | "unknown"
+      diagnostic?: string
+    }
+  }
+}
+
+export type WopalSpaceSpaceStatusResponse = WopalSpaceSpaceStatusResponses[keyof WopalSpaceSpaceStatusResponses]
+
+export type WopalSpaceSpaceSyncData = {
+  body?: {
+    confirm: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/spaces/{name}/sync"
+}
+
+export type WopalSpaceSpaceSyncErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceSyncError = WopalSpaceSpaceSyncErrors[keyof WopalSpaceSpaceSyncErrors]
+
+export type WopalSpaceSpaceSyncResponses = {
+  /**
+   * Space sync result
+   */
+  200: {
+    confirm: boolean
+    strayFiles: Array<string>
+    contributions: Array<{
+      sha: string
+      subject: string
+    }>
+    mainAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    mainHead: string
+    sparsePatterns: Array<string>
+    shadowedPaths: Array<string>
+    protectedPaths: Array<string>
+    conflicts: {
+      upstream: Array<string>
+      stray: Array<string>
+    }
+    prunedSelections: Array<string>
+    pluginConfigDrift: Array<{
+      section: string
+      added: Array<string>
+      removed: Array<string>
+    }>
+    uncommittedChanges: Array<string>
+  }
+}
+
+export type WopalSpaceSpaceSyncResponse = WopalSpaceSpaceSyncResponses[keyof WopalSpaceSpaceSyncResponses]
+
+export type WopalSpaceSpaceCapabilityRemoveData = {
+  body?: {
+    references: Array<string>
+    local?: boolean
+    section?: string
+    confirm: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/spaces/{name}/capabilities"
+}
+
+export type WopalSpaceSpaceCapabilityRemoveErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceCapabilityRemoveError =
+  WopalSpaceSpaceCapabilityRemoveErrors[keyof WopalSpaceSpaceCapabilityRemoveErrors]
+
+export type WopalSpaceSpaceCapabilityRemoveResponses = {
+  /**
+   * Space capability selection result
+   */
+  200: {
+    confirm: boolean
+    operation: "add" | "remove"
+    local: boolean
+    type: string
+    items: Array<{
+      reference: string
+      capabilityPath: string
+      selection: "include" | "exclude" | "private" | "none"
+      warnings: Array<string>
+    }>
+    stateCommit?: string
+    capabilities: {
+      agents: Array<string>
+      skills: Array<string>
+      rules: Array<string>
+      commands: Array<string>
+      plugins: Array<string>
+      paths: Array<string>
+    }
+  }
+}
+
+export type WopalSpaceSpaceCapabilityRemoveResponse =
+  WopalSpaceSpaceCapabilityRemoveResponses[keyof WopalSpaceSpaceCapabilityRemoveResponses]
+
+export type WopalSpaceSpaceCapabilityAddData = {
+  body?: {
+    references: Array<string>
+    local?: boolean
+    section?: string
+    confirm: boolean
+  }
+  path: {
+    name: string
+  }
+  query?: never
+  url: "/wopal-space/spaces/{name}/capabilities"
+}
+
+export type WopalSpaceSpaceCapabilityAddErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSpaceCapabilityAddError =
+  WopalSpaceSpaceCapabilityAddErrors[keyof WopalSpaceSpaceCapabilityAddErrors]
+
+export type WopalSpaceSpaceCapabilityAddResponses = {
+  /**
+   * Space capability selection result
+   */
+  200: {
+    confirm: boolean
+    operation: "add" | "remove"
+    local: boolean
+    type: string
+    items: Array<{
+      reference: string
+      capabilityPath: string
+      selection: "include" | "exclude" | "private" | "none"
+      warnings: Array<string>
+    }>
+    stateCommit?: string
+    capabilities: {
+      agents: Array<string>
+      skills: Array<string>
+      rules: Array<string>
+      commands: Array<string>
+      plugins: Array<string>
+      paths: Array<string>
+    }
+  }
+}
+
+export type WopalSpaceSpaceCapabilityAddResponse =
+  WopalSpaceSpaceCapabilityAddResponses[keyof WopalSpaceSpaceCapabilityAddResponses]
+
+export type WopalSpaceSetupInspectData = {
   body?: never
   path?: never
   query?: never
-  url: "/workbench/dsh-url"
+  url: "/wopal-space/setup/inspect"
 }
 
-export type WorkbenchDshUrlErrors = {
+export type WopalSpaceSetupInspectErrors = {
   /**
-   * Bad request
+   * WopalSpaceRequestError | InvalidRequestError
    */
-  400: BadRequestError
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
 }
 
-export type WorkbenchDshUrlError = WorkbenchDshUrlErrors[keyof WorkbenchDshUrlErrors]
+export type WopalSpaceSetupInspectError = WopalSpaceSetupInspectErrors[keyof WopalSpaceSetupInspectErrors]
 
-export type WorkbenchDshUrlResponses = {
+export type WopalSpaceSetupInspectResponses = {
   /**
-   * Authenticated DSH iframe entry URL
+   * Live setup facts
    */
   200: {
-    url: string
+    home: {
+      path: string
+      binding: {
+        mode: "normal" | "development"
+        source: "shell" | "default" | "selected"
+        path: string
+        locked: boolean
+        selectable: boolean
+        persisted: boolean
+      }
+      writable: boolean
+      foundation: {
+        ready: boolean
+        missing: Array<string>
+      }
+      settings: {
+        present: boolean
+        valid: boolean
+        ellamaka: {
+          present: boolean
+          valid: boolean
+        }
+      }
+      capabilities: {
+        ready: boolean
+        missing: Array<string>
+      }
+    }
+    ontology: {
+      status: "ready" | "missing" | "broken"
+      items: Array<{
+        name: string
+        path: string
+        mode: "fork" | "clone"
+      }>
+      diagnostic?: string
+    }
+    space: {
+      status: "ready" | "missing" | "unprepared"
+      items: Array<{
+        name: string
+        path: string
+        verified: boolean
+      }>
+      availableTypes: Array<{
+        type: string
+        description: string
+      }>
+      diagnostic?: string
+    }
+    credentials: {
+      github: {
+        configured: boolean
+        source?: string
+        account?: string
+      }
+      providers: Array<string>
+    }
+    state: {
+      status: "absent" | "ok" | "corrupt"
+      path: string
+      completed: boolean
+      currentStep: string
+      steps: {
+        [key: string]: string
+      }
+      diagnostic?: string
+    }
+    goals: Array<"foundation" | "github" | "ontology" | "space" | "provider">
+    fingerprint: string
   }
 }
 
-export type WorkbenchDshUrlResponse = WorkbenchDshUrlResponses[keyof WorkbenchDshUrlResponses]
+export type WopalSpaceSetupInspectResponse = WopalSpaceSetupInspectResponses[keyof WopalSpaceSetupInspectResponses]
+
+export type WopalSpaceSetupHomeSelectData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/setup/home"
+}
+
+export type WopalSpaceSetupHomeSelectErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupHomeSelectError = WopalSpaceSetupHomeSelectErrors[keyof WopalSpaceSetupHomeSelectErrors]
+
+export type WopalSpaceSetupHomeSelectResponses = {
+  /**
+   * Locked Host Home
+   */
+  200: {
+    mode: "normal" | "development"
+    source: "shell" | "default" | "selected"
+    path: string
+    locked: boolean
+    selectable: boolean
+    persisted: boolean
+  }
+}
+
+export type WopalSpaceSetupHomeSelectResponse =
+  WopalSpaceSetupHomeSelectResponses[keyof WopalSpaceSetupHomeSelectResponses]
+
+export type WopalSpaceSetupPlanData = {
+  body?: {
+    goals: Array<"foundation" | "github" | "ontology" | "space" | "provider">
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/setup/plan"
+}
+
+export type WopalSpaceSetupPlanErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupPlanError = WopalSpaceSetupPlanErrors[keyof WopalSpaceSetupPlanErrors]
+
+export type WopalSpaceSetupPlanResponses = {
+  /**
+   * Pending setup actions
+   */
+  200: {
+    planId: string
+    goals: Array<"foundation" | "github" | "ontology" | "space" | "provider">
+    actions: Array<{
+      actionId: "foundation" | "github" | "ontology" | "space" | "provider"
+      goal: "foundation" | "github" | "ontology" | "space" | "provider"
+      requiresInput: boolean
+      dependsOn: Array<"foundation" | "github" | "ontology" | "space" | "provider">
+    }>
+    fingerprint: string
+    createdAt: string
+  }
+}
+
+export type WopalSpaceSetupPlanResponse = WopalSpaceSetupPlanResponses[keyof WopalSpaceSetupPlanResponses]
+
+export type WopalSpaceSetupExecuteData = {
+  body?: {
+    planId: string
+    actionId: "foundation" | "github" | "ontology" | "space" | "provider"
+    input?: {
+      [key: string]: unknown
+    }
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/setup/runs"
+}
+
+export type WopalSpaceSetupExecuteErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupExecuteError = WopalSpaceSetupExecuteErrors[keyof WopalSpaceSetupExecuteErrors]
+
+export type WopalSpaceSetupExecuteResponses = {
+  /**
+   * Started setup run
+   */
+  200: {
+    runId: string
+    planId: string
+    actionId: "foundation" | "github" | "ontology" | "space" | "provider"
+    goal: "foundation" | "github" | "ontology" | "space" | "provider"
+    status: "queued" | "running" | "completed" | "failed" | "cancelled"
+    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    startedAt: string
+    updatedAt: string
+    result?: {
+      [key: string]: unknown
+    }
+    error?: {
+      code: string
+      message: string
+      suggestion?: string
+    }
+  }
+}
+
+export type WopalSpaceSetupExecuteResponse = WopalSpaceSetupExecuteResponses[keyof WopalSpaceSetupExecuteResponses]
+
+export type WopalSpaceSetupProgressData = {
+  body?: never
+  path: {
+    runId: string
+  }
+  query?: never
+  url: "/wopal-space/setup/runs/{runId}"
+}
+
+export type WopalSpaceSetupProgressErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupProgressError = WopalSpaceSetupProgressErrors[keyof WopalSpaceSetupProgressErrors]
+
+export type WopalSpaceSetupProgressResponses = {
+  /**
+   * Setup run snapshot
+   */
+  200: {
+    runId: string
+    planId: string
+    actionId: "foundation" | "github" | "ontology" | "space" | "provider"
+    goal: "foundation" | "github" | "ontology" | "space" | "provider"
+    status: "queued" | "running" | "completed" | "failed" | "cancelled"
+    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    startedAt: string
+    updatedAt: string
+    result?: {
+      [key: string]: unknown
+    }
+    error?: {
+      code: string
+      message: string
+      suggestion?: string
+    }
+  }
+}
+
+export type WopalSpaceSetupProgressResponse = WopalSpaceSetupProgressResponses[keyof WopalSpaceSetupProgressResponses]
+
+export type WopalSpaceSetupProgressEventsData = {
+  body?: never
+  path: {
+    runId: string
+  }
+  query?: {
+    after?: string
+  }
+  url: "/wopal-space/setup/runs/{runId}/events"
+}
+
+export type WopalSpaceSetupProgressEventsErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupProgressEventsError =
+  WopalSpaceSetupProgressEventsErrors[keyof WopalSpaceSetupProgressEventsErrors]
+
+export type WopalSpaceSetupProgressEventsResponses = {
+  /**
+   * Success
+   */
+  200: string
+}
+
+export type WopalSpaceSetupProgressEventsResponse =
+  WopalSpaceSetupProgressEventsResponses[keyof WopalSpaceSetupProgressEventsResponses]
+
+export type WopalSpaceSetupCancelData = {
+  body?: never
+  path: {
+    runId: string
+  }
+  query?: never
+  url: "/wopal-space/setup/runs/{runId}/cancel"
+}
+
+export type WopalSpaceSetupCancelErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupCancelError = WopalSpaceSetupCancelErrors[keyof WopalSpaceSetupCancelErrors]
+
+export type WopalSpaceSetupCancelResponses = {
+  /**
+   * Setup run after cancellation
+   */
+  200: {
+    runId: string
+    planId: string
+    actionId: "foundation" | "github" | "ontology" | "space" | "provider"
+    goal: "foundation" | "github" | "ontology" | "space" | "provider"
+    status: "queued" | "running" | "completed" | "failed" | "cancelled"
+    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    startedAt: string
+    updatedAt: string
+    result?: {
+      [key: string]: unknown
+    }
+    error?: {
+      code: string
+      message: string
+      suggestion?: string
+    }
+  }
+}
+
+export type WopalSpaceSetupCancelResponse = WopalSpaceSetupCancelResponses[keyof WopalSpaceSetupCancelResponses]
+
+export type WopalSpaceSetupCompleteData = {
+  body?: {
+    planId: string
+  }
+  path?: never
+  query?: never
+  url: "/wopal-space/setup/complete"
+}
+
+export type WopalSpaceSetupCompleteErrors = {
+  /**
+   * WopalSpaceRequestError | InvalidRequestError
+   */
+  400: WopalSpaceRequestError | InvalidRequestError
+  /**
+   * WopalSpaceForbiddenError
+   */
+  403: WopalSpaceForbiddenError
+  /**
+   * WopalSpaceNotFoundError
+   */
+  404: WopalSpaceNotFoundError
+  /**
+   * WopalSpaceConflictError
+   */
+  409: WopalSpaceConflictError
+  /**
+   * WopalSpaceOperationError
+   */
+  500: WopalSpaceOperationError
+}
+
+export type WopalSpaceSetupCompleteError = WopalSpaceSetupCompleteErrors[keyof WopalSpaceSetupCompleteErrors]
+
+export type WopalSpaceSetupCompleteResponses = {
+  /**
+   * Setup completed
+   */
+  200: {
+    completed: true
+    planId: string
+    completedAt: string
+  }
+}
+
+export type WopalSpaceSetupCompleteResponse = WopalSpaceSetupCompleteResponses[keyof WopalSpaceSetupCompleteResponses]
 
 export type EventSubscribeData = {
   body?: never
@@ -8870,185 +10449,6 @@ export type WopalSpaceModeResponses = {
 }
 
 export type WopalSpaceModeResponse = WopalSpaceModeResponses[keyof WopalSpaceModeResponses]
-
-export type WorkbenchCreateSessionData = {
-  body?: {
-    requestID: string
-    target:
-      | {
-          type: "general"
-        }
-      | {
-          type: "space"
-          spacePath: string
-          directory?: string
-        }
-      | {
-          type: "space"
-          space: string
-          directory?: string
-        }
-    title?: string
-    agent?: string
-  }
-  path?: never
-  query?: never
-  url: "/workbench/sessions"
-}
-
-export type WorkbenchCreateSessionErrors = {
-  /**
-   * InvalidSpaceTarget | InvalidRequestError
-   */
-  400: InvalidSpaceTarget | InvalidRequestError
-  /**
-   * WorkbenchSpaceNotFound
-   */
-  404: WorkbenchSpaceNotFound
-  /**
-   * SessionDirectoryUnavailable | WorkbenchRequestConflict
-   */
-  409: SessionDirectoryUnavailable | WorkbenchRequestConflict
-  /**
-   * CapabilityContractError
-   */
-  502: CapabilityContractError
-  /**
-   * SpaceControlUnavailable
-   */
-  503: SpaceControlUnavailable
-}
-
-export type WorkbenchCreateSessionError = WorkbenchCreateSessionErrors[keyof WorkbenchCreateSessionErrors]
-
-export type WorkbenchCreateSessionResponses = {
-  /**
-   * Created Workbench session
-   */
-  200: {
-    id: string
-    title: string
-    directory: string
-    directoryHealth: "healthy" | "missing" | "unavailable"
-    agent?: string
-    timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  }
-}
-
-export type WorkbenchCreateSessionResponse = WorkbenchCreateSessionResponses[keyof WorkbenchCreateSessionResponses]
-
-export type WorkbenchSessionTreeData = {
-  body?: never
-  path?: never
-  query?: {
-    limitPerScope?: string
-  }
-  url: "/workbench/session-tree"
-}
-
-export type WorkbenchSessionTreeErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * CapabilityContractError
-   */
-  502: CapabilityContractError
-  /**
-   * SpaceControlUnavailable
-   */
-  503: SpaceControlUnavailable
-}
-
-export type WorkbenchSessionTreeError = WorkbenchSessionTreeErrors[keyof WorkbenchSessionTreeErrors]
-
-export type WorkbenchSessionTreeResponses = {
-  /**
-   * Workbench session tree
-   */
-  200: {
-    scopes: Array<{
-      key: string
-      kind: "general" | "space"
-      name: string
-      path: string
-      sessionCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      truncated: boolean
-      locations: Array<{
-        key: string
-        kind: "general-directory" | "general-date" | "space-root" | "project"
-        name: string
-        path: string
-        sessionCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        sessions: Array<{
-          id: string
-          title: string
-          directory: string
-          relativePath?: string
-          marker: "" | "directory" | "worktree"
-          branch?: string
-          directoryHealth: "healthy" | "missing" | "unavailable"
-          timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-          timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        }>
-      }>
-    }>
-  }
-}
-
-export type WorkbenchSessionTreeResponse = WorkbenchSessionTreeResponses[keyof WorkbenchSessionTreeResponses]
-
-export type WorkbenchLocationsData = {
-  body?: never
-  path?: never
-  query: {
-    spacePath: string
-    query?: string
-  }
-  url: "/workbench/locations"
-}
-
-export type WorkbenchLocationsErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-  /**
-   * WorkbenchSpaceNotFound
-   */
-  404: WorkbenchSpaceNotFound
-  /**
-   * CapabilityContractError
-   */
-  502: CapabilityContractError
-  /**
-   * SpaceControlUnavailable
-   */
-  503: SpaceControlUnavailable
-}
-
-export type WorkbenchLocationsError = WorkbenchLocationsErrors[keyof WorkbenchLocationsErrors]
-
-export type WorkbenchLocationsResponses = {
-  /**
-   * Controlled Workbench creation locations
-   */
-  200: {
-    scopePath: string
-    items: Array<{
-      key: string
-      kind: "space-root" | "project" | "recent" | "search"
-      name: string
-      path: string
-      relativeDirectory: string
-      lastUsedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    }>
-  }
-}
-
-export type WorkbenchLocationsResponse = WorkbenchLocationsResponses[keyof WorkbenchLocationsResponses]
 
 export type PtyConnectData = {
   body?: never

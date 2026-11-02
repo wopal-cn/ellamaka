@@ -34,7 +34,7 @@ const sessions = [
   time: { created: 1700000000000, updated: 1700000000000 },
 }))
 
-async function setup(page: Page, initialBound: boolean, withCachedMessages = false) {
+async function setup(page: Page, initialBound: boolean, withCachedMessages = false, includeColdNotification = false) {
   const requests: Array<{ path: string; directory: string }> = []
   capturedRequests.set(page, requests)
   const errors: string[] = []
@@ -54,64 +54,31 @@ async function setup(page: Page, initialBound: boolean, withCachedMessages = fal
       default: { test: "model" },
     },
     sessions,
+    spaces: tabs,
     pageMessages: (sessionID) => ({ items: withCachedMessages ? [cachedMessage(sessionID)] : [] }),
-    events: () => [{ directory: "global", payload: { id: "connected", type: "server.connected", properties: {} } }],
+    events: () => [
+      { directory: "global", payload: { id: "connected", type: "server.connected", properties: {} } },
+      ...(includeColdNotification
+        ? [
+            {
+              directory: sessions[1].directory,
+              payload: { id: "cold-idle", type: "session.idle", properties: { sessionID: sessions[1].id } },
+            },
+          ]
+        : []),
+    ],
   })
   await page.route("**/*", async (route) => {
     const request = route.request()
     const url = new URL(request.url())
     if (url.pathname.startsWith("/dsh/")) return route.fulfill({ status: 200, contentType: "text/html", body: "" })
     if (url.port !== (process.env.PLAYWRIGHT_SERVER_PORT ?? "4096")) return route.fallback()
+    // Record which directories the Runtime actually loaded. WopalSpace and
+    // App BFF routes are answered by mockOpenCodeServer before this handler
+    // runs, so they never count as a Runtime instance.
     const directory =
       url.searchParams.get("directory") ?? decodeURIComponent(request.headers()["x-opencode-directory"] ?? "")
     requests.push({ path: url.pathname, directory })
-    const json = (body: unknown) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) })
-    if (url.pathname === "/global/health") return json({ healthy: true, dsh: false, cli: { state: "ok" } })
-    if (url.pathname === "/wopal-space/spaces") return json({ spaces: tabs })
-    if (url.pathname === "/wopal-space/mode") return json({ isWopalSpace: true })
-    if (url.pathname === "/path")
-      return json({ state: directory, config: directory, worktree: directory, directory, home: "/fixtures/home" })
-    if (url.pathname === "/workbench/session-statuses")
-      return json([{ directory: sessions[1].directory, sessionID: sessions[1].id, status: { type: "busy" } }])
-    if (url.pathname === "/workbench/session-tree")
-      return json({
-        scopes: tabs.map((tab) => {
-          const items = sessions.filter((s) => s.directory.startsWith(tab.path + "/"))
-          return {
-            key: tab.path,
-            kind: "space",
-            name: tab.name,
-            path: tab.path,
-            sessionCount: items.length,
-            truncated: false,
-            locations: [
-              {
-                key: tab.path,
-                kind: "space-root",
-                name: tab.name,
-                path: tab.path,
-                sessionCount: items.length,
-                sessions: items.map((s) => ({
-                  ...s,
-                  directoryHealth: "healthy",
-                  marker: "directory",
-                  timeCreated: s.time.created,
-                  timeUpdated: s.time.updated,
-                })),
-              },
-            ],
-          }
-        }),
-      })
-    if (url.pathname === "/workbench/locations")
-      return json({ scopePath: url.searchParams.get("spacePath"), items: [] })
-    if (url.pathname === "/workbench/files")
-      return json([
-        { name: "README.md", path: "README.md", absolute: roots[0] + "/README.md", type: "file", ignored: false },
-      ])
-    if (url.pathname === "/workbench/file-content")
-      return json({ type: "text", content: "File browsing without a session runtime" })
     return route.fallback()
   })
   await page.addInitScript(
@@ -265,5 +232,13 @@ test("a server reconnect recovers only the visible Space and leaves its backgrou
 
   const recoveryDirectories = loadedDirectories(requests.slice(recoveryStart))
   expect(recoveryDirectories).toEqual([sessions[0].directory])
+  expect(errors).toEqual([])
+})
+
+test("a cold session notification reads metadata without starting its directory", async ({ page }) => {
+  const { requests, errors } = await setup(page, false, false, true)
+  await page.goto("/workbench")
+  await expect.poll(() => requests.some((request) => request.path === "/global/session/ses_history")).toBe(true)
+  expect(loadedDirectories(requests)).toEqual([])
   expect(errors).toEqual([])
 })

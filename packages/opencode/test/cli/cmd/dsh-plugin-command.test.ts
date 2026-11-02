@@ -36,6 +36,7 @@ describe("local plugin operands", () => {
 
   test("registry names and explicit protocols pass through verbatim", () => {
     expect(normalizeAddArgs(["add", "dsh-better-sidebar"])).toEqual(["add", "dsh-better-sidebar"])
+    expect(normalizeAddArgs(["add", "github:owner/repo"])).toEqual(["add", "github:owner/repo"])
     expect(normalizeAddArgs(["add", "file:/plugins/x"])).toEqual(["add", "file:/plugins/x"])
     expect(normalizeAddArgs(["add", "link:/plugins/x"])).toEqual(["add", "link:/plugins/x"])
   })

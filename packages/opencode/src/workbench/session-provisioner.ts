@@ -2,15 +2,15 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { mkdir } from "fs/promises"
 import path from "path"
 import { Global } from "@wopal/ellamaka-core/global"
-import { SpaceRegistry } from "@/wopal/space-registry"
-import { CliContract } from "@/wopal/cli-contract"
+import { WopalSpaceHostService } from "@/wopal/wopal-space-host"
 import { SessionDirectoryHealth } from "./session-directory-health"
-import { SpaceControlUnavailable, CapabilityContractError } from "@/wopal/cli-schema"
+import { spaceQueryFailed, WorkbenchSpaceQueryFailed } from "./session-projection"
 import { SessionShare } from "@/share/session"
 import { InstanceStore } from "@/project/instance-store"
 import { Database } from "@/storage/db"
 import { SessionTable } from "@/session/session.sql"
-import { normalizeWorkbenchPath, resolveSpaceDirectory } from "./session-tree"
+import { resolveSpaceDirectory } from "./session-tree"
+import { spaceByPath } from "./space-paths"
 
 export interface ProvisionGeneralInput {
   requestID?: string
@@ -40,10 +40,10 @@ export class SessionDirectoryUnavailable extends Schema.TaggedErrorClass<Session
   { message: Schema.String, directory: Schema.String },
 ) {}
 
-export class InvalidSpaceTarget extends Schema.TaggedErrorClass<InvalidSpaceTarget>()(
-  "InvalidSpaceTarget",
-  { message: Schema.String, detail: Schema.optional(Schema.String) },
-) {}
+export class InvalidSpaceTarget extends Schema.TaggedErrorClass<InvalidSpaceTarget>()("InvalidSpaceTarget", {
+  message: Schema.String,
+  detail: Schema.optional(Schema.String),
+}) {}
 
 export class WorkbenchRequestConflict extends Schema.TaggedErrorClass<WorkbenchRequestConflict>()(
   "WorkbenchRequestConflict",
@@ -54,8 +54,7 @@ export type ProvisionError =
   | SessionDirectoryUnavailable
   | InvalidSpaceTarget
   | WorkbenchRequestConflict
-  | SpaceControlUnavailable
-  | CapabilityContractError
+  | WorkbenchSpaceQueryFailed
 
 export interface SessionProvisioner {
   readonly provisionGeneral: (input: ProvisionGeneralInput) => Effect.Effect<ProvisionResult, ProvisionError>
@@ -64,34 +63,35 @@ export interface SessionProvisioner {
 
 export class Service extends Context.Service<Service, SessionProvisioner>()("@opencode/SessionProvisioner") {}
 
-const WOPAL_HOME = Global.Path.wopalHome
-
 const make = Effect.gen(function* () {
   const health = yield* SessionDirectoryHealth.Service
-  const registry = yield* SpaceRegistry.Service
+  const host = yield* WopalSpaceHostService.Service
   const sharedSessions = yield* SessionShare.Service
   const instances = yield* InstanceStore.Service
   const inFlight = new Map<string, { payload: string; run: Effect.Effect<ProvisionResult, ProvisionError> }>()
 
-  const registeredSpaces = () =>
-    Effect.gen(function* () {
-      const snapshot = yield* registry.getSpaces()
-      if (snapshot.spaces.length > 0) return snapshot.spaces
-      return (yield* registry.refreshSpaces(CliContract.executablePath())).spaces
-    })
+  // Registered Spaces are read-only WopalSpace facts; no CLI cache warm-up.
+  const registeredSpaces = () => Effect.try({ try: () => host.space.list().items, catch: spaceQueryFailed })
 
   const ensureHealthyDirectory = (directory: string) =>
     health.check(directory).pipe(
       Effect.flatMap((status) => {
         if (status === "healthy") return Effect.succeed(directory)
-        return Effect.fail(new SessionDirectoryUnavailable({
-          message: `Directory is ${status}: ${directory}`,
-          directory,
-        }))
+        return Effect.fail(
+          new SessionDirectoryUnavailable({
+            message: `Directory is ${status}: ${directory}`,
+            directory,
+          }),
+        )
       }),
     )
 
-  const resultFromSession = (session: { id: string; directory: string; title: string; time?: { created?: number; updated?: number } }) => ({
+  const resultFromSession = (session: {
+    id: string
+    directory: string
+    title: string
+    time?: { created?: number; updated?: number }
+  }) => ({
     id: session.id,
     directory: session.directory,
     title: session.title,
@@ -115,14 +115,19 @@ const make = Effect.gen(function* () {
           .all()
           .find((session) => {
             const workbench = session.metadata?.workbench
-            return !!workbench && typeof workbench === "object" && "requestID" in workbench && workbench.requestID === requestID
+            return (
+              !!workbench &&
+              typeof workbench === "object" &&
+              "requestID" in workbench &&
+              workbench.requestID === requestID
+            )
           }),
       ),
     ).pipe(
       Effect.flatMap((existing) => {
         if (!existing) return Effect.succeed(undefined)
-        const workbench = existing.metadata?.workbench as { payload?: unknown }
-        if (workbench.payload === payload) {
+        const workbench = existing.metadata?.workbench
+        if (workbench && typeof workbench === "object" && "payload" in workbench && workbench.payload === payload) {
           return Effect.succeed({
             id: existing.id,
             directory: existing.directory,
@@ -131,14 +136,20 @@ const make = Effect.gen(function* () {
             timeUpdated: existing.timeUpdated ?? Date.now(),
           })
         }
-        return Effect.fail(new WorkbenchRequestConflict({
-          message: "requestID was already used with a different Workbench creation payload",
-          requestID,
-        }))
+        return Effect.fail(
+          new WorkbenchRequestConflict({
+            message: "requestID was already used with a different Workbench creation payload",
+            requestID,
+          }),
+        )
       }),
     )
 
-  const request = (input: { requestID: string; payload: string; create: () => Effect.Effect<ProvisionResult, ProvisionError> }) =>
+  const request = (input: {
+    requestID: string
+    payload: string
+    create: () => Effect.Effect<ProvisionResult, ProvisionError>
+  }) =>
     Effect.gen(function* () {
       const active = inFlight.get(input.requestID)
       if (active) {
@@ -152,7 +163,7 @@ const make = Effect.gen(function* () {
       }
       const cached = yield* Effect.cached(
         existingRequest(input.requestID, input.payload).pipe(
-          Effect.flatMap((existing) => existing ? Effect.succeed(existing) : input.create()),
+          Effect.flatMap((existing) => (existing ? Effect.succeed(existing) : input.create())),
           Effect.ensuring(Effect.sync(() => inFlight.delete(input.requestID))),
         ),
       )
@@ -170,17 +181,20 @@ const make = Effect.gen(function* () {
     const y = now.getFullYear()
     const m = String(now.getMonth() + 1).padStart(2, "0")
     const d = String(now.getDate()).padStart(2, "0")
-    const directory = path.join(WOPAL_HOME, "general_tasks", `${y}-${m}-${d}`)
+    const directory = path.join(Global.Path.wopalHome, "general_tasks", `${y}-${m}-${d}`)
     const payload = JSON.stringify({ target: { type: "general" }, title: input.title, agent: input.agent })
     return request({
       requestID,
       payload,
       create: () =>
         Effect.tryPromise(() => mkdir(directory, { recursive: true })).pipe(
-          Effect.mapError(() => new SessionDirectoryUnavailable({
-            message: "Failed to create general task directory",
-            directory,
-          })),
+          Effect.mapError(
+            () =>
+              new SessionDirectoryUnavailable({
+                message: "Failed to create general task directory",
+                directory,
+              }),
+          ),
           Effect.flatMap(() =>
             instances.provide(
               { directory },
@@ -205,9 +219,10 @@ const make = Effect.gen(function* () {
         })
       }
       const spaces = yield* registeredSpaces()
-      const matching = input.spacePath
-        ? yield* matchSpaceByPath(spaces, input.spacePath)
-        : spaces.filter((space) => space.id === input.spaceName)
+      const requestedPath = input.spacePath
+      const matching = requestedPath
+        ? yield* Effect.tryPromise(() => spaceByPath(spaces, requestedPath)).pipe(Effect.mapError(spaceQueryFailed))
+        : spaces.filter((space) => space.name === input.spaceName)
       if (matching.length === 0) {
         return yield* new InvalidSpaceTarget({
           message: `Registered Space not found: ${input.spacePath ?? input.spaceName}`,
@@ -216,22 +231,34 @@ const make = Effect.gen(function* () {
       }
       if (matching.length > 1) {
         return yield* new InvalidSpaceTarget({
-          message: "Legacy Space name is ambiguous; use spacePath",
-          detail: input.spaceName,
+          message: requestedPath
+            ? "Multiple registered Spaces resolve to the requested path"
+            : "Legacy Space name is ambiguous; use spacePath",
+          detail: input.spacePath ?? input.spaceName,
         })
       }
-      const selected = matching[0]!
+      const selected = matching[0]
       const spacePath = yield* Effect.tryPromise(() => resolveSpaceDirectory(selected.path)).pipe(
-        Effect.mapError((error) => new SessionDirectoryUnavailable({
-          message: error instanceof Error ? error.message : "Space directory is unavailable",
-          directory: selected.path,
-        })),
+        Effect.mapError(
+          (error) =>
+            new SessionDirectoryUnavailable({
+              message: error instanceof Error ? error.message : "Space directory is unavailable",
+              directory: selected.path,
+            }),
+        ),
       )
-      const directory = yield* Effect.tryPromise(() => resolveSpaceDirectory(selected.path, input.relativeDirectory)).pipe(
-        Effect.mapError((error) => new SessionDirectoryUnavailable({
-          message: error instanceof Error ? error.message : "Space directory is unavailable",
-          directory: selected.path,
-        })),
+      const directory = yield* Effect.tryPromise(() =>
+        input.relativeDirectory
+          ? resolveSpaceDirectory(spacePath, input.relativeDirectory)
+          : Promise.resolve(spacePath),
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new SessionDirectoryUnavailable({
+              message: error instanceof Error ? error.message : "Space directory is unavailable",
+              directory: selected.path,
+            }),
+        ),
       )
       yield* ensureHealthyDirectory(directory)
       const requestID = input.requestID ?? crypto.randomUUID()
@@ -244,39 +271,26 @@ const make = Effect.gen(function* () {
         requestID,
         payload,
         create: () =>
-          instances.provide(
-            { directory },
-            sharedSessions.create({
-              title: input.title,
-              agent: input.agent,
-              metadata: { workbench: { requestID, payload } },
-            }),
-          ).pipe(Effect.map(resultFromSession)),
+          instances
+            .provide(
+              { directory },
+              sharedSessions.create({
+                title: input.title,
+                agent: input.agent,
+                metadata: { workbench: { requestID, payload } },
+              }),
+            )
+            .pipe(Effect.map(resultFromSession)),
       })
     })
 
   return Service.of({ provisionGeneral, provisionSpace })
 })
 
-function matchSpaceByPath(spaces: Array<{ name: string; path: string }>, value: string) {
-  const requested = normalizeWorkbenchPath(value)
-  return Effect.all(
-    spaces.map((space) =>
-      Effect.tryPromise(() => resolveSpaceDirectory(space.path)).pipe(
-        Effect.map((resolved) => ({ space, resolved })),
-        Effect.catch(() => Effect.succeed({ space, resolved: normalizeWorkbenchPath(space.path) })),
-      ),
-    ),
-    { concurrency: 16 },
-  ).pipe(
-    Effect.map((items) => items.filter((item) => item.resolved === requested || normalizeWorkbenchPath(item.space.path) === requested).map((item) => item.space)),
-  )
-}
-
 export const layer = Layer.effect(Service, make)
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(SpaceRegistry.defaultLayer),
+  Layer.provide(WopalSpaceHostService.layer),
   Layer.provide(SessionDirectoryHealth.defaultLayer),
 )
 

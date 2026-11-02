@@ -16,7 +16,6 @@ import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { FormatError } from "./cli/error"
 import { ServeCommand } from "./cli/cmd/serve"
-import { Filesystem } from "@/util/filesystem"
 import { DebugCommand } from "./cli/cmd/debug"
 import { StatsCommand } from "./cli/cmd/stats"
 import { McpCommand } from "./cli/cmd/mcp"
@@ -33,9 +32,8 @@ import { BINARY_NAME } from "@wopal/ellamaka-brand/branding"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
 import { Global } from "@wopal/ellamaka-core/global"
+import { isWopalHomeLockedAtStartup } from "@wopal/ellamaka-core/wopal-home-env"
 import { detectWopalSpace } from "@wopal/ellamaka-brand/detect"
-import { JsonMigration } from "@/storage/json-migration"
-import { Database } from "@/storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { DshPluginCommand } from "./cli/cmd/dsh-plugin"
@@ -46,9 +44,10 @@ import { dshDumpResolve, dshRootFlagsBeforePlugin, DSH_HELP_EXAMPLES } from "./c
 import { resolveLogLevel, resolveTrace } from "./cli/log-level"
 import { Effect } from "effect"
 import { Heap } from "./cli/heap"
-import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "@wopal/ellamaka-core/util/opencode-process"
 import { isRecord } from "@/util/record"
+import { readSetupState } from "@wopal/wopalspace"
+import { ensureRuntimeStorage, useBootstrapDatabase } from "@/storage/runtime-bootstrap"
 
 ensureProcessMetadata("main")
 
@@ -127,9 +126,18 @@ const cli = yargs(args)
     // paths. They do not initialize the runtime Home.
     if (command === "generate" || command === "dsh") return
 
-    await Global.ensure()
+    const serverCommand = SERVER_COMMANDS.has(command)
+    // A server may trust Setup state only when this Host lifecycle starts with
+    // an explicitly persisted Home. Development mode and the normal-mode
+    // default path are both editable first-page candidates.
+    const startupHomeLocked = serverCommand && isWopalHomeLockedAtStartup()
+    const setupState = startupHomeLocked ? readSetupState(Global.Path.wopalHome) : undefined
+    const initializeRuntime =
+      !serverCommand || (startupHomeLocked && setupState?.status === "ok" && setupState.state.completed)
+    if (serverCommand && !initializeRuntime) useBootstrapDatabase()
+    if (initializeRuntime) await Global.ensure()
 
-    const role: "serve" | "tui" = SERVER_COMMANDS.has(command) ? "serve" : "tui"
+    const role: "serve" | "tui" = serverCommand ? "serve" : "tui"
     const detection = detectWopalSpace(process.cwd())
     // The logger routes by role and space itself (`WOPAL_SPACE_ROOT` below) —
     // the entry must not rewrite the dev log directory (D-03/D-04).
@@ -184,19 +192,22 @@ const cli = yargs(args)
     process.env.OPENCODE = "1"
     process.env.OPENCODE_PID = String(process.pid)
 
-    const marker = Database.getPath()
-    if (marker !== ":memory:" && !(await Filesystem.exists(marker))) {
+    if (initializeRuntime) {
       const tty = process.stderr.isTTY
-      process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
       const width = 36
       const orange = "\x1b[38;5;214m"
       const muted = "\x1b[0;2m"
       const reset = "\x1b[0m"
       let last = -1
-      if (tty) process.stderr.write("\x1b[?25l")
+      let announced = false
       try {
-        await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
+        const result = await ensureRuntimeStorage({
           progress: (event) => {
+            if (!announced) {
+              announced = true
+              process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
+              if (tty) process.stderr.write("\x1b[?25l")
+            }
             const percent = Math.floor((event.current / event.total) * 100)
             if (percent === last && event.current !== event.total) return
             last = percent
@@ -212,13 +223,15 @@ const cli = yargs(args)
             }
           },
         })
-      } finally {
-        if (tty) process.stderr.write("\x1b[?25h")
-        else {
-          process.stderr.write(`sqlite-migration:done${EOL}`)
+        if (result.databaseCreated && !announced) {
+          process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
+          announced = true
         }
+      } finally {
+        if (announced && tty) process.stderr.write("\x1b[?25h")
+        else if (announced) process.stderr.write(`sqlite-migration:done${EOL}`)
       }
-      process.stderr.write("Database migration complete." + EOL)
+      if (announced) process.stderr.write("Database migration complete." + EOL)
     }
   })
   .usage("")

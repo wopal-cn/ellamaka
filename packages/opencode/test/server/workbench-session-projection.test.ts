@@ -4,7 +4,9 @@ import { testEffect } from "../lib/effect"
 import { TestInstance } from "../fixture/fixture"
 import { SessionProjection, resolveSpaceRootPath } from "../../src/workbench/session-projection"
 import { SessionDirectoryHealth } from "../../src/workbench/session-directory-health"
-import { SpaceRegistry } from "../../src/wopal/space-registry"
+import { WopalSpaceHostService } from "../../src/wopal/wopal-space-host"
+import type { RegisteredSpace, SpaceListResult, SpaceSearchResult } from "@wopal/wopalspace"
+import { SpaceServiceError } from "@wopal/wopalspace"
 import { Database } from "../../src/storage/db"
 import { SessionTable } from "../../src/session/session.sql"
 import { ProjectTable } from "../../src/project/project.sql"
@@ -13,73 +15,115 @@ import { SessionID } from "../../src/session/schema"
 import { Identifier } from "../../src/id/id"
 import { Slug } from "@wopal/ellamaka-core/util/slug"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
-import { SpaceControlUnavailable, type SpaceEntry, type ProjectEntry } from "../../src/wopal/cli-schema"
+import type { SpaceProject } from "@wopal/wopalspace"
 import { eq } from "drizzle-orm"
 import path from "path"
 import { realpath } from "fs/promises"
 
-const it = testEffect(
-  SessionProjection.layer.pipe(
-    Layer.provide(SessionDirectoryHealth.defaultLayer),
-    Layer.provide(
-      Layer.succeed(SpaceRegistry.Service, {
-        getSpaces: () => Effect.succeed({ spaces: [], refreshedAt: 0 }),
-        refreshSpaces: () => Effect.succeed({ spaces: [], refreshedAt: 0 }),
-        refreshProjects: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-        searchSpace: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-      }),
-    ),
-  ),
-)
+type TestSpace = { id: string; name: string; path: string }
 
-function projectionLayer(spaces: SpaceEntry[], projects: ProjectEntry[] = []) {
-  return SessionProjection.layer.pipe(
-    Layer.provide(SessionDirectoryHealth.defaultLayer),
-    Layer.provide(
-      Layer.succeed(SpaceRegistry.Service, {
-        getSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-        refreshSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-        refreshProjects: () => Effect.succeed({ items: projects, total: projects.length, refreshedAt: 0 }),
-        searchSpace: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-      }),
-    ),
-  )
-}
-
-/** Cold-start layer: getSpaces returns empty, refreshSpaces returns the given spaces. */
-function coldStartLayer(spaces: SpaceEntry[]) {
-  return SessionProjection.layer.pipe(
-    Layer.provide(SessionDirectoryHealth.defaultLayer),
-    Layer.provide(
-      Layer.succeed(SpaceRegistry.Service, {
-        getSpaces: () => Effect.succeed({ spaces: [] as SpaceEntry[], refreshedAt: 0 }),
-        refreshSpaces: () => Effect.succeed({ spaces, refreshedAt: Date.now() }),
-        refreshProjects: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-        searchSpace: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-      }),
-    ),
-  )
-}
-
-function unavailableSpacesLayer() {
-  let refreshes = 0
-  const dependencies = Layer.mergeAll(
-    SessionDirectoryHealth.defaultLayer,
-    Layer.succeed(SpaceRegistry.Service, {
-      getSpaces: () => Effect.succeed({ spaces: [] as SpaceEntry[], refreshedAt: 0 }),
-      refreshSpaces: () => {
-        refreshes += 1
-        return Effect.fail(new SpaceControlUnavailable({ message: "Wopal CLI unavailable" }))
-      },
-      refreshProjects: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-      searchSpace: () => Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
-    }),
-  )
+/** Test shorthand -> the registered Space facts the private service exposes. */
+function registered(space: TestSpace): RegisteredSpace {
   return {
-    get refreshes() {
-      return refreshes
+    name: space.id,
+    displayName: space.name,
+    path: space.path,
+    branch: "space/" + space.id,
+    type: "local",
+  }
+}
+
+type HostOverrides = {
+  projects?: (name: string) => SpaceProject[]
+  search?: (name: string, query?: string) => SpaceSearchResult
+  list?: () => SpaceListResult
+}
+
+/** Only the Space queries SessionProjection consumes; the rest stay unimplemented. */
+function hostLayer(spaces: TestSpace[], overrides: HostOverrides = {}) {
+  return Layer.succeed(WopalSpaceHostService.Service, {
+    host: { wopalHome: "/unused" },
+    rebindHome: () => {},
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- WopalSpace host double omits methods not used by projection
+    ontology: {} as never,
+    findSpace: () => undefined,
+    space: {
+      resolve: () => {
+        throw new Error("unused")
+      },
+      list:
+        overrides.list ??
+        (() => {
+          const items = spaces.map((space) => ({
+            ...registered(space),
+            facts: { present: true, snapshot: "ok" as const, worktree: true, mismatch: [] },
+          }))
+          return { items, total: items.length }
+        }),
+      availableTypes: () => [],
+      init: () => Promise.reject(new Error("unused")),
+      projectsList: (name: string) => {
+        const items = overrides.projects?.(name) ?? []
+        return { items, total: items.length }
+      },
+      filesList: () => {
+        throw new Error("unused")
+      },
+      filesRead: () => {
+        throw new Error("unused")
+      },
+      search: (name: string, input?: { query?: string }) =>
+        overrides.search?.(name, input?.query) ?? { items: [], total: 0, offset: 0, limit: 50, hasMore: false },
+      scan: () => {
+        throw new Error("unused")
+      },
+      status: () => Promise.reject(new Error("unused")),
+      sync: () => Promise.reject(new Error("unused")),
+      capabilityAdd: () => Promise.reject(new Error("unused")),
+      capabilityRemove: () => Promise.reject(new Error("unused")),
     },
-    layer: Layer.fresh(SessionProjection.layer.pipe(Layer.provide(dependencies))),
+  })
+}
+
+const it = testEffect(
+  SessionProjection.layer.pipe(Layer.provide(SessionDirectoryHealth.defaultLayer), Layer.provide(hostLayer([]))),
+)
+const isolatedIt = testEffect(Layer.empty)
+
+function projectionLayer(spaces: TestSpace[], projects: Array<SpaceProject & { id: string }> = []) {
+  return SessionProjection.layer.pipe(
+    Layer.provide(SessionDirectoryHealth.defaultLayer),
+    Layer.provide(
+      hostLayer(spaces, {
+        projects: () => projects.map(({ name, path, worktrees }) => ({ id: name, name, path, worktrees })),
+      }),
+    ),
+  )
+}
+
+/** The Space registry itself fails: General sessions must still render. */
+function unavailableSpacesLayer() {
+  let queries = 0
+  return {
+    get queries() {
+      return queries
+    },
+    layer: Layer.fresh(
+      SessionProjection.layer.pipe(
+        Layer.provide(SessionDirectoryHealth.defaultLayer),
+        Layer.provide(
+          hostLayer([], {
+            list: () => {
+              queries += 1
+              throw new SpaceServiceError({
+                code: "SPACE_REGISTRY_INVALID",
+                message: "Space registry is not readable",
+              })
+            },
+          }),
+        ),
+      ),
+    ),
   }
 }
 
@@ -87,6 +131,7 @@ function ensureGlobalProject() {
   Database.use((db) => {
     if (db.select({ id: ProjectTable.id }).from(ProjectTable).where(eq(ProjectTable.id, ProjectID.global)).get()) return
     db.insert(ProjectTable)
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy fixture supplies the canonical project row shape
       .values({
         id: ProjectID.global,
         worktree: "/",
@@ -107,9 +152,12 @@ function insertSession(
   Database.use((db) =>
     db
       .insert(SessionTable)
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy fixture supplies branded IDs through its own decoder
       .values({
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy fixture supplies branded IDs through its own decoder
         id: id as never,
         project_id: ProjectID.global,
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- optional fixture parent is branded by the caller
         parent_id: options?.parentID as never,
         slug: Slug.create(),
         directory,
@@ -125,12 +173,8 @@ function insertSession(
   return SessionID.make(id)
 }
 
-function deleteSession(id: SessionID) {
-  Database.use((db) => db.delete(SessionTable).where(eq(SessionTable.id, id)).run())
-}
-
 /** Run projection query + session lifecycle in a fresh runtime with the mock. */
-function queryProjection(spaces: SpaceEntry[], sessionDir: string, subDir?: string) {
+function queryProjection(spaces: TestSpace[], sessionDir: string, subDir?: string) {
   return Effect.runPromise(
     Effect.gen(function* () {
       yield* Effect.sync(() => {
@@ -145,60 +189,8 @@ function queryProjection(spaces: SpaceEntry[], sessionDir: string, subDir?: stri
   )
 }
 
-/** Run projection with a cold-start registry (getSpaces returns empty, refreshSpaces provides data). */
-function queryProjectionColdStart(spaces: SpaceEntry[], sessionDir: string, subDir?: string) {
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      yield* Effect.sync(() => {
-        ensureGlobalProject()
-        insertSession(sessionDir, "root")
-        if (subDir) insertSession(subDir, "sub")
-      })
-      const projection = yield* SessionProjection.Service
-      const groups = yield* projection.getSessionGroups()
-      return groups
-    }).pipe(Effect.scoped, Effect.provide(coldStartLayer(spaces))),
-  )
-}
-
 describe("session-projection-group-resolution", () => {
-  it.instance("reads child and archived notification metadata directly from the canonical session table", () =>
-    Effect.gen(function* () {
-      const instance = yield* TestInstance
-      const sessionIDs: SessionID[] = []
-      return yield* Effect.gen(function* () {
-        const { parent, child, archived } = yield* Effect.sync(() => {
-          ensureGlobalProject()
-          const parent = insertSession(instance.directory, "parent")
-          const child = insertSession(instance.directory, "child", { parentID: parent, agent: "reviewer" })
-          const archived = insertSession(instance.directory, "archived", {
-            timeArchived: Date.now(),
-            agent: "archiver",
-          })
-          sessionIDs.push(parent, child, archived)
-          return { parent, child, archived }
-        })
-        const projection = yield* SessionProjection.Service
-
-        expect(yield* projection.getSessionSummary({ sessionID: child })).toEqual({
-          id: child,
-          title: "child",
-          directory: instance.directory,
-          parentID: parent,
-          agent: "reviewer",
-        })
-        expect(yield* projection.getSessionSummary({ sessionID: archived })).toEqual({
-          id: archived,
-          title: "archived",
-          directory: instance.directory,
-          agent: "archiver",
-        })
-        expect(yield* projection.getSessionSummary({ sessionID: SessionID.make("ses_missing") })).toBeNull()
-      }).pipe(Effect.ensuring(Effect.sync(() => sessionIDs.forEach(deleteSession))))
-    }),
-  )
-
-  it.instance("keeps General sessions available when space discovery is unavailable", () =>
+  it.instance("keeps General sessions available when the Space registry is unreadable", () =>
     Effect.gen(function* () {
       const instance = yield* TestInstance
       yield* Effect.sync(() => {
@@ -209,7 +201,7 @@ describe("session-projection-group-resolution", () => {
       const services = yield* Layer.build(unavailable.layer)
       const groups = yield* Context.get(services, SessionProjection.Service).getSessionGroups()
 
-      expect(unavailable.refreshes).toBe(1)
+      expect(unavailable.queries).toBe(1)
       expect(groups).toMatchObject([
         {
           type: "general",
@@ -248,7 +240,7 @@ describe("session-projection-group-resolution", () => {
       const subDir = path.join(dir, "subdir")
       yield* Effect.sync(() => require("fs").mkdirSync(subDir, { recursive: true }))
 
-      const spaces: SpaceEntry[] = [{ id: "test-space", name: "测试空间", path: dir, type: "local" }]
+      const spaces: TestSpace[] = [{ id: "test-space", name: "测试空间", path: dir }]
       const groups = yield* Effect.promise(() => queryProjection(spaces, dir, subDir))
 
       const spaceGroup = groups.find((g) => g.type === "space" && g.id === "test-space")
@@ -266,9 +258,7 @@ describe("session-projection-group-resolution", () => {
       const generalDir = path.join(dir, "general")
       yield* Effect.sync(() => require("fs").mkdirSync(generalDir, { recursive: true }))
 
-      const spaces: SpaceEntry[] = [
-        { id: "test-space", name: "测试空间", path: path.join(dir, "nonexistent"), type: "local" },
-      ]
+      const spaces: TestSpace[] = [{ id: "test-space", name: "测试空间", path: path.join(dir, "nonexistent") }]
       const groups = yield* Effect.promise(() => queryProjection(spaces, generalDir))
 
       const spaceGroup = groups.find((g) => g.type === "space")
@@ -285,7 +275,7 @@ describe("session-projection-group-resolution", () => {
       const dir = instance.directory
       const missingDir = path.join(dir, "missing")
 
-      const spaces: SpaceEntry[] = [{ id: "test-space", name: "测试空间", path: missingDir, type: "local" }]
+      const spaces: TestSpace[] = [{ id: "test-space", name: "测试空间", path: missingDir }]
       const groups = yield* Effect.promise(() => queryProjection(spaces, missingDir))
 
       const spaceGroup = groups.find((g) => g.type === "space" && g.id === "test-space")
@@ -293,41 +283,6 @@ describe("session-projection-group-resolution", () => {
       expect(spaceGroup!.title).toBe("测试空间")
       expect(spaceGroup!.sessions.length).toBeGreaterThanOrEqual(1)
       expect(spaceGroup!.sessions[0].directoryHealth).toBe("missing")
-    }),
-  )
-
-  it.instance("cold-start: classifies space session after empty-cache refresh", () =>
-    Effect.gen(function* () {
-      const instance = yield* TestInstance
-      const dir = instance.directory
-      const subDir = path.join(dir, "subdir")
-      yield* Effect.sync(() => require("fs").mkdirSync(subDir, { recursive: true }))
-
-      const spaces: SpaceEntry[] = [{ id: "test-space", name: "测试空间", path: dir, type: "local" }]
-      const groups = yield* Effect.promise(() => queryProjectionColdStart(spaces, dir, subDir))
-
-      const spaceGroup = groups.find((g) => g.type === "space" && g.id === "test-space")
-      expect(spaceGroup).toBeDefined()
-      expect(spaceGroup!.title).toBe("测试空间")
-      expect(spaceGroup!.sessions.length).toBeGreaterThanOrEqual(2)
-    }),
-  )
-
-  it.instance("cold-start: Space-root session becomes type=space with id=space.name after refresh", () =>
-    Effect.gen(function* () {
-      const instance = yield* TestInstance
-      const dir = instance.directory
-
-      const spaces: SpaceEntry[] = [{ id: "my-space", name: "我的空间", path: dir, type: "local" }]
-      const groups = yield* Effect.promise(() => queryProjectionColdStart(spaces, dir))
-
-      const spaceGroup = groups.find((g) => g.type === "space")
-      expect(spaceGroup).toBeDefined()
-      expect(spaceGroup!.id).toBe("my-space")
-      expect(spaceGroup!.title).toBe("我的空间")
-      expect(spaceGroup!.type).toBe("space")
-      expect(spaceGroup!.sessions.length).toBeGreaterThanOrEqual(1)
-      expect(spaceGroup!.sessions[0].directory).toBe(dir)
     }),
   )
 
@@ -345,8 +300,8 @@ describe("session-projection-group-resolution", () => {
         require("fs").mkdirSync(wtDir, { recursive: true })
       })
 
-      const spaces: SpaceEntry[] = [{ id: "my-space", name: "我的空间", path: dir, type: "local" }]
-      const projects: ProjectEntry[] = [
+      const spaces: TestSpace[] = [{ id: "my-space", name: "我的空间", path: dir }]
+      const projects: Array<SpaceProject & { id: string }> = [
         {
           id: "p1",
           name: "my-project",
@@ -361,7 +316,7 @@ describe("session-projection-group-resolution", () => {
         insertSession(wtDir, "wt-session")
       })
 
-      // Run in a fresh runtime so the custom SpaceRegistry mock (with spaces
+      // Run in a fresh runtime so the custom WopalSpace host mock (with spaces
       // and projects) is wired through SessionProjection.layer from scratch,
       // matching the queryProjection pattern used in earlier tests.
       const tree = yield* Effect.promise(() =>
@@ -392,21 +347,20 @@ describe("session-projection-group-resolution", () => {
         require("fs").mkdirSync(brokenDir, { recursive: true })
         require("fs").mkdirSync(healthyDir, { recursive: true })
       })
-      const spaces: SpaceEntry[] = [
-        { id: "broken", name: "broken", path: brokenDir, type: "local" },
-        { id: "healthy", name: "healthy", path: healthyDir, type: "local" },
+      const spaces: TestSpace[] = [
+        { id: "broken", name: "broken", path: brokenDir },
+        { id: "healthy", name: "healthy", path: healthyDir },
       ]
       const layer = SessionProjection.layer.pipe(
         Layer.provide(SessionDirectoryHealth.defaultLayer),
         Layer.provide(
-          Layer.succeed(SpaceRegistry.Service, {
-            getSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-            refreshSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-            refreshProjects: (_executable, spaceName) =>
-              spaceName === "broken"
-                ? Effect.fail(new SpaceControlUnavailable({ message: "broken space" }))
-                : Effect.succeed({ items: [], total: 0, refreshedAt: 1 }),
-            searchSpace: () => Effect.succeed({ items: [], total: 0, refreshedAt: 1 }),
+          hostLayer(spaces, {
+            projects: (name) => {
+              if (name === "broken") {
+                throw new SpaceServiceError({ code: "SPACE_OPERATION_FAILED", message: "broken space" })
+              }
+              return []
+            },
           }),
         ),
       )
@@ -433,20 +387,17 @@ describe("session-projection-group-resolution", () => {
       const projDir = path.join(dir, "projects/my-project")
       yield* Effect.sync(() => require("fs").mkdirSync(projDir, { recursive: true }))
 
-      const spaces: SpaceEntry[] = [{ id: "my-space", name: "我的空间", path: dir, type: "local" }]
-      const projects: ProjectEntry[] = [{ id: "p1", name: "my-project", path: "projects/my-project", worktrees: [] }]
-      const cliArgs: string[] = []
+      const spaces: TestSpace[] = [{ id: "my-space", name: "我的空间", path: dir }]
+      const projects: SpaceProject[] = [{ id: "p1", name: "my-project", path: "projects/my-project", worktrees: [] }]
+      const selected: string[] = []
       const layer = SessionProjection.layer.pipe(
         Layer.provide(SessionDirectoryHealth.defaultLayer),
         Layer.provide(
-          Layer.succeed(SpaceRegistry.Service, {
-            getSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-            refreshSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-            refreshProjects: (_executable, spaceName) => {
-              cliArgs.push(spaceName ?? "")
-              return Effect.succeed({ items: projects, total: projects.length, refreshedAt: 1 })
+          hostLayer(spaces, {
+            projects: (name) => {
+              selected.push(name)
+              return projects
             },
-            searchSpace: () => Effect.succeed({ items: [], total: 0, refreshedAt: 1 }),
           }),
         ),
       )
@@ -465,9 +416,9 @@ describe("session-projection-group-resolution", () => {
         ),
       )
 
-      // The CLI --space argument must be the stable id, never the Chinese display name.
-      expect(cliArgs).toContain("my-space")
-      expect(cliArgs).not.toContain("我的空间")
+      // The stable registry key selects the Space; the display name never does.
+      expect(selected).toContain("my-space")
+      expect(selected).not.toContain("我的空间")
     }),
   )
 
@@ -476,18 +427,15 @@ describe("session-projection-group-resolution", () => {
       const instance = yield* TestInstance
       const dir = yield* Effect.tryPromise(() => realpath(instance.directory))
 
-      const spaces: SpaceEntry[] = [{ id: "my-space", name: "我的空间", path: dir, type: "local" }]
-      const searchArgs: string[] = []
+      const spaces: TestSpace[] = [{ id: "my-space", name: "我的空间", path: dir }]
+      const searched: string[] = []
       const layer = SessionProjection.layer.pipe(
         Layer.provide(SessionDirectoryHealth.defaultLayer),
         Layer.provide(
-          Layer.succeed(SpaceRegistry.Service, {
-            getSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-            refreshSpaces: () => Effect.succeed({ spaces, refreshedAt: 1 }),
-            refreshProjects: () => Effect.succeed({ items: [], total: 0, refreshedAt: 1 }),
-            searchSpace: (_executable, query, spaceName) => {
-              searchArgs.push(query, spaceName ?? "")
-              return Effect.succeed({ items: [], total: 0, refreshedAt: 1 })
+          hostLayer(spaces, {
+            search: (name, query) => {
+              searched.push(name, query ?? "")
+              return { items: [], total: 0, offset: 0, limit: 50, hasMore: false }
             },
           }),
         ),
@@ -502,9 +450,82 @@ describe("session-projection-group-resolution", () => {
         ),
       )
 
-      // The CLI --space argument must be the stable id, never the Chinese display name.
-      expect(searchArgs).toContain("my-space")
-      expect(searchArgs).not.toContain("我的空间")
+      // The stable registry key selects the Space; the display name never does.
+      expect(searched).toContain("my-space")
+      expect(searched).not.toContain("我的空间")
+    }),
+  )
+
+  it.instance("getLocations resolves a Space path through a symbolic-link alias", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fixture = yield* Effect.tryPromise(() => realpath(instance.directory))
+      const dir = path.join(fixture, "space")
+      const alias = path.join(fixture, "space-alias")
+      yield* Effect.tryPromise(() => require("fs/promises").mkdir(dir))
+      yield* Effect.tryPromise(() => require("fs/promises").symlink(dir, alias))
+
+      const spaces: TestSpace[] = [{ id: "aliased-space", name: "Aliased Space", path: dir }]
+      const layer = SessionProjection.layer.pipe(
+        Layer.provide(SessionDirectoryHealth.defaultLayer),
+        Layer.provide(hostLayer(spaces)),
+      )
+
+      const locations = yield* Effect.promise(() =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const projection = yield* SessionProjection.Service
+            return yield* projection.getLocations({ spacePath: alias })
+          }).pipe(Effect.scoped, Effect.provide(layer)),
+        ),
+      )
+
+      expect(locations.scopePath).toBe(dir)
+      expect(locations.items[0]?.path).toBe(dir)
+    }),
+  )
+
+  isolatedIt.instance("getLocations rejects distinct registered Spaces with the same real root", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const dir = path.join(instance.directory, "space")
+      const alias = path.join(instance.directory, "space-alias")
+      yield* Effect.promise(async () => {
+        await require("fs/promises").mkdir(dir)
+        await require("fs/promises").symlink(dir, alias)
+      })
+      const layer = projectionLayer([
+        { id: "one", name: "One", path: dir },
+        { id: "two", name: "Two", path: alias },
+      ])
+      const result = yield* Effect.gen(function* () {
+        const projection = yield* SessionProjection.Service
+        return yield* projection.getLocations({ spacePath: alias }).pipe(Effect.flip)
+      }).pipe(Effect.provide(layer))
+      expect(result._tag).toBe("WorkbenchSpaceQueryFailed")
+      if (result._tag === "WorkbenchSpaceQueryFailed") expect(result.code).toBe("SPACE_PATH_AMBIGUOUS")
+    }),
+  )
+
+  isolatedIt.instance("getSessionTree rejects distinct registered Spaces with the same real root", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const dir = path.join(instance.directory, "space")
+      const alias = path.join(instance.directory, "space-alias")
+      yield* Effect.promise(async () => {
+        await require("fs/promises").mkdir(dir)
+        await require("fs/promises").symlink(dir, alias)
+      })
+      const layer = projectionLayer([
+        { id: "one", name: "One", path: dir },
+        { id: "two", name: "Two", path: alias },
+      ])
+      const result = yield* Effect.gen(function* () {
+        const projection = yield* SessionProjection.Service
+        return yield* projection.getSessionTree().pipe(Effect.flip)
+      }).pipe(Effect.provide(layer))
+      expect(result._tag).toBe("WorkbenchSpaceQueryFailed")
+      if (result._tag === "WorkbenchSpaceQueryFailed") expect(result.code).toBe("SPACE_PATH_AMBIGUOUS")
     }),
   )
 })

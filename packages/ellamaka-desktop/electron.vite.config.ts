@@ -9,29 +9,13 @@ import { fileURLToPath } from "node:url"
 
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
-// Single source of truth for the wopal-cli protocol floor is
-// .ci/versions.json (plus the @wopal/cli-capability-schema dependency floor,
-// whose max is exported by scripts/build.sh / dev.sh as
-// MIN_WOPAL_CLI_VERSION). Inject it at build time so packaged main-process
-// code reading import.meta.env.MIN_WOPAL_CLI_VERSION never sees undefined;
-// prefer the resolved env, fall back to reading the repo config directly.
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const minWopalCliVersion = (() => {
-  if (process.env.MIN_WOPAL_CLI_VERSION) return process.env.MIN_WOPAL_CLI_VERSION
-  const versionsPath = path.resolve(__dirname, "../../.ci/versions.json")
-  try {
-    const versions = JSON.parse(fsSync.readFileSync(versionsPath, "utf8"))
-    if (typeof versions.minWopalCli === "string" && versions.minWopalCli) return versions.minWopalCli
-  } catch {
-    throw new Error(`cannot read minWopalCli from ${versionsPath}`)
-  }
-  throw new Error(`minWopalCli missing in ${versionsPath}`)
-})()
 
 const channel = resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
-const dshProxyTarget = process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.ELLAMAKA_PORT ?? "4097"}`
+const dshProxyTarget =
+  process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.ELLAMAKA_PORT ?? "4097"}`
 
 const sentry =
   process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_ORG && process.env.SENTRY_PROJECT
@@ -54,7 +38,6 @@ export default defineConfig({
   main: {
     define: {
       "import.meta.env.ELLAMAKA_CHANNEL": JSON.stringify(channel),
-      "import.meta.env.MIN_WOPAL_CLI_VERSION": JSON.stringify(minWopalCliVersion),
     },
     build: {
       rollupOptions: {
@@ -76,6 +59,7 @@ export default defineConfig({
         enforce: "pre",
         resolveId(s) {
           if (s === "@lydell/node-pty") return nodePtyPkg
+          return null
         },
       },
       {
@@ -89,11 +73,13 @@ export default defineConfig({
             }
             return "\0virtual:opencode-server"
           }
+          return null
         },
         load(id) {
           if (id === "\0virtual:opencode-server") {
             return "export default {}; export const Server = {};"
           }
+          return null
         },
       },
       {

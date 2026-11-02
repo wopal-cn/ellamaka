@@ -53,13 +53,18 @@ export type PersistedWorkbench = {
 }
 
 export type HydratableWorkbench = Omit<PersistedWorkbench, "spaces"> & {
-  spaces: Record<string, {
-    panels: Array<Omit<WorkbenchPanel, "slotState" | "viewMode"> & {
-      slotState?: PanelSlotState
-      viewMode?: PanelViewMode
-    }>
-    activePanelID: string
-  }>
+  spaces: Record<
+    string,
+    {
+      panels: Array<
+        Omit<WorkbenchPanel, "slotState" | "viewMode"> & {
+          slotState?: PanelSlotState
+          viewMode?: PanelViewMode
+        }
+      >
+      activePanelID: string
+    }
+  >
 }
 
 export type WorkbenchSessionBinding = {
@@ -160,16 +165,18 @@ function normalizePersistedWorkbench(value: HydratableWorkbench): PersistedWorkb
   })
   const tabs = snapshot.tabs.some((tab) => tab.path === GENERAL_TAB_PATH)
     ? snapshot.tabs.map(backfillId)
-    : [{ id: GENERAL_TAB_NAME, name: GENERAL_TAB_NAME, path: GENERAL_TAB_PATH, type: "general" }, ...snapshot.tabs.map(backfillId)]
+    : [
+        { id: GENERAL_TAB_NAME, name: GENERAL_TAB_NAME, path: GENERAL_TAB_PATH, type: "general" },
+        ...snapshot.tabs.map(backfillId),
+      ]
   const requestedPath = snapshot.activeTabPath
-  const legacyMatches = snapshot.activeSpaceName
-    ? tabs.filter((tab) => tab.name === snapshot.activeSpaceName)
-    : []
-  const activeTabPath = requestedPath !== undefined && tabs.some((tab) => tab.path === requestedPath)
-    ? requestedPath
-    : legacyMatches.length === 1
-      ? legacyMatches[0].path
-      : GENERAL_TAB_PATH
+  const legacyMatches = snapshot.activeSpaceName ? tabs.filter((tab) => tab.name === snapshot.activeSpaceName) : []
+  const activeTabPath =
+    requestedPath !== undefined && tabs.some((tab) => tab.path === requestedPath)
+      ? requestedPath
+      : legacyMatches.length === 1
+        ? legacyMatches[0].path
+        : GENERAL_TAB_PATH
   return {
     schemaVersion: 2,
     display: snapshot.display,
@@ -268,6 +275,31 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
     migrateLegacyPanels(path)
   }
 
+  /**
+   * A persisted panel can hold a working directory from a previous Home or a
+   * directory that no longer exists. Reset only empty panels; bound panels
+   * retain the Session's working directory.
+   */
+  function reconcileSpaceDirectories(rawPath: string) {
+    const path = normalizeSpacePath(rawPath)
+    if (path === GENERAL_TAB_PATH) return false
+    const space = store.spaces[path]
+    if (!space) return false
+    const inside = (directory: string) => directory === path || directory.startsWith(`${path}/`)
+    const needs = space.panels.some(
+      (panel) => panel.slotState === "empty" && !inside(normalizeSpacePath(panel.directory)),
+    )
+    if (!needs) return false
+    setStore("spaces", path, "panels", (panels) =>
+      panels.map((panel) =>
+        panel.slotState !== "empty" || inside(normalizeSpacePath(panel.directory))
+          ? panel
+          : { ...panel, directory: path },
+      ),
+    )
+    return true
+  }
+
   function addPanel(rawPath: string): string | undefined {
     const path = normalizeSpacePath(rawPath)
     ensureSpace(path)
@@ -308,20 +340,32 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
   function setPanelMode(rawPath: string, id: string, mode: PanelMode) {
     const path = normalizeSpacePath(rawPath)
     ensureSpace(path)
-    setStore("spaces", path, "panels", (panel) => panel.id === id, produce((panel) => {
-      panel.mode = mode
-      panel.viewMode = mode
-    }))
+    setStore(
+      "spaces",
+      path,
+      "panels",
+      (panel) => panel.id === id,
+      produce((panel) => {
+        panel.mode = mode
+        panel.viewMode = mode
+      }),
+    )
   }
 
   function setPanelPtyId(rawPath: string, id: string, type: "tui" | "term" | "split", ptyID: string | undefined) {
     const path = normalizeSpacePath(rawPath)
     ensureSpace(path)
-    setStore("spaces", path, "panels", (panel) => panel.id === id, produce((panel) => {
-      if (type === "tui") panel.tuiPtyId = ptyID
-      else if (type === "term") panel.termPtyId = ptyID
-      else panel.splitPtyId = ptyID
-    }))
+    setStore(
+      "spaces",
+      path,
+      "panels",
+      (panel) => panel.id === id,
+      produce((panel) => {
+        if (type === "tui") panel.tuiPtyId = ptyID
+        else if (type === "term") panel.termPtyId = ptyID
+        else panel.splitPtyId = ptyID
+      }),
+    )
   }
 
   function setPanelSplitTerminal(rawPath: string, id: string, open: boolean) {
@@ -429,9 +473,12 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
     batch(() => {
       if (tab) closeTab(tab.path)
       if (store.spaces[path]) {
-        setStore("spaces", produce((spaces) => {
-          delete spaces[path]
-        }))
+        setStore(
+          "spaces",
+          produce((spaces) => {
+            delete spaces[path]
+          }),
+        )
       }
     })
     return true
@@ -441,27 +488,39 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
     const path = normalizeSpacePath(rawPath)
     ensureSpace(path)
     const normDir = normalizeSpacePath(session.directory) || session.directory || path
-    setStore("spaces", path, "panels", (panel) => panel.id === panelID, produce((panel) => {
-      panel.slotState = "bound"
-      panel.boundSessionId = session.id
-      panel.viewMode = session.type
-      panel.mode = session.type
-      panel.directory = normDir
-    }))
+    setStore(
+      "spaces",
+      path,
+      "panels",
+      (panel) => panel.id === panelID,
+      produce((panel) => {
+        panel.slotState = "bound"
+        panel.boundSessionId = session.id
+        panel.viewMode = session.type
+        panel.mode = session.type
+        panel.directory = normDir
+      }),
+    )
   }
 
   function unbindSessionFromPanel(rawPath: string, panelID: string) {
     const path = normalizeSpacePath(rawPath)
     const panel = store.spaces[path]?.panels.find((candidate) => candidate.id === panelID)
     if (!panel || (panel.slotState === "empty" && !panel.boundSessionId)) return false
-    setStore("spaces", path, "panels", (candidate) => candidate.id === panelID, produce((value) => {
-      value.slotState = "empty"
-      value.boundSessionId = undefined
-      value.tuiPtyId = undefined
-      value.termPtyId = undefined
-      value.splitPtyId = undefined
-      value.splitTerminal = false
-    }))
+    setStore(
+      "spaces",
+      path,
+      "panels",
+      (candidate) => candidate.id === panelID,
+      produce((value) => {
+        value.slotState = "empty"
+        value.boundSessionId = undefined
+        value.tuiPtyId = undefined
+        value.termPtyId = undefined
+        value.splitPtyId = undefined
+        value.splitTerminal = false
+      }),
+    )
     return true
   }
 
@@ -487,10 +546,16 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
   function setPanelViewMode(rawPath: string, panelID: string, mode: PanelViewMode) {
     const path = normalizeSpacePath(rawPath)
     ensureSpace(path)
-    setStore("spaces", path, "panels", (panel) => panel.id === panelID, produce((panel) => {
-      panel.viewMode = mode
-      if (isPanelMode(mode)) panel.mode = mode
-    }))
+    setStore(
+      "spaces",
+      path,
+      "panels",
+      (panel) => panel.id === panelID,
+      produce((panel) => {
+        panel.viewMode = mode
+        if (isPanelMode(mode)) panel.mode = mode
+      }),
+    )
   }
 
   function isSessionBound(sessionID: string) {
@@ -528,11 +593,58 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
       }
       setStore("activeTabPath", normPath)
     })
+    reconcileSpaceDirectories(normPath)
   }
 
   function setActive(rawPath: string) {
     const path = normalizeSpacePath(rawPath)
     if (store.tabs.some((tab) => tab.path === path)) setStore("activeTabPath", path)
+  }
+
+  function reconcileSpacePath(rawOld: string, rawNew: string) {
+    const oldPath = normalizeSpacePath(rawOld)
+    const newPath = normalizeSpacePath(rawNew)
+    if (!oldPath || !newPath || oldPath === newPath) return false
+    batch(() => {
+      const state = store.spaces[oldPath]
+      if (state) {
+        const existing = store.spaces[newPath]
+        if (existing) {
+          // Both states are independently valid layouts. Canonical state owns
+          // its layout when the alias was not active; active alias Panels take
+          // priority so its working conversation survives, capped at 3.
+          const oldActive = store.activeTabPath === oldPath
+          const primary = oldActive ? state : existing
+          const secondary = oldActive ? existing : state
+          const ids = new Set(primary.panels.map((panel) => panel.id))
+          const extra = secondary.panels
+            .filter(
+              (panel) =>
+                !ids.has(panel.id) &&
+                (!panel.boundSessionId ||
+                  !primary.panels.some((other) => other.boundSessionId === panel.boundSessionId)),
+            )
+            .slice(0, Math.max(0, 3 - primary.panels.length))
+            .map((panel) => ({ ...panel, id: uniquePanelID() }))
+          setStore("spaces", newPath, {
+            panels: [...primary.panels, ...extra],
+            activePanelID: primary.activePanelID,
+          })
+        } else setStore("spaces", newPath, state)
+        setStore("spaces", oldPath, undefined!)
+      }
+      setStore("tabs", (tabs) => {
+        const old = tabs.find((tab) => tab.path === oldPath)
+        const current = tabs.find((tab) => tab.path === newPath)
+        if (current)
+          return tabs
+            .filter((tab) => tab.path !== oldPath)
+            .map((tab) => (tab.path === newPath && old?.pinned ? { ...tab, pinned: true } : tab))
+        return tabs.map((tab) => (tab.path === oldPath ? { ...tab, path: newPath } : tab))
+      })
+      if (store.activeTabPath === oldPath) setStore("activeTabPath", newPath)
+    })
+    return true
   }
 
   function validateTabs(validPaths: Set<string>) {
@@ -553,10 +665,16 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
     hydrate,
     snapshot,
     trackPersisted,
-    get display() { return store.display },
-    get spaces() { return store.spaces },
+    get display() {
+      return store.display
+    },
+    get spaces() {
+      return store.spaces
+    },
     spaceState,
     ensureSpace,
+    reconcileSpacePath,
+    reconcileSpaceDirectories,
     addPanel,
     removePanel,
     setPanelMode,
@@ -577,15 +695,21 @@ export function createWorkbenchStore(initial: PersistedWorkbench = PERSISTED_DEF
     isSessionBound,
     boundPanelIdForSession,
     findSessionBinding,
-    get tabs() { return store.tabs },
+    get tabs() {
+      return store.tabs
+    },
     activeTab,
     get activeDirectory() {
       const tab = activeTab()
       const space = tab ? store.spaces[tab.path] : undefined
       return space?.panels.find((panel) => panel.id === space.activePanelID)?.directory ?? ""
     },
-    get activeTabPath() { return store.activeTabPath ?? GENERAL_TAB_PATH },
-    get activeSpaceName() { return activeTab()?.name ?? GENERAL_TAB_NAME },
+    get activeTabPath() {
+      return store.activeTabPath ?? GENERAL_TAB_PATH
+    },
+    get activeSpaceName() {
+      return activeTab()?.name ?? GENERAL_TAB_NAME
+    },
     openTab,
     closeTab,
     closeOtherTabs,

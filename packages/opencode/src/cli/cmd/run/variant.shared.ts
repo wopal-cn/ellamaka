@@ -15,7 +15,7 @@ import { isRecord } from "@/util/record"
 import { createSession, sessionVariant, type RunSession, type SessionMessages } from "./session.shared"
 import type { RunInput, RunProvider } from "./types"
 
-const MODEL_FILE = path.join(Global.Path.state, "model.json")
+const modelFile = () => path.join(Global.Path.state, "model.json")
 
 type ModelState = Record<string, unknown> & {
   variant?: Record<string, string | undefined>
@@ -143,7 +143,7 @@ function createLayer(fs = AppFileSystem.defaultLayer) {
         const file = yield* AppFileSystem.Service
 
         const read = Effect.fn("RunVariant.read")(function* () {
-          return yield* file.readJson(MODEL_FILE).pipe(
+          return yield* file.readJson(modelFile()).pipe(
             Effect.map(state),
             Effect.catchCause(() => Effect.succeed(state(undefined))),
           )
@@ -179,7 +179,7 @@ function createLayer(fs = AppFileSystem.defaultLayer) {
           }
 
           yield* file
-            .writeJson(MODEL_FILE, {
+            .writeJson(modelFile(), {
               ...current,
               variant: next,
             })

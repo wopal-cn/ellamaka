@@ -2,7 +2,7 @@
 //
 // The notification only carries the Session ID. The target Space and
 // directory are resolved inside the Workbench from the server-side
-// `workbench.sessionGroups()` projection, so this module deliberately
+// `workbench.sessionTree()` projection, so this module deliberately
 // expresses no Space/path semantics — it is pure URL contract only.
 
 export const WORKBENCH_SESSION_LINK_PARAM = "session"

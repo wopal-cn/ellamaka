@@ -8,7 +8,7 @@ describe("Desktop sidecar CorePreparation wiring", () => {
     expect(source).toContain("prepareDshProfiles")
     expect(source).not.toContain("initializeDshRuntime")
     const listener = source.indexOf("listener = serverListener")
-    const mount = source.indexOf("dshInitialization = initializeDsh(command)")
+    const mount = source.indexOf("dshInitialization = initializeDsh(effectiveCommand)")
     expect(listener).toBeGreaterThan(-1)
     expect(mount).toBeGreaterThan(listener)
   })
@@ -23,7 +23,7 @@ describe("Desktop sidecar CorePreparation wiring", () => {
   test("reports server readiness before DSH preparation so the window never waits for DSH", () => {
     const source = readFileSync(join(import.meta.dir, "sidecar.ts"), "utf8")
     const ready = source.indexOf('parentPort.postMessage({ type: "ready" })')
-    const initialize = source.indexOf("dshInitialization = initializeDsh(command)")
+    const initialize = source.indexOf("await ensureDshMounted()")
     expect(ready).toBeGreaterThan(-1)
     expect(initialize).toBeGreaterThan(ready)
   })

@@ -1,8 +1,5 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
-import { File } from "@/file"
-import { SessionID } from "@/session/schema"
-import { SessionStatus } from "@/session/status"
 import { Authorization } from "../middleware/authorization"
 import { described } from "./metadata"
 
@@ -36,30 +33,8 @@ const WorkbenchSessionResponse = Schema.Struct({
   timeUpdated: Schema.Number,
 })
 
-const WorkbenchSessionGroup = Schema.Struct({
-  id: Schema.String,
-  title: Schema.String,
-  type: Schema.Literals(["space", "general"]),
-  sessionCount: Schema.Number,
-  sessions: Schema.Array(WorkbenchSessionResponse),
-})
-const WorkbenchSessionGroupsResponse = Schema.Struct({ groups: Schema.Array(WorkbenchSessionGroup) })
-const WorkbenchSessionStatusResponse = Schema.Struct({
-  directory: Schema.String,
-  sessionID: SessionID,
-  status: SessionStatus.Info,
-})
-const WorkbenchSessionSummaryResponse = Schema.Struct({
-  id: SessionID,
-  title: Schema.String,
-  directory: Schema.String,
-  parentID: Schema.optional(SessionID),
-  agent: Schema.optional(Schema.String),
-})
-const WorkbenchSpaceFilesQuery = Schema.Struct({
-  spacePath: Schema.String,
-  path: Schema.optional(Schema.String),
-})
+// BFF DTOs use plain strings for session identity so the app-private client
+// keeps a readable wire type; the Runtime remains the identity owner.
 
 const WorkbenchTreeSession = Schema.Struct({
   id: Schema.String,
@@ -127,38 +102,19 @@ export class WorkbenchRequestConflictError extends Schema.TaggedErrorClass<Workb
   { message: Schema.String, requestID: Schema.String },
   { httpApiStatus: 409 },
 ) {}
-export class WorkbenchSpaceFileAccessDeniedError extends Schema.TaggedErrorClass<WorkbenchSpaceFileAccessDeniedError>()(
-  "WorkbenchSpaceFileAccessDenied",
-  { message: Schema.String, path: Schema.String },
-  { httpApiStatus: 403 },
-) {}
-export class WorkbenchSpaceFileNotFoundError extends Schema.TaggedErrorClass<WorkbenchSpaceFileNotFoundError>()(
-  "WorkbenchSpaceFileNotFound",
-  { message: Schema.String, path: Schema.String },
-  { httpApiStatus: 404 },
-) {}
-export class SpaceControlUnavailableError extends Schema.TaggedErrorClass<SpaceControlUnavailableError>()(
-  "SpaceControlUnavailable",
-  { message: Schema.String, reason: Schema.optional(Schema.String) },
+/** The private WopalSpace query behind this projection failed. */
+export class WorkbenchSpaceQueryError extends Schema.TaggedErrorClass<WorkbenchSpaceQueryError>()(
+  "WorkbenchSpaceQueryError",
+  { code: Schema.String, message: Schema.String, suggestion: Schema.optional(Schema.String) },
   { httpApiStatus: 503 },
-) {}
-export class CapabilityContractError extends Schema.TaggedErrorClass<CapabilityContractError>()(
-  "CapabilityContractError",
-  { message: Schema.String, capability: Schema.optional(Schema.String), detail: Schema.optional(Schema.String) },
-  { httpApiStatus: 502 },
 ) {}
 
 const WorkbenchDshUrlResponse = Schema.Struct({
-  url: Schema.Union([Schema.String, Schema.Undefined]),
+  url: Schema.optional(Schema.String),
 })
 
 export const WorkbenchPaths = {
   sessions: "/workbench/sessions",
-  sessionGroups: "/workbench/session-groups",
-  sessionStatuses: "/workbench/session-statuses",
-  sessionSummary: "/workbench/session-summaries/:sessionID",
-  files: "/workbench/files",
-  fileContent: "/workbench/file-content",
   sessionTree: "/workbench/session-tree",
   locations: "/workbench/locations",
   dshUrl: "/workbench/dsh-url",
@@ -169,92 +125,13 @@ const WorkbenchErrors = [
   InvalidSpaceTargetError,
   SessionDirectoryUnavailableError,
   WorkbenchRequestConflictError,
-  SpaceControlUnavailableError,
-  CapabilityContractError,
+  WorkbenchSpaceQueryError,
 ] as const
 
-export const WorkbenchApi = HttpApi.make("workbench").add(
+// Official App BFF: private ids keep this group out of the Public Platform
+// HttpApi composition (and therefore out of /doc and the published SDK).
+export const WorkbenchApi = HttpApi.make("app-bff-root").add(
   HttpApiGroup.make("workbench")
-    .add(
-      HttpApiEndpoint.get("sessionGroups", WorkbenchPaths.sessionGroups, {
-        success: described(WorkbenchSessionGroupsResponse, "Legacy Workbench session groups"),
-        error: [SpaceControlUnavailableError, CapabilityContractError],
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "workbench.sessionGroups",
-          summary: "List legacy Workbench session groups",
-          description: "Compatibility projection for existing consumers. New Workbench clients use session-tree.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.get("sessionStatuses", WorkbenchPaths.sessionStatuses, {
-        success: described(Schema.Array(WorkbenchSessionStatusResponse), "Running Workbench session statuses"),
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "workbench.sessionStatuses",
-          summary: "List status snapshots for initialized sessions",
-          description:
-            "Returns non-idle busy or retry status snapshots from already initialized instances without loading a directory.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.get("sessionSummary", WorkbenchPaths.sessionSummary, {
-        params: { sessionID: SessionID },
-        // Separate same-status schemas retain top-level null in generated
-        // OpenAPI/SDK output; a root Schema.NullOr is flattened by the
-        // current OpenAPI encoder.
-        success: [described(WorkbenchSessionSummaryResponse, "Workbench session notification metadata"), Schema.Null],
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "workbench.sessionSummary",
-          summary: "Read Workbench session notification metadata",
-          description:
-            "Reads canonical session metadata without loading a directory. Returns null when the session does not exist.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.get("files", WorkbenchPaths.files, {
-        query: WorkbenchSpaceFilesQuery,
-        success: described(Schema.Array(File.Node), "Files and directories in a registered Space"),
-        error: [
-          WorkbenchSpaceNotFoundError,
-          WorkbenchSpaceFileAccessDeniedError,
-          WorkbenchSpaceFileNotFoundError,
-          SpaceControlUnavailableError,
-          CapabilityContractError,
-        ],
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "workbench.files",
-          summary: "List files in a registered Space",
-          description:
-            "Lists a registered Space root or relative child directory without loading an instance. Traversal and symlink escapes are rejected.",
-        }),
-      ),
-    )
-    .add(
-      HttpApiEndpoint.get("fileContent", WorkbenchPaths.fileContent, {
-        query: Schema.Struct({ spacePath: Schema.String, path: Schema.String }),
-        success: described(File.Content, "File content in a registered Space"),
-        error: [
-          WorkbenchSpaceNotFoundError,
-          WorkbenchSpaceFileAccessDeniedError,
-          WorkbenchSpaceFileNotFoundError,
-          SpaceControlUnavailableError,
-          CapabilityContractError,
-        ],
-      }).annotateMerge(
-        OpenApi.annotations({
-          identifier: "workbench.fileContent",
-          summary: "Read a file in a registered Space",
-          description:
-            "Reads a relative file from a registered Space without loading an instance. Traversal and symlink escapes are rejected.",
-        }),
-      ),
-    )
     .add(
       HttpApiEndpoint.get("dshUrl", WorkbenchPaths.dshUrl, {
         success: described(WorkbenchDshUrlResponse, "Authenticated DSH iframe entry URL"),
@@ -267,10 +144,10 @@ export const WorkbenchApi = HttpApi.make("workbench").add(
         }),
       ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "workbench", description: "Workbench compatibility routes." }))
+    .annotateMerge(OpenApi.annotations({ title: "workbench", description: "Workbench private App BFF routes: session creation, session tree, creation locations and the DSH entry." }))
     .middleware(Authorization),
 )
-export const WorkbenchInstanceApi = HttpApi.make("workbench-instance").add(
+export const WorkbenchInstanceApi = HttpApi.make("app-bff-instance").add(
   HttpApiGroup.make("workbench-instance")
     .add(
       HttpApiEndpoint.post("createSession", WorkbenchPaths.sessions, {
@@ -296,7 +173,7 @@ export const WorkbenchInstanceApi = HttpApi.make("workbench-instance").add(
           ),
         }),
         success: described(WorkbenchSessionTreeResponse, "Workbench session tree"),
-        error: [SpaceControlUnavailableError, CapabilityContractError],
+        error: [WorkbenchSpaceQueryError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "workbench.sessionTree",
@@ -307,7 +184,7 @@ export const WorkbenchInstanceApi = HttpApi.make("workbench-instance").add(
       HttpApiEndpoint.get("locations", WorkbenchPaths.locations, {
         query: Schema.Struct({ spacePath: Schema.String, query: Schema.optional(Schema.String) }),
         success: described(WorkbenchLocationsResponse, "Controlled Workbench creation locations"),
-        error: [WorkbenchSpaceNotFoundError, SpaceControlUnavailableError, CapabilityContractError],
+        error: [WorkbenchSpaceNotFoundError, WorkbenchSpaceQueryError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "workbench.locations",

@@ -137,7 +137,7 @@ space_rel_path() {
 
 is_running() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
-# In `dev.sh serve` the Workbench UI is served by the Vite dev server, NOT by
+# In `dev.sh serve` the app UI is served by the Vite dev server, NOT by
 # the backend: the backend prints a `workbench: <backend-url>` line for its own
 # standalone serve mode, where the embedded UI exists. Relaying that line
 # verbatim (or pointing at the backend port at all) hands the user a 404. The
@@ -145,9 +145,12 @@ is_running() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 # server password is configured, and the `?auth_token=` it prints is the
 # credential exchange the SPA already understands. Port the token onto the Vite
 # origin, which is the origin the user's browser actually talks to in dev.
-workbench_entry_url() {
+# WOPAL_DEV treats the launch Home as an editable candidate, so every new dev
+# Host lifecycle enters Onboarding first and lets that flow lock the effective
+# Home before Workbench starts reading Runtime configuration.
+dev_entry_url() {
   local port="$1"
-  local url="http://127.0.0.1:$port/workbench"
+  local url="http://127.0.0.1:$port/onboarding"
   local line token
   line="$(grep -m1 '^workbench: ' "$BACKEND_LOG" 2>/dev/null)"
   case "$line" in
@@ -160,7 +163,7 @@ workbench_entry_url() {
   printf '%s' "$url"
 }
 
-# The health/config probes ride the same Basic auth the backend enforces:
+# The health probe rides the same Basic auth the backend enforces:
 # when a password is configured (ELLAMAKA_SERVER_PASSWORD), an anonymous
 # probe gets 401 and the wait loop would kill a perfectly healthy server.
 # The username defaults to the engine default (ellamaka); ELLAMAKA_SERVER_USERNAME
@@ -184,10 +187,6 @@ wait_backend() {
     sleep 0.5
   done
   return 1
-}
-
-warmup_config() {
-  backend_curl "http://127.0.0.1:$1/global/config" >/dev/null 2>&1 || true
 }
 
 pgid_of() {
@@ -731,7 +730,7 @@ start_backend() {
   local port="$1" debug="$2" debug_modules="$3" preload="$4"
   shift 4
   local plugin_modules=""
-  local -a env_args=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")")
+  local -a env_args=(WOPAL_DEV=1 WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json")
   # Official rc.1 packages resolve their harness home through $DSH_HOME
   # directly (e.g. dsh-agent-presets' user preset root), bypassing every
   # ctx/config seam the integration owns. Point it at the official-layout
@@ -754,13 +753,10 @@ start_backend() {
 start_frontend() {
   local port="$1" backend_port="$2"
   [ -d "$ellamaka_app_dir" ] || { echo "missing Ellamaka Workbench: $ellamaka_app_dir"; return 1; }
-  # The Vite dev server proxies `/api/onboarding` and `/dsh` onto the backend
-  # origin. Their built-in fallbacks are the standalone-serve defaults
-  # (4096/4097); without ELLAMAKA_DSH_PROXY_TARGET `serve --port <other>`
-  # proxies every onboarding and dsh request to whatever unrelated process owns
-  # those ports (a 401 Basic prompt from a foreign listener is the visible
-  # symptom), while VITE_ELLAMAKA_SERVER_PORT only rebinds the SDK client.
-  # Point both proxy chains at the backend this worktree actually started.
+  # The Vite dev server proxies `/dsh` onto the backend origin. Its built-in
+  # fallback is the standalone-serve default (4097); point the proxy chain at
+  # the backend this worktree actually started while the SDK client uses
+  # VITE_ELLAMAKA_SERVER_PORT directly.
   start_process frontend "$port" "$FRONTEND_LOG" "$ellamaka_app_dir" env VITE_ELLAMAKA_SERVER_PORT="$backend_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$backend_port" bun run dev -- --host 127.0.0.1 --port "$port" --strictPort
 }
 
@@ -966,14 +962,13 @@ cmd_tui() {
 
   if $attach; then
     mkdir -p "$DEV_DIR"
-    local caller_pwd="$(pwd)" attach_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") attach_args=()
+    local caller_pwd="$(pwd)" attach_env=(WOPAL_DEV=1 WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json") attach_args=()
     interactive_log_injection "$debug" "$debug_modules"
     attach_env+=("${INTERACTIVE_LOG_ENV[@]}")
     attach_args+=("${INTERACTIVE_LOG_ARGS[@]}")
 
     if read_record backend && service_running backend && backend_healthy "$RECORD_PORT"; then
       echo "attaching to running server :$RECORD_PORT"
-      warmup_config "$RECORD_PORT"
       if ! read_record frontend || ! service_running frontend; then
         claim_ports_reset
         choose_free_port workbench "$APP_PORT"; APP_PORT="$SELECTED_PORT"
@@ -1001,17 +996,16 @@ cmd_tui() {
       stop_keep_logs backend
       return 1
     fi
-    warmup_config "$PORT"
     start_frontend "$APP_PORT" "$PORT" || { stop_keep_logs backend; return 1; }
     echo "  backend :$PORT, workbench :$APP_PORT"
-    echo "  → $(workbench_entry_url "$APP_PORT")"
+    echo "  → $(dev_entry_url "$APP_PORT")"
     cd "$opencode_dir"
     write_record tui - "$$" "$(pgid_of "$$")"
     exec env "${attach_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
   fi
 
   mkdir -p "$DEV_DIR"
-  local caller_pwd="$(pwd)" tui_env=(WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json" MIN_WOPAL_CLI_VERSION="$(resolve_min_wopal_cli_version "$root")") tui_args=()
+  local caller_pwd="$(pwd)" tui_env=(WOPAL_DEV=1 WOPAL_DEBUG_LOG_DIR="$DEV_DIR" ELLAMAKA_MODELS_FALLBACK_PATH="$root/.ci/models.json") tui_args=()
   interactive_log_injection "$debug" "$debug_modules"
   tui_env+=("${INTERACTIVE_LOG_ENV[@]}")
   tui_args+=("${INTERACTIVE_LOG_ARGS[@]}")
@@ -1076,8 +1070,6 @@ cmd_serve() {
     stop_keep_logs backend
     return 1
   fi
-  warmup_config "$PORT"
-
   if $backend_only; then
     echo "  backend :$PORT (backend-only)"
     echo "  pidfile $(space_rel_path "$PIDFILE")"
@@ -1089,7 +1081,7 @@ cmd_serve() {
   echo "  backend :$PORT, workbench :$APP_PORT"
   echo "  pidfile $(space_rel_path "$PIDFILE")"
   echo "  logs    $(space_rel_path "$BACKEND_LOG") / $(space_rel_path "$FRONTEND_LOG")"
-  echo "  → $(workbench_entry_url "$APP_PORT")"
+  echo "  → $(dev_entry_url "$APP_PORT")"
 
   if $cdp_debug; then
     if is_running 9222; then
@@ -1134,7 +1126,6 @@ EOF
       choose_free_port backend "$backend_port"; local new_backend_port="$SELECTED_PORT"
       start_backend "$new_backend_port" false all "$opencode_preload" || return 1
       wait_backend "$new_backend_port" || { echo "restart: backend failed to start; see $BACKEND_LOG"; return 1; }
-      warmup_config "$new_backend_port"
       echo "  backend :$new_backend_port restarted"
       if [ "$new_backend_port" != "$backend_port" ] && service_running frontend; then
         echo "  ⚠  backend moved :$backend_port → :$new_backend_port"
@@ -1151,7 +1142,7 @@ EOF
       claim_port "$frontend_backend_port"
       choose_free_port workbench "$frontend_port"; local new_frontend_port="$SELECTED_PORT"
       start_frontend "$new_frontend_port" "$frontend_backend_port" || return 1
-      echo "  workbench :$new_frontend_port restarted  → $(workbench_entry_url "$new_frontend_port")"
+      echo "  workbench :$new_frontend_port restarted  → $(dev_entry_url "$new_frontend_port")"
       ;;
     all)
       local restart_backend=false restart_frontend=false backend_port="" frontend_port=""
@@ -1165,7 +1156,6 @@ EOF
         choose_free_port backend "$backend_port"; backend_port="$SELECTED_PORT"
         start_backend "$backend_port" false all "$opencode_preload" || return 1
         wait_backend "$backend_port" || { echo "restart: backend failed to start; see $BACKEND_LOG"; return 1; }
-        warmup_config "$backend_port"
         echo "  backend :$backend_port restarted"
       fi
       if $restart_frontend; then
@@ -1175,7 +1165,7 @@ EOF
         claim_port "$backend_port"
         choose_free_port workbench "$frontend_port"; frontend_port="$SELECTED_PORT"
         start_frontend "$frontend_port" "$backend_port" || return 1
-        echo "  workbench :$frontend_port restarted  → $(workbench_entry_url "$frontend_port")"
+        echo "  workbench :$frontend_port restarted  → $(dev_entry_url "$frontend_port")"
       fi
       echo "restarted dev services"
       ;;
@@ -1218,11 +1208,6 @@ cmd_desktop() {
   choose_free_port desktop-sidecar "$desktop_sidecar_port"
   desktop_sidecar_port="$SELECTED_PORT"
   export ELLAMAKA_CHANNEL="$CHANNEL"
-  # Keep the schema dependency floor in lockstep with .ci/versions.json
-  # before resolving MIN_WOPAL_CLI_VERSION (idempotent no-op when aligned).
-  sync_min_wopal_cli_version "$root"
-  export MIN_WOPAL_CLI_VERSION="${MIN_WOPAL_CLI_VERSION:-$(resolve_min_wopal_cli_version "$root")}"
-
   echo "🖥  Starting Desktop (channel: $CHANNEL)..."
   if $rebuild; then
     echo "==> Rebuilding sidecar (packages/opencode)..."
@@ -1239,7 +1224,7 @@ cmd_desktop() {
 
   mkdir -p "$DEV_DIR"
   local plugin_modules=""
-  local -a desktop_env=(ELLAMAKA_DESKTOP_DEV=1 ELLAMAKA_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 WOPAL_DEV_CLI_PATH="$space/projects/wopal-cli/src/cli.ts" MIN_WOPAL_CLI_VERSION="$MIN_WOPAL_CLI_VERSION" ELLAMAKA_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
+  local -a desktop_env=(ELLAMAKA_DESKTOP_DEV=1 ELLAMAKA_LOG_LEVEL="$($debug && echo DEBUG || echo INFO)" WOPAL_DEBUG_LOG_DIR="$DEV_DIR" WOPAL_DEV=1 ELLAMAKA_PORT="$desktop_sidecar_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$desktop_sidecar_port")
   # The sidecar's dshmarket install worker re-launches this command for
   # `dsh plugin` installs (Bun installer). Point it at the worktree CLI
   # entry run via bun — no engine build required; the sidecar falls back to

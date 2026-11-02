@@ -9,6 +9,7 @@ import {
   mergeTree,
   getSessionMarker,
   type SessionGroupsSDK,
+  type SessionTreeSDK,
   type SessionGroup,
   type SessionTreeScope,
   type WorkbenchSessionTree,
@@ -26,42 +27,6 @@ function deferred<T>() {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-type MockGroup = {
-  id: string
-  title: string
-  type: "space" | "general"
-  sessionCount: number | string
-  sessions: Array<{
-    id: string
-    title: string
-    directory: string
-    directoryHealth: "healthy" | "missing" | "unavailable"
-    agent?: string
-    timeCreated: number | string
-    timeUpdated: number | string
-  }>
-}
-
-function mockSDK(groups: MockGroup[]): SessionGroupsSDK {
-  return {
-    client: {
-      workbench: {
-        sessionGroups: async () => ({ data: { groups } }),
-      },
-    },
-  }
-}
-
-function mockSDKThrows(error: Error): SessionGroupsSDK {
-  return {
-    client: {
-      workbench: {
-        sessionGroups: async () => { throw error },
-      },
-    },
-  }
-}
 
 function panel(
   overrides: Partial<{
@@ -86,11 +51,7 @@ function panel(
   }
 }
 
-function wbWithPanels(
-  spacePath: string,
-  panels: ReturnType<typeof panel>[],
-  activeTabPath?: string,
-): OpenSessionWB {
+function wbWithPanels(spacePath: string, panels: ReturnType<typeof panel>[], activeTabPath?: string): OpenSessionWB {
   const spaces: Record<string, { panels: typeof panels; activePanelID: string }> = {
     [spacePath]: { panels, activePanelID: panels[0]?.id ?? "" },
   }
@@ -99,10 +60,7 @@ function wbWithPanels(
     openTab: () => {},
     ensureSpace: () => {},
     setStatusMessage: () => {},
-    activeTab: () =>
-      activeTabPath !== undefined
-        ? { id: "test", name: "test", path: activeTabPath }
-        : undefined,
+    activeTab: () => (activeTabPath !== undefined ? { id: "test", name: "test", path: activeTabPath } : undefined),
     findSessionBinding: (sessionID) => {
       for (const [path, space] of Object.entries(spaces)) {
         const panel = space.panels.find(
@@ -118,30 +76,71 @@ function wbWithPanels(
 // ── fetchSessionGroups ──────────────────────────────────────────────────────
 
 describe("fetchSessionGroups", () => {
-  test("SDK returns groups → normalizes and returns them", async () => {
-    const sdk = mockSDK([
+  type TreeScope = Parameters<NonNullable<SessionTreeSDK["bff"]["workbench"]["sessionTree"]>>[0] extends never
+    ? never
+    : NonNullable<Awaited<ReturnType<SessionTreeSDK["bff"]["workbench"]["sessionTree"]>>["data"]>["scopes"]
+  const treeOf = (scopes: NonNullable<TreeScope>): SessionGroupsSDK => ({
+    bff: {
+      workbench: {
+        locations: async ({ spacePath }) => ({ data: { scopePath: spacePath } }),
+        sessionTree: async () => ({ data: { scopes } }),
+      },
+    },
+  })
+
+  test("projects the canonical session tree into Space/General groups", async () => {
+    const sdk = treeOf([
       {
-        id: "space-a",
-        title: "Space A",
-        type: "space",
-        sessionCount: 2,
-        sessions: [
+        path: "",
+        name: "General",
+        kind: "general",
+        sessionCount: 1,
+        truncated: false,
+        locations: [
           {
-            id: "s1",
-            title: "Session 1",
-            directory: "/a",
-            directoryHealth: "healthy",
-            agent: "tui",
-            timeCreated: 1000,
-            timeUpdated: 2000,
+            key: "general-date:2026-07-16",
+            kind: "general-date",
+            name: "2026-07-16",
+            path: "",
+            sessionCount: 1,
+            sessions: [
+              {
+                id: "s1",
+                title: "Session 1",
+                directory: "/a",
+                directoryHealth: "healthy",
+                marker: "",
+                timeCreated: 1000,
+                timeUpdated: 2000,
+              },
+            ],
           },
+        ],
+      },
+      {
+        path: "/space-a",
+        name: "Space A",
+        kind: "space",
+        sessionCount: 2,
+        truncated: false,
+        locations: [
           {
-            id: "s2",
-            title: "Session 2",
-            directory: "/a/b",
-            directoryHealth: "missing",
-            timeCreated: "3000",
-            timeUpdated: "4000",
+            key: "space:/space-a:root",
+            kind: "space-root",
+            name: "Root",
+            path: "/space-a",
+            sessionCount: 1,
+            sessions: [
+              {
+                id: "s2",
+                title: "Session 2",
+                directory: "/space-a",
+                directoryHealth: "missing",
+                marker: "",
+                timeCreated: 3,
+                timeUpdated: 4,
+              },
+            ],
           },
         ],
       },
@@ -149,104 +148,59 @@ describe("fetchSessionGroups", () => {
 
     const result = await fetchSessionGroups(sdk)
 
-    expect(result).toEqual([
-      {
-        id: "space-a",
-        title: "Space A",
-        type: "space",
-        sessionCount: 2,
-        sessions: [
-          {
-            id: "s1",
-            title: "Session 1",
-            directory: "/a",
-            directoryHealth: "healthy",
-            agent: "tui",
-            timeCreated: 1000,
-            timeUpdated: 2000,
-          },
-          {
-            id: "s2",
-            title: "Session 2",
-            directory: "/a/b",
-            directoryHealth: "missing",
-            agent: undefined,
-            timeCreated: 0,
-            timeUpdated: 0,
-          },
-        ],
-      },
+    expect(result.map((group) => [group.id, group.type, group.sessionCount])).toEqual([
+      ["", "general", 1],
+      ["/space-a", "space", 2],
     ])
+    // Sessions from every location of a scope stay in that scope.
+    expect(result[1]?.sessions.map((session) => session.id)).toEqual(["s2"])
+    expect(result[1]?.sessions[0]).toMatchObject({ directory: "/space-a", directoryHealth: "missing" })
   })
 
-  test("SDK returns empty groups → returns empty array", async () => {
-    const sdk = mockSDK([])
-    const result = await fetchSessionGroups(sdk)
-    expect(result).toEqual([])
+  test("an empty tree returns no groups", async () => {
+    expect(await fetchSessionGroups(treeOf([]))).toEqual([])
   })
 
-  test("SDK returns null/undefined data → returns empty array", async () => {
+  test("missing tree data returns no groups", async () => {
     const sdk: SessionGroupsSDK = {
-      client: {
+      bff: {
         workbench: {
-          sessionGroups: async () => ({ data: undefined }),
+          locations: async () => ({ data: undefined }),
+          sessionTree: async () => ({ data: undefined }),
         },
       },
     }
-    const result = await fetchSessionGroups(sdk)
-    expect(result).toEqual([])
+    expect(await fetchSessionGroups(sdk)).toEqual([])
   })
 
-  test("SDK throws → propagates error", async () => {
-    const error = new Error("Network failure")
-    const sdk = mockSDKThrows(error)
+  test("a failing tree propagates the error", async () => {
+    const sdk: SessionGroupsSDK = {
+      bff: {
+        workbench: {
+          locations: async ({ spacePath }) => ({ data: { scopePath: spacePath } }),
+          sessionTree: async () => {
+            throw new Error("Network failure")
+          },
+        },
+      },
+    }
     await expect(fetchSessionGroups(sdk)).rejects.toThrow("Network failure")
   })
 
-  test("non-numeric sessionCount is normalized to 0", async () => {
-    const sdk = mockSDK([
-      {
-        id: "g1",
-        title: "G1",
-        type: "general",
-        sessionCount: "NaN",
-        sessions: [],
-      },
-    ])
+  test("a non-numeric scope count normalizes to 0 and missing locations normalize to none", async () => {
+    const sdk = treeOf([{ path: "/p", name: "P", kind: "space", sessionCount: "not-a-number", truncated: false }])
     const result = await fetchSessionGroups(sdk)
-    expect(result[0].sessionCount).toBe(0)
-  })
-
-  test("undefined sessions array is normalized to empty array", async () => {
-    const sdk: SessionGroupsSDK = {
-      client: {
-        workbench: {
-          sessionGroups: async () => ({
-            data: {
-              groups: [
-                {
-                  id: "g1",
-                  title: "G1",
-                  type: "general",
-                  sessionCount: 0,
-                  sessions: undefined,
-                },
-              ],
-            },
-          }),
-        },
-      },
-    }
-    const result = await fetchSessionGroups(sdk)
-    expect(result[0].sessions).toEqual([])
+    expect(result[0]?.sessionCount).toBe(0)
+    expect(result[0]?.sessions).toEqual([])
   })
 })
 
 describe("fetchSessionTree", () => {
   test("preserves General and same-name Spaces by their path identity and locations", async () => {
     const tree = await fetchSessionTree({
-      client: {
+      bff: {
         workbench: {
+          locations: async ({ spacePath }) => ({ data: { scopePath: spacePath } }),
           sessionTree: async () => ({
             data: {
               scopes: [
@@ -257,22 +211,26 @@ describe("fetchSessionTree", () => {
                   path: "",
                   sessionCount: 1,
                   truncated: false,
-                  locations: [{
-                    key: "general-date:2026-07-16",
-                    kind: "general-date" as const,
-                    name: "2026-07-16",
-                    path: "",
-                    sessionCount: 1,
-                    sessions: [{
-                      id: "general-session",
-                      title: "General",
-                      directory: "/home/.wopal/general_tasks/2026-07-16",
-                      directoryHealth: "healthy" as const,
-                      marker: "",
-                      timeCreated: 1,
-                      timeUpdated: 2,
-                    }],
-                  }],
+                  locations: [
+                    {
+                      key: "general-date:2026-07-16",
+                      kind: "general-date" as const,
+                      name: "2026-07-16",
+                      path: "",
+                      sessionCount: 1,
+                      sessions: [
+                        {
+                          id: "general-session",
+                          title: "General",
+                          directory: "/home/.wopal/general_tasks/2026-07-16",
+                          directoryHealth: "healthy" as const,
+                          marker: "",
+                          timeCreated: 1,
+                          timeUpdated: 2,
+                        },
+                      ],
+                    },
+                  ],
                 },
                 {
                   key: "space:/fixtures/two",
@@ -281,22 +239,26 @@ describe("fetchSessionTree", () => {
                   path: "/fixtures/two",
                   sessionCount: 1,
                   truncated: false,
-                  locations: [{
-                    key: "space:/fixtures/two:root",
-                    kind: "space-root" as const,
-                    name: "Root",
-                    path: "/fixtures/two",
-                    sessionCount: 1,
-                    sessions: [{
-                      id: "space-session",
-                      title: "Space",
-                      directory: "/fixtures/two",
-                      directoryHealth: "healthy" as const,
-                      marker: "",
-                      timeCreated: 3,
-                      timeUpdated: 4,
-                    }],
-                  }],
+                  locations: [
+                    {
+                      key: "space:/fixtures/two:root",
+                      kind: "space-root" as const,
+                      name: "Root",
+                      path: "/fixtures/two",
+                      sessionCount: 1,
+                      sessions: [
+                        {
+                          id: "space-session",
+                          title: "Space",
+                          directory: "/fixtures/two",
+                          directoryHealth: "healthy" as const,
+                          marker: "",
+                          timeCreated: 3,
+                          timeUpdated: 4,
+                        },
+                      ],
+                    },
+                  ],
                 },
               ],
             },
@@ -311,37 +273,69 @@ describe("fetchSessionTree", () => {
 
   test("preserves marker, relativePath, and branch fields for project and worktree sessions", async () => {
     const tree = await fetchSessionTree({
-      client: {
+      bff: {
         workbench: {
+          locations: async ({ spacePath }) => ({ data: { scopePath: spacePath } }),
           sessionTree: async () => ({
             data: {
-              scopes: [{
-                key: "space:/proj",
-                kind: "space" as const,
-                name: "P",
-                path: "/proj",
-                sessionCount: 3,
-                truncated: false,
-                locations: [{
-                  key: "project:/proj/repo",
-                  kind: "project" as const,
-                  name: "repo",
-                  path: "/proj/repo",
+              scopes: [
+                {
+                  key: "space:/proj",
+                  kind: "space" as const,
+                  name: "P",
+                  path: "/proj",
                   sessionCount: 3,
-                  sessions: [
-                    { id: "root", title: "R", directory: "/proj/repo", directoryHealth: "healthy" as const, marker: "", timeCreated: 1, timeUpdated: 1 },
-                    { id: "wt", title: "W", directory: "/outside/wt", directoryHealth: "healthy" as const, marker: "worktree", relativePath: undefined, branch: "feature/x", timeCreated: 2, timeUpdated: 2 },
-                    { id: "sub", title: "S", directory: "/proj/repo/pkg", directoryHealth: "healthy" as const, marker: "directory", relativePath: "pkg", timeCreated: 3, timeUpdated: 3 },
+                  truncated: false,
+                  locations: [
+                    {
+                      key: "project:/proj/repo",
+                      kind: "project" as const,
+                      name: "repo",
+                      path: "/proj/repo",
+                      sessionCount: 3,
+                      sessions: [
+                        {
+                          id: "root",
+                          title: "R",
+                          directory: "/proj/repo",
+                          directoryHealth: "healthy" as const,
+                          marker: "",
+                          timeCreated: 1,
+                          timeUpdated: 1,
+                        },
+                        {
+                          id: "wt",
+                          title: "W",
+                          directory: "/outside/wt",
+                          directoryHealth: "healthy" as const,
+                          marker: "worktree",
+                          relativePath: undefined,
+                          branch: "feature/x",
+                          timeCreated: 2,
+                          timeUpdated: 2,
+                        },
+                        {
+                          id: "sub",
+                          title: "S",
+                          directory: "/proj/repo/pkg",
+                          directoryHealth: "healthy" as const,
+                          marker: "directory",
+                          relativePath: "pkg",
+                          timeCreated: 3,
+                          timeUpdated: 3,
+                        },
+                      ],
+                    },
                   ],
-                }],
-              }],
+                },
+              ],
             },
           }),
         },
       },
     })
 
-    const sessions = tree.scopes[0]!.locations[0]!.sessions
+    const sessions = tree.scopes[0].locations[0].sessions
     expect(sessions.map((s) => [s.id, s.marker, s.relativePath, s.branch])).toEqual([
       ["root", "", undefined, undefined],
       ["wt", "worktree", undefined, "feature/x"],
@@ -390,8 +384,12 @@ describe("createSessionGroupsLoader", () => {
         request += 1
         return request === 1 ? first.promise : second.promise
       },
-      commit: () => { hasData = true },
-      setLoading: (v) => { loadingEvents.push(v) },
+      commit: () => {
+        hasData = true
+      },
+      setLoading: (v) => {
+        loadingEvents.push(v)
+      },
       onError: () => {},
       hasData: () => hasData,
     })
@@ -416,7 +414,9 @@ describe("createSessionGroupsLoader", () => {
     const loader = createSessionGroupsLoader({
       fetch: () => first.promise,
       commit: () => {},
-      setLoading: (v) => { loadingEvents.push(v) },
+      setLoading: (v) => {
+        loadingEvents.push(v)
+      },
       onError: () => {},
       hasData: () => false,
     })
@@ -436,19 +436,23 @@ function makeScope(overrides: Partial<SessionTreeScope> = {}): SessionTreeScope 
     kind: "space",
     sessionCount: 1,
     truncated: false,
-    locations: [{
-      key: "space:/space:root",
-      label: "Root",
-      kind: "space-root",
-      sessions: [{
-        id: "s1",
-        title: "Session 1",
-        directory: "/space",
-        directoryHealth: "healthy",
-        timeCreated: 1,
-        timeUpdated: 2,
-      }],
-    }],
+    locations: [
+      {
+        key: "space:/space:root",
+        label: "Root",
+        kind: "space-root",
+        sessions: [
+          {
+            id: "s1",
+            title: "Session 1",
+            directory: "/space",
+            directoryHealth: "healthy",
+            timeCreated: 1,
+            timeUpdated: 2,
+          },
+        ],
+      },
+    ],
     ...overrides,
   }
 }
@@ -464,26 +468,32 @@ describe("mergeTree", () => {
     const prev: WorkbenchSessionTree = { scopes: [makeScope()] }
     // Reconstruct a structurally equal but reference-distinct tree
     const next: WorkbenchSessionTree = {
-      scopes: [{
-        path: "/space",
-        name: "Space",
-        kind: "space",
-        sessionCount: 1,
-        truncated: false,
-        locations: [{
-          key: "space:/space:root",
-          label: "Root",
-          kind: "space-root",
-          sessions: [{
-            id: "s1",
-            title: "Session 1",
-            directory: "/space",
-            directoryHealth: "healthy",
-            timeCreated: 1,
-            timeUpdated: 2,
-          }],
-        }],
-      }],
+      scopes: [
+        {
+          path: "/space",
+          name: "Space",
+          kind: "space",
+          sessionCount: 1,
+          truncated: false,
+          locations: [
+            {
+              key: "space:/space:root",
+              label: "Root",
+              kind: "space-root",
+              sessions: [
+                {
+                  id: "s1",
+                  title: "Session 1",
+                  directory: "/space",
+                  directoryHealth: "healthy",
+                  timeCreated: 1,
+                  timeUpdated: 2,
+                },
+              ],
+            },
+          ],
+        },
+      ],
     }
     const merged = mergeTree(prev, next)
     // Identity preserved at every level
@@ -496,25 +506,43 @@ describe("mergeTree", () => {
   test("reuses unchanged session refs and only swaps the one whose title changed", () => {
     const prev: WorkbenchSessionTree = { scopes: [makeScope()] }
     const next: WorkbenchSessionTree = {
-      scopes: [{
-        path: "/space",
-        name: "Space",
-        kind: "space",
-        sessionCount: 2,
-        truncated: false,
-        locations: [{
-          key: "space:/space:root",
-          label: "Root",
-          kind: "space-root",
-          sessions: [
-            { id: "s1", title: "Session 1 RENAMED", directory: "/space", directoryHealth: "healthy", timeCreated: 1, timeUpdated: 3 },
-            { id: "s2", title: "Session 2", directory: "/space", directoryHealth: "healthy", timeCreated: 4, timeUpdated: 5 },
+      scopes: [
+        {
+          path: "/space",
+          name: "Space",
+          kind: "space",
+          sessionCount: 2,
+          truncated: false,
+          locations: [
+            {
+              key: "space:/space:root",
+              label: "Root",
+              kind: "space-root",
+              sessions: [
+                {
+                  id: "s1",
+                  title: "Session 1 RENAMED",
+                  directory: "/space",
+                  directoryHealth: "healthy",
+                  timeCreated: 1,
+                  timeUpdated: 3,
+                },
+                {
+                  id: "s2",
+                  title: "Session 2",
+                  directory: "/space",
+                  directoryHealth: "healthy",
+                  timeCreated: 4,
+                  timeUpdated: 5,
+                },
+              ],
+            },
           ],
-        }],
-      }],
+        },
+      ],
     }
     const merged = mergeTree(prev, next)
-    expect(merged).not.toBe(prev)             // sessionCount changed → new scope
+    expect(merged).not.toBe(prev) // sessionCount changed → new scope
     expect(merged.scopes[0]).not.toBe(prev.scopes[0])
     expect(merged.scopes[0].locations[0]).not.toBe(prev.scopes[0].locations[0])
     // s1 changed title → new ref
@@ -546,11 +574,7 @@ describe("mergeSessionTreeSessions", () => {
       lastActiveAt: 1,
     }
 
-    const merged = mergeSessionTreeSessions(
-      [{ id: "session-1", title: "Before" }],
-      () => false,
-      [local],
-    )
+    const merged = mergeSessionTreeSessions([{ id: "session-1", title: "Before" }], () => false, [local])
 
     expect(merged).toEqual([{ id: "session-1", title: "After", status: "idle" }])
   })
@@ -640,11 +664,7 @@ describe("getPanelBadge", () => {
   })
 
   test("returns undefined for unbound session", () => {
-    const wb = wbWithPanels(
-      "/space",
-      [panel({ id: "p1", slotState: "empty" })],
-      "/space",
-    )
+    const wb = wbWithPanels("/space", [panel({ id: "p1", slotState: "empty" })], "/space")
     expect(getPanelBadge(wb, "unknown")).toBeUndefined()
   })
 
@@ -658,11 +678,7 @@ describe("getPanelBadge", () => {
   })
 
   test("skips active space in fallback scan to avoid double-counting", () => {
-    const wb = wbWithPanels(
-      "/active",
-      [panel({ id: "p1", slotState: "bound", boundSessionId: "s1" })],
-      "/active",
-    )
+    const wb = wbWithPanels("/active", [panel({ id: "p1", slotState: "bound", boundSessionId: "s1" })], "/active")
     // Session is in active space — should find it via activePath
     expect(getPanelBadge(wb, "s1")).toBe("P1")
   })

@@ -1095,9 +1095,20 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     const after = local.after
       ? { ...local.after, contents: afterContents, cacheKey: cacheKey(afterContents) }
       : undefined
+    // Diff metadata may be recreated on every reactive update even when its
+    // rendered target is unchanged. Compare the target identity only by the
+    // content that the viewer renders, so an unchanged sibling update keeps
+    // the existing shadow-root viewer.
+    const sameFileDiff = (a: FileDiffMetadata | undefined, b: FileDiffMetadata | undefined) =>
+      a === b ||
+      (a !== undefined &&
+        b !== undefined &&
+        a.name === b.name &&
+        a.deletionLines.join("") === b.deletionLines.join("") &&
+        a.additionLines.join("") === b.additionLines.join(""))
     const targetChanged =
       local.fileDiff !== undefined
-        ? instanceFileDiff !== local.fileDiff
+        ? !sameFileDiff(instanceFileDiff, local.fileDiff)
         : instanceFileDiff !== undefined ||
           before === undefined ||
           after === undefined ||

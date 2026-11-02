@@ -290,6 +290,22 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
   ),
 )
 
+it.effect("loads engine settings alongside the space registry and preserves the registry on update", () =>
+  withGlobalConfig({}, ({ dir }) =>
+    Effect.gen(function* () {
+      const spaces = { example: { path: "/tmp/example" } }
+      const ontologies = { example: { path: "/tmp/ontology" } }
+      yield* writeConfigEffect(dir, { model: "test/model", spaces, ontologies }, "settings.jsonc")
+
+      expect((yield* Config.use.getGlobal()).model).toBe("test/model")
+      yield* Config.use.updateGlobal({ model: "new/model" })
+      const file = path.join(dir, "settings.jsonc")
+      const written = ConfigParse.jsonc(yield* AppFileSystem.use.readFileString(file), file)
+      expect(written).toMatchObject({ model: "new/model", spaces, ontologies })
+    }),
+  ),
+)
+
 it.effect("updates global config inside ellamaka wrapper and preserves top-level keys", () =>
   withGlobalConfig({}, ({ dir }) =>
     Effect.gen(function* () {

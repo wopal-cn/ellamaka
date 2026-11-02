@@ -57,7 +57,7 @@ import { Workspace } from "@/control-plane/workspace"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
-import { InstanceHttpApi, RootHttpApi } from "./api"
+import { AppBffInstanceApi, AppBffRootApi, InstanceHttpApi, RootHttpApi } from "./api"
 import { PublicApi } from "./public"
 import {
   authorizationLayer,
@@ -87,13 +87,12 @@ import { v2Handlers } from "./handlers/v2"
 import { workspaceHandlers } from "./handlers/workspace"
 import { wopalSpaceHandlers, wopalSpaceInstanceHandlers } from "./handlers/wopal-space"
 import { workbenchHandlers, workbenchInstanceHandlers } from "./handlers/workbench"
-import { SpaceRegistry } from "@/wopal/space-registry"
-import { CliContract } from "@/wopal/cli-contract"
+import { SetupHostService } from "@/wopal/setup-host"
+import { WopalSpaceHostService } from "@/wopal/wopal-space-host"
 import { SessionProvisioner } from "@/workbench/session-provisioner"
 import { SessionProjection } from "@/workbench/session-projection"
 import { SessionDirectoryHealth } from "@/workbench/session-directory-health"
-import { WorkbenchDshUrl, layer as workbenchDshUrlLayer } from "@/workbench/dsh-url"
-import { SpaceFiles } from "@/workbench/space-files"
+import { layer as workbenchDshUrlLayer } from "@/workbench/dsh-url"
 import { instanceContextLayer } from "./middleware/instance-context"
 import { workspaceRoutingLayer } from "./middleware/workspace-routing"
 import { disposeMiddleware } from "./lifecycle"
@@ -126,17 +125,25 @@ const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config
 const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const v2HttpApiAuthLayer = v2AuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))
 const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+// The Official App BFF reads the same private WopalSpace services as the
+// Public Platform API. One stable layer holds the trusted host context, built
+// once at the assembly boundary; handlers never rebuild it per request.
+const wopalSpaceHostLayer = WopalSpaceHostService.layer
+// Setup composes over the same Ontology/Space instances; it is a separate
+// service so the Workbench/Space host contract stays unchanged.
+const setupHostLayer = SetupHostService.layer.pipe(Layer.provideMerge(wopalSpaceHostLayer))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
-  Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers, workbenchHandlers]),
-  Layer.provide(CliContract.defaultLayer),
+  Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers]),
+  Layer.provide(setupHostLayer),
+  Layer.provide(schemaErrorLayer),
+  Layer.provide(httpApiAuthLayer),
+)
+const appBffRootApiRoutes = HttpApiBuilder.layer(AppBffRootApi).pipe(
+  Layer.provide(workbenchHandlers),
   Layer.provide(SessionProvisioner.defaultLayer),
   Layer.provide(SessionProjection.defaultLayer),
   Layer.provide(SessionDirectoryHealth.defaultLayer),
-  // Uses the process-wide AppFileSystem below and the same SpaceRegistry
-  // snapshot as other root Workbench projections. Do not provide a nested
-  // SessionStatus layer here: status snapshots must share the canonical state.
-  Layer.provide(SpaceFiles.layer),
-  Layer.provide(SpaceRegistry.defaultLayer),
+  Layer.provide(wopalSpaceHostLayer),
   Layer.provide(workbenchDshUrlLayer),
   Layer.provide(schemaErrorLayer),
   Layer.provide(httpApiAuthLayer),
@@ -167,14 +174,22 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     tuiHandlers,
     workspaceHandlers,
     wopalSpaceInstanceHandlers,
-    workbenchInstanceHandlers,
   ]),
+)
+
+const appBffInstanceApiRoutes = HttpApiBuilder.layer(AppBffInstanceApi).pipe(
+  Layer.provide(workbenchInstanceHandlers),
+  Layer.provide(wopalSpaceHostLayer),
   Layer.provide(SessionProvisioner.defaultLayer),
   Layer.provide(SessionProjection.defaultLayer),
   Layer.provide(SessionDirectoryHealth.defaultLayer),
 )
 
 const instanceRoutes = instanceApiRoutes.pipe(
+  Layer.provide([httpApiAuthLayer, v2HttpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
+)
+
+const appBffInstanceRoutes = appBffInstanceApiRoutes.pipe(
   Layer.provide([httpApiAuthLayer, v2HttpApiAuthLayer, workspaceRoutingLive, instanceContextLayer, schemaErrorLayer]),
 )
 
@@ -210,7 +225,17 @@ type RouteRequirements =
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
-  return Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, docRoute, uiRoute).pipe(
+  return Layer.mergeAll(
+    rootApiRoutes,
+    appBffRootApiRoutes,
+    eventApiRoutes,
+    ptyConnectApiRoutes,
+    instanceRoutes,
+    appBffInstanceRoutes,
+    docRoute,
+    uiRoute,
+  ).pipe(
+    Layer.provide([wopalSpaceHostLayer]),
     Layer.provide([
       errorLayer,
       compressionLayer,

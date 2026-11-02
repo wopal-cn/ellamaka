@@ -1,5 +1,3 @@
-import { type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
 export * from "drizzle-orm"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -11,7 +9,7 @@ import { readFileSync, readdirSync, existsSync } from "fs"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { InstallationChannel } from "@wopal/ellamaka-core/installation/version"
 import { EffectBridge } from "@/effect/bridge"
-import { init } from "#db"
+import { init, migrate } from "#db"
 import { Effect, Schema } from "effect"
 
 declare const OPENCODE_MIGRATIONS: { sql: string; timestamp: number; name: string }[] | undefined
@@ -56,13 +54,6 @@ export type Transaction = SQLiteTransaction<"sync", void>
 type Client = ReturnType<typeof init>
 
 type Journal = { sql: string; timestamp: number; name: string }[]
-
-// Drizzle's migrate overloads trigger expensive variance checks here; narrow to the journal overload we actually use.
-const migrateFromJournal = migrate as unknown as (db: SQLiteBunDatabase, entries: Journal) => void
-
-function applyMigrations(db: SQLiteBunDatabase, entries: Journal) {
-  migrateFromJournal(db, entries)
-}
 
 function time(tag: string) {
   const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(tag)
@@ -125,7 +116,7 @@ export const Client = Object.assign(
           item.sql = "select 1;"
         }
       }
-      applyMigrations(db, entries)
+      migrate(db, entries)
     }
 
     client = db

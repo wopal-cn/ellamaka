@@ -225,18 +225,6 @@
     },
     {
       "rule": "TISO001",
-      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
-      "detail": "mock.module(../onboarding-client-context)",
-      "count": 2
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
-      "detail": "mock.module(@solidjs/router)",
-      "count": 2
-    },
-    {
-      "rule": "TISO001",
       "file": "packages/ellamaka-app/src/pages/session/chat-blocks.test.tsx",
       "detail": "mock.module(./workbench-markdown-renderer)",
       "count": 2
@@ -753,12 +741,6 @@
     },
     {
       "rule": "TISO002",
-      "file": "packages/opencode/test/config/tui-plugin-config.test.ts",
-      "detail": "process.env[...]",
-      "count": 4
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/opencode/test/config/tui.test.ts",
       "detail": "process.env.OPENCODE_CONFIG",
       "count": 1
@@ -987,12 +969,6 @@
     },
     {
       "rule": "TISO002",
-      "file": "packages/opencode/test/server/wopal-cli-contract.test.ts",
-      "detail": "process.env.WOPAL_DEV_CLI_PATH",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/opencode/test/session/instruction.test.ts",
       "detail": "process.env.WOPAL_SPACE",
       "count": 3
@@ -1086,12 +1062,6 @@
       "file": "packages/ellamaka-app/src/hooks/use-session-history-loader.test.ts",
       "detail": "setTimeout(r, 0)",
       "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/ellamaka-app/src/pages/onboarding/steps/done.test.tsx",
-      "detail": "setTimeout(resolve, 0)",
-      "count": 3
     },
     {
       "rule": "TISO003",
@@ -1392,18 +1362,6 @@
       "file": "packages/ellamaka-desktop/src/main/window-show-guard.test.ts",
       "detail": "sleep(30)",
       "count": 7
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/ellamaka-onboarding/test/router.test.ts",
-      "detail": "setTimeout(resolve, 50)",
-      "count": 1
-    },
-    {
-      "rule": "TISO003",
-      "file": "packages/ellamaka-onboarding/test/service.test.ts",
-      "detail": "setTimeout(resolve, 0)",
-      "count": 1
     },
     {
       "rule": "TISO003",
@@ -2088,12 +2046,6 @@
       "file": "packages/ellamaka-desktop/src/main/dsh-proxy.test.ts",
       "detail": "fetch(`http://127.0.0.1:${port}/dsh/`)",
       "count": 1
-    },
-    {
-      "rule": "TISO004",
-      "file": "packages/ellamaka-onboarding/test/router.test.ts",
-      "detail": "fetch(`${host.origin}/api/onboarding/stream`, { signal: controller.signal })",
-      "count": 3
     },
     {
       "rule": "TISO004",

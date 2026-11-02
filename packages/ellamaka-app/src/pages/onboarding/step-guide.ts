@@ -4,19 +4,17 @@ export type StepGuideAssets = Readonly<Record<string, string>>
 
 export const STEP_GUIDE_IDS = [
   "system-check",
-  "install-cli",
+  "github-auth",
   "ontology-setup",
   "create-space",
+  "runtime-preparation",
   "ai-provider",
   "done",
 ] as const
 
-export type StepGuideId = typeof STEP_GUIDE_IDS[number]
+export type StepGuideId = (typeof STEP_GUIDE_IDS)[number]
 
 const STEP_GUIDE_ALIASES: Record<string, StepGuideId> = {
-  "github-auth": "ontology-setup",
-  "install-wopal-cli": "install-cli",
-  "install-ellamaka-cli": "install-cli",
   "star-guide": "done",
 }
 
@@ -32,16 +30,12 @@ function escapeHtml(value: string): string {
 }
 
 export function resolveStepGuideId(step: string): StepGuideId | null {
-  if ((STEP_GUIDE_IDS as readonly string[]).includes(step)) {
-    return step as StepGuideId
-  }
+  const canonical = STEP_GUIDE_IDS.find((candidate) => candidate === step)
+  if (canonical) return canonical
   return STEP_GUIDE_ALIASES[step] ?? null
 }
 
-export function resolveStepGuideImageSource(
-  source: string,
-  assets: StepGuideAssets,
-): string | null {
+export function resolveStepGuideImageSource(source: string, assets: StepGuideAssets): string | null {
   const trimmed = source.trim()
   if (trimmed.startsWith("asset:")) {
     const key = trimmed.slice("asset:".length)
@@ -57,13 +51,11 @@ export function resolveStepGuideImageSource(
   }
 }
 
-export function prepareStepGuideMarkdown(
-  markdown: string,
-  assets: StepGuideAssets,
-): string {
+export function prepareStepGuideMarkdown(markdown: string, assets: StepGuideAssets): string {
   const replacements: Array<{ raw: string; html: string }> = []
-  marked.walkTokens(marked.lexer(markdown), (token) => {
+  void marked.walkTokens(marked.lexer(markdown), (token) => {
     if (token.type !== "image") return
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- marked does not narrow Token by its type field
     const image = token as Tokens.Image
     const resolved = resolveStepGuideImageSource(image.href, assets)
     if (!resolved) {
@@ -87,8 +79,5 @@ export function prepareStepGuideMarkdown(
     })
   })
 
-  return replacements.reduce(
-    (result, replacement) => result.replace(replacement.raw, replacement.html),
-    markdown,
-  )
+  return replacements.reduce((result, replacement) => result.replace(replacement.raw, replacement.html), markdown)
 }

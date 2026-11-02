@@ -31,39 +31,6 @@ describe("checkServerHealth", () => {
     expect(result).toEqual({ healthy: true, version: "1.2.3" })
   })
 
-  test("preserves the Wopal CLI handshake status", async () => {
-    const fetch = mockFetch(
-      async () =>
-        new Response(
-          JSON.stringify({
-            healthy: true,
-            version: "1.2.3",
-            cli: {
-              state: "incompatible",
-              requiredVersion: "0.3.4",
-              actualVersion: "0.3.3",
-            },
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        ),
-    )
-
-    const result = await checkServerHealth(server, fetch)
-
-    expect(result).toEqual({
-      healthy: true,
-      version: "1.2.3",
-      cli: {
-        state: "incompatible",
-        requiredVersion: "0.3.4",
-        actualVersion: "0.3.3",
-      },
-    })
-  })
-
   test("preserves the dsh runtime status when the server reports it", async () => {
     const fetch = mockFetch(
       async () =>

@@ -4,6 +4,7 @@ import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { batch, onCleanup, onMount, createResource, createSignal } from "solid-js"
 import { createSdkForServer } from "@/utils/server"
+import { createAppBffClient } from "@/bff/client"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
 import { ServerConnection, useServer } from "./server"
@@ -55,7 +56,7 @@ export function createServerSdkEventResync() {
   }
 }
 
-function createServerSdkContext(server: ServerConnection.Any) {
+export function createServerSdkContext(server: ServerConnection.Any) {
   const platform = usePlatform()
   const abort = new AbortController()
   const resync = createServerSdkEventResync()
@@ -291,10 +292,18 @@ function createServerSdkContext(server: ServerConnection.Any) {
     fetch: platform.fetch,
     throwOnError: true,
   })
+  // Official App BFF uses the app-private generated client; platform
+  // capabilities keep using the published SDK above.
+  const bff = createAppBffClient({
+    server: server.http,
+    ...(platform.fetch ? { fetch: platform.fetch } : {}),
+    throwOnError: true,
+  })
 
   return {
     url: server.http.url,
     client: sdk,
+    bff,
     event: {
       on: emitter.on.bind(emitter),
       listen: emitter.listen.bind(emitter),
@@ -381,6 +390,7 @@ function createDirSdkContext(directory: string, serverSDK: ReturnType<typeof cre
   return {
     directory,
     client,
+    bff: serverSDK.bff,
     event: emitter,
     activate: mode.activate,
     get url() {

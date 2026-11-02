@@ -22,7 +22,7 @@ import { ConfigVariable } from "@/config/variable"
 import { tryLoadWopalSpaceTuiConfig } from "./wopal-space"
 import { resolveWopalSpaceRoot } from "@/config/wopal-space-settings"
 import { preparePluginDependencies } from "@/core/plugin-dependency-preparation"
-import type { PluginConfigTable } from "@/config/wopal-plugin-config"
+import { ConfigWopalPluginConfig, type PluginConfigTable } from "@/config/wopal-plugin-config"
 import type { DeepMutable } from "@wopal/ellamaka-core/schema"
 import type { TuiAttentionSoundName } from "@wopal/ellamaka-plugin/tui"
 import { FormatError, FormatUnknownError } from "@/cli/error"
@@ -48,8 +48,8 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout"> &
   }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
-  // Effective plugin behaviour config (three-layer `wopal.pluginConfig` merge);
-  // empty object outside a WopalSpace instance.
+  // Effective plugin behaviour config. Every instance gets product defaults +
+  // global settings; WopalSpace instances add public/local Space overrides.
   pluginConfig: PluginConfigTable
   // Internal resolved plugin list used by runtime loading.
   plugin_origins?: ConfigPlugin.Origin[]
@@ -104,7 +104,6 @@ function dropUnknownKeybinds(input: Record<string, unknown>, configFilepath: str
 
 const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: string }) {
   const afs = yield* AppFileSystem.Service
-  let appliedOrder = 0
 
   const resolvePlugins = (config: Info, configFilepath: string): Effect.Effect<Info> =>
     Effect.gen(function* () {
@@ -178,16 +177,6 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       return yield* load(text, filepath)
     })
 
-  const loadSettingsFile = (filepath: string): Effect.Effect<Info> =>
-    Effect.gen(function* () {
-      const data = yield* loadFile(filepath)
-      if (Object.keys(data).length) {
-        appliedOrder += 1
-        log.info("applying tui config", { path: filepath, order: appliedOrder })
-      }
-      return data
-    })
-
   const merge = (source: string, data: Info) =>
     Effect.sync(() => {
       acc.result = mergeDeep(acc.result, data)
@@ -224,13 +213,19 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   // 1. Global tui config (lowest precedence).
   //    Extract only the `tui` field from settings.jsonc — the file also contains
   //    `ontologies`, `spaces`, `ellamaka` which are not valid TUI config keys.
-  for (const file of [path.join(Global.Path.config, "settings.jsonc")]) {
-    const text = yield* readConfigFile(file)
-    if (!text) continue
-    const raw = ConfigParse.jsonc(text, file) as Record<string, unknown>
-    if (!raw.tui || typeof raw.tui !== "object") continue
-    yield* merge(file, yield* load(JSON.stringify(raw.tui), file))
+  const globalSettingsPath = path.join(Global.Path.config, "settings.jsonc")
+  const globalSettings = yield* readConfigFile(globalSettingsPath)
+  if (globalSettings) {
+    const raw = ConfigParse.jsonc(globalSettings, globalSettingsPath)
+    if (isRecord(raw) && isRecord(raw.tui)) {
+      yield* merge(globalSettingsPath, yield* load(JSON.stringify(raw.tui), globalSettingsPath))
+    }
   }
+  const basePluginConfig = ConfigWopalPluginConfig.isGeneralTaskDirectory(ctx.directory, Global.Path.wopalHome)
+    ? ConfigWopalPluginConfig.mergeEffectivePluginConfig([
+        { source: "global", path: globalSettingsPath, text: globalSettings },
+      ]).pluginConfig
+    : {}
 
   // 2. Explicit OPENCODE_TUI_CONFIG override, if set.
   if (Flag.OPENCODE_TUI_CONFIG) {
@@ -272,7 +267,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   const parsedKeybinds = TuiKeybind.parse(keybinds)
   const result: Resolved = {
     ...acc.result,
-    pluginConfig: wopal?.pluginConfig ?? {},
+    pluginConfig: wopal?.pluginConfig ?? basePluginConfig,
     attention: {
       enabled: acc.result.attention?.enabled ?? false,
       notifications: acc.result.attention?.notifications ?? true,

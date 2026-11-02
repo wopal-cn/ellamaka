@@ -3,18 +3,17 @@ import { zhCN, type StepContent } from "./content/zh-CN"
 /** The canonical wizard steps, in order (mirrors the server contract). */
 export const ONBOARDING_STEPS = [
   "system-check",
-  "install-cli",
+  "github-auth",
   "ontology-setup",
   "create-space",
+  "runtime-preparation",
   "ai-provider",
   "done",
 ] as const
 
 export type OnboardingStepName = (typeof ONBOARDING_STEPS)[number]
 
-export const OPTIONAL_STEPS: Set<OnboardingStepName> = new Set([
-  "ai-provider",
-])
+export const OPTIONAL_STEPS: Set<OnboardingStepName> = new Set(["ai-provider"])
 
 export interface StepContext {
   hasExistingSpaces?: boolean
@@ -37,20 +36,20 @@ export interface PhaseConfig {
 export const PHASE_CONFIGS: PhaseConfig[] = [
   {
     phase: 1,
-    title: "引擎准备",
-    steps: ["system-check", "install-cli"],
+    title: "工作目录",
+    steps: ["system-check"],
     autoAdvanceSteps: new Set([]),
   },
   {
     phase: 2,
     title: "预备能力",
-    steps: ["ontology-setup"], // github-auth is integrated into ontology-setup
+    steps: ["github-auth", "ontology-setup"],
     autoAdvanceSteps: new Set([]),
   },
   {
     phase: 3,
     title: "空间与模型",
-    steps: ["create-space", "ai-provider"],
+    steps: ["create-space", "runtime-preparation", "ai-provider"],
     autoAdvanceSteps: new Set([]),
   },
   {
@@ -61,19 +60,31 @@ export const PHASE_CONFIGS: PhaseConfig[] = [
   },
 ]
 
-export function getPhaseForStep(step: OnboardingStepName | "done" | string): PhaseConfig {
-  if (step === "star-guide") {
-    return PHASE_CONFIGS[3] // Phase 4
-  }
-  if (step === "install-wopal-cli" || step === "install-ellamaka-cli") {
-    return PHASE_CONFIGS[0] // Phase 1
-  }
+export function getPhaseForStep(step: string): PhaseConfig {
   for (const config of PHASE_CONFIGS) {
-    if (config.steps.includes(step as any)) {
+    if (config.steps.some((candidate) => candidate === step)) {
       return config
     }
   }
   return PHASE_CONFIGS[0]
+}
+
+export function canNavigateToPhase(currentStep: string, targetPhase: number, working: boolean): boolean {
+  return !working && targetPhase <= getPhaseForStep(currentStep).phase
+}
+
+export function requiresRuntimePreparation(runtimeReady: boolean): boolean {
+  return !runtimeReady
+}
+
+export function applyRuntimePreparationGate(
+  step: OnboardingStepName | "done",
+  runtimeReady: boolean,
+): OnboardingStepName | "done" {
+  if ((step === "ai-provider" || step === "done") && requiresRuntimePreparation(runtimeReady)) {
+    return "runtime-preparation"
+  }
+  return step
 }
 
 export interface StepMetadata {
@@ -83,36 +94,24 @@ export interface StepMetadata {
   content?: StepContent
 }
 
-export const STEP_METADATA: Record<OnboardingStepName | "done" | string, StepMetadata> = {
+export const STEP_METADATA: Record<string, StepMetadata> = {
   "system-check": {
     title: zhCN.steps["system-check"].title,
     description: zhCN.steps["system-check"].goal,
     optional: false,
     content: zhCN.steps["system-check"],
   },
-  "install-cli": {
-    title: zhCN.steps["install-cli"].title,
-    description: zhCN.steps["install-cli"].goal,
-    optional: false,
-    content: zhCN.steps["install-cli"],
-  },
-  "install-wopal-cli": {
-    title: zhCN.steps["install-wopal-cli"].title,
-    description: zhCN.steps["install-wopal-cli"].goal,
-    optional: false,
-    content: zhCN.steps["install-wopal-cli"],
-  },
-  "install-ellamaka-cli": {
-    title: zhCN.steps["install-ellamaka-cli"].title,
-    description: zhCN.steps["install-ellamaka-cli"].goal,
-    optional: false,
-    content: zhCN.steps["install-ellamaka-cli"],
-  },
   "ai-provider": {
     title: zhCN.steps["ai-provider"].title,
     description: zhCN.steps["ai-provider"].goal,
     optional: true,
     content: zhCN.steps["ai-provider"],
+  },
+  "github-auth": {
+    title: zhCN.steps["github-auth"].title,
+    description: zhCN.steps["github-auth"].goal,
+    optional: false,
+    content: zhCN.steps["github-auth"],
   },
   "ontology-setup": {
     title: zhCN.steps["ontology-setup"].title,
@@ -125,6 +124,12 @@ export const STEP_METADATA: Record<OnboardingStepName | "done" | string, StepMet
     description: zhCN.steps["create-space"].goal,
     optional: false,
     content: zhCN.steps["create-space"],
+  },
+  "runtime-preparation": {
+    title: zhCN.steps["runtime-preparation"].title,
+    description: zhCN.steps["runtime-preparation"].goal,
+    optional: false,
+    content: zhCN.steps["runtime-preparation"],
   },
   "star-guide": {
     title: zhCN.steps["star-guide"].title,
@@ -140,25 +145,26 @@ export const STEP_METADATA: Record<OnboardingStepName | "done" | string, StepMet
   },
 }
 
-export function getStepMetadata(step: OnboardingStepName | "done" | string): StepMetadata {
-  return STEP_METADATA[step] ?? { title: String(step), description: "", optional: false }
+export function getStepMetadata(step: string): StepMetadata {
+  return STEP_METADATA[step] ?? { title: step, description: "", optional: false }
 }
 
-export function getStepContent(step: OnboardingStepName | "done" | string): StepContent | undefined {
+export function getStepContent(step: string): StepContent | undefined {
   return STEP_METADATA[step]?.content
 }
 
 export type ForwardMode = "submit" | "advance" | "disabled"
 export type FeedbackMode = "idle" | "working" | "error" | "hidden"
 
-const EXPLICIT_ACTION_STEPS = new Set<OnboardingStepName>([
+const EXPLICIT_ACTION_STEPS: ReadonlySet<string> = new Set<OnboardingStepName>([
   "ai-provider",
+  "github-auth",
   "ontology-setup",
   "create-space",
 ])
 
-export function isExplicitActionStep(step: OnboardingStepName | "done" | string): boolean {
-  return step !== "done" && EXPLICIT_ACTION_STEPS.has(step as any)
+export function isExplicitActionStep(step: string): boolean {
+  return step !== "done" && EXPLICIT_ACTION_STEPS.has(step)
 }
 
 export function resolveFeedbackMode(input: {
@@ -185,10 +191,7 @@ export function resolveForwardMode(input: {
   return input.submitFromNavigation === false ? "disabled" : "submit"
 }
 
-export function isRetryActionVisible(
-  step: OnboardingStepName | "done",
-  input: { working: boolean; success: boolean | undefined },
-): boolean {
+export function isRetryActionVisible(step: string, input: { working: boolean; success: boolean | undefined }): boolean {
   return step !== "done" && !input.working && input.success === false
 }
 
@@ -214,14 +217,18 @@ export function resolveRestoreTarget(
   return ONBOARDING_STEPS.find((step) => step === saved) ?? "system-check"
 }
 
-export function createStepController(initialStep: OnboardingStepName | "done" | string = "system-check") {
-  let currentStep: OnboardingStepName | "done" = (initialStep === "star-guide" ? "done" : initialStep === "install-wopal-cli" || initialStep === "install-ellamaka-cli" ? "install-cli" : initialStep) as OnboardingStepName | "done"
+function normalizeStep(step: string): OnboardingStepName | "done" {
+  if (step === "done") return "done"
+  return ONBOARDING_STEPS.find((candidate) => candidate === step) ?? "system-check"
+}
+
+export function createStepController(initialStep = "system-check") {
+  let currentStep = normalizeStep(initialStep)
 
   return {
     getCurrentStep: () => currentStep,
-    setCurrentStep: (step: OnboardingStepName | "done" | string) => {
-      const normalized = step === "star-guide" ? "done" : (step === "install-wopal-cli" || step === "install-ellamaka-cli" ? "install-cli" : step)
-      currentStep = normalized as OnboardingStepName | "done"
+    setCurrentStep: (step: string) => {
+      currentStep = normalizeStep(step)
     },
     getProgressPercent: () => {
       if (currentStep === "done") return 100

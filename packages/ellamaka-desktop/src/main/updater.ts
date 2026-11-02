@@ -1,10 +1,8 @@
-import { spawnSync } from "node:child_process"
 import { app, dialog } from "electron"
 import pkg from "electron-updater"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { getLogger } from "./logging"
 import { authorizeUpdate, authorizeUpdateFromFeed } from "./updater-policy"
-import { checkEngineMajorMinor, checkWopalCliVersion } from "./version-check"
 
 export { authorizeUpdate } from "./updater-policy"
 export type { UpdateAuthorizationInput, UpdateAuthorization } from "./updater-policy"
@@ -13,28 +11,6 @@ const { autoUpdater } = pkg
 type UpdateCheckResult = { updateAvailable: boolean; version?: string; failed?: boolean }
 let downloadedVersion: string | undefined
 let pendingCheck: Promise<UpdateCheckResult> | undefined
-
-// Resolve the installed wopal-cli version via `wopal --version`. Returns null
-// when the binary is missing or the probe fails — callers treat null as
-// "skip this check" (never block the update on an unreadable version).
-function probeWopalCliVersion(): string | null {
-  try {
-    const res = spawnSync("wopal", ["--version"], { encoding: "utf8", timeout: 5000 })
-    if (res.status === 0 && res.stdout?.trim()) return res.stdout.trim()
-  } catch {}
-  return null
-}
-
-// Resolve the installed ellamaka CLI version via `ellamaka --version`. Returns
-// null when the binary is missing or the probe fails — callers treat null as
-// "skip this check".
-function probeEngineCliVersion(): string | null {
-  try {
-    const res = spawnSync("ellamaka", ["--version"], { encoding: "utf8", timeout: 5000 })
-    if (res.status === 0 && res.stdout?.trim()) return res.stdout.trim()
-  } catch {}
-  return null
-}
 
 export function setupAutoUpdater() {
   if (!UPDATER_ENABLED) return
@@ -119,44 +95,6 @@ async function checkAndDownloadUpdate(): Promise<UpdateCheckResult> {
       return { updateAvailable: false, failed: true }
     }
     logger.log("update authorized", { version, channel: targetChannel })
-    // Runtime version gate (docs/DISTRIBUTION.md §6): after policy
-    // authorization, before download. The installed wopal-cli must satisfy
-    // the protocol floor and the installed ellamaka CLI must share the
-    // Desktop's major.minor. A probe failure (binary missing / unreadable)
-    // skips that check instead of blocking the update.
-    const wopalCliVersion = probeWopalCliVersion()
-    const engineCliVersion = probeEngineCliVersion()
-    // Each probe failure skips its own check (logged, not blocking): a
-    // binary missing from the Electron PATH must not block updates.
-    if (wopalCliVersion !== null) {
-      const wopal = checkWopalCliVersion(wopalCliVersion, import.meta.env.MIN_WOPAL_CLI_VERSION)
-      if (!wopal.ok) {
-        logger.log("update denied by runtime version gate", {
-          reason: wopal.reason,
-          wopalCliVersion,
-          engineCliVersion,
-          version,
-        })
-        return { updateAvailable: false, failed: true }
-      }
-    } else {
-      logger.log("wopal-cli version probe failed, skipping wopal-cli floor check", { version })
-    }
-    if (engineCliVersion !== null) {
-      const engine = checkEngineMajorMinor(app.getVersion(), engineCliVersion)
-      if (!engine.ok) {
-        logger.log("update denied by runtime version gate", {
-          reason: engine.reason,
-          wopalCliVersion,
-          engineCliVersion,
-          version,
-        })
-        return { updateAvailable: false, failed: true }
-      }
-    } else {
-      logger.log("ellamaka CLI version probe failed, skipping engine major.minor check", { version })
-    }
-    logger.log("update version gate passed", { wopalCliVersion, engineCliVersion })
     await autoUpdater.downloadUpdate()
     downloadedVersion = version
     logger.log("update download completed", { version })

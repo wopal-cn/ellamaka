@@ -264,7 +264,6 @@
         "@typescript/native-preview": "catalog:",
         "@valibot/to-json-schema": "1.6.0",
         "@wopal/ellamaka-app": "workspace:*",
-        "@wopal/ellamaka-onboarding": "workspace:*",
         "@wopal/ellamaka-release": "workspace:*",
         "@wopal/ui": "workspace:*",
         "electron": "41.2.1",
@@ -291,18 +290,6 @@
         "@parcel/watcher-linux-x64-musl": "2.5.1",
         "@parcel/watcher-win32-arm64": "2.5.1",
         "@parcel/watcher-win32-x64": "2.5.1",
-      },
-    },
-    "packages/ellamaka-onboarding": {
-      "name": "@wopal/ellamaka-onboarding",
-      "version": "2.0.10",
-      "dependencies": {
-        "@wopal/ellamaka-core": "workspace:*",
-      },
-      "devDependencies": {
-        "@tsconfig/bun": "catalog:",
-        "@types/bun": "catalog:",
-        "@types/node": "catalog:",
       },
     },
     "packages/ellamaka-release": {
@@ -403,10 +390,8 @@
         "@solid-primitives/scheduled": "1.5.2",
         "@standard-schema/spec": "1.0.0",
         "@types/ws": "8.18.1",
-        "@wopal/cli-capability-schema": "^0.3.23",
         "@wopal/ellamaka-brand": "workspace:*",
         "@wopal/ellamaka-cordis": "workspace:*",
-        "@wopal/ellamaka-onboarding": "workspace:*",
         "@wopal/ellamaka-plugin": "workspace:*",
         "@wopal/ellamaka-release": "workspace:*",
         "@wopal/ellamaka-sdk": "workspace:*",
@@ -589,7 +574,9 @@
       "name": "@wopal/wopalspace",
       "version": "2.0.10",
       "dependencies": {
+        "effect": "catalog:",
         "jsonc-parser": "3.3.1",
+        "yaml": "^2.9.0",
       },
       "devDependencies": {
         "@tsconfig/bun": "catalog:",
@@ -2706,8 +2693,6 @@
 
     "@vscode/ripgrep-win32-x64": ["@vscode/ripgrep-win32-x64@1.18.0", "https://registry.npmmirror.com/@vscode/ripgrep-win32-x64/-/ripgrep-win32-x64-1.18.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-KNPvtElldqILHdnAetujPaowkNbpqJy3ssIGGN6F6Kve9Qi+nNLI2DN01O83JjCEVQbCzl8Ov3QZ9Eov3BR8Dg=="],
 
-    "@wopal/cli-capability-schema": ["@wopal/cli-capability-schema@0.3.23", "https://registry.npmmirror.com/@wopal/cli-capability-schema/-/cli-capability-schema-0.3.23.tgz", { "dependencies": { "@sinclair/typebox": "^0.34.52" } }, "sha512-rnewLHWxCiCmciGBg9QOvrCXg7gz1g7vseF94TL/gtTJTDt0+bT4qBvI2c5hDTAnNjkFGGGJc1n+hCNquI7Aww=="],
-
     "@wopal/effect-drizzle-sqlite": ["@wopal/effect-drizzle-sqlite@workspace:packages/effect-drizzle-sqlite"],
 
     "@wopal/ellamaka": ["@wopal/ellamaka@workspace:packages/opencode"],
@@ -2723,8 +2708,6 @@
     "@wopal/ellamaka-core": ["@wopal/ellamaka-core@workspace:packages/ellamaka-core"],
 
     "@wopal/ellamaka-desktop": ["@wopal/ellamaka-desktop@workspace:packages/ellamaka-desktop"],
-
-    "@wopal/ellamaka-onboarding": ["@wopal/ellamaka-onboarding@workspace:packages/ellamaka-onboarding"],
 
     "@wopal/ellamaka-plugin": ["@wopal/ellamaka-plugin@workspace:packages/plugin"],
 

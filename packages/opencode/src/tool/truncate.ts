@@ -7,15 +7,15 @@ import { evaluate } from "@/permission/evaluate"
 import { Config } from "@/config/config"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { ToolID } from "./schema"
-import { TRUNCATION_DIR } from "./truncation-dir"
+import { truncationDir } from "./truncation-dir"
 
 const log = Log.create({ service: "truncation" })
 const RETENTION = Duration.days(7)
 
 export const MAX_LINES = 2000
 export const MAX_BYTES = 50 * 1024
-export const DIR = TRUNCATION_DIR
-export const GLOB = path.join(TRUNCATION_DIR, "*")
+export const dir = truncationDir
+export const glob = () => path.join(truncationDir(), "*")
 
 export type Result = { content: string; truncated: false } | { content: string; truncated: true; outputPath: string }
 
@@ -53,12 +53,13 @@ export const layer = Layer.effect(
 
     const cleanup = Effect.fn("Truncate.cleanup")(function* () {
       const cutoff = Date.now() - Duration.toMillis(RETENTION)
-      const entries = yield* fs.readDirectory(TRUNCATION_DIR).pipe(
+      const directory = truncationDir()
+      const entries = yield* fs.readDirectory(directory).pipe(
         Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
         Effect.catch(() => Effect.succeed([])),
       )
       for (const entry of entries) {
-        const file = path.join(TRUNCATION_DIR, entry)
+        const file = path.join(directory, entry)
         const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.void))
         const mtime = Option.getOrElse(info?.mtime ?? Option.none(), () => new Date(0)).getTime()
         if (mtime >= cutoff) continue
@@ -67,8 +68,9 @@ export const layer = Layer.effect(
     })
 
     const write = Effect.fn("Truncate.write")(function* (text: string) {
-      const file = path.join(TRUNCATION_DIR, ToolID.ascending())
-      yield* fs.ensureDir(TRUNCATION_DIR).pipe(Effect.orDie)
+      const directory = truncationDir()
+      const file = path.join(directory, ToolID.ascending())
+      yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
       return file
     })

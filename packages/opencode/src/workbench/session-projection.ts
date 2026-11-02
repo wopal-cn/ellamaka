@@ -2,14 +2,12 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { realpath } from "fs/promises"
 import path from "path"
 import { Database } from "@/storage/db"
-import { SessionID } from "@/session/schema"
 import { SessionTable } from "@/session/session.sql"
 import { SessionDirectoryHealth } from "./session-directory-health"
-import { SpaceRegistry } from "@/wopal/space-registry"
-import { CliContract } from "@/wopal/cli-contract"
-import type { SpaceEntry } from "@/wopal/cli-schema"
-import { SpaceControlUnavailable, CapabilityContractError } from "@/wopal/cli-schema"
-import { and, eq, isNull } from "drizzle-orm"
+import type { RegisteredSpace, SpaceListItem } from "@wopal/wopalspace"
+import { WopalSpaceHostService } from "@/wopal/wopal-space-host"
+import { uniqueSpaceRootFailure } from "./space-paths"
+import { and, isNull } from "drizzle-orm"
 import {
   buildWorkbenchSessionTree,
   isPathWithin,
@@ -37,14 +35,6 @@ export interface SessionSummary {
   timeArchived?: number
 }
 
-export interface WorkbenchSessionSummary {
-  id: SessionID
-  title: string
-  directory: string
-  parentID?: SessionID
-  agent?: string
-}
-
 export type WorkbenchLocation = {
   key: string
   kind: "space-root" | "project" | "recent" | "search"
@@ -59,18 +49,36 @@ export class WorkbenchSpaceNotFound extends Schema.TaggedErrorClass<WorkbenchSpa
   { message: Schema.String, spacePath: Schema.String },
 ) {}
 
+/** A private WopalSpace query failed; carries the stable domain code. */
+export class WorkbenchSpaceQueryFailed extends Schema.TaggedErrorClass<WorkbenchSpaceQueryFailed>()(
+  "WorkbenchSpaceQueryFailed",
+  { message: Schema.String, code: Schema.String, suggestion: Schema.optional(Schema.String) },
+) {}
+
+export function spaceQueryFailed(error: unknown) {
+  const code =
+    typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+      ? error.code
+      : "SPACE_OPERATION_FAILED"
+  const message = error instanceof Error ? error.message : String(error)
+  const suggestion =
+    typeof error === "object" && error !== null && "suggestion" in error && typeof error.suggestion === "string"
+      ? error.suggestion
+      : undefined
+  return new WorkbenchSpaceQueryFailed({ code, message, ...(suggestion ? { suggestion } : {}) })
+}
+
 export interface SessionProjection {
-  readonly getSessionGroups: () => Effect.Effect<SessionGroup[], SpaceControlUnavailable | CapabilityContractError>
-  readonly getSessionSummary: (input: { sessionID: SessionID }) => Effect.Effect<WorkbenchSessionSummary | null>
+  readonly getSessionGroups: () => Effect.Effect<SessionGroup[], WorkbenchSpaceQueryFailed>
   readonly getSessionTree: (input?: {
     limitPerScope?: number
-  }) => Effect.Effect<WorkbenchSessionTree, SpaceControlUnavailable | CapabilityContractError>
+  }) => Effect.Effect<WorkbenchSessionTree, WorkbenchSpaceQueryFailed>
   readonly getLocations: (input: {
     spacePath: string
     query?: string
   }) => Effect.Effect<
     { scopePath: string; items: WorkbenchLocation[] },
-    WorkbenchSpaceNotFound | SpaceControlUnavailable | CapabilityContractError
+    WorkbenchSpaceNotFound | WorkbenchSpaceQueryFailed
   >
 }
 
@@ -110,7 +118,7 @@ export function resolveSpaceRootPath(root: string, value: string): string {
 
 const make = Effect.gen(function* () {
   const health = yield* SessionDirectoryHealth.Service
-  const registry = yield* SpaceRegistry.Service
+  const host = yield* WopalSpaceHostService.Service
 
   const activeRows = () =>
     Effect.sync(() =>
@@ -133,52 +141,18 @@ const make = Effect.gen(function* () {
       ),
     )
 
-  const getSessionSummary = Effect.fn("SessionProjection.getSessionSummary")(function* (input: {
-    sessionID: SessionID
-  }) {
-    return yield* Effect.sync(() => {
-      const row = Database.use((db) =>
-        db
-          .select({
-            id: SessionTable.id,
-            title: SessionTable.title,
-            directory: SessionTable.directory,
-            parentID: SessionTable.parent_id,
-            agent: SessionTable.agent,
-          })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, input.sessionID))
-          .get(),
-      )
-      if (!row) return null
-      return {
-        id: SessionID.make(row.id),
-        title: row.title,
-        directory: row.directory,
-        parentID: row.parentID ? SessionID.make(row.parentID) : undefined,
-        agent: row.agent ?? undefined,
-      }
-    })
-  })
+  // Registered Spaces are a read-only WopalSpace fact: no cache warm-up and no
+  // CLI subprocess. Query failures degrade to "no Spaces" so General sessions
+  // still render.
+  const spaces = () => Effect.try({ try: () => host.space.list().items, catch: spaceQueryFailed })
 
-  const spaces = () =>
-    Effect.gen(function* () {
-      const snapshot = yield* registry.getSpaces()
-      if (snapshot.spaces.length > 0) return snapshot.spaces
-      return (yield* registry.refreshSpaces(CliContract.executablePath())).spaces
-    })
+  const spacesOrEmpty = () => spaces().pipe(Effect.catch(() => Effect.succeed([] as SpaceListItem[])))
 
-  const spacesOrEmpty = () =>
-    spaces().pipe(
-      Effect.catchTag("SpaceControlUnavailable", () => Effect.succeed([])),
-      Effect.catchTag("CapabilityContractError", () => Effect.succeed([])),
-    )
-
-  const getSessionGroups = (): Effect.Effect<SessionGroup[], SpaceControlUnavailable | CapabilityContractError> =>
+  const getSessionGroups = (): Effect.Effect<SessionGroup[], WorkbenchSpaceQueryFailed> =>
     Effect.gen(function* () {
       const [rows, registeredSpaces] = yield* Effect.all([activeRows(), spacesOrEmpty()])
       const normalizedSpaces = registeredSpaces
-        .map((space) => ({ ...space, path: normalizeWorkbenchPath(space.path) }))
+        .map((space) => ({ ...space, id: space.name, path: normalizeWorkbenchPath(space.path) }))
         .sort((a, b) => b.path.length - a.path.length || a.path.localeCompare(b.path))
       const grouped = new Map<string, { title: string; rows: RawSessionRow[] }>()
       const general = new Map<string, RawSessionRow[]>()
@@ -186,7 +160,7 @@ const make = Effect.gen(function* () {
       for (const row of rows) {
         const match = normalizedSpaces.find((space) => isPathWithin(space.path, row.directory))
         if (match) {
-          const bucket = grouped.get(match.id) ?? { title: match.name, rows: [] }
+          const bucket = grouped.get(match.id) ?? { title: match.displayName, rows: [] }
           bucket.rows.push(row)
           grouped.set(match.id, bucket)
           continue
@@ -222,15 +196,16 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const [rows, registeredSpaces] = yield* Effect.all([activeRows(), spacesOrEmpty()], { concurrency: 2 })
       const resolvedSpaces = yield* canonicalSpaces(registeredSpaces)
+      const ambiguity = uniqueSpaceRootFailure(resolvedSpaces)
+      if (ambiguity) return yield* new WorkbenchSpaceQueryFailed(ambiguity)
       // Fetch projects per space. `wopal space projects list --space <name>`
       // returns paths relative to that space's root; resolve them to absolute
       // against the owning space's root before passing to the tree builder.
       // A single global fetch would only cover whichever space the serve CWD
       // happens to sit in, missing every other (dynamically created) space.
-      const cli = CliContract.executablePath()
       const projectsPerSpace = yield* Effect.all(
         resolvedSpaces.map((space) =>
-          registry.refreshProjects(cli, space.id).pipe(
+          Effect.try({ try: () => host.space.projectsList(space.id), catch: spaceQueryFailed }).pipe(
             Effect.map((snapshot) =>
               snapshot.items.map((project) => {
                 const absoluteProjectPath = resolveSpaceRootPath(space.path, project.path)
@@ -285,22 +260,32 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const registeredSpaces = yield* spaces()
       const canonical = yield* canonicalSpaces(registeredSpaces)
-      const requested = normalizeWorkbenchPath(input.spacePath)
-      const space = canonical.find((item) => item.path === requested)
-      if (!space) {
+      // A workbench may reach the same Space through a symbolic-link alias
+      // (for example /Users/... and /Volumes/.../mini-links/...). The Space
+      // Tree projects canonical paths while a persisted tab can retain the
+      // alias. Resolve the request through the same canonicalization as the
+      // registry before matching; only containment and ownership are affected.
+      const requested = yield* canonicalPath(input.spacePath)
+      const matches = canonical.filter((item) => item.path === requested)
+      if (matches.length === 0) {
         return yield* new WorkbenchSpaceNotFound({
           message: `Registered Space not found: ${input.spacePath}`,
           spacePath: input.spacePath,
         })
       }
-      const cli = CliContract.executablePath()
+      if (matches.length > 1) {
+        const collision = uniqueSpaceRootFailure(matches)
+        if (collision) return yield* new WorkbenchSpaceQueryFailed(collision)
+      }
+      const space = matches[0]
+      const query = input.query?.trim()
       const [projects, rows, searched] = yield* Effect.all(
         [
-          registry.refreshProjects(cli, space.id),
+          Effect.try({ try: () => host.space.projectsList(space.id), catch: spaceQueryFailed }),
           activeRows(),
-          input.query?.trim()
-            ? registry.searchSpace(cli, input.query.trim(), space.id, "dir")
-            : Effect.succeed({ items: [], total: 0, refreshedAt: 0 }),
+          query
+            ? Effect.try({ try: () => host.space.search(space.id, { query, type: "dir" }), catch: spaceQueryFailed })
+            : Effect.succeed({ items: [], total: 0 }),
         ],
         { concurrency: 3 },
       )
@@ -351,7 +336,7 @@ const make = Effect.gen(function* () {
       return { scopePath: space.path, items: [...items.filter((item) => item.kind !== "recent"), ...recent] }
     })
 
-  return Service.of({ getSessionGroups, getSessionSummary, getSessionTree, getLocations })
+  return Service.of({ getSessionGroups, getSessionTree, getLocations })
 })
 
 function summaries(rows: RawSessionRow[], health: SessionDirectoryHealth) {
@@ -374,10 +359,13 @@ function summaries(rows: RawSessionRow[], health: SessionDirectoryHealth) {
   )
 }
 
-function canonicalSpaces(spaces: SpaceEntry[]) {
+// id is the stable registry key; name is the display label.
+function canonicalSpaces(spaces: readonly RegisteredSpace[]) {
   return Effect.all(
     spaces.map((space) =>
-      canonicalPath(space.path).pipe(Effect.map((resolved) => ({ id: space.id, name: space.name, path: resolved }))),
+      canonicalPath(space.path).pipe(
+        Effect.map((resolved) => ({ id: space.name, name: space.displayName, path: resolved })),
+      ),
     ),
     { concurrency: 16 },
   )
@@ -432,7 +420,7 @@ export const layer = Layer.effect(Service, make)
 
 export const defaultLayer = layer.pipe(
   Layer.provide(SessionDirectoryHealth.defaultLayer),
-  Layer.provide(SpaceRegistry.defaultLayer),
+  Layer.provide(WopalSpaceHostService.layer),
 )
 
 export * as SessionProjection from "./session-projection"

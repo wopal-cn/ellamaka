@@ -9,9 +9,10 @@ import { ConfigCommand } from "./command"
 import { ConfigAgent } from "./agent"
 import { ConfigPlugin } from "./plugin"
 import { loadWopalSpaceSettingsFiles } from "./wopal-space-settings"
-import { mergePluginConfig, settingsFileSource } from "./wopal-plugin-config"
+import { mergeEffectivePluginConfig, settingsFileSource } from "./wopal-plugin-config"
 import type { PluginConfigSources, PluginConfigTable } from "./wopal-plugin-config"
 import { Effect } from "effect"
+import { isRecord } from "@/util/record"
 import type { Info } from "./config"
 import type { ConsoleState } from "./console-state"
 
@@ -24,18 +25,15 @@ export async function localPluginInstallDeps(dir: string): Promise<InstallDepend
 }
 
 export interface WopalSpaceDeps {
-  readConfigFile: (filepath: string) => Effect.Effect<string | undefined, never, never>
-  loadConfig: (
-    text: string,
-    options: { path: string } | { dir: string; source: string },
-  ) => Effect.Effect<Info, never, never>
-  getGlobal: () => Effect.Effect<Info, never, never>
-  merge: (source: string, next: Info, kind?: ConfigPlugin.Scope) => Effect.Effect<void, never, never>
+  readConfigFile: (filepath: string) => Effect.Effect<string | undefined>
+  loadConfig: (text: string, options: { path: string } | { dir: string; source: string }) => Effect.Effect<Info>
+  getGlobal: () => Effect.Effect<Info>
+  merge: (source: string, next: Info, kind?: ConfigPlugin.Scope) => Effect.Effect<void>
   mergePluginOrigins: (
     source: string,
     list: ConfigPlugin.Spec[] | undefined,
     kind?: ConfigPlugin.Scope,
-  ) => Effect.Effect<void, never, never>
+  ) => Effect.Effect<void>
   applyPostMerge: () => void
   initContainers: () => void
   getResult: () => Info
@@ -74,7 +72,7 @@ export function tryLoadWopalSpaceConfig(
     // space settings texts (no second file read for space layers).
     const globalSettingsPath = path.join(Global.Path.config, "settings.jsonc")
     const globalSettings = yield* deps.readConfigFile(globalSettingsPath)
-    const { pluginConfig, sources: pluginConfigSources } = mergePluginConfig([
+    const { pluginConfig, sources: pluginConfigSources } = mergeEffectivePluginConfig([
       { source: "global", path: globalSettingsPath, text: globalSettings },
       ...settings.files.map((file) => ({
         source: settingsFileSource(file.path),
@@ -90,8 +88,8 @@ export function tryLoadWopalSpaceConfig(
       let loaded = false
       for (const file of settings.files) {
         if (file.dir !== dir) continue
-        const raw = ConfigParse.jsonc(file.text, file.path) as Record<string, unknown>
-        if (raw?.ellamaka && typeof raw.ellamaka === "object") {
+        const raw = ConfigParse.jsonc(file.text, file.path)
+        if (isRecord(raw) && raw.ellamaka && typeof raw.ellamaka === "object") {
           yield* deps.merge(
             file.path,
             yield* deps
