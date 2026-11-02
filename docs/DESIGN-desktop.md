@@ -132,16 +132,14 @@ Host Environment 表达当前登录用户实际可用的宿主环境事实。默
 - Desktop/launcher 自己拥有的 sidecar 启动参数在创建 sidecar 时作为显式 overlay 提供；这一步不改变 Host Environment snapshot 本身，也不承担用户环境的 Secret 分类。
 - 显式 inherited `WOPAL_HOME` 具有优先级；login shell 只在 inherited value 缺失时补齐它。Desktop 启动期复用同一 Host Environment snapshot，不为 `WOPAL_HOME` 再执行第二次 shell probe。
 
-Desktop 提供一个全局、可选的 shell-import 收敛策略，配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，因为一个 Desktop sidecar 只有一份 Host Environment，Space 配置不改变它：
+Desktop 消费 WopalSpace 的全局 Host Environment 设置。配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，Space 配置不覆盖它：
 
 ```jsonc
 {
   "wopal": {
-    "desktop": {
-      "environment": {
-        "mode": "inherit",
-        "allow": ["MY_COMPANY_*", "HTTP_PROXY"],
-      },
+    "environment": {
+      "mode": "inherit",
+      "allow": ["MY_COMPANY_*", "HTTP_PROXY"],
     },
   },
 }
@@ -152,7 +150,7 @@ Desktop 提供一个全局、可选的 shell-import 收敛策略，配置只从 
 - `inherit`：默认值。保留 Electron inherited Base Environment，并导入成功 login-shell probe 得到的完整环境；这是当前版本的兼容路径。
 - `allowlist`：保留 Base Environment，只从 login-shell snapshot 额外导入 `PATH`、缺失时的 `WOPAL_HOME`，以及 `allow` 明确匹配的变量。`allow` 支持精确变量名和结尾为 `*` 的前缀匹配，不引入正则表达式或基于 `TOKEN` / `SECRET` / `KEY` 等名称的推断。
 
-这个配置只控制 Desktop 从 login shell 额外导入哪些宿主变量，不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
+这个配置定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。它不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
 
 完整 Host Environment 只存在于当前 Desktop 进程内存中，不序列化为 userData cache 或其他持久文件。若未来需要持久化某个恢复值，其设计使用明确 allowlist，并把该值作为独立配置处理，而不是保存完整环境快照。
 
