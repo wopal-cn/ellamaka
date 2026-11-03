@@ -1,7 +1,7 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-02
+> **Updated**: 2026-11-03
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -132,14 +132,16 @@ Host Environment 表达当前登录用户实际可用的宿主环境事实。默
 - Desktop/launcher 自己拥有的 sidecar 启动参数在创建 sidecar 时作为显式 overlay 提供；这一步不改变 Host Environment snapshot 本身，也不承担用户环境的 Secret 分类。
 - 显式 inherited `WOPAL_HOME` 具有优先级；login shell 只在 inherited value 缺失时补齐它。Desktop 启动期复用同一 Host Environment snapshot，不为 `WOPAL_HOME` 再执行第二次 shell probe。
 
-Desktop 消费 WopalSpace 的全局 shell 环境导入设置。配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，Space 配置不覆盖它：
+Desktop 消费 WopalSpace 的全局本机执行配置域中的 shell 环境导入设置。配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，Space 配置不覆盖它：
 
 ```jsonc
 {
   "wopal": {
-    "shell-env": {
-      "mode": "inherit",
-      "list": [],
+    "execution": {
+      "shellEnv": {
+        "mode": "inherit",
+        "list": [],
+      },
     },
   },
 }
@@ -153,7 +155,7 @@ Desktop 消费 WopalSpace 的全局 shell 环境导入设置。配置只从 `$WO
 
 `list` 支持精确变量名和结尾为 `*` 的前缀匹配。空列表在 `allowlist` 下表示不额外导入 shell 变量，在 `denylist` 下等同于 `inherit`。被导入的 shell 变量覆盖 inherited 同名值；未导入的变量保持 inherited 值。显式 inherited `WOPAL_HOME` 仍具有优先级。
 
-这个配置定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。它不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
+`wopal.execution.shellEnv` 定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。`wopal.execution` 中的其他执行设置由需要它们的产品入口消费；#263 不因此扩大为 sandbox 改造。这个配置不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
 
 完整 Host Environment 只存在于当前 Desktop 进程内存中，不序列化为 userData cache 或其他持久文件。若未来需要持久化某个恢复值，其设计使用明确 allowlist，并把该值作为独立配置处理，而不是保存完整环境快照。
 

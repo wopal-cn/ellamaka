@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Draft
-> **Updated**: 2026-11-02
+> **Updated**: 2026-11-03
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -9,13 +9,13 @@
 > - `../../../projects/wopal-cli/docs/DESIGN-config-cli.md` — CLI 呈现与 SDK 消费
 > - `../../../.wopal/docs/DESIGN-assembly.md` — 本体装配：空间 `settings.jsonc` 的分发契约
 >
-> **Scope**: Phase 3 Draft；研究 Ellamaka/DSH 双核心如何消费统一 canonical settings，并保留各自 native apply lifecycle。当前 #265 只实现主设计已正式冻结的 `wopal.dsh.web.enabled` 窄写面，不提前交付本 Draft 的完整 Config Plane。
+> **Scope**: Phase 3 Draft；研究 Ellamaka/DSH 双核心如何消费统一 canonical settings，并保留各自 native apply lifecycle。当前 #265 只实现主设计已正式冻结的 `wopal.dsh.web.enabled` 窄写面；`wopal.execution.shellEnv` 由 Desktop bootstrap 直接读取同一 canonical 全局文件，不提前交付本 Draft 的完整 Config Plane。
 
 ---
 
 ## What This Owns
 
-> **Deferred**：本文整体仍是 Phase 3 Draft。主设计已经单独冻结 `wopal.dsh.web.enabled` 的全局读写契约和 `restart-required` 语义；除这个窄写面外，当前实施不得提前新增通用 Config Plane、统一 DSH native 配置投影、reset-key 或任意 key mutation。
+> **Deferred**：本文整体仍是 Phase 3 Draft。主设计已经单独冻结 `wopal.dsh.web.enabled` 的全局读写契约，以及 `wopal.execution.shellEnv` / `wopal.execution.execWritableRoots` 的全局 authored facts。当前 #265 只提供前者的窄写面；执行环境设置由各启动入口按 Active DESIGN 消费，不因此提前新增通用 Config Plane、统一 DSH native 配置投影、reset-key 或任意 key mutation。
 
 Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wopalspace` 的 `config` module，并通过统一公开 `@wopal/ellamaka-sdk` 提供消费面：Wopal CLI 使用 `/local` 的 `config.*` methods，Browser/Workbench 使用 `/http`。Config Plane 的业务 owner 仍是 private `@wopal/wopalspace/config`，SDK package 统一不代表领域 owner 合并。
 
@@ -32,6 +32,8 @@ Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wop
 ### Active Narrow Contract: DSH Web
 
 `wopal.dsh.web.enabled` 是产品层 Web surface 开关，不是 DSH native profile 配置，因此不经过 DshConfigProvider，也不投影到 `cordis.patch.yml`。它只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，默认 `true`，Space 层不能覆盖。Tools profile 的进程级启用事实只来自 `ELLAMAKA_DSH_TOOLS`。`GET /config-v2` 返回 Web effective fact；受控 `PATCH /config-v2` 只允许 global scope 写这个键，并返回 `restart-required`。具体正式契约以主 `DESIGN.md#config-surface`、`DESIGN-dsh-web.md#enablement` 与 `DESIGN-wopalspace.md#product-settings` 为准。
+
+`wopal.execution.*` 同样只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，但它是宿主启动前需要的执行环境事实。Desktop #263 直接读取 `wopal.execution.shellEnv` 后构造 Host Environment；这条 bootstrap read 与 `config-v2` 的 Server 生命周期分离。Phase 3 后续可以把这些键纳入统一 describe/mutate surface，但不能改变它们已经冻结的 schema、默认值或 global-only 语义。
 
 ## Reading: Product Defaults + User Global + Space Override
 
