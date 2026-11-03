@@ -1,7 +1,7 @@
 # WopalSpace Application Domain
 
 > **Status**: Active
-> **Updated**: 2026-10-31
+> **Updated**: 2026-11-03
 > **Parent**: `./DESIGN.md`
 > **Scope**: private `@wopal/wopalspace` 的目标态架构、能力范围、公开契约、核心流程与状态归属
 > **Sibling DESIGNs**:
@@ -33,7 +33,7 @@
 以下能力不属于 `@wopal/wopalspace`：
 
 - Product 安装、更新与修复：继续由 Wopal CLI 拥有；
-- Evolution、Skill Lifecycle、Plan Scheduling；Evolution 的查询、worktree、内容提交、采用清单调整和失败恢复全部由 Wopal CLI 本机实现，不调用 WopalSpace service；
+- Evolution、Skill Lifecycle；Evolution 的查询、worktree、内容提交、采用清单调整和失败恢复全部由 Wopal CLI 本机实现，不调用 WopalSpace service；
 - Wopal CLI 的参数解析、交互提示、输出格式、machine envelope 和退出码；
 - Ellamaka Runtime 的 Session、Agent、PTY、Tool 和 effective capability discovery；
 - Core Preparation 内部的 DSH、plugin dependency、preflight 机制；
@@ -141,6 +141,8 @@ private `@wopal/wopalspace` 提供受控的 canonical settings writer，供 Serv
 - 写入结果返回 `restart-required`。运行中的 Server/sidecar 继续使用启动时解析出的 Web profile 意图，直到用户重启。
 
 DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.web.enabled`，Tools 只认当前进程的 `ELLAMAKA_DSH_TOOLS`。
+
+产品级 `wopal.execution.shellEnv` 与 `wopal.execution.execWritableRoots` 也以 `$WOPAL_HOME/config/settings.jsonc` 为唯一 authored source，并由各宿主启动入口按产品 DESIGN 直接消费。当前受控 settings writer 不负责修改这两个键；Desktop #263 只读取 `shellEnv`，不因此扩大本 writer 的 mutation surface。
 
 更广泛的 global/space 配置编辑、来源解释、reset-key、schema catalog 与 DSH native projection 属于统一 Config Plane 的后续范围，不由这个窄 writer 推断或提前实现。
 

@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-02
+> **Updated**: 2026-11-03
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -18,12 +18,11 @@
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
 > - `./DESIGN-logging.md` — 日志架构：角色分域路由、文件生命周期、Trace 与脱敏策略
 > - `./DESIGN-onboarding.md` — WopalSpace Setup/Onboarding 在 Ellamaka Server host 上的集成
-> - `./DESIGN-plan-scheduler.md` — Proposed，阶段 4 可选调度设计，不属本轮实施范围
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
 
 ## Role
 
-ellamaka 是 OpenCode fork，是 WopalSpace 的底层执行引擎、Server host 与官方 GUI host。它拥有 Core/DSH、Agent、Session、PTY、Tool 和 Runtime 配置语义；private `@wopal/wopalspace` 拥有 Setup、Ontology、Space application 业务；`@wopal/ellamaka-app` 拥有官方 Onboarding/Workbench 产品体验及其 App BFF。Product 安装/update、Evolution、Skill Lifecycle 与 Plan Scheduling 继续由 Wopal CLI 拥有。
+ellamaka 是 OpenCode fork，是 WopalSpace 的底层执行引擎、Server host 与官方 GUI host。它拥有 Core/DSH、Agent、Session、PTY、Tool 和 Runtime 配置语义；private `@wopal/wopalspace` 拥有 Setup、Ontology、Space application 业务；`@wopal/ellamaka-app` 拥有官方 Onboarding/Workbench 产品体验及其 App BFF。Product 安装/update、Evolution 与 Skill Lifecycle 继续由 Wopal CLI 拥有。
 
 领域依赖方向固定为 **WopalSpace → Ellamaka**：`ellamaka-core`、Session、Agent、PTY、Tool 等底层 Runtime domain 不反向 import WopalSpace。Server composition root 可以同时挂载 Public Platform API 与 Official App BFF；App BFF 可以组合 Runtime 和 private WopalSpace facts，但不改变底层 domain 的依赖方向。
 
@@ -173,7 +172,7 @@ WopalSpace 模式下配置加载优先级（低→高）：
 | Agent frontmatter    | `<space>/.wopal/agents/*.md`                                                  |
 | Environment override | `ELLAMAKA_CONFIG_CONTENT`                                                     |
 
-普通会话权限按同一优先链合并，最后匹配者生效；调度会话还受 Scheduled Plan Execution 的 profile 上限约束。非 WopalSpace 模式只从 `$WOPAL_HOME/config/settings.jsonc` 读取全局产品配置，不读取 opencode XDG 全局配置；agents、commands、plugins、skills 与外部技能继续遵循 OpenCode-compatible 能力加载，并由 `$WOPAL_HOME` 提供最后一层全局覆盖。配置链环境变量统一使用 `ELLAMAKA_` 前缀，完整规则见 `../../../docs/products/wopal-space/DESIGN-config-settings.md`。
+普通会话权限按同一优先链合并，最后匹配者生效。非 WopalSpace 模式只从 `$WOPAL_HOME/config/settings.jsonc` 读取全局产品配置，不读取 opencode XDG 全局配置；agents、commands、plugins、skills 与外部技能继续遵循 OpenCode-compatible 能力加载，并由 `$WOPAL_HOME` 提供最后一层全局覆盖。配置链环境变量统一使用 `ELLAMAKA_` 前缀，完整规则见 `../../../docs/products/wopal-space/DESIGN-config-settings.md`。
 
 空间配置分为公开与私有两层：`config/settings.jsonc` 随 ontology 提交分发，承载公共默认值；`config/settings.local.jsonc` 为用户私有覆盖，不提交。两层通过 `mergeDeep` 合并，后者优先。
 
@@ -182,6 +181,8 @@ WopalSpace 模式下配置加载优先级（低→高）：
 ### Config Surface
 
 Workbench 经引擎 HTTP 配置面获取生效配置，供权限选择器与产品设置消费。读面由引擎从自己的加载状态直答，不经 CLI；既有 `/config` 端点维持 Ellamaka 运行时视图，不扩展。`config-v2` 的持久写入调用 private `@wopal/wopalspace` 的受控 settings writer，HTTP handler 不直接编辑 JSONC。
+
+本机启动前必须使用的执行环境事实直接来自同一 canonical 全局文件 `$WOPAL_HOME/config/settings.jsonc`。Desktop Main 在 sidecar 创建前消费 `wopal.execution.shellEnv`；该 bootstrap read 不等待 Server 或 `config-v2`，也不创建 Desktop 私有配置源。`wopal.execution.execWritableRoots` 当前由需要本机 exec sandbox 的产品入口消费，#263 不使用它。
 
 ```typescript
 // 读——引擎直接从自己的加载状态回答，不走 CLI
@@ -654,22 +655,13 @@ WopalSpace 需要统一 Web UI 作为 TUI 之外的第二种用户界面。`ella
 
 Workbench 的界面、视图模型、目录架构、能力适配规则以及与 `wopal-cli` 的协同见 [DESIGN-workbench.md](./DESIGN-workbench.md)。需要参考上游 UI 代码时，从 `labs/ref-repos/opencode/packages/app` 读取。
 
-## Scheduled Plan Execution
-
-界面结构、空间级工作区切换、审批与排期交互由 [DESIGN-plan-scheduler.md](./DESIGN-plan-scheduler.md) 定义；HTTP 路径、数据与错误契约由 [Scheduler API 草案](./DESIGN-plan-scheduler.md#api-proposal) 定义。Workbench 壳负责承载，调度领域状态由 CLI 提供。
-
-Ellamaka 实现 Wopal CLI 定义的 Runner Port：版本协商、幂等执行身份、非交互 Session、结构化事件/结果、查询、取消与完整工具进程树收尾。CLI 拥有可审阅的 DAG JSON、时间、运行态 JSON claim，ontology Provider 拥有审批和实际实施准备；runtime 承接已批准 revision 与验证过的环境。
-
-调度 profile 在普通配置合并后施加不可放宽的权限上限。它允许正常编辑、网络、构建和测试，保护 Git 管理元数据、权威 Plan 与审批/调度写权限，阻止 Agent 自行提交、合并或推进人工生命周期。工具代理/隔离覆盖间接 shell 与子进程路径，提示词不能替代强制执行。
-
-Workbench 经 Runtime Integration API 使用同一 CLI 能力，提供审批后停止、DAG 确认、cron/时区、阻塞诊断、运行历史和人工接管；Desktop/Web 共享行为。跨项目协议遵循 [Plan Orchestration](../../../docs/products/wopal-space/DESIGN-plan-orchestration.md)，交互遵循 [Scheduler UI](../../../docs/products/wopal-space/DESIGN-plan-scheduler-ui.md)。
-
 ---
 
 ## Reference Documents
 
 | 文档                                         | 引用目的                            |
 | -------------------------------------------- | ----------------------------------- |
+| `../../../docs/products/wopal-space/proposal/plan-orchestration-scheduler-proposal.md` | Phase 4 Plan 编排与调度方向提案（非正式设计） |
 | `../../../projects/wopal-cli/docs/DESIGN.md` | wopal-cli 如何消费 ellamaka release |
 | `packages/opencode/AGENTS.md`                | engine package 内部规则             |
 | `packages/ellamaka-app/AGENTS.md`            | ellamaka 官方 web UI 包级开发规则   |

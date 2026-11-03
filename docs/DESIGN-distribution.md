@@ -1,7 +1,7 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-10-23
+> **Updated**: 2026-11-03
 > **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
@@ -574,7 +574,7 @@ ellamaka 安装完成后，运行时加载链路按 WopalSpace mode 工作：
 5. 加载 `<space>/.wopal/commands/*.md`
 6. 加载 `<space>/.wopal/plugins/`
 
-分发阶段只负责产品制品。Space-local 声明与 plugin 引用由 ontology 提供、Ellamaka 加载；private `@wopal/wopalspace` 承载 ontology lifecycle 与 Space init/sync/capability 等共享 application implementation，外部消费者通过统一 `@wopal/ellamaka-sdk` 使用这些 operations。Evolution、Skill Lifecycle 与 Plan Scheduling 当前仍由 Wopal CLI 实现；Core runtime 不承担这些 WopalSpace 业务语义。
+分发阶段只负责产品制品。Space-local 声明与 plugin 引用由 ontology 提供、Ellamaka 加载；private `@wopal/wopalspace` 承载 ontology lifecycle 与 Space init/sync/capability 等共享 application implementation，外部消费者通过统一 `@wopal/ellamaka-sdk` 使用这些 operations。Evolution 与 Skill Lifecycle 当前仍由 Wopal CLI 实现；Core runtime 不承担这些 WopalSpace 业务语义。
 
 ---
 
