@@ -72,11 +72,103 @@ describe("Ontology list and inspect are local reads", () => {
     ])
     expect(result.upstream.map((segment) => segment.label)).toEqual([
       "local/main → origin/main",
-      "origin/main → upstream/main",
+      "local/main → upstream/main",
     ])
     expect(result.downstream.every((segment) => segment.kind === "merge")).toBe(true)
-    expect(result.upstream.every((segment) => segment.kind === "push")).toBe(true)
+    expect(result.upstream.map((segment) => segment.kind)).toEqual(["push", "contribute"])
     expect(fixture.snapshot()).toEqual(before)
+  })
+
+  test("inspect reports content and history as separate dimensions for every segment", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    prepareOntologyScenario(fixture, "behind")
+    fixture.git(fixture.ontology, "fetch", "origin")
+    const result = await service().inspect("test-onto")
+    // The origin/main landing commit is not in local ancestry yet: target-ancestor.
+    expect(result.downstream[0]).toMatchObject({
+      kind: "merge",
+      historyState: "target-ancestor",
+      contentState: "changes",
+      requiredAction: "fast-forward",
+    })
+    expect(result.downstream[0]?.sourceAhead).toBeGreaterThan(0)
+    expect(result.downstream[0]?.targetAhead).toBe(0)
+    // The upstream mirror is identical in tree and ancestry: nothing to do.
+    expect(result.downstream[1]).toMatchObject({
+      kind: "merge",
+      historyState: "same",
+      contentState: "aligned",
+      requiredAction: "none",
+    })
+    // local lags behind origin: the mirror push must wait until intake runs.
+    expect(result.upstream[0]).toMatchObject({
+      kind: "push",
+      historyState: "source-ancestor",
+      contentState: "changes",
+      requiredAction: "sync-first",
+    })
+  })
+
+  test("inspect reports a tree-aligned but ancestry-diverged merge as reconcile-history", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    // A squash-landed upstream commit has identical content but disconnected history.
+    fixture.commit(fixture.ontology, "rules/typescript.md", "# squashed upstream content\n", "feat: squashed upstream")
+    fixture.git(fixture.ontology, "push", "upstream", "main")
+    fixture.git(fixture.ontology, "reset", "--hard", "HEAD~1")
+    fixture.commit(
+      fixture.ontology,
+      "rules/typescript.md",
+      "# squashed upstream content\n",
+      "chore: same content locally",
+    )
+    fixture.git(fixture.ontology, "fetch", "upstream")
+    const result = await service().inspect("test-onto")
+    expect(result.downstream[1]).toMatchObject({
+      kind: "merge",
+      historyState: "diverged",
+      contentState: "aligned",
+      requiredAction: "reconcile-history",
+    })
+    expect(result.downstream[1]?.fileDiffs).toEqual([])
+  })
+
+  test("inspect reports authoritative contribution content once upstream is an ancestor", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    // Local gains a commit upstream has never seen: the three-dot baseline is closed.
+    fixture.commit(fixture.ontology, "local-only.md", "local work\n", "feat: local only")
+    const result = await service().inspect("test-onto")
+    expect(result.upstream[1]).toMatchObject({
+      kind: "contribute",
+      historyState: "target-ancestor",
+      contentState: "changes",
+      requiredAction: "contribute",
+    })
+    expect(result.upstream[1]?.sourceAhead).toBe(1)
+    expect(result.upstream[1]?.targetAhead).toBe(0)
+    expect(result.upstream[1]?.fileDiffs).toEqual([{ path: "local-only.md", status: "added" }])
+  })
+
+  test("inspect withholds contribution content while upstream is not an ancestor", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    // Squash-landed content leaves local and upstream with unrelated histories.
+    fixture.commit(fixture.ontology, "rules/typescript.md", "# squashed upstream content\n", "feat: squashed upstream")
+    fixture.git(fixture.ontology, "push", "upstream", "main")
+    fixture.git(fixture.ontology, "reset", "--hard", "HEAD~1")
+    fixture.commit(
+      fixture.ontology,
+      "rules/typescript.md",
+      "# squashed upstream content\n",
+      "chore: same content locally",
+    )
+    fixture.git(fixture.ontology, "fetch", "upstream")
+    const result = await service().inspect("test-onto")
+    expect(result.upstream[1]).toMatchObject({
+      kind: "contribute",
+      historyState: "diverged",
+      contentState: "unknown",
+      requiredAction: "sync-first",
+    })
+    expect(result.upstream[1]?.fileDiffs).toEqual([])
   })
 
   test("inspect predicts a merge conflict without writing objects, refs, index or FETCH_HEAD", async () => {
@@ -85,8 +177,9 @@ describe("Ontology list and inspect are local reads", () => {
     fixture.git(fixture.ontology, "fetch", "origin")
     const before = fixture.snapshot()
     const result = await service().inspect("test-onto")
-    expect(result.downstream[0]?.mergePrediction).toBe("conflict")
+    expect(result.downstream[0]?.contentState).toBe("conflict")
     expect(result.downstream[0]?.conflictFiles).toContain("rules/typescript.md")
+    expect(result.downstream[0]?.requiredAction).toBe("blocked")
     expect(fixture.snapshot()).toEqual(before)
   })
 

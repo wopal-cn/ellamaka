@@ -79,11 +79,30 @@ const FlowAnalysis = Schema.Struct({
   label: Schema.String,
   fromBranch: Schema.String,
   toBranch: Schema.String,
-  upToDate: Schema.Boolean,
+  kind: Schema.Literals(["merge", "push", "contribute"]),
+  historyState: Schema.Literals([
+    "same",
+    "source-ancestor",
+    "target-ancestor",
+    "diverged",
+    "no-common-base",
+    "unavailable",
+  ]),
+  sourceAhead: Schema.NullOr(Schema.Number),
+  targetAhead: Schema.NullOr(Schema.Number),
+  contentState: Schema.Literals(["aligned", "changes", "conflict", "unknown"]),
   fileDiffs: Schema.Array(FileDiff),
-  mergePrediction: Schema.Literals(["clean", "conflict", "no-common-base"]),
   conflictFiles: Schema.Array(Schema.String),
-  kind: Schema.Literals(["merge", "push"]),
+  requiredAction: Schema.Literals([
+    "none",
+    "fast-forward",
+    "merge-content",
+    "reconcile-history",
+    "push",
+    "contribute",
+    "sync-first",
+    "blocked",
+  ]),
 })
 
 const OntologySpaceReference = Schema.Struct({
@@ -191,7 +210,15 @@ const InstallResult = Schema.Struct({
 
 const SyncStep = Schema.Struct({
   step: Schema.String,
-  action: Schema.Literals(["skipped", "merged", "pushed", "conflict", "failed"]),
+  action: Schema.Literals([
+    "skipped",
+    "fast-forwarded",
+    "merged",
+    "reconciled",
+    "pushed",
+    "conflict",
+    "failed",
+  ]),
   fileDiffs: Schema.optional(Schema.Array(FileDiff)),
   conflictFiles: Schema.optional(Schema.Array(Schema.String)),
   summary: Schema.optional(Schema.String),

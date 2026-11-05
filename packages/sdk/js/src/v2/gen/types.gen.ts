@@ -4559,27 +4559,49 @@ export type WopalSpaceOntologyInspectResponses = {
       label: string
       fromBranch: string
       toBranch: string
-      upToDate: boolean
+      kind: "merge" | "push" | "contribute"
+      historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
+      sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      contentState: "aligned" | "changes" | "conflict" | "unknown"
       fileDiffs: Array<{
         path: string
         status: "added" | "modified" | "deleted"
       }>
-      mergePrediction: "clean" | "conflict" | "no-common-base"
       conflictFiles: Array<string>
-      kind: "merge" | "push"
+      requiredAction:
+        | "none"
+        | "fast-forward"
+        | "merge-content"
+        | "reconcile-history"
+        | "push"
+        | "contribute"
+        | "sync-first"
+        | "blocked"
     }>
     upstream: Array<{
       label: string
       fromBranch: string
       toBranch: string
-      upToDate: boolean
+      kind: "merge" | "push" | "contribute"
+      historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
+      sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      contentState: "aligned" | "changes" | "conflict" | "unknown"
       fileDiffs: Array<{
         path: string
         status: "added" | "modified" | "deleted"
       }>
-      mergePrediction: "clean" | "conflict" | "no-common-base"
       conflictFiles: Array<string>
-      kind: "merge" | "push"
+      requiredAction:
+        | "none"
+        | "fast-forward"
+        | "merge-content"
+        | "reconcile-history"
+        | "push"
+        | "contribute"
+        | "sync-first"
+        | "blocked"
     }>
   }
 }
@@ -4708,27 +4730,49 @@ export type WopalSpaceOntologyRefreshResponses = {
         label: string
         fromBranch: string
         toBranch: string
-        upToDate: boolean
+        kind: "merge" | "push" | "contribute"
+        historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
+        sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        contentState: "aligned" | "changes" | "conflict" | "unknown"
         fileDiffs: Array<{
           path: string
           status: "added" | "modified" | "deleted"
         }>
-        mergePrediction: "clean" | "conflict" | "no-common-base"
         conflictFiles: Array<string>
-        kind: "merge" | "push"
+        requiredAction:
+          | "none"
+          | "fast-forward"
+          | "merge-content"
+          | "reconcile-history"
+          | "push"
+          | "contribute"
+          | "sync-first"
+          | "blocked"
       }>
       upstream: Array<{
         label: string
         fromBranch: string
         toBranch: string
-        upToDate: boolean
+        kind: "merge" | "push" | "contribute"
+        historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
+        sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        contentState: "aligned" | "changes" | "conflict" | "unknown"
         fileDiffs: Array<{
           path: string
           status: "added" | "modified" | "deleted"
         }>
-        mergePrediction: "clean" | "conflict" | "no-common-base"
         conflictFiles: Array<string>
-        kind: "merge" | "push"
+        requiredAction:
+          | "none"
+          | "fast-forward"
+          | "merge-content"
+          | "reconcile-history"
+          | "push"
+          | "contribute"
+          | "sync-first"
+          | "blocked"
       }>
     }
   }
@@ -4780,7 +4824,7 @@ export type WopalSpaceOntologySyncResponses = {
   200: {
     steps: Array<{
       step: string
-      action: "skipped" | "merged" | "pushed" | "conflict" | "failed"
+      action: "skipped" | "fast-forwarded" | "merged" | "reconciled" | "pushed" | "conflict" | "failed"
       fileDiffs?: Array<{
         path: string
         status: "added" | "modified" | "deleted"

@@ -35,15 +35,14 @@ function residue() {
 }
 
 describe("Ontology sync preview", () => {
-  test("preview performs zero writes and reports the single clone merge", async () => {
+  test("preview performs zero writes and reports the single clone fast-forward", async () => {
     fixture = createCompatibilityFixture(parent)
     prepareOntologyScenario(fixture, "behind")
     fixture.git(fixture.ontology, "fetch", "origin")
     const before = snapshot()
     const preview = await service().sync("test-onto", { confirm: false })
     expect(preview).toMatchObject({ pushed: false })
-    expect(preview.steps.map((step) => [step.step, step.action])).toEqual([["main", "merged"]])
-    expect(preview.steps[0]?.fileDiffs).toContainEqual({ path: "rules/typescript.md", status: "modified" })
+    expect(preview.steps.map((step) => [step.step, step.action])).toEqual([["main", "fast-forwarded"]])
     expect(snapshot()).toEqual(before)
     expect(residue()).toEqual([])
   })
@@ -95,25 +94,25 @@ describe("Ontology sync preview", () => {
 })
 
 describe("Ontology sync apply", () => {
-  test("clone merges origin main into local main without pushing", async () => {
+  test("clone fast-forwards origin main into local main without pushing", async () => {
     fixture = createCompatibilityFixture(parent)
     prepareOntologyScenario(fixture, "behind")
     const originHead = fixture.git(fixture.origin, "rev-parse", "main")
     const result = await service().sync("test-onto", { confirm: true })
     expect(result).toMatchObject({ pushed: false })
-    expect(result.steps.map((step) => [step.step, step.action])).toEqual([["main", "merged"]])
+    expect(result.steps.map((step) => [step.step, step.action])).toEqual([["main", "fast-forwarded"]])
     expect(fixture.git(fixture.ontology, "rev-parse", "main")).toBe(originHead)
     expect(fixture.git(fixture.ontology, "show", "main:rules/typescript.md")).toContain("incoming")
   })
 
-  test("clone merges through a temporary worktree when the host is on another branch", async () => {
+  test("clone fast-forwards through a temporary worktree when the host is on another branch", async () => {
     fixture = createCompatibilityFixture(parent)
     prepareOntologyScenario(fixture, "behind")
     fixture.git(fixture.ontology, "switch", "-c", "space/demo-space-other", "main")
     const beforeBranch = fixture.git(fixture.ontology, "rev-parse", "--abbrev-ref", "HEAD")
     const originHead = fixture.git(fixture.origin, "rev-parse", "main")
     const result = await service().sync("test-onto", { confirm: true })
-    expect(result.steps[0]?.action).toBe("merged")
+    expect(result.steps[0]?.action).toBe("fast-forwarded")
     expect(fixture.git(fixture.ontology, "rev-parse", "--abbrev-ref", "HEAD")).toBe(beforeBranch)
     expect(fixture.git(fixture.ontology, "rev-parse", "main")).toBe(originHead)
     expect(residue()).toEqual([])
@@ -130,13 +129,16 @@ describe("Ontology sync apply", () => {
     const result = await service().sync("test-onto", { confirm: true })
     expect(result).toMatchObject({ pushed: true })
     expect(result.steps.map((step) => [step.step, step.action])).toEqual([
-      ["origin-merge", "merged"],
+      ["origin-merge", "fast-forwarded"],
       ["upstream-merge", "merged"],
       ["origin-push", "pushed"],
     ])
     const local = fixture.git(fixture.ontology, "rev-parse", "main")
     expect(fixture.git(fixture.origin, "rev-parse", "main")).toBe(local)
     expect(fixture.git(fixture.ontology, "merge-base", "--is-ancestor", "upstream/main", "main")).toBe("")
+    // Content merge uses the formal subject, not the generated merge text.
+    const mergeSubject = fixture.git(fixture.ontology, "log", "--format=%s", "--merges", "-1", "main")
+    expect(mergeSubject).toBe("sync(ontology): integrate upstream/main")
     expect(existsSync(join(fixture.ontology, "origin-only.md"))).toBe(true)
     expect(existsSync(join(fixture.ontology, "upstream-only.md"))).toBe(true)
     expect(residue()).toEqual([])
@@ -188,6 +190,95 @@ describe("Ontology sync apply", () => {
     ])
     expect(fixture.git(fixture.ontology, "rev-parse", "main")).toBe(localAfterFirst)
     expect(fixture.git(fixture.origin, "rev-parse", "main")).toBe(localAfterFirst)
+  })
+
+  test("squash-landed upstream content produces one tree-preserving reconciliation merge", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    // The change lands upstream via squash; local has the identical content
+    // from an unrelated commit, so trees are aligned but ancestry diverged.
+    fixture.commit(fixture.ontology, "rules/typescript.md", "# squashed content\n", "feat: squashed upstream")
+    fixture.git(fixture.ontology, "push", "upstream", "main")
+    fixture.git(fixture.ontology, "reset", "--hard", "HEAD~1")
+    fixture.commit(fixture.ontology, "rules/typescript.md", "# squashed content\n", "chore: same content locally")
+    fixture.git(fixture.ontology, "fetch", "upstream")
+    const localBefore = fixture.git(fixture.ontology, "rev-parse", "main")
+    const treeBefore = fixture.git(fixture.ontology, "rev-parse", "main^{tree}")
+    const result = await service().sync("test-onto", { confirm: true })
+    expect(result.steps.map((step) => [step.step, step.action])).toEqual([
+      ["origin-merge", "skipped"],
+      ["upstream-merge", "reconciled"],
+      ["origin-push", "pushed"],
+    ])
+    expect(result.steps[1]?.fileDiffs).toEqual([])
+    // The upstream landing commit is now inside local ancestry.
+    expect(fixture.git(fixture.ontology, "merge-base", "--is-ancestor", "upstream/main", "main")).toBe("")
+    // First-parent tree is unchanged: reconciliation never rewrites files.
+    expect(fixture.git(fixture.ontology, "rev-parse", "main^{tree}")).toBe(treeBefore)
+    const subject = fixture.git(fixture.ontology, "log", "--format=%s", "-1", "main")
+    expect(subject).toBe("sync(ontology): reconcile upstream/main history")
+    // No temporary identity leaks into the formal history.
+    const body = fixture.git(fixture.ontology, "log", "--format=%B", "-1", "main")
+    expect(body).not.toContain("ontology-sync-")
+    expect(body).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/)
+    expect(fixture.git(fixture.ontology, "log", "--format=%P", "-1", "main").split(" ")).toHaveLength(2)
+    expect(fixture.git(fixture.ontology, "rev-parse", "main^1")).toBe(localBefore)
+    expect(fixture.git(fixture.ontology, "rev-parse", "main^2")).toBe(
+      fixture.git(fixture.ontology, "rev-parse", "upstream/main"),
+    )
+    // Once the baseline is closed, the contribution view is authoritative and
+    // has nothing pending: landed content is no longer reported as local-only.
+    const after = await service().inspect("test-onto")
+    expect(after.upstream[1]).toMatchObject({
+      kind: "contribute",
+      historyState: "target-ancestor",
+      contentState: "aligned",
+      requiredAction: "none",
+    })
+    expect(after.upstream[1]?.fileDiffs).toEqual([])
+  })
+
+  test("content-changing divergence creates a merged step and target-ancestor fast-forwards", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    // Upstream lands an unrelated new file; local has nothing of it. The
+    // commit goes through a real clone because a bare repo has no worktree.
+    const upstreamClone = join(fixture.root, "upstream-author")
+    fixture.git(fixture.root, "clone", fixture.upstream, upstreamClone)
+    fixture.commit(upstreamClone, "upstream-feature.md", "upstream\n", "feat: upstream feature")
+    fixture.git(upstreamClone, "push", "origin", "main")
+    fixture.git(fixture.ontology, "fetch", "upstream")
+    const result = await service().sync("test-onto", { confirm: true })
+    expect(result.steps.map((step) => [step.step, step.action])).toEqual([
+      ["origin-merge", "skipped"],
+      ["upstream-merge", "fast-forwarded"],
+      ["origin-push", "pushed"],
+    ])
+    expect(existsSync(join(fixture.ontology, "upstream-feature.md"))).toBe(true)
+    const mergeCommits = fixture
+      .git(fixture.ontology, "log", "--format=%P", "-3", "main")
+      .split("\n")
+      .filter((parents) => parents.includes(" "))
+    expect(mergeCommits).toEqual([])
+  })
+
+  test("repeating sync on unchanged refs is idempotent with zero commits", async () => {
+    fixture = createCompatibilityFixture(parent, "fork")
+    // Origin lands a file that local has not consumed yet: the first sync
+    // fast-forwards to it and needs no push because local then equals origin.
+    // The second sync must find nothing to do at all.
+    fixture.commit(fixture.ontology, "origin-work.md", "origin\n", "feat: origin work")
+    fixture.git(fixture.ontology, "push", "origin", "main")
+    fixture.git(fixture.ontology, "reset", "--hard", "HEAD~1")
+    const first = await service().sync("test-onto", { confirm: true })
+    expect(first.steps.map((step) => [step.step, step.action])).toEqual([
+      ["origin-merge", "fast-forwarded"],
+      ["upstream-merge", "skipped"],
+      ["origin-push", "skipped"],
+    ])
+    const afterFirst = fixture.git(fixture.ontology, "rev-parse", "main")
+    const second = await service().sync("test-onto", { confirm: true })
+    expect(second.pushed).toBe(false)
+    expect(second.steps.map((step) => step.action)).toEqual(["skipped", "skipped", "skipped"])
+    expect(fixture.git(fixture.ontology, "rev-parse", "main")).toBe(afterFirst)
   })
 
   test("apply rechecks the registration after excluding the dirty check and refuses a replaced repository", async () => {

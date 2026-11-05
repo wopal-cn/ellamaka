@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync } from "node:fs"
+import { copyFileSync, mkdirSync, readdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import {
   analyzeFlow,
@@ -133,8 +133,11 @@ export function previewSync(options: Omit<SyncOptions, "confirm">): SyncStep[] {
   if (mode === "clone") {
     const flow = analyzeFlow(repo, ORIGIN, "main", "origin/main → local/main", git, "merge", scratchRoot)
     if (commitsAhead(repo, "main", ORIGIN, git) === 0) return [{ step: "main", action: "skipped" }]
-    if (flow.mergePrediction !== "clean") {
+    if (flow.contentState === "conflict" || flow.contentState === "unknown") {
       return [{ step: "main", action: "conflict", conflictFiles: flow.conflictFiles }]
+    }
+    if (flow.historyState === "target-ancestor") {
+      return [{ step: "main", action: "fast-forwarded" }]
     }
     return [{ step: "main", action: "merged", fileDiffs: flow.fileDiffs, summary: buildMergeSummary(flow.fileDiffs) }]
   }
@@ -156,11 +159,17 @@ export function previewSync(options: Omit<SyncOptions, "confirm">): SyncStep[] {
       }
       if (!merge.tree) return steps
       const currentTree = git(repo, ["rev-parse", head + "^{tree}"], quarantine.env)
+      const treeUnchanged = currentTree === merge.tree
       const diffs =
-        currentTree === merge.tree
-          ? []
-          : parseDiffs(git(repo, ["diff", "--name-status", currentTree, merge.tree], quarantine.env))
-      steps.push({ step: stage.step, action: "merged", fileDiffs: diffs, summary: buildMergeSummary(diffs) })
+        treeUnchanged ? [] : parseDiffs(git(repo, ["diff", "--name-status", currentTree, merge.tree], quarantine.env))
+      steps.push({
+        step: stage.step,
+        action: treeUnchanged ? "reconciled" : "merged",
+        fileDiffs: diffs,
+        summary: treeUnchanged
+          ? "0 content changes — aligns commit topology (no file changes)"
+          : buildMergeSummary(diffs),
+      })
       head = isAncestor(repo, head, stage.source, git, quarantine.env)
         ? stage.source
         : git(
@@ -219,23 +228,91 @@ function removeCandidate(repo: string, git: GitRunner, candidate: Candidate): vo
   rmSync(candidate.path, { recursive: true, force: true })
 }
 
-function mergeInto(repo: string, target: string, source: string, git: GitRunner): { ok: boolean; conflicts: string[] } {
+/** Formal subjects fixed by the design; temporary worktree/branch identity never leaks. */
+function mergeSubject(source: string, treePreserving: boolean): string {
+  const remote = source.startsWith("upstream/") ? "upstream/main" : "origin/main"
+  return treePreserving ? "sync(ontology): reconcile " + remote + " history" : "sync(ontology): integrate " + remote
+}
+
+/**
+ * Persist every loose object the quarantined commit created. The scratch
+ * store uses the standard two-hex-prefix fan-out layout, so a plain file
+ * copy into the real store is sufficient and idempotent.
+ */
+function copyQuarantinedObjects(repo: string, scratch: string, git: GitRunner): void {
+  const common = git(repo, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+  const real = join(common, "objects")
+  for (const prefix of readdirSync(scratch)) {
+    if (!/^[0-9a-f]{2}$/.test(prefix)) continue
+    mkdirSync(join(real, prefix), { recursive: true })
+    for (const name of readdirSync(join(scratch, prefix))) {
+      const target = join(real, prefix, name)
+      try {
+        git(repo, ["cat-file", "-e", prefix + name])
+        continue
+      } catch {
+        // Object absent from the real store; copy the loose file.
+      }
+      rmSync(target, { force: true })
+      copyFileSync(join(scratch, prefix, name), target)
+    }
+  }
+}
+
+/**
+ * Build the merge commit directly: the tree from the virtual merge decides
+ * whether this is a content integration or a tree-preserving history
+ * reconciliation, and the subject follows the outcome, not the guess.
+ */
+function commitMerge(
+  repo: string,
+  worktree: string,
+  firstParent: string,
+  source: string,
+  git: GitRunner,
+): { ok: boolean; conflicts: string[] } {
+  const quarantine = createQuarantine(repo, git)
   try {
-    git(repo, ["merge", "--no-edit", source])
+    const merge = virtualMerge(repo, firstParent, source, git, quarantine.env)
+    if (!merge.clean) {
+      try {
+        git(worktree, ["merge", "--no-edit", "-m", "conflict-probe", source])
+      } catch {
+        // Expected: the probe only materializes conflict facts.
+      }
+      let conflicts: string[] = []
+      try {
+        conflicts = git(worktree, ["diff", "--name-only", "--diff-filter=U"]).split("\n").filter(Boolean)
+      } catch {
+        conflicts = []
+      }
+      try {
+        git(worktree, ["merge", "--abort"])
+      } catch {
+        // The candidate worktree is force-removed regardless.
+      }
+      return { ok: false, conflicts }
+    }
+    if (!merge.tree) return { ok: false, conflicts: [] }
+    const treeUnchanged = merge.tree === git(repo, ["rev-parse", firstParent + "^{tree}"], quarantine.env)
+    const message = mergeSubject(source, treeUnchanged)
+    // Build the merge commit inside the quarantine: the commit and any tree
+    // objects it references land in the scratch store. commit-tree does not
+    // copy referenced objects, so writing "into the real store" via
+    // alternates would leave the merge tree stranded in the disposable
+    // scratch. Instead the commit is built quarantined and every loose
+    // object produced is then copied into the real object store before the
+    // scratch is removed.
+    const commit = git(
+      worktree,
+      ["commit-tree", merge.tree, "-p", firstParent, "-p", source, "-m", message],
+      quarantine.env,
+    )
+    copyQuarantinedObjects(repo, quarantine.env.GIT_OBJECT_DIRECTORY ?? "", git)
+    git(worktree, ["update-ref", "HEAD", commit])
     return { ok: true, conflicts: [] }
-  } catch {
-    let conflicts: string[] = []
-    try {
-      conflicts = git(repo, ["diff", "--name-only", "--diff-filter=U"]).split("\n").filter(Boolean)
-    } catch {
-      conflicts = []
-    }
-    try {
-      git(repo, ["merge", "--abort"])
-    } catch {
-      // The candidate worktree is force-removed regardless.
-    }
-    return { ok: false, conflicts }
+  } finally {
+    quarantine.cleanup()
   }
 }
 
@@ -301,7 +378,7 @@ export function syncOntology(options: SyncOptions): SyncOutcome {
       return { steps: [{ step: "main", action: "skipped" }], pushed: false }
     }
     const flow = analyzeFlow(repo, ORIGIN, "main", "origin/main → local/main", git, "merge", scratchRoot)
-    if (flow.mergePrediction !== "clean") {
+    if (flow.contentState === "conflict" || flow.contentState === "unknown") {
       return {
         steps: [{ step: "main", action: "conflict", conflictFiles: flow.conflictFiles }],
         pushed: false,
@@ -310,16 +387,30 @@ export function syncOntology(options: SyncOptions): SyncOutcome {
     const onMain = currentBranch(repo, git) === "main"
     const candidate = onMain ? undefined : createCandidate(repo, git, scratchRoot)
     try {
-      const outcome = mergeInto(candidate?.path ?? repo, "main", ORIGIN, git)
+      const worktree = candidate?.path ?? repo
+      const firstParent = git(worktree, ["rev-parse", "main"])
+      const firstParentTree = git(worktree, ["rev-parse", firstParent + "^{tree}"])
+      if (isAncestor(repo, firstParent, ORIGIN, git)) {
+        // target-ancestor: fast-forward only, no merge commit.
+        git(worktree, ["merge", "--ff-only", ORIGIN])
+        if (candidate) updateLocalMain(repo, git(candidate.path, ["rev-parse", "HEAD"]), git)
+        steps.push({ step: "main", action: "fast-forwarded" })
+        return { steps, pushed: false }
+      }
+      const outcome = commitMerge(repo, worktree, firstParent, ORIGIN, git)
       if (!outcome.ok) {
         return { steps: [{ step: "main", action: "conflict", conflictFiles: outcome.conflicts }], pushed: false }
       }
       if (candidate) updateLocalMain(repo, git(candidate.path, ["rev-parse", "HEAD"]), git)
+      const newHead = git(worktree, ["rev-parse", "main"])
+      const treeUnchanged = git(worktree, ["rev-parse", newHead + "^{tree}"]) === firstParentTree
       steps.push({
         step: "main",
-        action: "merged",
-        fileDiffs: flow.fileDiffs,
-        summary: buildMergeSummary(flow.fileDiffs),
+        action: treeUnchanged ? "reconciled" : "merged",
+        fileDiffs: treeUnchanged ? [] : flow.fileDiffs,
+        summary: treeUnchanged
+          ? "0 content changes — aligns commit topology (no file changes)"
+          : buildMergeSummary(flow.fileDiffs),
       })
     } finally {
       if (candidate) removeCandidate(repo, git, candidate)
@@ -332,15 +423,35 @@ export function syncOntology(options: SyncOptions): SyncOutcome {
   let candidate: Candidate | undefined
   try {
     for (const stage of plan) {
-      const target = candidate?.path ?? repo
-      const targetRef = candidate ? "HEAD" : "main"
-      if (commitsAhead(target, targetRef, stage.source, git) === 0) {
+      // Judge against the projected history: after the first stage the
+      // candidate HEAD, not the original main, is the integration point.
+      const targetRef = candidate ? git(candidate.path, ["rev-parse", "HEAD"]) : "main"
+      if (isAncestor(repo, stage.source, targetRef, git)) {
         steps.push({ step: stage.step, action: "skipped" })
         continue
       }
-      const flow = analyzeFlow(target, stage.source, targetRef, stage.step, git, "merge", scratchRoot)
+      if (isAncestor(repo, targetRef, stage.source, git)) {
+        // Fast-forward: the stage cannot run on the host checkout, so the
+        // candidate worktree materializes the projected merge commit.
+        candidate ??= createCandidate(repo, git, scratchRoot)
+        git(candidate.path, ["merge", "--ff-only", stage.source])
+        steps.push({ step: stage.step, action: "fast-forwarded" })
+        merged = true
+        continue
+      }
+      const flow = analyzeFlow(repo, stage.source, targetRef, stage.step, git, "merge", scratchRoot)
       candidate ??= createCandidate(repo, git, scratchRoot)
-      const outcome = mergeInto(candidate.path, "HEAD", stage.source, git)
+      if (flow.contentState === "conflict" || flow.contentState === "unknown") {
+        steps.push({
+          step: stage.step,
+          action: "conflict",
+          conflictFiles: flow.conflictFiles,
+        })
+        return { steps, pushed: false }
+      }
+      const firstParent = git(candidate.path, ["rev-parse", "HEAD"])
+      const firstParentTree = git(candidate.path, ["rev-parse", firstParent + "^{tree}"])
+      const outcome = commitMerge(repo, candidate.path, firstParent, stage.source, git)
       if (!outcome.ok) {
         steps.push({
           step: stage.step,
@@ -349,11 +460,16 @@ export function syncOntology(options: SyncOptions): SyncOutcome {
         })
         return { steps, pushed: false }
       }
+      const newHead = git(candidate.path, ["rev-parse", "HEAD"])
+      const newTree = git(candidate.path, ["rev-parse", newHead + "^{tree}"])
+      const treeUnchanged = newTree === firstParentTree
       steps.push({
         step: stage.step,
-        action: "merged",
-        fileDiffs: flow.fileDiffs,
-        summary: buildMergeSummary(flow.fileDiffs),
+        action: treeUnchanged ? "reconciled" : "merged",
+        fileDiffs: treeUnchanged ? [] : flow.fileDiffs,
+        summary: treeUnchanged
+          ? "0 content changes — aligns commit topology (no file changes)"
+          : buildMergeSummary(flow.fileDiffs),
       })
       merged = true
     }

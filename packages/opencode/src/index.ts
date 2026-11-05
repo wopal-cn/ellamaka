@@ -327,15 +327,14 @@ const cli = yargs(args)
   })
   .command(DbCommand)
   .fail((msg, err) => {
-    if (
-      msg?.startsWith("Unknown argument") ||
-      msg?.startsWith("Not enough non-option arguments") ||
-      msg?.startsWith("Invalid values:")
-    ) {
-      if (err) throw err
-      cli.showHelp(show)
-    }
+    // yargs receives no error object for usage mistakes (unknown flag, wrong
+    // arity, bad enum value); a real failure always arrives as `err`. Keying on
+    // `err` instead of the message text keeps this working regardless of the
+    // yargs locale, whose translations would otherwise fall through to the
+    // silent `process.exit(1)` below.
     if (err) throw err
+    if (msg) process.stderr.write(msg + EOL + EOL)
+    cli.showHelp(show)
     process.exit(1)
   })
   .strict()

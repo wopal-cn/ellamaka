@@ -88,15 +88,38 @@ export interface FileDiff {
   readonly status: "added" | "modified" | "deleted"
 }
 
+export type OntologyHistoryState =
+  | "same"
+  | "source-ancestor"
+  | "target-ancestor"
+  | "diverged"
+  | "no-common-base"
+  | "unavailable"
+
+export type OntologyContentState = "aligned" | "changes" | "conflict" | "unknown"
+
+export type OntologyFlowAction =
+  | "none"
+  | "fast-forward"
+  | "merge-content"
+  | "reconcile-history"
+  | "push"
+  | "contribute"
+  | "sync-first"
+  | "blocked"
+
 export interface FlowAnalysis {
   readonly label: string
   readonly fromBranch: string
   readonly toBranch: string
-  readonly upToDate: boolean
+  readonly kind: "merge" | "push" | "contribute"
+  readonly historyState: OntologyHistoryState
+  readonly sourceAhead: number | null
+  readonly targetAhead: number | null
+  readonly contentState: OntologyContentState
   readonly fileDiffs: readonly FileDiff[]
-  readonly mergePrediction: "clean" | "conflict" | "no-common-base"
   readonly conflictFiles: readonly string[]
-  readonly kind: "merge" | "push"
+  readonly requiredAction: OntologyFlowAction
 }
 
 export interface OntologySummary {
@@ -199,9 +222,18 @@ export interface RefreshResult {
   readonly inspection: OntologyInspectResult
 }
 
+export type OntologySyncAction =
+  | "skipped"
+  | "fast-forwarded"
+  | "merged"
+  | "reconciled"
+  | "pushed"
+  | "conflict"
+  | "failed"
+
 export interface SyncStep {
   readonly step: string
-  readonly action: "skipped" | "merged" | "pushed" | "conflict" | "failed"
+  readonly action: OntologySyncAction
   readonly fileDiffs?: readonly FileDiff[]
   readonly conflictFiles?: readonly string[]
   readonly summary?: string

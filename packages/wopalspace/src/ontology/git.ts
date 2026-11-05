@@ -2,7 +2,15 @@ import { execFileSync } from "node:child_process"
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve, sep } from "node:path"
-import type { FileDiff, FlowAnalysis, GitRunner, RepositoryFacts } from "./types"
+import type {
+  FileDiff,
+  FlowAnalysis,
+  GitRunner,
+  OntologyContentState,
+  OntologyFlowAction,
+  OntologyHistoryState,
+  RepositoryFacts,
+} from "./types"
 
 const BUFFER = 64 * 1024 * 1024
 
@@ -273,6 +281,130 @@ export function virtualMerge(
   return { clean, tree, conflictFiles }
 }
 
+function ancestryState(repo: string, from: string, to: string, git: GitRunner): OntologyHistoryState {
+  if (git(repo, ["rev-parse", from]) === git(repo, ["rev-parse", to])) return "same"
+  if (isAncestor(repo, from, to, git)) return "source-ancestor"
+  if (isAncestor(repo, to, from, git)) return "target-ancestor"
+  return hasCommonBase(repo, from, to, git) ? "diverged" : "no-common-base"
+}
+
+function aheadCounts(
+  repo: string,
+  from: string,
+  to: string,
+  historyState: OntologyHistoryState,
+  git: GitRunner,
+): { sourceAhead: number | null; targetAhead: number | null } {
+  if (historyState === "no-common-base" || historyState === "unavailable") {
+    return { sourceAhead: null, targetAhead: null }
+  }
+  return {
+    sourceAhead: commitsAhead(repo, to, from, git),
+    targetAhead: commitsAhead(repo, from, to, git),
+  }
+}
+
+/**
+ * Content facts for a merge segment come from a quarantined merge-tree, so
+ * refs, index, worktree and the real object database stay untouched.
+ */
+function mergeContentFacts(
+  repo: string,
+  from: string,
+  to: string,
+  historyState: OntologyHistoryState,
+  git: GitRunner,
+  tempRoot?: string,
+): {
+  contentState: OntologyContentState
+  fileDiffs: readonly FileDiff[]
+  conflictFiles: readonly string[]
+} {
+  if (historyState === "same" || historyState === "source-ancestor") {
+    return { contentState: "aligned", fileDiffs: [], conflictFiles: [] }
+  }
+  if (historyState === "no-common-base" || historyState === "unavailable") {
+    return { contentState: "unknown", fileDiffs: [], conflictFiles: [] }
+  }
+  const quarantine = createQuarantine(repo, git, tempRoot)
+  try {
+    const merge = virtualMerge(repo, to, from, git, quarantine.env)
+    if (!merge.clean) {
+      return {
+        contentState: "conflict",
+        fileDiffs: [],
+        conflictFiles: merge.tree ? merge.conflictFiles : [],
+      }
+    }
+    if (!merge.tree) return { contentState: "unknown", fileDiffs: [], conflictFiles: [] }
+    const targetTree = git(repo, ["rev-parse", to + "^{tree}"], quarantine.env)
+    if (targetTree === merge.tree) return { contentState: "aligned", fileDiffs: [], conflictFiles: [] }
+    return {
+      contentState: "changes",
+      fileDiffs: parseDiff(git(repo, ["diff", "--name-status", targetTree, merge.tree], quarantine.env)),
+      conflictFiles: [],
+    }
+  } catch {
+    return { contentState: "unknown", fileDiffs: [], conflictFiles: [] }
+  } finally {
+    quarantine.cleanup()
+  }
+}
+
+/**
+ * Push facts compare the two trees directly: a mirror push can never
+ * conflict, so push segments never report conflictFiles.
+ */
+function pushContentFacts(
+  repo: string,
+  from: string,
+  to: string,
+  historyState: OntologyHistoryState,
+  git: GitRunner,
+  env?: NodeJS.ProcessEnv,
+): { contentState: OntologyContentState; fileDiffs: readonly FileDiff[]; conflictFiles: readonly string[] } {
+  if (historyState === "no-common-base" || historyState === "unavailable") {
+    return { contentState: "unknown", fileDiffs: [], conflictFiles: [] }
+  }
+  try {
+    const sourceTree = git(repo, ["rev-parse", from + "^{tree}"], env)
+    const targetTree = git(repo, ["rev-parse", to + "^{tree}"], env)
+    if (sourceTree === targetTree) return { contentState: "aligned", fileDiffs: [], conflictFiles: [] }
+    return {
+      contentState: "changes",
+      fileDiffs: parseDiff(git(repo, ["diff", "--name-status", targetTree, sourceTree], env)),
+      conflictFiles: [],
+    }
+  } catch {
+    return { contentState: "unknown", fileDiffs: [], conflictFiles: [] }
+  }
+}
+
+const MERGE_ACTIONS: Record<string, OntologyFlowAction> = {
+  "same|aligned": "none",
+  "source-ancestor|aligned": "none",
+  "target-ancestor|aligned": "fast-forward",
+  "target-ancestor|changes": "fast-forward",
+  "diverged|aligned": "reconcile-history",
+  "diverged|changes": "merge-content",
+  "diverged|conflict": "blocked",
+  "no-common-base|unknown": "blocked",
+  "unavailable|unknown": "blocked",
+}
+
+/** A mirror push never conflicts; when local lags behind, intake must run first. */
+const PUSH_ACTIONS: Record<string, OntologyFlowAction> = {
+  "same|aligned": "none",
+  "target-ancestor|aligned": "push",
+  "target-ancestor|changes": "push",
+  "source-ancestor|aligned": "sync-first",
+  "source-ancestor|changes": "sync-first",
+  "diverged|aligned": "sync-first",
+  "diverged|changes": "sync-first",
+  "no-common-base|unknown": "blocked",
+  "unavailable|unknown": "blocked",
+}
+
 export function analyzeFlow(
   repo: string,
   from: string,
@@ -282,48 +414,93 @@ export function analyzeFlow(
   kind: "merge" | "push",
   tempRoot?: string,
 ): FlowAnalysis {
+  const unavailable: FlowAnalysis = {
+    label,
+    fromBranch: from,
+    toBranch: to,
+    kind,
+    historyState: "unavailable",
+    sourceAhead: null,
+    targetAhead: null,
+    contentState: "unknown",
+    fileDiffs: [],
+    conflictFiles: [],
+    requiredAction: "blocked",
+  }
+  if (!refExists(repo, from, git) || !refExists(repo, to, git)) return unavailable
+  const historyState = ancestryState(repo, from, to, git)
+  const ahead = aheadCounts(repo, from, to, historyState, git)
+  const content =
+    kind === "push"
+      ? pushContentFacts(repo, from, to, historyState, git)
+      : mergeContentFacts(repo, from, to, historyState, git, tempRoot)
+  return {
+    label,
+    fromBranch: from,
+    toBranch: to,
+    kind,
+    historyState,
+    sourceAhead: ahead.sourceAhead,
+    targetAhead: ahead.targetAhead,
+    contentState: content.contentState,
+    fileDiffs: content.fileDiffs,
+    conflictFiles: content.conflictFiles,
+    requiredAction:
+      (kind === "push" ? PUSH_ACTIONS : MERGE_ACTIONS)[historyState + "|" + content.contentState] ?? "blocked",
+  }
+}
+
+/**
+ * A contribute segment has an authoritative content baseline only when the
+ * upstream ref is already inside local ancestry. Before that, squash/rebase
+ * landed content must not masquerade as pending contributions.
+ */
+export function analyzeContributionFlow(
+  repo: string,
+  from: string,
+  to: string,
+  label: string,
+  git: GitRunner,
+): FlowAnalysis {
   const base: FlowAnalysis = {
     label,
     fromBranch: from,
     toBranch: to,
-    upToDate: false,
+    kind: "contribute",
+    historyState: "unavailable",
+    sourceAhead: null,
+    targetAhead: null,
+    contentState: "unknown",
     fileDiffs: [],
-    mergePrediction: "no-common-base",
     conflictFiles: [],
-    kind,
+    requiredAction: "blocked",
   }
   if (!refExists(repo, from, git) || !refExists(repo, to, git)) return base
-  if (!hasCommonBase(repo, from, to, git)) return base
-  if (commitsAhead(repo, to, from, git) === 0) return { ...base, upToDate: true, mergePrediction: "clean" }
-
-  const quarantine = createQuarantine(repo, git, tempRoot)
-  try {
-    const merge = virtualMerge(repo, to, from, git, quarantine.env)
-    if (!merge.clean) {
-      return {
-        ...base,
-        mergePrediction: merge.tree ? "conflict" : "no-common-base",
-        conflictFiles: merge.conflictFiles,
-      }
-    }
-    if (!merge.tree) return base
-    const targetTree = git(repo, ["rev-parse", to + "^{tree}"], quarantine.env)
-    const fileDiffs =
-      targetTree === merge.tree
-        ? []
-        : parseDiff(git(repo, ["diff", "--name-status", targetTree, merge.tree], quarantine.env))
-    return {
-      ...base,
-      upToDate: targetTree === merge.tree,
-      mergePrediction: "clean",
-      fileDiffs,
-      conflictFiles: [],
-    }
-  } catch {
-    return base
-  } finally {
-    quarantine.cleanup()
+  const historyState = ancestryState(repo, from, to, git)
+  const facts: FlowAnalysis = { ...base, historyState, ...aheadCounts(repo, from, to, historyState, git) }
+  if (historyState === "no-common-base") {
+    return { ...facts, contentState: "unknown", requiredAction: "blocked" }
   }
+  if (historyState === "same") {
+    return { ...facts, contentState: "aligned", requiredAction: "none" }
+  }
+  // The three-dot baseline is authoritative only once upstream/main is already
+  // inside local ancestry; before that, landed content must not be reported as
+  // pending contributions.
+  if (historyState === "target-ancestor") {
+    try {
+      const fileDiffs = parseDiff(git(repo, ["diff", "--name-status", to + "..." + from]))
+      return {
+        ...facts,
+        contentState: fileDiffs.length === 0 ? "aligned" : "changes",
+        fileDiffs,
+        requiredAction: fileDiffs.length === 0 ? "none" : "contribute",
+      }
+    } catch {
+      return { ...facts, contentState: "unknown", requiredAction: "blocked" }
+    }
+  }
+  return { ...facts, contentState: "unknown", requiredAction: "sync-first" }
 }
 
 export interface WorktreeRecord {

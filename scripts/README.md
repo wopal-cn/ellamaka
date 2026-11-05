@@ -21,7 +21,7 @@
 | `release-npm.sh`      | SDK / Plugin 独立 npm 发布               |
 | `withdraw-release.sh` | 整版撤回已发布版本                       |
 | `dev.sh`              | 本地开发服务器（tui / serve / desktop）  |
-| `scalar-doc.ts`       | Scalar API 文档调试                      |
+| `scalar-doc.ts`       | Scalar API 文档与调试                    |
 | `dsh-migrate-home.sh` | DSH home 布局一次性迁移                  |
 
 ## 构建与发布
@@ -92,21 +92,44 @@ CLI 与 Desktop 各自按已成功发布的 namespaced tag 独立推进版本；
 | ------------------ | ------------------------------------ |
 | `tui`              | 启动 TUI（默认进程内后端）           |
 | `serve`            | 启动 HTTP 后端 + Workbench           |
-| `restart [target]` | 重启后端 / Workbench / 全部          |
-| `status`           | 显示运行中的开发实例                 |
+| `restart [target]` | 重启后端 / Workbench / 文档 / 全部   |
+| `status`           | 显示运行中的开发实例（含 doc url）   |
 | `desktop`          | 构建并启动 Electron 桌面应用（后台） |
-| `stop [target]`    | 停止后端 / Workbench / 桌面 / 全部   |
+| `stop [target]`    | 停止后端 / Workbench / 桌面 / 文档   |
+
+常用选项：
+
+```bash
+./scripts/dev.sh serve                  # 后端 + Workbench
+./scripts/dev.sh serve --with-doc       # 再加上 Scalar API 文档（4100，占用时自动顺延）
+./scripts/dev.sh serve --backend-only --with-doc   # 只起后端 + 文档
+```
+
+`--with-doc` 默认关闭。文档进程的端口固定从 4100 起、被占用时自动 bump，起停和状态都走同一套 ledger：`status` 会打印 `doc url`，`stop doc` / `restart doc` 单独管理。
 
 开发模式 channel 固定为 `local`（`ellamaka-local.db`）。
 
-### `scalar-doc.ts` — Scalar API 文档调试
+### `scalar-doc.ts` — Scalar API 文档与调试
+
+日常开发直接用 `./scripts/dev.sh serve --with-doc`，不需要单独跑本脚本。需要脱离 dev.sh 独立调试时：
 
 ```bash
-bun run scripts/scalar-doc.ts
+bun run scripts/scalar-doc.ts              # 启动并打开浏览器
+bun run scripts/scalar-doc.ts --no-open    # 无头环境：只起服务
 # SCALAR_PORT=8080 SCALAR_API=http://127.0.0.1:3000 bun run scripts/scalar-doc.ts
 ```
 
-在独立端口提供 Scalar UI，并把 API 请求代理到 ellamaka，支持 "Try it out" 调试。默认 `http://localhost:4100`，代理到 `http://127.0.0.1:4097`。
+在独立端口提供 Scalar UI，并把 API 请求代理到 ellamaka，支持 "Try it out" 调试。
+
+| 项           | 默认值                  | 覆盖方式      |
+| ------------ | ----------------------- | ------------- |
+| 文档端口     | `4100`                  | `SCALAR_PORT` |
+| 代理目标     | `http://127.0.0.1:4096` | `SCALAR_API`  |
+| 自动开浏览器 | 开启                    | `--no-open`   |
+
+OpenAPI spec 在启动时直接从当前源码生成（`generatedOpenApi()`），不读取任何落盘快照，因此不会与代码漂移。需要导出 JSON 时直接取 `http://localhost:4100/api/doc.json`。
+
+"Try it out" 会把请求转发给后端，先用 `./scripts/dev.sh serve` 起服务；后端没起时 UI 和 spec 仍可正常浏览。页面里的 Server 固定为文档服务自身，所有请求经同源代理转发，因此不受后端 CORS 限制。
 
 ## 迁移
 

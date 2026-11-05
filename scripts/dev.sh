@@ -68,6 +68,7 @@ BACKEND_LOG="$DEV_DIR/ellamaka-dev-backend.log"
 FRONTEND_LOG="$DEV_DIR/ellamaka-dev-frontend.log"
 DESKTOP_LOG="$DEV_DIR/ellamaka-dev-desktop.log"
 SIDECAR_LOG="$DEV_DIR/ellamaka-dev-sidecar.log"
+DOC_LOG="$DEV_DIR/ellamaka-dev-doc.log"
 PLUGIN_DEBUG_LOG="$LOGDIR/wopal-plugins-debug.log"
 SELF_PGID="$(ps -o pgid= -p "$$" | tr -d '[:space:]')"
 # Per-bucket project root used by is_service_process to judge cross-worktree
@@ -100,18 +101,21 @@ $self serve [options]
   --app-port <port> Workbench port (default: 3000)
   --debug [mods]    Debug mode
   --backend-only    Start only the backend server (skip Workbench)
+  --with-doc        Also start the Scalar API reference (port 4100, auto-bumped)
   --cdp-debug       Launch Chrome with CDP debugging (port 9222) and open the Workbench
 
 $self restart [target]
   backend           Restart only the backend server (keep Workbench alive)
   frontend          Restart only the Workbench dev server (keep backend alive)
-  all               Restart both backend and Workbench (default)
+  doc               Restart only the Scalar API reference (keep backend alive)
+  all               Restart everything that is running (default)
   Desktop is not supported. Use 'stop desktop && $self desktop'.
 
 $self stop [target]
   backend           Stop only the backend server (keep others alive)
   frontend          Stop only the Workbench dev server (keep others alive)
   desktop           Stop only the Electron desktop app (keep others alive)
+  doc               Stop only the Scalar API reference (keep others alive)
   all               Stop all dev instances (default)
 
 $self desktop [options]
@@ -181,12 +185,35 @@ backend_healthy() {
 }
 
 wait_backend() {
-  local port="$1" i
+  local port="$1" i pid
   for i in $(seq 1 30); do
     backend_healthy "$port" && return 0
+    # A backend that already exited will never become healthy. Without this
+    # the caller sat through the full 15s timeout before reporting a failure
+    # that was known after 100ms.
+    pid="$(read_record backend >/dev/null 2>&1 && printf '%s' "$RECORD_PID")"
+    if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+      return 1
+    fi
     sleep 0.5
   done
   return 1
+}
+
+# The reason a backend failed to start is in its log, so print it instead of
+# sending the user to open a file themselves. Argument errors put the message
+# on the first line; runtime crashes put the stack at the end — show both ends.
+report_backend_failure() {
+  echo "backend failed to start" >&2
+  if [ -s "$BACKEND_LOG" ]; then
+    echo "--- $(space_rel_path "$BACKEND_LOG") ---" >&2
+    head -n 5 "$BACKEND_LOG" >&2
+    echo "..." >&2
+    tail -n 10 "$BACKEND_LOG" >&2
+    echo "---" >&2
+  else
+    echo "  log is empty; see $(space_rel_path "$BACKEND_LOG")" >&2
+  fi
 }
 
 pgid_of() {
@@ -327,6 +354,10 @@ is_service_process() {
     desktop-crashpad|desktop-crashpad-*)
       [[ "$command" == *crashpad* ]] || return 1
       expected="$desktop_dir_"
+      ;;
+    doc)
+      [[ "$command" == *"scripts/scalar-doc.ts"* ]] || return 1
+      expected="$root_"
       ;;
     *) return 1 ;;
   esac
@@ -597,6 +628,7 @@ cleanup_service_logs() {
       if ! service_running desktop; then rm -f "$PLUGIN_DEBUG_LOG"; fi
       ;;
     frontend) rm -f "$FRONTEND_LOG" ;;
+    doc) rm -f "$DOC_LOG" ;;
     desktop)
       rm -f "$DESKTOP_LOG" "$SIDECAR_LOG"
       if ! service_running backend; then rm -f "$PLUGIN_DEBUG_LOG"; fi
@@ -760,6 +792,23 @@ start_frontend() {
   start_process frontend "$port" "$FRONTEND_LOG" "$ellamaka_app_dir" env VITE_ELLAMAKA_SERVER_PORT="$backend_port" ELLAMAKA_DSH_PROXY_TARGET="http://127.0.0.1:$backend_port" bun run dev -- --host 127.0.0.1 --port "$port" --strictPort
 }
 
+# Scalar API reference. Optional: `serve --with-doc` only. It generates the
+# OpenAPI spec from source at startup and proxies API calls to the backend
+# this worktree actually started.
+start_doc() {
+  local port="$1" backend_port="$2"
+  start_process doc "$port" "$DOC_LOG" "$root" env SCALAR_PORT="$port" SCALAR_API="http://127.0.0.1:$backend_port" bun run scripts/scalar-doc.ts --no-open
+}
+
+wait_doc() {
+  local port="$1" i
+  for i in $(seq 1 20); do
+    curl -sf --max-time 1 "http://127.0.0.1:$port/api/doc.json" >/dev/null 2>&1 && return 0
+    sleep 0.25
+  done
+  return 1
+}
+
 listener_pid() {
   lsof -nP -tiTCP:"$1" -sTCP:LISTEN 2>/dev/null | { IFS= read -r pid || true; printf '%s' "$pid"; }
 }
@@ -811,7 +860,7 @@ record_crashpads() {
 cmd_stop() {
   local target="${1:-all}" failed=false
   case "$target" in
-    backend|frontend|desktop|tui|all|--everywhere) ;;
+    backend|frontend|desktop|doc|tui|all|--everywhere) ;;
     -h|--help)
       cat <<EOF
 Usage: $self stop [target] [--everywhere]
@@ -820,6 +869,7 @@ Targets:
   backend    Stop only the backend server (keep Workbench alive)
   frontend   Stop only the Workbench dev server (keep backend alive)
   desktop    Stop only the Electron desktop app (keep backend/Workbench alive)
+  doc        Stop only the Scalar API reference (started with serve --with-doc)
   tui        Stop a registered foreground tui/attach client of this worktree
   all        Stop all dev instances in THIS worktree (default)
 
@@ -846,10 +896,10 @@ EOF
   fi
 
   case "$target" in
-    backend|frontend|desktop|tui) stop_service "$target" ;;
+    backend|frontend|desktop|doc|tui) stop_service "$target" ;;
     all)
       # Ask once up front for the whole batch: per-service prompts inside
-      # stop_service would fire four times (frontend/desktop/backend/tui).
+      # stop_service would fire once per running service.
       LOG_CLEANUP=""
       if has_logs "$DEV_DIR"; then
         confirm_log_cleanup "clean up dev logs ($DEV_DIR)?" || echo "logs kept: $DEV_DIR"
@@ -857,6 +907,7 @@ EOF
         LOG_CLEANUP=yes
       fi
       stop_service frontend || failed=true
+      stop_service doc || failed=true
       stop_service desktop || failed=true
       stop_service backend || failed=true
       stop_service tui || failed=true
@@ -891,7 +942,7 @@ stop_everywhere() {
       [ -n "$label" ] || continue
       service="${label%%-*}"
       case "$service" in
-        backend|frontend|desktop|tui) ;;
+        backend|frontend|desktop|doc|tui) ;;
         *) continue ;;
       esac
       # Respect the requested target; crashpad/sidecar/vite sub-records ride
@@ -901,6 +952,7 @@ stop_everywhere() {
         backend) [ "$service" = backend ] || continue ;;
         frontend) [ "$service" = frontend ] || continue ;;
         desktop) [ "$service" = desktop ] || continue ;;
+        doc) [ "$service" = doc ] || continue ;;
         tui) [ "$service" = tui ] || continue ;;
       esac
       # Identity check BEFORE killing, mirroring stop_service: a recycled
@@ -1020,7 +1072,7 @@ cmd_tui() {
 }
 
 cmd_serve() {
-  local PORT=4096 APP_PORT=3000 debug=false debug_modules="all" backend_only=false cdp_debug=false passthrough=()
+  local PORT=4096 APP_PORT=3000 debug=false debug_modules="all" backend_only=false cdp_debug=false with_doc=false passthrough=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --) shift; passthrough+=("$@"); break ;;
@@ -1032,6 +1084,7 @@ cmd_serve() {
         ;;
       --backend-only) backend_only=true; shift ;;
       --cdp-debug) cdp_debug=true; shift ;;
+      --with-doc) with_doc=true; shift ;;
       -h|--help) usage ;;
       *) passthrough+=("$1"); shift ;;
     esac
@@ -1066,7 +1119,7 @@ cmd_serve() {
   $debug && echo "debug: modules=$debug_modules"
   start_backend "$PORT" "$debug" "$debug_modules" "$opencode_preload" "${passthrough[@]}" || return 1
   if ! wait_backend "$PORT"; then
-    echo "backend failed to start; see $BACKEND_LOG"
+    report_backend_failure
     stop_keep_logs backend
     return 1
   fi
@@ -1074,6 +1127,16 @@ cmd_serve() {
     echo "  backend :$PORT (backend-only)"
     echo "  pidfile $(space_rel_path "$PIDFILE")"
     echo "  logs    $(space_rel_path "$BACKEND_LOG")"
+    if $with_doc; then
+      choose_free_port doc 4100
+      local doc_port="$SELECTED_PORT"
+      if start_doc "$doc_port" "$PORT" && wait_doc "$doc_port"; then
+        echo "  doc     :$doc_port → http://127.0.0.1:$doc_port"
+      else
+        echo "  ⚠  doc failed to start; see $(space_rel_path "$DOC_LOG")"
+        stop_keep_logs doc
+      fi
+    fi
     return 0
   fi
 
@@ -1082,6 +1145,16 @@ cmd_serve() {
   echo "  pidfile $(space_rel_path "$PIDFILE")"
   echo "  logs    $(space_rel_path "$BACKEND_LOG") / $(space_rel_path "$FRONTEND_LOG")"
   echo "  → $(dev_entry_url "$APP_PORT")"
+  if $with_doc; then
+    choose_free_port doc 4100
+    local doc_port="$SELECTED_PORT"
+    if start_doc "$doc_port" "$PORT" && wait_doc "$doc_port"; then
+      echo "  doc     :$doc_port → http://127.0.0.1:$doc_port"
+    else
+      echo "  ⚠  doc failed to start; see $(space_rel_path "$DOC_LOG")"
+      stop_keep_logs doc
+    fi
+  fi
 
   if $cdp_debug; then
     if is_running 9222; then
@@ -1096,7 +1169,7 @@ cmd_serve() {
 cmd_restart() {
   local target="${1:-all}"
   case "$target" in
-    backend|frontend|all) ;;
+    backend|frontend|doc|all) ;;
     -h|--help|"")
       cat <<EOF
 Usage: $self restart [target]
@@ -1104,7 +1177,8 @@ Usage: $self restart [target]
 Targets:
   backend    Restart only the backend server (keep Workbench alive)
   frontend   Restart only the Workbench dev server (keep backend alive)
-  all        Restart both (default)
+  doc        Restart only the Scalar API reference (keep backend/Workbench alive)
+  all        Restart everything that is running (default)
 
 Note: desktop is not supported here. Use "stop desktop && dev.sh desktop" instead.
 EOF
@@ -1112,7 +1186,7 @@ EOF
       ;;
     desktop) echo "restart: desktop not supported (use 'stop desktop && $self desktop')"; return 1 ;;
     tui) echo "restart: tui not supported (use 'stop tui && $self tui')"; return 1 ;;
-    *) echo "Unknown restart target: $target (expected: backend|frontend|all)"; return 1 ;;
+    *) echo "Unknown restart target: $target (expected: backend|frontend|doc|all)"; return 1 ;;
   esac
 
   case "$target" in
@@ -1144,12 +1218,26 @@ EOF
       start_frontend "$new_frontend_port" "$frontend_backend_port" || return 1
       echo "  workbench :$new_frontend_port restarted  → $(dev_entry_url "$new_frontend_port")"
       ;;
+    doc)
+      read_record doc && service_running doc || { echo "restart: doc not running"; return 1; }
+      local doc_old_port="$RECORD_PORT"
+      read_record backend && service_running backend || { echo "restart: backend not running"; return 1; }
+      local doc_backend_port="$RECORD_PORT"
+      stop_service doc || return 1
+      claim_ports_reset
+      claim_port "$doc_backend_port"
+      choose_free_port doc "$doc_old_port"; local new_doc_port="$SELECTED_PORT"
+      start_doc "$new_doc_port" "$doc_backend_port" && wait_doc "$new_doc_port" || return 1
+      echo "  doc :$new_doc_port restarted → http://127.0.0.1:$new_doc_port"
+      ;;
     all)
-      local restart_backend=false restart_frontend=false backend_port="" frontend_port=""
+      local restart_backend=false restart_frontend=false restart_doc=false backend_port="" frontend_port="" doc_port=""
       if read_record backend && service_running backend; then restart_backend=true; backend_port="$RECORD_PORT"; fi
       if read_record frontend && service_running frontend; then restart_frontend=true; frontend_port="$RECORD_PORT"; fi
-      $restart_backend || $restart_frontend || { echo "restart: no dev instance running"; return 1; }
+      if read_record doc && service_running doc; then restart_doc=true; doc_port="$RECORD_PORT"; fi
+      $restart_backend || $restart_frontend || $restart_doc || { echo "restart: no dev instance running"; return 1; }
       if $restart_frontend; then stop_service frontend || return 1; fi
+      if $restart_doc; then stop_service doc || return 1; fi
       if $restart_backend; then stop_service backend || return 1; fi
       claim_ports_reset
       if $restart_backend; then
@@ -1166,6 +1254,13 @@ EOF
         choose_free_port workbench "$frontend_port"; frontend_port="$SELECTED_PORT"
         start_frontend "$frontend_port" "$backend_port" || return 1
         echo "  workbench :$frontend_port restarted  → $(dev_entry_url "$frontend_port")"
+      fi
+      if $restart_doc; then
+        $restart_backend || { echo "restart: backend not running"; return 1; }
+        claim_port "$backend_port"
+        choose_free_port doc "$doc_port"; doc_port="$SELECTED_PORT"
+        start_doc "$doc_port" "$backend_port" && wait_doc "$doc_port" || return 1
+        echo "  doc :$doc_port restarted → http://127.0.0.1:$doc_port"
       fi
       echo "restarted dev services"
       ;;
@@ -1458,6 +1553,9 @@ show_all_buckets() {
         alive="DEAD"
       fi
       printf '      %-9s port %-12s pid %-7s pgid %-7s %s\n' "$label" "$port" "$pid" "$pgid" "$alive"
+      if [ "$label" = "doc" ]; then
+        printf '                url http://127.0.0.1:%s\n' "$port"
+      fi
     done < "$pidfile"
     SCOPE_ROOT="$saved_scope_root"
     any=true

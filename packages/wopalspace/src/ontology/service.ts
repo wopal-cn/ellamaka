@@ -6,6 +6,7 @@ import { capabilityKind, readCapabilities } from "./capabilities"
 import { inspectContributions } from "./contributions"
 import { createGitHubForkProvisioner, githubPullRequestQuery } from "./github"
 import {
+  analyzeContributionFlow,
   analyzeFlow,
   assertRepositoryRoot,
   commitsAhead,
@@ -192,7 +193,7 @@ export function createOntologyService(options: OntologyServiceOptions): Ontology
       mode === "fork"
         ? [
             analyzeFlow(resolved.path, "main", ORIGIN, "local/main → origin/main", git, "push", tempRoot),
-            analyzeFlow(resolved.path, ORIGIN, UPSTREAM, "origin/main → upstream/main", git, "push", tempRoot),
+            analyzeContributionFlow(resolved.path, "main", UPSTREAM, "local/main → upstream/main", git),
           ]
         : []
     const publicRepo = publicFacts(facts)

@@ -1,29 +1,36 @@
 #!/usr/bin/env bun
 
 /**
- * API Reference — Scalar UI with full proxy
+ * API Reference — Scalar UI with a live OpenAPI spec
  *
- * Serves Scalar UI on a separate port, proxies all API requests to ellamaka.
- * This enables "Try it out" debugging with correct server URL.
+ * The spec is generated from the current source at startup, so the reference
+ * always matches the routes on disk. There is no committed openapi.json
+ * snapshot to keep in sync.
  *
  * Usage:
- *   bun run scripts/scalar-doc.ts          → http://localhost:4100
- *   SCALAR_PORT=8080 bun run scripts/scalar-doc.ts
- *   SCALAR_API=http://127.0.0.1:3000 bun run scripts/scalar-doc.ts
+ *   bun run scripts/scalar-doc.ts               → http://localhost:4100 (opens the browser)
+ *   bun run scripts/scalar-doc.ts --no-open     → serve only
+ *   SCALAR_PORT=8080 SCALAR_API=http://127.0.0.1:3000 bun run scripts/scalar-doc.ts
+ *
+ * "Try it out" proxies to ellamaka, so start the backend first with
+ * `./scripts/dev.sh serve` (default 127.0.0.1:4096).
  */
 
 import { serve } from "bun"
+import { generatedOpenApi } from "../packages/opencode/src/server/routes/instance/httpapi/openapi"
 
 const PORT = Number(process.env.SCALAR_PORT) || 4100
-const API_SERVER = process.env.SCALAR_API || "http://127.0.0.1:4097"
-const STATIC_SPEC = import.meta.dir + "/../packages/sdk/openapi.json"
+const API_SERVER = process.env.SCALAR_API || "http://127.0.0.1:4096"
 const SPEC_PATH = "/api/doc.json"
+const OPEN_BROWSER = !process.argv.includes("--no-open")
+
+const spec = JSON.stringify(generatedOpenApi(), null, 2)
 
 const HTML = `<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ellamaka API Reference</title>
     <style>body { margin: 0; padding: 0; }</style>
   </head>
@@ -33,12 +40,13 @@ const HTML = `<!DOCTYPE html>
     <script>
       Scalar.createApiReference('#app', {
         url: '${SPEC_PATH}',
-        'servers': [{'url': '${API_SERVER}', 'description': 'ellamaka dev'}]
+        // Same origin as the page, so "Test Request" goes through this
+        // server's proxy instead of hitting the API cross-origin.
+        servers: [{ url: window.location.origin, description: 'ellamaka dev (proxied)' }]
       })
     </script>
   </body>
 </html>`
-
 
 serve({
   port: PORT,
@@ -53,18 +61,14 @@ serve({
       })
     }
 
-    // OpenAPI spec
+    // OpenAPI spec, generated from source on startup
     if (pathname === SPEC_PATH) {
-      const file = Bun.file(STATIC_SPEC)
-      if (await file.exists()) {
-        return new Response(file, {
-          headers: {
-            "content-type": "application/json",
-            "access-control-allow-origin": "*",
-          },
-        })
-      }
-      return new Response("Spec not found", { status: 404 })
+      return new Response(spec, {
+        headers: {
+          "content-type": "application/json",
+          "access-control-allow-origin": "*",
+        },
+      })
     }
 
     // Proxy all other requests to ellamaka
@@ -98,11 +102,29 @@ serve({
   },
 })
 
+const page = `http://localhost:${PORT}`
+
+if (OPEN_BROWSER) {
+  const command =
+    process.platform === "darwin"
+      ? ["open", page]
+      : process.platform === "win32"
+        ? ["cmd", "/c", "start", "", page]
+        : ["xdg-open", page]
+  try {
+    Bun.spawn(command, { stdout: "ignore", stderr: "ignore" }).unref()
+  } catch {
+    // Headless environments simply skip the browser step.
+  }
+}
+
 console.log(`
   ellamaka API Reference (Scalar)
   ─────────────────────────────────────
-  UI:         http://localhost:${PORT}
+  UI:         ${page}
+  Spec:       ${page}${SPEC_PATH}   (generated from source)
   API Server: ${API_SERVER}
   ─────────────────────────────────────
   Override: SCALAR_PORT=8080 SCALAR_API=http://host:port bun run scripts/scalar-doc.ts
+  Headless: bun run scripts/scalar-doc.ts --no-open
 `)
