@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-03
+> **Updated**: 2026-11-06
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -19,6 +19,7 @@
 > - `./DESIGN-logging.md` — 日志架构：角色分域路由、文件生命周期、Trace 与脱敏策略
 > - `./DESIGN-onboarding.md` — WopalSpace Setup/Onboarding 在 Ellamaka Server host 上的集成
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
+> - `./testing-isolation.md` — 测试隔离规范：隔离模型、门禁规则与包级测试基座
 
 ## Role
 
@@ -382,6 +383,7 @@ SDK/root调用模型的MAJOR变化不自动改变PluginInput.client。现有插�
 | WopalSpace local root            | `$WOPAL_HOME`                                         | 产品级路径契约：显式环境变量优先，否则使用平台默认路径                                |
 | Global config                    | `$WOPAL_HOME/config/`                                 | 当前配置文件与既有加载链；统一 Config Plane / writer ownership 留到 Phase 3 Draft     |
 | Runtime data                     | `$WOPAL_HOME/ellamaka/data/`                          | ellamaka                                                                              |
+| Provider credential              | `$WOPAL_HOME/ellamaka/data/auth.json`                 | ellamaka；唯一持久凭证存储，见 [Provider Credential Storage](#provider-credential-storage) |
 | Cache                            | `$WOPAL_HOME/ellamaka/cache/`                         | ellamaka                                                                              |
 | Process state                    | `$WOPAL_HOME/ellamaka/state/`                         | ellamaka                                                                              |
 | Instance WopalSpace root         | 当前 directory 的检测结果                             | `undefined` 表示非 WopalSpace；绝对路径表示 WopalSpace                                |
@@ -390,6 +392,26 @@ SDK/root调用模型的MAJOR变化不自动改变PluginInput.client。现有插�
 | 空间运行态                       | `<space>/.wopal-space/`                               | space runtime；wopal-plugin 按 instance root 写日志，Ellamaka engine 不拥有其目录结构 |
 
 `WOPAL_HOME` 遵循 WopalSpace 产品级路径契约：显式环境变量优先；macOS/Linux 默认 `~/.wopal`，Windows 默认 `%USERPROFILE%\\.wopal`。首次 Onboarding 在变量缺失时可以先让用户确认 Home：正常模式把选择持久化为用户 `WOPAL_HOME`，开发模式只做 `WOPAL_DEV=1` 进程覆盖；确认后当前 Host 生命周期冻结该值。Ellamaka 不维护第二份 Home 持久化事实。临时目录使用系统临时目录下的 `ellamaka/`。
+
+### Provider Credential Storage
+
+Provider 凭证只有一个持久存储：`$WOPAL_HOME/ellamaka/data/auth.json`，由 `packages/opencode/src/auth` 拥有，
+`opencode providers login` 写入，`provider.ts` 在装配模型时读取。它就是用户「已经登录了哪些 provider」的唯一事实。
+
+`packages/ellamaka-core` 内的 `AccountV2`（`account.json`）不属于凭证存储：
+
+- 它从不出现在模型请求路径上。主路径 `provider.ts` 只读 `auth.json`；`AccountV2` 的消费者只有尚未成为主路径的
+  v2 catalog 投影、`@wopal/ellamaka-cli` 开发入口与 `debug/v2`。
+- 它的 `load()` 会在 `auth.json` 存在时执行一次迁移写回。`auth.json` 是完整的长期存储，因此这个迁移没有终止条件，
+  每次进程启动都会重新覆盖 `account.json`。于是任何写进 `account.json` 的内容都无法存活，而 `auth.json`
+  的历史在其间反复被重写。
+- 一个不回写 `auth.json`、由另一条链路读取的第二份凭证副本，会让「用户登录了哪个 provider」出现两个答案。
+
+因此 `AccountV2` 与 `account.json` 属于待退役代码：新代码不得读取、写入或依赖它们，也不得在测试中为它们构造
+fixture。真正需要账号选择能力时，作为一个独立设计重新引入，并在同一份设计里定义它与 `auth.json` 的单一 ownership。
+
+测试约束：任何测试都不得读写真实 `$WOPAL_HOME` 下的凭证文件；凭证相关的测试使用临时 Home 与注入的
+credential service。测试隔离的完整规则见 [Test Isolation](./testing-isolation.md)。
 
 ### 环境变量来源
 

@@ -1,5 +1,10 @@
 # 测试隔离规范（Test Isolation）
 
+> **Status**: Active
+> **Updated**: 2026-11-06
+> **Parent**: `./DESIGN.md`
+> **Scope**: 全仓每个带 `test/` 的 package 的隔离基座、门禁规则与验证责任
+
 本文件解释 Ellamaka 测试隔离的「为什么」和「怎么判」，不是另一份通用测试政策。跨项目测试原则与 TDD 语义由
 WopalSpace 装配的 `testing.md` 统一拥有；Ellamaka 特有、需要全仓执行的隔离约束写在根 `AGENTS.md`，
 机器可判定的部分在 `packages/opencode/script/test-isolation/`（`bun run check:test-isolation`）。本文只保留事故分类、
@@ -30,9 +35,10 @@ CI 上 runner 的文件顺序是稳定的，所以 CI 每次都以同样的方�
 | F 断言被削弱换绿灯       | 删掉一条 retention 断言；把观察窗口从 12 秒缩到 1.5 秒                                                          | 测试不再验证它声称验证的行为                   |
 | G 分层与预算失守         | 真实子进程 / fs watch / git / 网络测试混进 unit 层                                                              | unit 层超时、随机失败                          |
 | H 规则无门禁             | 规则只写在文档里                                                                                                | 几个月后同样的违规再次进入仓库                 |
+| I 真实 Home 依赖         | 测试通过 `defaultLayer` / `Global.Path` 直接读写开发者真实 `$WOPAL_HOME`；本地因目录已存在而通过，CI 干净 runner 上 ENOENT | 本地静默污染用户数据，CI 必红；同一 bug 两种症状 |
 
-A-H 里的每一类都曾单独修过，又复发。区别在于：A-G 修的是**这一次的具体代码**，
-H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的是 H。
+A-I 里的每一类都曾单独修过，又复发。区别在于：A-G、I 修的是**这一次的具体代码**，
+H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的是 H，并通过包级基座（见下节）让 I 无法复发。
 
 ## 三种隔离模型与选择规则
 
@@ -93,6 +99,38 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 仓库里已有的例子：`packages/ellamaka-desktop/electron-mock.ts` 是**固定的 process preload**，
 它本身可以继续存在；但某个 Desktop 测试如果想把 electron 换成另一套 mock，就不能在同一个测试进程里做。
 
+## 包级测试基座
+
+事故 I 的根因不是某一行写错，而是**包的测试基座存在与否全凭个人习惯**：同一个 `ellamaka-core` 里，
+`account.test.ts` 用 `Global.layerWith` 注入临时目录，而三个 provider 测试用 `defaultLayer` 直连真实 Home。
+两种写法都能通过评审，因为规范没有说清「一个包必须具备什么才能写测试」。
+
+### 基座契约
+
+每个带 `test/` 的 package 都必须满足下列之一，并在 `test/AGENTS.md` 记录它选了哪一条：
+
+1. **拥有 Home 隔离基座**：`bunfig.toml` 的 `[test].preload` 指向一个 package-local preload，
+   在**任何 `src/` import 之前**把 `WOPAL_HOME` 重定向到临时目录，并在测试结束后清理。
+   `packages/opencode/test/preload.ts` 是参考实现。
+2. **声明不触碰全局路径**：包里没有任何测试导入 `Global`、`defaultLayer`、`Global.Path.*`
+   或其它读取进程级路径的模块。一旦出现这类导入，必须转为第 1 条。
+
+判据只有一条：**在 `$WOPAL_HOME` 指向一个空的不存在目录时，整个包的测试必须全绿，且不创建任何真实
+`$WOPAL_HOME` 内容。** 这条判据同时覆盖本地与 CI，因为它不依赖开发者机器上恰好存在某个目录。
+
+### 禁止的写法
+
+- 测试文件里用 `*.defaultLayer` 装配一个会写文件的 service。`defaultLayer` 绑定 `Global.defaultLayer`，
+  因此指向真实 Home。用 `Global.layerWith(...)` 注入临时目录，或用 `Layer.mock` 注入替身。
+- 测试断言依赖「本机某个目录/文件已经存在」。这类断言在 CI 上必红，在本地则掩盖真实缺陷。
+- 在 `null` / 缺失父目录时依赖写入成功。文件系统写入必须自己确保父目录存在；测试不得把
+  「父目录恰好存在」当成前提。
+
+### 修复顺序
+
+先修生产代码的健壮性（谁写文件谁建父目录），再补基座，最后迁移测试。
+只改测试而不修生产代码，等于把「写入不建目录」这个真实缺陷埋进更深的调用链。
+
 ## 规则与门禁的对应
 
 | 规则                                     | 门禁    | 判定方式                                                                |
@@ -106,6 +144,8 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 | baseline 不得有 stale 条目               | TISO007 | baseline 里记录的违规在源码中已不存在即失败                             |
 | 普通测试不直接启用 Bun 进程内 concurrent | TISO008 | 识别 bun:test 控制器（含 alias/namespace/chained form）的 `.concurrent` |
 | OpenCode 测试不得泄漏 env/cwd            | TISO101 | OpenCode preload 记录 env/cwd 基线，测试结束后比对并先恢复再报错        |
+| 无 Home 基座的包不得使用全局路径装配      | TISO009 | 包无 Home 重定向 preload 时，扫描测试中的 `Global` / `*.defaultLayer` / `Global.Path` 使用 |
+| 每个带 test 的包须声明测试基座            | TISO010 | 包存在 `test/AGENTS.md` 声明基座契约，且声明与实际导入一致               |
 
 TISO008 是**直接 Bun test control 门禁**，不是“禁止一切并发”。测试可以在一个普通用例内部并发执行
 由该用例明确拥有的操作；也可以通过经过审查的 owner-aware helper 开启 test-level concurrency。
@@ -114,9 +154,13 @@ TISO008 是**直接 Bun test control 门禁**，不是“禁止一切并发”�
 并在 helper 旁记录隔离契约；普通测试仍禁止直接调用 `test.concurrent` / `describe.concurrent`。
 
 TISO101 当前是 **OpenCode package 的运行时 backstop**，由 `packages/opencode/bunfig.toml` 加载
-`test/preload.ts` 后生效；它不是全仓每个 Bun test process 都已安装的保证。其它 package 仍受全仓静态
-TISO 门禁与 scoped fixture 规则约束；若未来需要同等级的运行时 env/cwd 哨兵，应在对应 package 的 test
-preload/runner 中显式接入，而不是把 OpenCode preload 的覆盖范围当成全仓事实。
+`test/preload.ts` 后生效；它不是全仓每个 Bun test process 都已安装的保证。
+
+TISO009 补上这个洞：它不要求每个包都装运行时哨兵，而是**要求使用全局路径装配的包必须同时拥有 Home 隔离基座**。
+没有基座、也不碰全局路径的包保持现状；一旦这样的包引入了 `Global` 或 `defaultLayer`，门禁立即失败，
+必须补基座才能继续。这样防护覆盖的是真实风险面，而不是逼所有包做同一种改造。
+
+TISO010 让「包选了什么基座」成为可检查的事实，而不是口口相传的约定：声明缺失或声明与实际导入矛盾都算失败。
 
 **baseline 的维护规则**：baseline 是**精确债务清单**，每条记录「规则 + 文件 + 具体目标（模块 id / env key / API）+ 出现次数」。
 出现次数是必需的：同一个文件里第二条完全相同的违规如果没有计数，就会匹配上只记录了一次的条目而被漏掉。
