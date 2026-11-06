@@ -365,26 +365,29 @@ export function updateRef(git: GitRunner, repo: string, ref: string, value: stri
  */
 export function updateRefChecked(git: GitRunner, repo: string, ref: string, value: string): void {
   const attempt = tryGit(git, repo, ["update-ref", "refs/heads/" + ref, value])
-  if (!attempt.ok) throw new SpaceServiceError({
-    code: spaceErrorCodes.syncFailed,
-    message: "git update-ref " + ref + " failed: " + attempt.stderr,
-  })
+  if (!attempt.ok)
+    throw new SpaceServiceError({
+      code: spaceErrorCodes.syncFailed,
+      message: "git update-ref " + ref + " failed: " + attempt.stderr,
+    })
 }
 
 export function resetHardToChecked(git: GitRunner, repo: string, ref: string): void {
   const attempt = tryGit(git, repo, ["reset", "--hard", ref])
-  if (!attempt.ok) throw new SpaceServiceError({
-    code: spaceErrorCodes.syncFailed,
-    message: "git reset --hard failed: " + attempt.stderr,
-  })
+  if (!attempt.ok)
+    throw new SpaceServiceError({
+      code: spaceErrorCodes.syncFailed,
+      message: "git reset --hard failed: " + attempt.stderr,
+    })
 }
 
 export function resetMixedToChecked(git: GitRunner, repo: string, ref: string): void {
   const attempt = tryGit(git, repo, ["reset", "--mixed", ref])
-  if (!attempt.ok) throw new SpaceServiceError({
-    code: spaceErrorCodes.syncFailed,
-    message: "git reset --mixed failed: " + attempt.stderr,
-  })
+  if (!attempt.ok)
+    throw new SpaceServiceError({
+      code: spaceErrorCodes.syncFailed,
+      message: "git reset --mixed failed: " + attempt.stderr,
+    })
 }
 
 /** Read-only virtual merge: writes only into a disposable object store. */
@@ -439,11 +442,5 @@ export function operationInProgress(git: GitRunner, worktree: string): string | 
 /** Changed paths of one diff expression (e.g. "main...space/x"). */
 export function diffNameOnlyExpr(git: GitRunner, repo: string, expression: string): string[] {
   const result = tryGit(git, repo, ["diff", "--name-only", expression])
-  return result.ok ? result.stdout.split("\n").filter(Boolean) : []
-}
-
-/** Changed paths of one diff expression with rename detection disabled. */
-export function diffNoRenamesPathsExpr(git: GitRunner, repo: string, expression: string): string[] {
-  const result = tryGit(git, repo, ["diff", "--no-renames", "--name-only", expression])
   return result.ok ? result.stdout.split("\n").filter(Boolean) : []
 }

@@ -210,15 +210,7 @@ const InstallResult = Schema.Struct({
 
 const SyncStep = Schema.Struct({
   step: Schema.String,
-  action: Schema.Literals([
-    "skipped",
-    "fast-forwarded",
-    "merged",
-    "reconciled",
-    "pushed",
-    "conflict",
-    "failed",
-  ]),
+  action: Schema.Literals(["skipped", "fast-forwarded", "merged", "reconciled", "pushed", "conflict", "failed"]),
   fileDiffs: Schema.optional(Schema.Array(FileDiff)),
   conflictFiles: Schema.optional(Schema.Array(Schema.String)),
   summary: Schema.optional(Schema.String),
@@ -360,6 +352,14 @@ const PreparationFacts = Schema.Struct({
   diagnostic: Schema.optional(Schema.String),
 })
 
+/** A complete worktree asset a caller can adopt through `space.capability.add`. */
+const SpaceCapabilityCandidate = Schema.Struct({
+  reference: Schema.String,
+  path: Schema.String,
+  kind: Schema.String,
+  source: Schema.Literal("worktree"),
+})
+
 const SpaceStatusResult = Schema.Struct({
   space: Schema.Struct({
     name: Schema.String,
@@ -381,12 +381,20 @@ const SpaceStatusResult = Schema.Struct({
     sparseViolations: Schema.Array(
       Schema.Struct({ path: Schema.String, form: Schema.Literals(["stranded", "drifted"]) }),
     ),
+    defaults: Schema.Array(Schema.String),
+    legacy: Schema.optional(
+      Schema.Struct({
+        version: Schema.Literal(2),
+        privateCount: Schema.Number,
+        writable: Schema.Boolean,
+      }),
+    ),
   }),
   selection: Schema.Struct({
     include: Schema.Array(Schema.String),
     exclude: Schema.Array(Schema.String),
-    private: Schema.Array(Schema.String),
   }),
+  candidates: Schema.Array(SpaceCapabilityCandidate),
   unregistered: Schema.Array(Schema.String),
   rootState: Schema.optional(
     Schema.Struct({
@@ -487,11 +495,13 @@ const CapabilityResult = Schema.Struct({
     Schema.Struct({
       reference: Schema.String,
       capabilityPath: Schema.String,
-      selection: Schema.Literals(["include", "exclude", "private", "none"]),
+      selection: Schema.Literals(["include", "exclude", "none"]),
       warnings: Schema.Array(Schema.String),
     }),
   ),
   stateCommit: Schema.optional(Schema.String),
+  ontologyCommit: Schema.optional(Schema.String),
+  syncPending: Schema.Boolean,
   capabilities: Schema.Struct({
     agents: Schema.Array(Schema.String),
     skills: Schema.Array(Schema.String),

@@ -89,14 +89,17 @@ describe("space sync preview", () => {
     expectUnchanged(value, before)
   })
 
-  it("refuses to upload registered private content", async () => {
+  it("refuses a legacy private hold instead of letting it ride into local main", async () => {
     const value = fixture()
     const statePath = join(value.space, ".wopal-space/space-meta.json")
     const state = JSON.parse(readFileSync(statePath, "utf8"))
-    writeFileSync(statePath, JSON.stringify({ ...state, private: ["rule:private-rule.md"] }, null, 2) + "\n")
+    writeFileSync(
+      statePath,
+      JSON.stringify({ ...state, version: 2, private: ["rule:private-rule.md"] }, null, 2) + "\n",
+    )
     value.commit(value.worktree, "rules/private-rule.md", "# private\n", "feat: private leak")
     const before = observe(value)
-    await expect(service(value).sync("demo-space", { confirm: false })).rejects.toThrow(/private content/i)
+    await expect(service(value).sync("demo-space", { confirm: false })).rejects.toThrow(/retired private selection/i)
     expectUnchanged(value, before)
   })
 })

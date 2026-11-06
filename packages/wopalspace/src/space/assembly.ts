@@ -805,14 +805,57 @@ export function alwaysAssembledPatterns(manifest: ArchetypeManifest): string[] {
   ]
 }
 
-/** Sparse-checkout patterns for a type's default assembly. */
-export function materializationPatterns(ontologyPath: string, manifest: ArchetypeManifest): string[] {
+/**
+ * Sparse-checkout patterns for a type's default assembly.
+ *
+ * A manifest may declare content the pool (`local main`) does not carry yet
+ * but this Space already committed on its own branch. `fallbacks` supplies the
+ * extra read order before a declaration is reported unresolved: the worktree
+ * first (content still on disk before `space sync`), then a tree resolver
+ * (content a local `exclude` removed from disk but never stopped owning).
+ */
+export function materializationPatterns(
+  ontologyPath: string,
+  manifest: ArchetypeManifest,
+  fallbacks: MaterializationFallbacks = {},
+): string[] {
   const patterns = new Set<string>(alwaysAssembledPatterns(manifest))
+  const { fallbackRoot, fallbackTree } = fallbacks
+  const resolveOne = (
+    category: CapabilityKind | null,
+    ref: string,
+    fromRoot: (root: string) => ResolvedCapabilityRef,
+  ): readonly string[] | undefined => {
+    try {
+      return fromRoot(ontologyPath).patterns
+    } catch (poolError) {
+      if (fallbackRoot !== undefined) {
+        try {
+          return fromRoot(fallbackRoot).patterns
+        } catch {
+          // fall through to the branch tree
+        }
+      }
+      const fromTree = fallbackTree?.(category, ref)
+      if (fromTree !== undefined && fromTree !== null) return fromTree.patterns
+      throw poolError
+    }
+  }
   for (const { category, ref } of manifestCategoryRefs(manifest)) {
-    for (const pattern of resolveCapabilityRef(ontologyPath, category, ref).patterns) patterns.add(pattern)
+    const found = resolveOne(category, ref, (root) => resolveCapabilityRef(root, category, ref))
+    if (found !== undefined) for (const pattern of found) patterns.add(pattern)
   }
   for (const ref of manifest.paths) {
-    for (const pattern of resolveGenericPathRef(ontologyPath, ref).patterns) patterns.add(pattern)
+    const found = resolveOne(null, ref, (root) => resolveGenericPathRef(root, ref))
+    if (found !== undefined) for (const pattern of found) patterns.add(pattern)
   }
   return [...patterns].sort()
+}
+
+/** Extra read sources for a manifest declaration the pool does not carry yet. */
+export interface MaterializationFallbacks {
+  /** Space worktree: content still materialized before `space sync`. */
+  readonly fallbackRoot?: string
+  /** Space branch tree: content a local exclude dropped from disk. */
+  readonly fallbackTree?: (category: CapabilityKind | null, ref: string) => ResolvedCapabilityRef | null
 }

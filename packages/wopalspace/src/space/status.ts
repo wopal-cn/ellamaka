@@ -1,6 +1,10 @@
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { checkSparseConsistency, listSparsePatterns } from "./sparse"
+import { readArchetype, manifestCategoryRefs } from "./assembly"
+import { capabilityKindSingular } from "./capability-kinds"
+import { listWorktreeCandidates, type AssetCandidate } from "./candidate"
+import { canonicalCapabilityRef } from "./selection"
 import {
   fileAtRef,
   lastCommitForPath,
@@ -52,6 +56,41 @@ function rootState(spacePath: string, git: GitRunner): SpaceStatusResult["rootSt
     tracked: isTracked,
     pendingChanges: currentNormalized !== null && currentNormalized !== committed,
     ...(lastCommit !== undefined ? { lastCommit } : {}),
+  }
+}
+
+/** The snapshot document version as read, without re-validating it. */
+function rawVersion(raw: string): number | undefined {
+  try {
+    const doc: unknown = JSON.parse(raw)
+    if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return undefined
+    const version: unknown = Reflect.get(doc, "version")
+    return typeof version === "number" ? version : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Canonical references the current type manifest declares as defaults. */
+function manifestDefaults(worktree: string, type: string): string[] {
+  try {
+    const manifest = readArchetype(worktree, type)
+    const refs: string[] = []
+    for (const { category, ref } of manifestCategoryRefs(manifest)) {
+      refs.push(canonicalCapabilityRef(capabilityKindSingular[category] + ":" + ref))
+    }
+    for (const ref of manifest.paths) refs.push(canonicalCapabilityRef("path:" + ref))
+    return refs.sort()
+  } catch {
+    return []
+  }
+}
+
+function candidatesOf(worktree: string, ontologyPath: string, git: GitRunner): readonly AssetCandidate[] {
+  try {
+    return listWorktreeCandidates({ git, worktree, ontologyPath })
+  } catch {
+    return []
   }
 }
 
@@ -126,12 +165,22 @@ export function readSpaceStatus(input: SpaceStatusInput, git: GitRunner): SpaceS
     sparseConsistent = null
   }
 
-  const registeredRoots = [...state.include, ...state.private].map((ref) => repositoryPathForCapabilityRef(ref))
+  const candidates = candidatesOf(worktree, ontologyPath, git)
+  const candidatePaths = candidates.map((candidate) => candidate.path)
+  const registeredRoots = [...state.include].map((ref) => repositoryPathForCapabilityRef(ref))
   const porcelain = statusPorcelain(git, worktree)
   const dirtyCount = porcelain.filter((line) => !line.startsWith("??")).length
 
   const root = rootState(space.path, git)
   const remote = ontologyMode === "fork" ? remoteDelta(git, ontologyPath, space.branch) : undefined
+  const legacy =
+    reading.legacyPrivate.length > 0 || rawVersion(reading.raw) === 2
+      ? {
+          version: 2 as const,
+          privateCount: reading.legacyPrivate.length,
+          writable: reading.legacyPrivate.length === 0,
+        }
+      : undefined
 
   return {
     space: { name: space.name, path: space.path, branch: space.branch, type: state.type },
@@ -142,9 +191,19 @@ export function readSpaceStatus(input: SpaceStatusInput, git: GitRunner): SpaceS
       mergePrediction: merge.prediction,
       conflictFiles: merge.conflictFiles,
     },
-    assembly: { schema: state.schema, ontology: state.source.ontology, sparseConsistent, sparseViolations },
-    selection: { include: [...state.include], exclude: [...state.exclude], private: [...state.private] },
-    unregistered: unregisteredFiles(worktree, registeredRoots, git),
+    assembly: {
+      schema: state.schema,
+      ontology: state.source.ontology,
+      sparseConsistent,
+      sparseViolations,
+      defaults: manifestDefaults(worktree, state.type),
+      ...(legacy !== undefined ? { legacy } : {}),
+    },
+    selection: { include: [...state.include], exclude: [...state.exclude] },
+    candidates,
+    unregistered: unregisteredFiles(worktree, registeredRoots, git).filter(
+      (path) => !candidatePaths.some((asset) => path === asset || path.startsWith(asset + "/")),
+    ),
     ...(root !== undefined ? { rootState: root } : {}),
     ...(remote !== undefined ? { remote } : {}),
     dirtyCount,

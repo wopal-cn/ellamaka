@@ -5480,12 +5480,23 @@ export type WopalSpaceSpaceStatusResponses = {
         path: string
         form: "stranded" | "drifted"
       }>
+      defaults: Array<string>
+      legacy?: {
+        version: 2
+        privateCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        writable: boolean
+      }
     }
     selection: {
       include: Array<string>
       exclude: Array<string>
-      private: Array<string>
     }
+    candidates: Array<{
+      reference: string
+      path: string
+      kind: string
+      source: "worktree"
+    }>
     unregistered: Array<string>
     rootState?: {
       tracked: boolean
@@ -5629,10 +5640,12 @@ export type WopalSpaceSpaceCapabilityRemoveResponses = {
     items: Array<{
       reference: string
       capabilityPath: string
-      selection: "include" | "exclude" | "private" | "none"
+      selection: "include" | "exclude" | "none"
       warnings: Array<string>
     }>
     stateCommit?: string
+    ontologyCommit?: string
+    syncPending: boolean
     capabilities: {
       agents: Array<string>
       skills: Array<string>
@@ -5699,10 +5712,12 @@ export type WopalSpaceSpaceCapabilityAddResponses = {
     items: Array<{
       reference: string
       capabilityPath: string
-      selection: "include" | "exclude" | "private" | "none"
+      selection: "include" | "exclude" | "none"
       warnings: Array<string>
     }>
     stateCommit?: string
+    ontologyCommit?: string
+    syncPending: boolean
     capabilities: {
       agents: Array<string>
       skills: Array<string>

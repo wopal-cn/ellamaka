@@ -6,13 +6,13 @@ import type { SpaceAssemblyState } from "./types"
 /**
  * Selection references and the tracked assembly snapshot.
  *
- * A selection is a canonical "<kind>:<target>" reference. The three sets are
+ * A selection is a canonical "<kind>:<target>" reference. The two sets are
  * mutually exclusive and never overlap parent/child. Identity fields and the
  * selection sets are the only persisted facts; revision, timestamps and the
  * materialized capability list are recomputed from Git refs and the manifest.
  */
 
-export const selectionCollections = ["include", "exclude", "private"] as const
+export const selectionCollections = ["include", "exclude"] as const
 export type SelectionCollection = (typeof selectionCollections)[number]
 
 function invalidRef(ref: string, reason: string, suggestion?: string): SpaceServiceError {
@@ -76,7 +76,6 @@ export interface BuildStateInput {
   readonly ontology: string
   readonly include?: readonly string[]
   readonly exclude?: readonly string[]
-  readonly private?: readonly string[]
 }
 
 function insertSorted(values: readonly string[], value: string): string[] {
@@ -107,7 +106,7 @@ export function withSelection(
       }
     }
   }
-  const next = { ...state, include: [] as string[], exclude: [] as string[], private: [] as string[] }
+  const next = { ...state, include: [] as string[], exclude: [] as string[] }
   for (const other of selectionCollections) {
     next[other] = state[other].filter((entry) => entry !== canonical)
   }
@@ -131,13 +130,12 @@ export function buildAssemblyState(input: BuildStateInput): SpaceAssemblyState {
     }
   }
   let state: SpaceAssemblyState = {
-    version: 2,
+    version: 3,
     type: input.type,
     schema: input.schema,
     source: { ontology: input.ontology },
     include: [],
     exclude: [],
-    private: [],
   }
   for (const collection of selectionCollections) {
     for (const ref of input[collection] ?? []) {
@@ -155,107 +153,133 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0
 }
 
+export type AssemblyStateValidation =
+  | {
+      readonly ok: true
+      readonly state: SpaceAssemblyState
+      /**
+       * Retired `private` selections still present in a version 2 snapshot.
+       * Empty means the snapshot is readable and upgrades on the next write;
+       * non-empty means every write must refuse until it is handled by hand.
+       */
+      readonly legacyPrivate: readonly string[]
+    }
+  | { readonly ok: false; readonly reason: string }
+
+function selectionEntries(
+  raw: Record<string, unknown>,
+  field: string,
+): { readonly ok: true; readonly entries: readonly string[] } | { readonly ok: false; readonly reason: string } {
+  const value = raw[field]
+  if (!Array.isArray(value)) return { ok: false, reason: 'missing selection set "' + field + '"' }
+  const entries: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== "string") return { ok: false, reason: 'selection "' + field + '" contains a non-string entry' }
+    let canonical: string
+    try {
+      canonical = canonicalCapabilityRef(entry)
+    } catch (error) {
+      return {
+        ok: false,
+        reason:
+          'selection "' +
+          field +
+          '" entry ' +
+          JSON.stringify(entry) +
+          " is invalid: " +
+          (error instanceof Error ? error.message : "unknown"),
+      }
+    }
+    if (canonical !== entry) {
+      return {
+        ok: false,
+        reason:
+          'selection "' +
+          field +
+          '" entry ' +
+          JSON.stringify(entry) +
+          " is not canonical (use " +
+          JSON.stringify(canonical) +
+          ")",
+      }
+    }
+    entries.push(canonical)
+  }
+  return { ok: true, entries }
+}
+
 /** Validate a raw snapshot document, reporting the first violation. */
-export function validateAssemblyState(
-  raw: unknown,
-): { readonly ok: true; readonly state: SpaceAssemblyState } | { readonly ok: false; readonly reason: string } {
+export function validateAssemblyState(raw: unknown): AssemblyStateValidation {
   if (!isRecord(raw)) return { ok: false, reason: "not a JSON object" }
-  if (raw.version !== 2) {
+  const version = raw.version
+  if (version !== 2 && version !== 3) {
     return {
       ok: false,
       reason:
         "unsupported space-meta version " +
-        JSON.stringify(raw.version) +
-        " (expected 2); older snapshots are handled manually, never migrated",
+        JSON.stringify(version) +
+        " (expected 3); older snapshots are handled manually, never migrated",
     }
+  }
+  if (version === 3 && Object.hasOwn(raw, "private")) {
+    return { ok: false, reason: 'version 3 must not carry the retired "private" selection set' }
   }
   if (!nonEmptyString(raw.type)) return { ok: false, reason: "missing type" }
   if (!nonEmptyString(raw.schema)) return { ok: false, reason: "missing schema" }
   const source = raw.source
   if (!isRecord(source) || !nonEmptyString(source.ontology)) return { ok: false, reason: "missing source.ontology" }
 
-  const parsed: {
-    version: 2
-    type: string
-    schema: string
-    source: { ontology: string }
-    include: string[]
-    exclude: string[]
-    private: string[]
-  } = {
-    version: 2,
-    type: raw.type,
-    schema: raw.schema,
-    source: { ontology: source.ontology },
-    include: [],
-    exclude: [],
-    private: [],
-  }
+  const collected: Record<SelectionCollection, string[]> = { include: [], exclude: [] }
 
-  const seen = new Map<string, SelectionCollection>()
-  for (const collection of selectionCollections) {
-    const value = raw[collection]
-    if (!Array.isArray(value)) return { ok: false, reason: 'missing selection set "' + collection + '"' }
-    for (const entry of value) {
-      if (typeof entry !== "string") {
-        return { ok: false, reason: 'selection "' + collection + '" contains a non-string entry' }
-      }
-      let canonical: string
-      try {
-        canonical = canonicalCapabilityRef(entry)
-      } catch (error) {
-        return {
-          ok: false,
-          reason:
-            'selection "' +
-            collection +
-            '" entry ' +
-            JSON.stringify(entry) +
-            " is invalid: " +
-            (error instanceof Error ? error.message : "unknown"),
-        }
-      }
-      if (canonical !== entry) {
-        return {
-          ok: false,
-          reason:
-            'selection "' +
-            collection +
-            '" entry ' +
-            JSON.stringify(entry) +
-            " is not canonical (use " +
-            JSON.stringify(canonical) +
-            ")",
-        }
-      }
+  const seen = new Map<string, string>()
+  const fields: readonly (SelectionCollection | "private")[] = [
+    ...selectionCollections,
+    ...(version === 2 ? (["private"] as const) : []),
+  ]
+  const legacyPrivate: string[] = []
+  for (const field of fields) {
+    const reading = selectionEntries(raw, field)
+    if (!reading.ok) return { ok: false, reason: reading.reason }
+    for (const canonical of reading.entries) {
       const previous = seen.get(canonical)
       if (previous !== undefined) {
         return {
           ok: false,
           reason:
-            previous === collection
-              ? 'selection "' + canonical + '" appears twice in "' + collection + '"'
-              : 'selection "' + canonical + '" appears in both "' + previous + '" and "' + collection + '"',
+            previous === field
+              ? 'selection "' + canonical + '" appears twice in "' + field + '"'
+              : 'selection "' + canonical + '" appears in both "' + previous + '" and "' + field + '"',
         }
       }
-      seen.set(canonical, collection)
-      parsed[collection].push(canonical)
+      seen.set(canonical, field)
+      if (field === "private") legacyPrivate.push(canonical)
+      else collected[field].push(canonical)
     }
   }
-
-  for (const [ref, collection] of seen) {
-    for (const [other, otherCollection] of seen) {
+  for (const [ref, field] of seen) {
+    for (const [other, otherField] of seen) {
       if (other === ref) continue
       if (refsOverlap(ref, other)) {
         return {
           ok: false,
-          reason: 'selection "' + ref + '" (' + collection + ') overlaps "' + other + '" (' + otherCollection + ")",
+          reason: 'selection "' + ref + '" (' + field + ') overlaps "' + other + '" (' + otherField + ")",
         }
       }
     }
   }
 
-  return { ok: true, state: parsed }
+  return {
+    ok: true,
+    state: {
+      version: 3,
+      type: raw.type,
+      schema: raw.schema,
+      source: { ontology: source.ontology },
+      include: collected.include,
+      exclude: collected.exclude,
+    },
+    legacyPrivate,
+  }
 }
 
 /** Canonical, byte-stable serialization (fixed key order, sorted sets). */
@@ -267,14 +291,13 @@ export function serializeAssemblyState(state: SpaceAssemblyState): string {
     source: { ontology: state.source.ontology },
     include: [...state.include].sort(),
     exclude: [...state.exclude].sort(),
-    private: [...state.private].sort(),
   }
   return JSON.stringify(document, null, 2) + "\n"
 }
 
 /** The sparse-range input form of the mount selections. */
 export function mountPatternPaths(state: SpaceAssemblyState): string[] {
-  return [...state.include, ...state.private].map((ref) => {
+  return [...state.include].map((ref) => {
     const path = repositoryPathForCapabilityRef(ref)
     const shape = parseCapabilityRefShape(ref.slice(ref.indexOf(":") + 1))
     return shape.form === "directory" ? path + "/" : path

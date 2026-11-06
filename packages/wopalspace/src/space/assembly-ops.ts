@@ -6,8 +6,14 @@ import {
   parseArchetypeDocument,
   readArchetype,
   type ArchetypeManifest,
+  type MaterializationFallbacks,
 } from "./assembly"
-import { computeEffectivePatterns, materializationPatternsFromTree, readAssemblyTree } from "./assembly-tree"
+import {
+  computeEffectivePatterns,
+  materializationPatternsFromTree,
+  readAssemblyTree,
+  treeFallback,
+} from "./assembly-tree"
 import { capabilityKindFromSingular } from "./capability-kinds"
 import {
   checkoutFileFrom,
@@ -32,10 +38,11 @@ import {
 import { declaredPluginNamesFromSettings, spacePluginSpecs } from "./local-config"
 import { parseJsonc } from "./structured-text"
 import { mountPatternPaths, shadowedPaths } from "./selection"
-import { canonicalCapabilityRef, repositoryPathForCapabilityRef } from "./selection"
+import { canonicalCapabilityRef } from "./selection"
 import { applySparsePatterns, listSparsePatterns } from "./sparse"
 import {
   commitAssemblyState,
+  legacyPrivateFailure,
   readAssemblyState,
   spaceMetaPath,
   transactAssemblyState,
@@ -78,13 +85,6 @@ export function patternCovers(pattern: string, path: string): boolean {
 
 export function isPathInPatterns(path: string, patterns: readonly string[]): boolean {
   return patterns.some((pattern) => patternCovers(pattern, path))
-}
-
-/** Does one selection entry cover a repository-relative path? */
-export function selectionEntryCoversPath(entryPath: string, candidatePath: string): boolean {
-  const base = entryPath.replace(/^\//, "").replace(/\/$/, "")
-  const candidate = candidatePath.replace(/^\//, "").replace(/\/$/, "")
-  return candidate === base || candidate.startsWith(base + "/")
 }
 
 export interface WorktreeAnalysis {
@@ -155,10 +155,11 @@ export function computeSparsePatterns(
   type: string,
   addedPaths: readonly string[],
   shadowed: readonly string[],
+  fallbacks?: MaterializationFallbacks,
 ): string[] {
   void type
   return computeEffectivePatterns(
-    materializationPatterns(ontologyPath, manifest),
+    materializationPatterns(ontologyPath, manifest, fallbacks),
     alwaysAssembledPatterns(manifest),
     addedPaths,
     shadowed,
@@ -203,19 +204,6 @@ export function trackedInWorktree(git: GitRunner, worktree: string, path: string
   return fileExistsAtRef(git, worktree, "HEAD", path)
 }
 
-/** Drop include/private selections equal to or nested under a path. */
-export function dropSelectionsUnder(state: SpaceAssemblyState, path: string): SpaceAssemblyState {
-  const covers = (ref: string) => {
-    const refPath = repositoryPathForCapabilityRef(ref)
-    return refPath === path || refPath.startsWith(path + "/")
-  }
-  return {
-    ...state,
-    include: state.include.filter((ref) => !covers(ref)),
-    private: state.private.filter((ref) => !covers(ref)),
-  }
-}
-
 export interface SelectionTransactionInput {
   readonly ontologyPath: string
   readonly worktree: string
@@ -238,15 +226,23 @@ export function applySelectionTransaction(
   git: GitRunner,
   input: SelectionTransactionInput,
 ): { changed: boolean; committed: boolean; commit?: string } {
-  const manifest = readArchetype(input.ontologyPath, input.type)
+  // The worktree manifest is the assembly this Space currently intends; a
+  // declaration whose content is committed on the branch but not yet synced
+  // resolves through the worktree fallback.
+  const manifest = readArchetype(input.worktree, input.type)
   const patterns = computeSparsePatterns(
     input.ontologyPath,
     manifest,
     input.type,
     [...mountPatternPaths(input.nextState), ...(input.coveragePaths ?? [])],
     shadowedPaths(input.nextState),
+    { fallbackRoot: input.worktree, fallbackTree: treeFallback(input.worktree, "HEAD", git) },
   )
   const reading = readAssemblyState(input.spacePath)
+  if (reading.status === "ok") {
+    const legacy = legacyPrivateFailure(input.spacePath, reading)
+    if (legacy !== null) throw legacy
+  }
   const metaBefore = reading.status === "ok" ? reading.raw : null
   const rangeBefore = listSparsePatterns(git, input.worktree)
 

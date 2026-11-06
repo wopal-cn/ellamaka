@@ -151,16 +151,6 @@ export const compatibilityBaseline = {
       fixture: "git-space",
     },
     {
-      id: "space-private-upload",
-      owner: "space",
-      behavior: "private selection cannot ride an ordinary sync into local main",
-      evidence: [
-        "projects/wopal-cli/tests/lib/space-sync.integration.test.ts",
-        "packages/wopalspace/test/fixtures/compatibility/baseline-results.json",
-      ],
-      fixture: "git-space",
-    },
-    {
       id: "space-merge-conflict",
       owner: "space",
       behavior: "preview and apply report the same conflict and apply leaves no ambiguous state",
@@ -272,6 +262,13 @@ export const compatibilityBaseline = {
       owners: ["space"],
       behavior: "Space sync preview does not write refs, index, sparse state, snapshot, registry, or Git objects",
       design: "DESIGN-wopalspace.md#refactor-compatibility-contract",
+    },
+    {
+      id: "space-private-selection-retired",
+      owners: ["space"],
+      behavior:
+        "the private selection set is retired: space-meta carries include/exclude only, and a non-empty version 2 private hold blocks writes until it is handled by hand",
+      design: "DESIGN-assembly.md#capability-pool-and-assembly-semantics",
     },
   ],
 } as const satisfies {

@@ -51,7 +51,7 @@ describe("space init create/reuse", () => {
     expect(existsSync(join(root, ".wopal", ".git"))).toBe(true)
     const snapshot = JSON.parse(readFileSync(join(root, ".wopal-space", "space-meta.json"), "utf8"))
     expect(snapshot).toMatchObject({
-      version: 2,
+      version: 3,
       type: "coding",
       schema: "coding-space-schema.yaml",
       source: { ontology: "test-onto" },

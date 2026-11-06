@@ -104,18 +104,6 @@
     ],
     "unchanged": true
   },
-  "space-private-upload": [
-    {
-      "code": "SPACE_SYNC_UPLOAD_GATE",
-      "unchanged": true,
-      "changedFields": []
-    },
-    {
-      "code": "SPACE_SYNC_UPLOAD_GATE",
-      "unchanged": true,
-      "changedFields": []
-    }
-  ],
   "space-dirty-touch-set": [
     {
       "code": "SPACE_SYNC_DIRTY",

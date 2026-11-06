@@ -136,15 +136,12 @@ describe("selection references", () => {
     expect(() => canonicalCapabilityRef("unknown:x")).toThrow(/unknown kind/)
   })
 
-  it("keeps the three sets mutually exclusive and refuses overlapping assets", () => {
+  it("keeps the two sets mutually exclusive and refuses overlapping assets", () => {
     const state = buildAssemblyState({ type: "coding", schema: "coding-space-schema.yaml", ontology: "test-onto" })
     const withInclude = withSelection(state, "include", "skill:dev-flow")
     expect(withInclude.include).toEqual(["skill:dev-flow"])
     expect(() => withSelection(withInclude, "exclude", "skill:dev-flow/noext")).toThrow(/overlaps/)
-    const moved = withSelection(withInclude, "private", "skill:dev-flow")
-    expect(moved.include).toEqual([])
-    expect(moved.private).toEqual(["skill:dev-flow"])
-    expect(withSelection(moved, "private", "skill:dev-flow", { remove: true }).private).toEqual([])
+    expect(withSelection(withInclude, "include", "skill:dev-flow", { remove: true }).include).toEqual([])
   })
 
   it("validates a snapshot strictly and round-trips canonical bytes", () => {

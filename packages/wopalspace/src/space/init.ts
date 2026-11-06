@@ -44,7 +44,7 @@ import { spaceBranchName, normalizeSpaceName } from "./registry"
 import { registerSpace } from "./registry-write"
 import { mountPatternPaths, shadowedPaths, buildAssemblyState, type BuildStateInput } from "./selection"
 import { applySparsePatterns, assertSparseConsistency, listSparsePatterns } from "./sparse"
-import { readAssemblyState, spaceMetaPath, transactAssemblyState } from "./snapshot"
+import { legacyPrivateFailure, readAssemblyState, spaceMetaPath, transactAssemblyState } from "./snapshot"
 import { SpaceServiceError, spaceErrorCodes } from "./types"
 import type {
   RegisteredOntology,
@@ -559,6 +559,8 @@ export function materializeSpaceInit(
             : "Repair or restore the corrupt snapshot; a corrupt snapshot is never migrated or rebuilt automatically.",
       })
     }
+    const legacy = legacyPrivateFailure(spacePath, reading)
+    if (legacy !== null) throw legacy
     previous = { raw: reading.raw, state: reading.state }
   }
 
@@ -690,7 +692,6 @@ export function materializeSpaceInit(
       ontology: ontology.name,
       include: selectionState?.include ?? [],
       exclude: selectionState?.exclude ?? [],
-      private: selectionState?.private ?? [],
     } satisfies BuildStateInput)
     const transaction = transactAssemblyState({ spacePath, expectedRaw: previous.raw, state: nextState }, git)
     step(

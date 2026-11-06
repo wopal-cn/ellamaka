@@ -14,7 +14,6 @@ import {
   isPathInPatterns,
   pluginConfigDrift,
   protectedPatterns,
-  selectionEntryCoversPath,
   syncWorktreeBase,
   validateAssemblyTree,
   type PluginConfigDrift,
@@ -22,7 +21,6 @@ import {
 import {
   diffNameOnlyExpr,
   diffNoRenamesPaths,
-  diffNoRenamesPathsExpr,
   fileAtRef,
   listCommits,
   lsTreeFiles,
@@ -39,7 +37,7 @@ import {
 } from "./git"
 import { mountPatternPaths, shadowedPaths } from "./selection"
 import { applySparsePatterns, listSparsePatterns } from "./sparse"
-import { readAssemblyState, spaceMetaPath, writeAssemblyStateBytes } from "./snapshot"
+import { readAssemblyState, requireWritableState, spaceMetaPath, writeAssemblyStateBytes } from "./snapshot"
 import { SpaceServiceError, spaceErrorCodes } from "./types"
 import type { RegisteredSpace, SpaceSyncCommit } from "./types"
 
@@ -87,62 +85,7 @@ interface Plan extends SpaceSyncResult {
 }
 
 function requireType(spacePath: string): string {
-  const reading = readAssemblyState(spacePath)
-  if (reading.status !== "ok") {
-    throw new SpaceServiceError({
-      code: reading.status === "missing" ? spaceErrorCodes.metaMissing : spaceErrorCodes.metaInvalid,
-      message:
-        reading.status === "missing"
-          ? "This space has no assembly state at " + reading.path
-          : "This space's assembly state is invalid at " + reading.path + ": " + reading.reason,
-      suggestion: "Re-run space.init to rebuild the Space assembly state.",
-    })
-  }
-  return reading.state.type
-}
-
-/** Paths the Space's unique commits touch, with rename detection off. */
-function uploadGateConflicts(
-  git: GitRunner,
-  ontologyPath: string,
-  branch: string,
-  privateRefs: readonly string[],
-): { path: string; entry: string }[] {
-  if (privateRefs.length === 0) return []
-  const changed = diffNoRenamesPathsExpr(git, ontologyPath, "main..." + branch)
-  const roots = privateRefs.map((ref) => ({
-    ref,
-    path: repositoryPath(ref),
-  }))
-  const conflicts: { path: string; entry: string }[] = []
-  for (const path of changed) {
-    for (const root of roots) {
-      if (selectionEntryCoversPath(root.path, path)) {
-        conflicts.push({ path, entry: root.ref })
-        break
-      }
-    }
-  }
-  return conflicts
-}
-
-function repositoryPath(ref: string): string {
-  const colon = ref.indexOf(":")
-  if (colon <= 0) return ref
-  const kind = ref.slice(0, colon)
-  const body = ref.slice(colon + 1).replace(/\/$/, "")
-  if (kind === "path") return body
-  const plural =
-    kind === "agent"
-      ? "agents"
-      : kind === "skill"
-        ? "skills"
-        : kind === "rule"
-          ? "rules"
-          : kind === "command"
-            ? "commands"
-            : "plugins"
-  return plural + "/" + body
+  return requireWritableState(spacePath).state.type
 }
 
 function strayConflicts(git: GitRunner, ontologyPath: string, branch: string, stray: readonly string[]): string[] {
@@ -183,14 +126,8 @@ export function planSpaceSync(context: SpaceSyncContext): Plan {
     stray: strayConflicts(git, ontologyPath, space.branch, strayFiles),
   }
 
-  const reading = readAssemblyState(space.path)
-  const state = reading.status === "ok" ? reading.state : undefined
-  if (state === undefined) {
-    throw new SpaceServiceError({
-      code: spaceErrorCodes.metaInvalid,
-      message: "Space assembly state is unreadable: " + space.path,
-    })
-  }
+  const reading = requireWritableState(space.path)
+  const state = reading.state
 
   const manifest = readArchetype(ontologyPath, type)
   const plannedPatterns = computeSparsePatterns(
@@ -219,18 +156,6 @@ export function planSpaceSync(context: SpaceSyncContext): Plan {
         " tracked file(s) this sync would update or remove: " +
         colliding.join(", "),
       suggestion: "Commit or discard these changes, then re-run sync. No changes were applied.",
-    })
-  }
-
-  const gate = uploadGateConflicts(git, ontologyPath, space.branch, state.private)
-  if (gate.length > 0) {
-    throw new SpaceServiceError({
-      code: spaceErrorCodes.syncUploadGate,
-      message:
-        "Space-unique commit(s) touch registered private content: " +
-        gate.map((entry) => entry.path + " (private " + entry.entry + ")").join(", "),
-      suggestion:
-        "Private content must never sync to local main. Withdraw the offending commit or unregister the private hold, then re-run sync. No changes were applied.",
     })
   }
 
@@ -452,8 +377,7 @@ export function applySpaceSync(context: SpaceSyncContext): SpaceSyncResult {
 export function syncFailure(error: unknown, recovery: readonly string[]): SpaceServiceError {
   // A caller told that no changes were applied must not be left with a sparse
   // range, ref or snapshot that recovery could not restore.
-  const incomplete =
-    recovery.length === 0 ? "" : " Rollback was incomplete (" + recovery.join("; ") + ")."
+  const incomplete = recovery.length === 0 ? "" : " Rollback was incomplete (" + recovery.join("; ") + ")."
   if (error instanceof SpaceServiceError) {
     return new SpaceServiceError({
       code: error.code,

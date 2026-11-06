@@ -11,6 +11,7 @@ import {
   resolveSchemaName,
   type ArchetypeManifest,
   type CapabilityRefShape,
+  type ResolvedCapabilityRef,
   type SpaceSchema,
 } from "./assembly"
 import { capabilityKindFromSingular, capabilityKindSingular, type CapabilityKind } from "./capability-kinds"
@@ -154,6 +155,60 @@ function treePatterns(
     return { patterns: matched.sort().map((file) => "/" + file) }
   }
   return { patterns: ["/" + target] }
+}
+
+/**
+ * Resolve one reference against a committed tree.
+ *
+ * The pool is `local main` and the worktree disk only holds what the current
+ * sparse range materializes. Content this Space already committed on its own
+ * branch is shared for this Space even before `space sync` publishes it, and
+ * it stays the only copy once a local `exclude` drops the disk materialization.
+ * Returns null when the tree does not carry the reference.
+ */
+export function resolveCapabilityRefFromTree(
+  facts: AssemblyTreeFacts,
+  category: CapabilityKind | null,
+  ref: string,
+): ResolvedCapabilityRef | null {
+  const label =
+    category === null
+      ? "Generic path reference " + JSON.stringify(ref)
+      : "Capability reference " + JSON.stringify(ref) + " (" + category + ")"
+  const shape = parseReferenceShape(ref, label)
+  const prefix = category === null ? "" : category + "/"
+  const resolved = treePatterns(facts, prefix, shape)
+  if ("problem" in resolved) return null
+  const path = prefix + shape.target
+  const base = { form: shape.form, ref: shape.ref, path, patterns: resolved.patterns }
+  if (shape.form !== "set") return base
+  const suffix = shape.setSuffix ?? ""
+  const files = [...facts.files]
+    .filter((file) => file.startsWith(path + "/"))
+    .filter((file) => {
+      const rest = file.slice(path.length + 1)
+      return !rest.includes("/") && capabilitySetSuffixMatches(suffix, rest)
+    })
+    .sort()
+  return { ...base, files, setSuffix: suffix }
+}
+
+/**
+ * A `materializationPatterns` fallback that resolves against a committed tree.
+ *
+ * Reads the tree once per call site so a multi-reference manifest does not
+ * shell out to Git for every entry.
+ */
+export function treeFallback(
+  repoPath: string,
+  ref: string,
+  git: GitRunner,
+): (category: CapabilityKind | null, ref: string) => ResolvedCapabilityRef | null {
+  let facts: AssemblyTreeFacts | undefined
+  return (category, reference) => {
+    if (facts === undefined) facts = readAssemblyTree(repoPath, ref, git)
+    return resolveCapabilityRefFromTree(facts, category, reference)
+  }
 }
 
 /** Sparse patterns of a manifest's default assembly, read from the ref. */

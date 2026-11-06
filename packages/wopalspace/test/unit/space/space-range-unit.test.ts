@@ -1,10 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import {
-  isPathInPatterns,
-  patternCovers,
-  protectedPatterns,
-  selectionEntryCoversPath,
-} from "../../../src/space/assembly-ops"
+import { isPathInPatterns, patternCovers, protectedPatterns } from "../../../src/space/assembly-ops"
 import { buildAssemblyState, withSelection } from "../../../src/space/selection"
 import { mountPatternPaths, shadowedPaths } from "../../../src/space/selection"
 
@@ -20,22 +15,16 @@ describe("space range matching", () => {
     expect(isPathInPatterns("assembly/templates/x.md", ["/config/"])).toBe(false)
     expect(isPathInPatterns("assembly/templates/x.md", protectedPatterns())).toBe(true)
   })
-
-  it("covers selection entries by exact path or nesting", () => {
-    expect(selectionEntryCoversPath("skills/dev-flow", "skills/dev-flow/SKILL.md")).toBe(true)
-    expect(selectionEntryCoversPath("skills/dev-flow", "skills/dev-flow-extra")).toBe(false)
-    expect(selectionEntryCoversPath("rules/typescript.md", "rules/typescript.md")).toBe(true)
-  })
 })
 
 describe("space selection projections", () => {
-  it("projects include/private into range inputs and exclude into shadows", () => {
+  it("projects include into range inputs and exclude into shadows", () => {
     let state = buildAssemblyState({ type: "coding", schema: "s.yaml", ontology: "test-onto" })
     state = withSelection(state, "include", "skill:dev-flow")
     state = withSelection(state, "exclude", "rule:typescript.md")
-    state = withSelection(state, "private", "path:dsh/")
+    state = withSelection(state, "include", "path:dsh")
 
-    expect(mountPatternPaths(state)).toEqual(["skills/dev-flow/", "dsh/"])
+    expect(mountPatternPaths(state)).toEqual(["dsh/", "skills/dev-flow/"])
     expect(shadowedPaths(state)).toEqual(["rules/typescript.md"])
   })
 
@@ -45,6 +34,6 @@ describe("space selection projections", () => {
     const excluded = withSelection(included, "exclude", "skill:dev-flow")
     expect(excluded.include).toEqual([])
     expect(excluded.exclude).toEqual(["skill:dev-flow"])
-    expect(() => withSelection(excluded, "private", "path:skills/dev-flow/extra")).toThrow(/overlaps/)
+    expect(() => withSelection(excluded, "include", "path:skills/dev-flow/extra")).toThrow(/overlaps/)
   })
 })

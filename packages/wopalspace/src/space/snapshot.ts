@@ -1,13 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { randomBytes } from "node:crypto"
 import { dirname, join } from "node:path"
-import { serializeAssemblyState, validateAssemblyState } from "./selection"
+import { repositoryPathForCapabilityRef, serializeAssemblyState, validateAssemblyState } from "./selection"
 import { tryGit, type GitRunner } from "./git"
 import { SpaceServiceError, spaceErrorCodes, type SpaceAssemblyState } from "./types"
 
 /** Snapshot filename inside the Space's runtime directory. */
 export const spaceMetaFilename = "space-meta.json"
-export const spaceMetaVersion = 2
+export const spaceMetaVersion = 3
 export const spaceMetaCommitMessage = "chore(space): update space assembly state"
 
 const stateRepoPath = ".wopal-space/space-meta.json"
@@ -18,9 +18,17 @@ export function spaceMetaPath(spacePath: string): string {
 }
 
 export type SpaceMetaReading =
-  | { readonly status: "ok"; readonly state: SpaceAssemblyState; readonly raw: string }
+  | {
+      readonly status: "ok"
+      readonly state: SpaceAssemblyState
+      readonly raw: string
+      /** Retired version 2 `private` selections still on disk; non-empty blocks writes. */
+      readonly legacyPrivate: readonly string[]
+    }
   | { readonly status: "missing"; readonly path: string }
   | { readonly status: "invalid"; readonly path: string; readonly reason: string }
+
+export type WritableSpaceMetaReading = Extract<SpaceMetaReading, { readonly status: "ok" }>
 
 /** Read and classify the snapshot: ok, missing, or invalid with a reason. */
 export function readAssemblyState(spacePath: string): SpaceMetaReading {
@@ -44,13 +52,65 @@ export function readAssemblyState(spacePath: string): SpaceMetaReading {
   }
   const result = validateAssemblyState(doc)
   if (!result.ok) return { status: "invalid", path, reason: result.reason }
-  return { status: "ok", state: result.state, raw }
+  return { status: "ok", state: result.state, raw, legacyPrivate: result.legacyPrivate }
 }
 
 /** The snapshot's assembly type, or null when no readable snapshot exists. */
 export function readAssemblyType(spacePath: string): string | null {
   const reading = readAssemblyState(spacePath)
   return reading.status === "ok" ? reading.state.type : null
+}
+
+/**
+ * The optimistic-concurrency / legacy-protection failure for a snapshot a
+ * state-changing operation must not write over.
+ *
+ * A version 2 snapshot that still registers private content is not corrupt:
+ * the space simply requires an explicit, human-reviewed migration. The error
+ * names the retained selections and their repository paths so the caller can
+ * act, and nothing has been written when it is raised.
+ */
+export function legacyPrivateFailure(spacePath: string, reading: WritableSpaceMetaReading): SpaceServiceError | null {
+  if (reading.legacyPrivate.length === 0) return null
+  const paths = reading.legacyPrivate.map((ref) => repositoryPathForCapabilityRef(ref))
+  return new SpaceServiceError({
+    code: spaceErrorCodes.metaLegacyPrivate,
+    message:
+      "This Space still holds " +
+      reading.legacyPrivate.length +
+      " retired private selection(s) at " +
+      spaceMetaPath(spacePath) +
+      ": " +
+      reading.legacyPrivate.join(", ") +
+      ". Affected repository paths: " +
+      paths.join(", ") +
+      ". The private selection set is no longer a persistent capability state, so this operation refuses to overwrite it.",
+    suggestion:
+      "Back up the snapshot and the affected files, review the Space branch commits that touch them, then decide explicitly whether that content stays outside the shared branch or may be published. Only after the content and its commits are handled, clear the retired private entries by hand (or restore a version 3 snapshot) and retry. No refs, sparse range or files were changed.",
+  })
+}
+
+/** Read a snapshot that a state-changing operation may write over. */
+export function requireWritableState(spacePath: string): WritableSpaceMetaReading {
+  const reading = readAssemblyState(spacePath)
+  if (reading.status === "missing") {
+    throw new SpaceServiceError({
+      code: spaceErrorCodes.metaMissing,
+      message: "This space has no assembly state at " + reading.path,
+      suggestion: "Re-run space.init to rebuild the Space assembly state.",
+    })
+  }
+  if (reading.status === "invalid") {
+    throw new SpaceServiceError({
+      code: spaceErrorCodes.metaInvalid,
+      message: "This space's assembly state is invalid at " + reading.path + ": " + reading.reason,
+      suggestion:
+        "Repair or restore the corrupt snapshot; a corrupt snapshot is never migrated or rebuilt automatically.",
+    })
+  }
+  const legacy = legacyPrivateFailure(spacePath, reading)
+  if (legacy !== null) throw legacy
+  return reading
 }
 
 function atomicWrite(path: string, content: string): void {
@@ -188,12 +248,60 @@ export interface SpaceMetaTransactionResult {
  * snapshot. A commit failure restores the previous bytes so a retry is clean.
  * An unchanged state performs no file write and no Git call.
  */
+/** Top-level keys the state model defines; anything else is preserved on upgrade. */
+const stateFields = new Set(["version", "type", "schema", "source", "include", "exclude", "private"])
+
+/**
+ * Serialize the next snapshot, preserving fields a previous version carried
+ * that this model does not own. A version 2 snapshot is upgraded to version 3
+ * by the same step that persists the requested change.
+ */
+function nextStateRaw(currentRaw: string | null, state: SpaceAssemblyState): string {
+  const base = serializeAssemblyState(state)
+  if (currentRaw === null) return base
+  let previous: unknown
+  try {
+    previous = JSON.parse(currentRaw)
+  } catch {
+    return base
+  }
+  if (previous === null || typeof previous !== "object" || Array.isArray(previous)) return base
+  const extras = Object.entries(previous).filter(([key]) => !stateFields.has(key))
+  if (extras.length === 0) return base
+  const parsed: unknown = JSON.parse(base)
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return base
+  const document: Record<string, unknown> = { ...parsed }
+  for (const [key, value] of extras) document[key] = value
+  return JSON.stringify(document, null, 2) + "\n"
+}
+
+function legacyGuard(spacePath: string, currentRaw: string | null): void {
+  if (currentRaw === null) return
+  let doc: unknown
+  try {
+    doc = JSON.parse(currentRaw)
+  } catch {
+    return
+  }
+  const result = validateAssemblyState(doc)
+  if (!result.ok || result.legacyPrivate.length === 0) return
+  const reading: WritableSpaceMetaReading = {
+    status: "ok",
+    state: result.state,
+    raw: currentRaw,
+    legacyPrivate: result.legacyPrivate,
+  }
+  const failure = legacyPrivateFailure(spacePath, reading)
+  if (failure !== null) throw failure
+}
+
 export function transactAssemblyState(input: SpaceMetaTransaction, git: GitRunner): SpaceMetaTransactionResult {
   const path = spaceMetaPath(input.spacePath)
-  const nextRaw = serializeAssemblyState(input.state)
   const currentRaw = existsSync(path) ? readFileSync(path, "utf8") : null
 
   if (currentRaw !== input.expectedRaw) throw concurrentModification(path)
+  legacyGuard(input.spacePath, currentRaw)
+  const nextRaw = nextStateRaw(currentRaw, input.state)
   if (currentRaw === nextRaw) return { changed: false, committed: false, path }
 
   assertRootRepoCommitReady(input.spacePath, git)

@@ -83,6 +83,7 @@ export {
   type SpaceService,
   type SpaceServiceOptions,
   type SpaceSparseViolation,
+  type SpaceCapabilityCandidate,
   type SpaceStatusResult,
   type SpaceSyncCommit,
   type SpaceSyncConflicts,

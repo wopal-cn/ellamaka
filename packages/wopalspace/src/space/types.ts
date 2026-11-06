@@ -37,12 +37,13 @@ export const spaceErrorCodes = {
   preparationFailed: "SPACE_PREPARATION_FAILED",
   syncConflict: "SPACE_SYNC_CONFLICT",
   syncDirty: "SPACE_SYNC_DIRTY",
-  syncUploadGate: "SPACE_SYNC_UPLOAD_GATE",
   syncFailed: "SPACE_SYNC_FAILED",
   syncOperationInProgress: "MERGE_IN_PROGRESS",
   capabilityInvalid: "CAPABILITY_KIND_INVALID",
   capabilitySpecInvalid: "SPACE_CAPABILITY_SPEC_INVALID",
   capabilityFailed: "SPACE_CAPABILITY_FAILED",
+  capabilityPartialCommit: "SPACE_CAPABILITY_PARTIAL_COMMIT",
+  metaLegacyPrivate: "SPACE_META_LEGACY_PRIVATE",
 } as const
 
 export type SpaceErrorCode = (typeof spaceErrorCodes)[keyof typeof spaceErrorCodes]
@@ -103,15 +104,21 @@ export interface RegisteredOntology {
   readonly fork: boolean
 }
 
-/** Assembly snapshot stored at .wopal-space/space-meta.json, format version 2. */
+/**
+ * Assembly snapshot stored at .wopal-space/space-meta.json, format version 3.
+ *
+ * The snapshot holds only the two Space-local overrides: `include` mounts a
+ * shared asset this Space wants beyond its type default, and `exclude` stops a
+ * type default here. Untracked files are temporary working-tree facts, never a
+ * persisted capability identity.
+ */
 export interface SpaceAssemblyState {
-  readonly version: 2
+  readonly version: 3
   readonly type: string
   readonly schema: string
   readonly source: { readonly ontology: string }
   readonly include: readonly string[]
   readonly exclude: readonly string[]
-  readonly private: readonly string[]
 }
 
 export type SpaceCondition =
@@ -264,6 +271,22 @@ export interface SpacePreparationFacts {
   readonly diagnostic?: string
 }
 
+/**
+ * One complete capability asset that exists only in the Space worktree.
+ *
+ * `reference` is the canonical `<kind>:<ref>` a caller can pass directly to
+ * `space.capability.add`; `source` records where the asset was found. This is
+ * an actionable candidate, not a persisted capability identity.
+ */
+export interface SpaceCapabilityCandidate {
+  readonly reference: string
+  /** Repository-relative asset path inside the ontology. */
+  readonly path: string
+  /** Singular capability kind (agent|skill|rule|command|plugin). */
+  readonly kind: string
+  readonly source: "worktree"
+}
+
 export interface SpaceStatusResult {
   readonly space: {
     readonly name: string
@@ -283,12 +306,21 @@ export interface SpaceStatusResult {
     readonly ontology: string
     readonly sparseConsistent: boolean | null
     readonly sparseViolations: readonly SpaceSparseViolation[]
+    /** Canonical references the current type manifest declares as defaults. */
+    readonly defaults: readonly string[]
+    /** Present only while the snapshot is still the older version 2 shape. */
+    readonly legacy?: {
+      readonly version: 2
+      readonly privateCount: number
+      readonly writable: boolean
+    }
   }
   readonly selection: {
     readonly include: readonly string[]
     readonly exclude: readonly string[]
-    readonly private: readonly string[]
   }
+  /** Complete, not-yet-managed assets the caller can adopt through capability.add. */
+  readonly candidates: readonly SpaceCapabilityCandidate[]
   readonly unregistered: readonly string[]
   readonly rootState?: {
     readonly tracked: boolean

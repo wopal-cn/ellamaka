@@ -31,6 +31,7 @@ export {
   type SpaceProject,
   type SpaceProjectsResult,
   type SpaceReconcileStep,
+  type SpaceCapabilityCandidate,
   type SpaceRepositoryEntry,
   type SpaceResolveResult,
   type SpaceScanResult,

@@ -70,13 +70,12 @@ export function createCompatibilityFixture(parent: string, mode: "clone" | "fork
       ".wopal-space/space-meta.json",
       JSON.stringify(
         {
-          version: 2,
+          version: 3,
           type: "coding",
           schema: "coding-space-schema.yaml",
           source: { ontology: "test-onto" },
           include: [],
           exclude: [],
-          private: [],
         },
         null,
         2,

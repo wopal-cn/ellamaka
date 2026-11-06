@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
-import { readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { createCompatibilityFixture, type CompatibilityFixture } from "../../fixtures/compatibility/git-space"
 import { systemGit } from "../../../src/space/git"
@@ -42,7 +42,7 @@ describe("space status", () => {
     expect(result.assembly.ontology).toBe("test-onto")
     expect(result.sync.contributions).toEqual([])
     expect(result.sync.behindCount).toBe(0)
-    expect(result.selection).toEqual({ include: [], exclude: [], private: [] })
+    expect(result.selection).toEqual({ include: [], exclude: [] })
     expect(result.preparation).toEqual({ status: "unknown" })
     expect(result).not.toHaveProperty("localState")
   })
@@ -78,12 +78,55 @@ describe("space status", () => {
     )
   })
 
+  it("lists complete unmanaged worktree assets as actionable candidates and nothing else", () => {
+    const value = fixture()
+    applySparsePatterns(systemGit, value.worktree, materializationPatterns)
+    mkdirSync(join(value.worktree, "skills", "new-one"), { recursive: true })
+    writeFileSync(join(value.worktree, "skills", "new-one", "SKILL.md"), "# new\n")
+    // Incomplete: a directory without SKILL.md.
+    mkdirSync(join(value.worktree, "skills", "partial"), { recursive: true })
+    writeFileSync(join(value.worktree, "skills", "partial", "notes.txt"), "n\n")
+    // Ignored entry inside an otherwise complete asset.
+    mkdirSync(join(value.worktree, "skills", "secretive"), { recursive: true })
+    writeFileSync(join(value.worktree, "skills", "secretive", "SKILL.md"), "# s\n")
+    writeFileSync(join(value.worktree, "skills", "secretive", ".env"), "S=1\n")
+    // Symlinked entry.
+    mkdirSync(join(value.worktree, "skills", "linked"), { recursive: true })
+    writeFileSync(join(value.worktree, "skills", "linked", "SKILL.md"), "# l\n")
+    symlinkSync(
+      join(value.worktree, "skills", "dev-flow", "SKILL.md"),
+      join(value.worktree, "skills", "linked", "x.md"),
+    )
+    // Ordinary stray file outside the capability categories.
+    value.write(value.worktree, "notes.md", "# stray\n")
+    // A pool identity that exists but is not mounted is not a candidate.
+    mkdirSync(join(value.ontology, "skills", "pool-only"), { recursive: true })
+    writeFileSync(join(value.ontology, "skills", "pool-only", "SKILL.md"), "# p\n")
+    value.git(value.ontology, "add", "-A")
+    value.git(value.ontology, "commit", "-qm", "feat: pool only")
+
+    const before = value.git(value.worktree, "status", "--porcelain=v1")
+    const result = status(value)
+    expect(result.candidates).toEqual([
+      { reference: "skill:new-one", path: "skills/new-one", kind: "skill", source: "worktree" },
+    ])
+    expect(result.unregistered).toEqual(expect.arrayContaining(["notes.md", "skills/partial/notes.txt"]))
+    expect(result.unregistered).not.toContain("skills/new-one/SKILL.md")
+    // Incomplete / ignored / linked assets are not candidates; they stay read-only facts.
+    expect(result.unregistered).toContain("skills/partial/notes.txt")
+    expect(result.unregistered).toContain("skills/secretive/SKILL.md")
+    expect(result.unregistered).toContain("skills/linked/x.md")
+    expect(result.assembly.defaults).toContain("skill:dev-flow")
+    expect(result.assembly.defaults).toContain("rule:typescript.md")
+    expect(value.git(value.worktree, "status", "--porcelain=v1")).toBe(before)
+  })
+
   it("reports selections, unregistered strays and the dirty count separately", () => {
     const value = fixture()
     applySparsePatterns(systemGit, value.worktree, materializationPatterns)
-    value.write(value.worktree, "rules/stray.md", "# stray\n")
+    value.write(value.worktree, "notes/stray.md", "# stray\n")
     const clean = status(value)
-    expect(clean.unregistered).toContain("rules/stray.md")
+    expect(clean.unregistered).toContain("notes/stray.md")
     expect(clean.dirtyCount).toBe(0)
 
     writeFileSync(join(value.worktree, "rules/typescript.md"), "# edited\n")

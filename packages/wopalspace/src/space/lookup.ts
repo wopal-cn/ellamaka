@@ -23,6 +23,7 @@ export function spaceFacts(space: RegisteredSpace, git: GitRunner): SpaceFacts {
   if (!present) mismatch.push("root-missing")
   if (snapshot.status === "missing") mismatch.push("snapshot-missing")
   if (snapshot.status === "invalid") mismatch.push("snapshot-invalid")
+  if (snapshot.status === "ok" && snapshot.legacyPrivate.length > 0) mismatch.push("snapshot-legacy-private")
   if (snapshot.status === "ok" && snapshot.state.type !== space.type) {
     mismatch.push("type-mismatch")
   }
