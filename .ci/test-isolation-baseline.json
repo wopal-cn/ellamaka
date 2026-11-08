@@ -417,12 +417,6 @@
     },
     {
       "rule": "TISO001",
-      "file": "packages/opencode/test/plugin/server-headers-delivery.test.ts",
-      "detail": "mock.module(@wopal/ellamaka-core/flag/flag)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
       "file": "packages/opencode/test/server/httpapi-mdns.test.ts",
       "detail": "mock.module(bonjour-service)",
       "count": 1

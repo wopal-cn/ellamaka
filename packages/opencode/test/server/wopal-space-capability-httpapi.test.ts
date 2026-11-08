@@ -34,12 +34,33 @@ import { testEffect } from "../lib/effect"
  */
 
 const home = await fs.mkdtemp(path.join(process.env.TMPDIR ?? "/tmp", "wopalspace-cap-http-"))
+const hostGitConfig = path.join(home, "gitconfig")
+await fs.writeFile(hostGitConfig, "")
+
+const testGitEnv = {
+  ...process.env,
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_GLOBAL: hostGitConfig,
+  GIT_AUTHOR_NAME: "WopalSpace Test",
+  GIT_AUTHOR_EMAIL: "test@example.invalid",
+  GIT_COMMITTER_NAME: "WopalSpace Test",
+  GIT_COMMITTER_EMAIL: "test@example.invalid",
+}
+
+const spaceGit = (cwd: string, args: readonly string[], env?: Readonly<Record<string, string>>) =>
+  execFileSync("git", ["-c", "init.defaultBranch=main", "-c", "protocol.file.allow=always", ...args], {
+    cwd,
+    env: env === undefined ? testGitEnv : { ...testGitEnv, ...env },
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"],
+    timeout: 30_000,
+  }).trim()
 
 afterAll(async () => {
   await fs.rm(home, { recursive: true, force: true })
 })
 
-const host = WopalSpaceHostService.layerFor({ host: { wopalHome: home } })
+const host = WopalSpaceHostService.layerFor({ host: { wopalHome: home }, spaceGit })
 
 const apiLayer = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, globalHandlers, wopalSpaceHandlers]),
@@ -220,7 +241,7 @@ async function createFixture(name: string) {
   await fs.mkdir(path.dirname(registryFile), { recursive: true })
   await fs.writeFile(registryFile, JSON.stringify(registry.record, null, 2))
 
-  const setup = createSpaceService({ host: { wopalHome } })
+  const setup = createSpaceService({ host: { wopalHome }, git: spaceGit })
   await setup.init({ name, root: spaceRoot, ontology: ontologyName, type: "coding" })
   return { root, wopalHome, ontology, spaceRoot, worktree: path.join(spaceRoot, ".wopal"), git }
 }

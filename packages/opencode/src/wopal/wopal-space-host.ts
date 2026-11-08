@@ -10,6 +10,7 @@ import {
   type SpacePreparationFacts,
   type SpacePreparationResult,
   type SpaceService,
+  type SpaceServiceOptions,
 } from "@wopal/wopalspace"
 import {
   getInstancePreparationService,
@@ -87,6 +88,8 @@ export interface WopalSpaceHostOverrides {
   readonly fork?: ForkProvisioner
   /** Test-only trusted host context; production still resolves Global.Path.wopalHome. */
   readonly host?: HostContext
+  /** Test-only Git runner for isolated Space operations without host gitconfig dependency. */
+  readonly spaceGit?: SpaceServiceOptions["git"]
 }
 
 const make = (overrides: WopalSpaceHostOverrides = {}) =>
@@ -95,6 +98,7 @@ const make = (overrides: WopalSpaceHostOverrides = {}) =>
       const ontology = createOntologyService({ host, ...(overrides.fork ? { fork: overrides.fork } : {}) })
       const space = createSpaceService({
         host,
+        ...(overrides.spaceGit ? { git: overrides.spaceGit } : {}),
         prepareInstance: (input) => prepare(host.wopalHome, input),
         inspectPreparation: (input) => preparationFacts(host.wopalHome, input.spacePath),
       })
