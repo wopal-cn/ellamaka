@@ -1,7 +1,7 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-03
+> **Updated**: 2026-11-06
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -101,7 +101,11 @@ Electron inherited environment
     │                │
     └───────┬────────┘
             ▼
-      Host Environment
+  确定本次产品根
+            │
+    读取该根全局设置
+            │
+  策略合成 Host Environment
             │
             ▼
    createSidecarEnv(...)
@@ -123,14 +127,14 @@ POSIX resolver 按以下顺序尝试互不重复的候选 shell：操作系统�
 
 每个候选使用 interactive login shell 读取环境，stdin 保持关闭，并在用户 Home 下执行。环境输出使用 NUL 分隔和前后 framing marker 提取，因此 shell rc 在 stdout 打印 banner 时不会污染变量解析。probe 注入只服务于读取过程的抑制变量，用于避免自动更新或 tmux autostart 等非终端行为阻塞；这些 probe-only/session-local 变量不进入最终 Host Environment。
 
-每个候选拥有独立的有界 deadline。timeout、abort 或候选失败会终止该 probe 所有的进程组并继续下一个候选；显式 abort 结束本次 resolution。第一个成功候选生成 Shell Environment；全部候选失败时只使用 Inherited Environment 继续启动 Desktop，使环境恢复失败表现为可诊断的降级而不是应用启动失败。
+每个候选拥有独立的有界 deadline。timeout、abort 或候选失败会终止该 probe 所有的进程组并继续下一个候选；显式 abort 结束本次 resolution。第一个成功候选生成 Shell Environment；全部候选失败时普通变量只使用 Inherited Environment，产品根使用继承值或默认目录，Desktop 继续启动，使环境恢复失败表现为可诊断的降级而不是应用启动失败。
 
 Host Environment 表达当前登录用户实际可用的宿主环境事实。默认兼容模式不根据变量名猜测 Secret，也不维护 Ellamaka 自己的 credential denylist：
 
-- Windows 保留登录会话继承环境。
+- Windows 保留登录会话继承的普通环境，并写入本次有效 `WOPAL_HOME`。
 - POSIX 成功读取 login shell 后，默认以该 shell 的完整用户运行环境补齐 Host Environment；shell 的 `PATH` 是 Desktop 发现 `gh`、`pnpm`、`bun`、`python3`、`rg` 等用户工具的权威 PATH。
 - Desktop/launcher 自己拥有的 sidecar 启动参数在创建 sidecar 时作为显式 overlay 提供；这一步不改变 Host Environment snapshot 本身，也不承担用户环境的 Secret 分类。
-- 显式 inherited `WOPAL_HOME` 具有优先级；login shell 只在 inherited value 缺失时补齐它。Desktop 启动期复用同一 Host Environment snapshot，不为 `WOPAL_HOME` 再执行第二次 shell probe。
+- Desktop 先按显式 inherited `WOPAL_HOME`、同次 shell 结果、产品默认目录的顺序确定绝对产品根，再读取该根的设置并合成普通环境。`WOPAL_HOME` 由产品根显式写入最终环境，保持独立于 mode/list 的导入集合。整个启动与 sidecar 重启复用同次结果。
 
 Desktop 消费 WopalSpace 的全局本机执行配置域中的 shell 环境导入设置。配置只从 `$WOPAL_HOME/config/settings.jsonc` 读取，Space 配置不覆盖它：
 
@@ -153,13 +157,15 @@ Desktop 消费 WopalSpace 的全局本机执行配置域中的 shell 环境导�
 - `allowlist`：保留 Inherited Environment，只导入 `list` 匹配的 Shell Environment 变量。
 - `denylist`：保留 Inherited Environment，导入除 `list` 匹配项之外的全部 Shell Environment 变量。
 
-`list` 支持精确变量名和结尾为 `*` 的前缀匹配。空列表在 `allowlist` 下表示不额外导入 shell 变量，在 `denylist` 下等同于 `inherit`。被导入的 shell 变量覆盖 inherited 同名值；未导入的变量保持 inherited 值。显式 inherited `WOPAL_HOME` 仍具有优先级。
+`list` 支持精确变量名和结尾为 `*` 的前缀匹配。空列表在 `allowlist` 下表示不额外导入 shell 变量，在 `denylist` 下等同于 `inherit`。被导入的 shell 变量覆盖 inherited 同名值；未导入的普通变量保持 inherited 值。`WOPAL_HOME` 始终使用本次确定的产品根，包括 allowlist=[] 或 denylist 包含 WOPAL_HOME 的情况。
 
 `wopal.execution.shellEnv` 定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。`wopal.execution` 中的其他执行设置由需要它们的产品入口消费；#263 不因此扩大为 sandbox 改造。这个配置不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
 
 完整 Host Environment 只存在于当前 Desktop 进程内存中，不序列化为 userData cache 或其他持久文件。若未来需要持久化某个恢复值，其设计使用明确 allowlist，并把该值作为独立配置处理，而不是保存完整环境快照。
 
-Host Environment 只向 sidecar 传递一次。Native Ellamaka Runtime 与 DSH/Cordis 都运行在这个 sidecar 的父环境之上，因此 #263 不为两个核心分别执行第二套 login-shell probe，也不维护两份 Host Environment。Native PTY、Shell、MCP 与 LSP 从 sidecar 宿主环境按各自 Runtime 契约派生子进程；DSH Web 与 Tools profile 同样从该 sidecar 环境起步，并继续使用 DSH 官方 subprocess/environment 契约。DSH 当前的 `subprocess-local` 会在启动 Browser Terminal、shell/tool 子进程前应用自己的 `scrubbedParentEnv()`，再叠加调用方显式 env；其中 `PATH`、Home、locale 与 proxy 类环境继续传递，DSH 自己定义的 credential-shaped 与 `DSH_*` ambient 过滤语义保持由 DSH 拥有。Ellamaka Desktop 不在 #263 中复制、绕过或重写这套 DSH child-env policy。
+Main 启动编排显式持有有效产品根和 Host Environment，并在每次 sidecar 创建或重启时传入。`createSidecarEnv` 的 `DSH_HOME`、Main 的 DSH bootstrap/诊断日志目录和 `registerIpcHandlers.homePath` 都从同一产品根派生。DSH_HOME 为绝对目录。Main 中已初始化的产品路径视图遵守现有 Home 绑定接口与生命周期约束，在相关消费方运行前与该根保持一致。普通 shell 环境保持显式输入，内部函数和参数组织由实现选择。
+
+Native Ellamaka Runtime 与 DSH/Cordis 都运行在这个 sidecar 的父环境之上，因此 #263 不为两个核心分别执行第二套 login-shell probe，也不维护两份 Host Environment。Native PTY、Shell、MCP 与 LSP 从 sidecar 宿主环境按各自 Runtime 契约派生子进程；DSH Web 与 Tools profile 同样从该 sidecar 环境起步，并继续使用 DSH 官方 subprocess/environment 契约。DSH 当前的 `subprocess-local` 会在启动 Browser Terminal、shell/tool 子进程前应用自己的 `scrubbedParentEnv()`，再叠加调用方显式 env；其中 `PATH`、Home、locale 与 proxy 类环境继续传递，DSH 自己定义的 credential-shaped 与 `DSH_*` ambient 过滤语义保持由 DSH 拥有。Ellamaka Desktop 不在 #263 中复制、绕过或重写这套 DSH child-env policy。
 
 Sandbox 只负责执行边界和资源限制；它消费调用方交给它的环境，不负责重新读取 login shell、构造 PATH 或初始化用户环境。Desktop Host Environment 因而只定义 Desktop → sidecar 的共同宿主基础环境。Native 与 DSH 下游的 child-env 差异由各自 Runtime owner 保持。
 

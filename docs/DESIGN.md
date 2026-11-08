@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-06
+> **Updated**: 2026-11-08
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -183,7 +183,7 @@ WopalSpace 模式下配置加载优先级（低→高）：
 
 Workbench 经引擎 HTTP 配置面获取生效配置，供权限选择器与产品设置消费。读面由引擎从自己的加载状态直答，不经 CLI；既有 `/config` 端点维持 Ellamaka 运行时视图，不扩展。`config-v2` 的持久写入调用 private `@wopal/wopalspace` 的受控 settings writer，HTTP handler 不直接编辑 JSONC。
 
-本机启动前必须使用的执行环境事实直接来自同一 canonical 全局文件 `$WOPAL_HOME/config/settings.jsonc`。Desktop Main 在 sidecar 创建前消费 `wopal.execution.shellEnv`；该 bootstrap read 不等待 Server 或 `config-v2`，也不创建 Desktop 私有配置源。`wopal.execution.execWritableRoots` 当前由需要本机 exec sandbox 的产品入口消费，#263 不使用它。
+本机启动前必须使用的执行环境事实直接来自同一 canonical 全局文件 `$WOPAL_HOME/config/settings.jsonc`。Desktop Main 先按显式继承值、同次 shell 恢复值、产品默认目录的顺序确定本次产品根，再从该根读取 `wopal.execution.shellEnv`；普通变量按策略合成，WOPAL_HOME 作为产品启动参数固定写入。Main 的目录消费方和 sidecar 启动/重启显式复用同一结果，详细合同见 [Desktop Host Environment](./DESIGN-desktop.md#desktop-host-environment)；该 bootstrap read 不等待 Server 或 `config-v2`，也不创建 Desktop 私有配置源。`wopal.execution.execWritableRoots` 当前由需要本机 exec sandbox 的产品入口消费，#263 不使用它。
 
 ```typescript
 // 读——引擎直接从自己的加载状态回答，不走 CLI
@@ -398,17 +398,9 @@ SDK/root调用模型的MAJOR变化不自动改变PluginInput.client。现有插�
 Provider 凭证只有一个持久存储：`$WOPAL_HOME/ellamaka/data/auth.json`，由 `packages/opencode/src/auth` 拥有，
 `opencode providers login` 写入，`provider.ts` 在装配模型时读取。它就是用户「已经登录了哪些 provider」的唯一事实。
 
-`packages/ellamaka-core` 内的 `AccountV2`（`account.json`）不属于凭证存储：
-
-- 它从不出现在模型请求路径上。主路径 `provider.ts` 只读 `auth.json`；`AccountV2` 的消费者只有尚未成为主路径的
-  v2 catalog 投影、`@wopal/ellamaka-cli` 开发入口与 `debug/v2`。
-- 它的 `load()` 会在 `auth.json` 存在时执行一次迁移写回。`auth.json` 是完整的长期存储，因此这个迁移没有终止条件，
-  每次进程启动都会重新覆盖 `account.json`。于是任何写进 `account.json` 的内容都无法存活，而 `auth.json`
-  的历史在其间反复被重写。
-- 一个不回写 `auth.json`、由另一条链路读取的第二份凭证副本，会让「用户登录了哪个 provider」出现两个答案。
-
-因此 `AccountV2` 与 `account.json` 属于待退役代码：新代码不得读取、写入或依赖它们，也不得在测试中为它们构造
-fixture。真正需要账号选择能力时，作为一个独立设计重新引入，并在同一份设计里定义它与 `auth.json` 的单一 ownership。
+Provider/Model 可用目录和模型调用由 `packages/opencode/src/provider` 的 Runtime Provider 服务统一提供；
+`packages/opencode/src/plugin` 通过公开插件接口补充运行时配置。Public Platform API 与 `@wopal/ellamaka-sdk`
+投影这一运行时事实，不拥有独立的 Provider/Model 目录状态。
 
 测试约束：任何测试都不得读写真实 `$WOPAL_HOME` 下的凭证文件；凭证相关的测试使用临时 Home 与注入的
 credential service。测试隔离的完整规则见 [Test Isolation](./testing-isolation.md)。

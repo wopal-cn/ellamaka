@@ -1,7 +1,7 @@
 # Ellamaka — Config Consumption and Settings Panel
 
 > **Status**: Draft
-> **Updated**: 2026-11-03
+> **Updated**: 2026-11-06
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -33,7 +33,7 @@ Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wop
 
 `wopal.dsh.web.enabled` 是产品层 Web surface 开关，不是 DSH native profile 配置，因此不经过 DshConfigProvider，也不投影到 `cordis.patch.yml`。它只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，默认 `true`，Space 层不能覆盖。Tools profile 的进程级启用事实只来自 `ELLAMAKA_DSH_TOOLS`。`GET /config-v2` 返回 Web effective fact；受控 `PATCH /config-v2` 只允许 global scope 写这个键，并返回 `restart-required`。具体正式契约以主 `DESIGN.md#config-surface`、`DESIGN-dsh-web.md#enablement` 与 `DESIGN-wopalspace.md#product-settings` 为准。
 
-`wopal.execution.*` 同样只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，但它是宿主启动前需要的执行环境事实。Desktop #263 直接读取 `wopal.execution.shellEnv` 后构造 Host Environment；这条 bootstrap read 与 `config-v2` 的 Server 生命周期分离。Phase 3 后续可以把这些键纳入统一 describe/mutate surface，但不能改变它们已经冻结的 schema、默认值或 global-only 语义。
+`wopal.execution.*` 同样只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，但它是宿主启动前需要的执行环境事实。Desktop #263 先按 Active Desktop Host Environment 合同确定产品根，再读取该根的 `wopal.execution.shellEnv` 并合成普通环境；WOPAL_HOME 作为已确定的产品启动参数独立于导入策略；这条 bootstrap read 与 `config-v2` 的 Server 生命周期分离。Phase 3 后续可以把这些键纳入统一 describe/mutate surface，但不能改变它们已经冻结的 schema、默认值或 global-only 语义。
 
 ## Reading: Product Defaults + User Global + Space Override
 

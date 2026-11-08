@@ -1,7 +1,7 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-10-30
+> **Updated**: 2026-11-06
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -107,6 +107,8 @@ Web 的能力组合与执行后端一致。Bun 与 Node Desktop 都装配标准 
 ### Browser Terminal Environment
 
 Web profile 的 Browser Terminal 由官方 `terminal-controller` 选择当前 Agent execution provider，再调用 `ctx.subprocess.spawnTerminal()`。在 Ellamaka Desktop 中，这个 provider 所在进程就是承载 DSH/Cordis 的 Ellamaka sidecar，因此它首先看到 Desktop 已解析并传入 sidecar 的 Host Environment，不需要 Web profile 自己再运行 login-shell probe。
+
+sidecar 的 WOPAL_HOME 与 DSH_HOME 来自同一本次产品根；Browser Terminal 使用 provider 所在 sidecar 的父环境。环境可达性的验证观测实际终端子进程，确认其能执行仅位于恢复 PATH 中的测试工具。
 
 本地 provider 随后按 DSH 官方 child-env 契约处理 terminal：以 `scrubbedParentEnv()` 为基线，再叠加 terminal 显式环境（例如当前 `DSH_SESSION_ID` 与终端类型）。`PATH` 保留，因此 Desktop Host Environment 修复的 CLI 查找能力同时覆盖 DSH Browser Terminal；credential-shaped ambient 名称与 ambient `DSH_*` 的过滤继续属于 DSH subprocess policy。Ellamaka 不在 Web profile 外再加第二套过滤或环境恢复逻辑。
 

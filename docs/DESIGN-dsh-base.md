@@ -1,7 +1,7 @@
 # DSH 集成基础设计
 
 > **Status**: Active
-> **Updated**: 2026-10-30
+> **Updated**: 2026-11-06
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -115,6 +115,8 @@ App Boot 审计后，宿主检查采用的必需服务和工具：`web` 检查�
 ## Host Compatibility
 
 ### Host Environment Input
+
+Desktop 的 WOPAL_HOME 来自 Main 启动时确定的产品根；sidecar 的 DSH_HOME 是同一根下的绝对 `dsh/home` 目录。该根与全局设置、Main 的 DSH 诊断路径、IPC Home 保持一致，sidecar 重启复用本次结果。详细启动顺序由 Desktop Host Environment 定义。
 
 DSH Bridge 不拥有第二套 Desktop 宿主环境。它运行在当前 Ellamaka host 进程中，并把该进程环境作为 DSH 运行时的父环境来源：Desktop 入口由 Electron Main 把一次解析出的 Host Environment 显式传给 sidecar；CLI、TUI 与 `serve` 入口使用各自启动进程实际继承的环境。Web 与 `ellamaka-tools` profile 因此共享当前 host 的同一份上游环境事实，不各自重新执行 login-shell probe。
 
