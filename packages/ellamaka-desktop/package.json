@@ -16,8 +16,8 @@
   },
   "scripts": {
     "typecheck": "tsgo -b",
-    "test": "bun test --preload ./electron-mock.ts --force-exit src",
-    "test:e2e": "bun test --preload ./electron-mock.ts --force-exit e2e",
+    "test": "bun test --preload ./test/preload.ts --preload ./electron-mock.ts --force-exit src",
+    "test:e2e": "bun test --preload ./test/preload.ts --preload ./electron-mock.ts --force-exit e2e",
     "predev": "bun ./scripts/predev.ts",
     "dev": "electron-vite dev",
     "prebuild": "bun ./scripts/prebuild.ts",
@@ -38,6 +38,7 @@
     "electron-store": "^10",
     "electron-updater": "^6",
     "electron-window-state": "^5.0.3",
+    "jsonc-parser": "3.3.1",
     "drizzle-orm": "catalog:",
     "marked": "^15",
     "semver": "catalog:"
@@ -46,6 +47,7 @@
     "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
     "@wopal/ellamaka-app": "workspace:*",
+    "@wopal/ellamaka-core": "workspace:*",
     "@wopal/ellamaka-release": "workspace:*",
     "@wopal/ui": "workspace:*",
     "@sentry/solid": "catalog:",

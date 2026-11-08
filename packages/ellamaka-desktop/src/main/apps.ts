@@ -10,10 +10,21 @@ const exists = (path: string) =>
     .then(() => true)
     .catch(() => false)
 
-export function checkAppExists(appName: string) {
-  if (process.platform === "win32") return true
-  if (process.platform === "linux") return true
-  return checkMacosApp(appName)
+/**
+ * Environment used for native app discovery. Callers pass the resolved Host
+ * Environment explicitly: a GUI cold start inherits a minimal PATH, so the
+ * login-shell PATH is the only place a user-installed app can be found.
+ */
+export type AppDiscoveryEnv = Record<string, string | undefined>
+
+export function checkAppExists(
+  appName: string,
+  env: AppDiscoveryEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (platform === "win32") return true
+  if (platform === "linux") return true
+  return checkMacosApp(appName, env)
 }
 
 export function resolveAppPath(appName: string) {
@@ -40,17 +51,17 @@ export function wslPath(path: string, mode: "windows" | "linux" | null): string 
   }
 }
 
-async function checkMacosApp(appName: string) {
+async function checkMacosApp(appName: string, env: AppDiscoveryEnv) {
   const locations = [`/Applications/${appName}.app`, `/System/Applications/${appName}.app`]
 
-  const home = process.env.HOME
+  const home = env.HOME
   if (home) locations.push(`${home}/Applications/${appName}.app`)
 
   for (const location of locations) {
     if (await exists(location)) return true
   }
 
-  return execFilePromise("which", [appName])
+  return execFilePromise("which", [appName], { env })
     .then(() => true)
     .catch(() => false)
 }
@@ -58,7 +69,7 @@ async function checkMacosApp(appName: string) {
 async function resolveWindowsAppPath(appName: string): Promise<string | null> {
   let output: string
   try {
-    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
+    output = await execFilePromise("where", [appName]).then((r) => r.stdout)
   } catch {
     return null
   }

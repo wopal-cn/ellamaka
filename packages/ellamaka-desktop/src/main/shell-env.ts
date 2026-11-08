@@ -1,12 +1,44 @@
-import { spawnSync } from "node:child_process"
+import { spawn, spawnSync, type ChildProcessByStdio } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir, userInfo } from "node:os"
-import { basename, join } from "node:path"
+import { basename, isAbsolute, join, normalize } from "node:path"
+import type { Readable } from "node:stream"
+import { parse } from "jsonc-parser"
 import { getLogger } from "./logging"
 
-const TIMEOUT = 5_000
+const DEFAULT_TIMEOUT_MS = 5_000
+const MAX_PROBE_OUTPUT_BYTES = 4 * 1024 * 1024
+const FALLBACK_SHELLS = ["/bin/zsh", "/bin/bash", "/bin/sh"] as const
+const MARKER_START = "__WOPAL_ENV_START__"
+const MARKER_END = "__WOPAL_ENV_END__"
+const DUMP = `printf '\\0%s\\0' '${MARKER_START}'; command env -0 || exit; printf '\\0%s\\0' '${MARKER_END}'; exit`
+const PROBE_ENVIRONMENT = {
+  DISABLE_AUTO_UPDATE: "true",
+  ZSH_TMUX_AUTOSTARTED: "true",
+  ZSH_TMUX_AUTOSTART: "false",
+} as const
+const PROBE_ONLY_KEYS = new Set(["PWD", "OLDPWD", "SHLVL", "_", ...Object.keys(PROBE_ENVIRONMENT)])
 
-type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
+type ProbeFailureReason = "timeout" | "aborted" | "spawn-error" | "exit" | "unparsed"
+type Probe =
+  | { type: "Loaded"; value: Record<string, string> }
+  | { type: "Failed"; reason: ProbeFailureReason; status?: number }
+
+export interface ShellEnvironmentLog {
+  warn(message: string, fields?: Record<string, unknown>): void
+  info?(message: string, fields?: Record<string, unknown>): void
+}
+
+export interface LoadShellEnvOptions {
+  platform?: NodeJS.Platform
+  candidates?: readonly string[]
+  timeoutMs?: number
+  signal?: AbortSignal
+  inherited?: Record<string, string>
+  homeDir?: string
+  log?: ShellEnvironmentLog
+  onSpawn?: () => void
+}
 
 export function resolveUserShell(envShell: string | undefined, loginShell: string | null | undefined) {
   const resolvedLoginShell = loginShell && loginShell !== "unknown" ? loginShell : undefined
@@ -32,84 +64,249 @@ export function parseShellEnv(out: Buffer) {
   return env
 }
 
-function probe(shell: string, mode: "-il" | "-l"): Probe {
-  const out = spawnSync(shell, [mode, "-c", "env -0"], {
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: TIMEOUT,
-    windowsHide: true,
+export function parseFramedShellEnv(out: string): Record<string, string> | undefined {
+  const open = `\0${MARKER_START}\0`
+  const close = `\0${MARKER_END}\0`
+  const start = out.indexOf(open)
+  const end = out.lastIndexOf(close)
+  if (start === -1 || end === -1 || end <= start) return undefined
+  const body = out.slice(start + open.length, end)
+  const env = parseShellEnv(Buffer.from(body))
+  return Object.keys(env).length > 0 ? env : undefined
+}
+
+function inheritedEnv(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
+}
+
+export async function loadShellEnv(_shell: string, options: LoadShellEnvOptions = {}) {
+  const platform = options.platform ?? process.platform
+  if (platform === "win32") return options.inherited ?? null
+
+  const configured = options.candidates
+  const candidates =
+    configured ??
+    (() => {
+      let account: string | null = null
+      try {
+        account = userInfo().shell
+      } catch {}
+      return [...new Set([...(account && account !== "unknown" ? [account] : []), ...FALLBACK_SHELLS])]
+    })()
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const homeDir = options.homeDir ?? homedir()
+  const log = options.log ?? defaultShellLog()
+  const inherited = options.inherited ?? inheritedEnv()
+
+  for (const [index, shell] of candidates.entries()) {
+    if (options.signal?.aborted) {
+      logFailure(log, { candidate: candidateName(shell), attempt: index + 1, reason: "aborted" })
+      throw abortError()
+    }
+    const started = Date.now()
+    const result = await probe(shell, inherited, homeDir, timeoutMs, options.signal, options.onSpawn)
+    if (result.type === "Loaded") {
+      for (const key of PROBE_ONLY_KEYS) delete result.value[key]
+      return result.value
+    }
+    logFailure(log, {
+      candidate: candidateName(shell),
+      attempt: index + 1,
+      reason: result.reason,
+      ...(result.reason === "timeout" || result.reason === "aborted" ? { durationMs: Date.now() - started } : {}),
+      ...(result.status !== undefined ? { status: result.status } : {}),
+    })
+    if (result.reason === "aborted") throw abortError()
+  }
+
+  log.warn("desktop.shell_env.degraded", {
+    platform: "posix",
+    candidates: candidates.length,
+    source: "inherited",
+    degraded: true,
   })
-
-  const err = out.error as NodeJS.ErrnoException | undefined
-  if (err) {
-    if (err.code === "ETIMEDOUT") return { type: "Timeout" }
-    console.log(`[server] Shell env probe failed for ${shell} ${mode}: ${err.message}`)
-    return { type: "Unavailable" }
-  }
-
-  if (out.status !== 0) {
-    console.log(`[server] Shell env probe exited with non-zero status for ${shell} ${mode}`)
-    return { type: "Unavailable" }
-  }
-
-  const env = parseShellEnv(out.stdout)
-  if (Object.keys(env).length === 0) {
-    console.log(`[server] Shell env probe returned empty env for ${shell} ${mode}`)
-    return { type: "Unavailable" }
-  }
-
-  return { type: "Loaded", value: env }
-}
-
-export function isNushell(shell: string) {
-  const name = basename(shell).toLowerCase()
-  const raw = shell.toLowerCase()
-  return name === "nu" || name === "nu.exe" || raw.endsWith("\\nu.exe")
-}
-
-export function loadShellEnv(shell: string) {
-  const logger = getLogger()
-  if (isNushell(shell)) {
-    logger.log(`[server] Skipping shell env probe for nushell: ${shell}`)
-    return null
-  }
-
-  const interactive = probe(shell, "-il")
-  if (interactive.type === "Loaded") {
-    logger.log(`[server] Loaded shell environment with -il (${Object.keys(interactive.value).length} vars)`)
-    return interactive.value
-  }
-  if (interactive.type === "Timeout") {
-    logger.log(`[server] Interactive shell env probe timed out: ${shell}`)
-    return null
-  }
-
-  const login = probe(shell, "-l")
-  if (login.type === "Loaded") {
-    logger.log(`[server] Loaded shell environment with -l (${Object.keys(login.value).length} vars)`)
-    return login.value
-  }
-
-  logger.log(`[server] Falling back to app environment: ${shell}`)
   return null
 }
 
-export function mergeShellEnv(shell: Record<string, string> | null, env: Record<string, string>) {
+export async function resolveDesktopHostEnvironment(
+  options: LoadShellEnvOptions & { shell?: Record<string, string> | null } = {},
+): Promise<{ home: string; env: Record<string, string> }> {
+  const inherited = { ...(options.inherited ?? inheritedEnv()) }
+  const homeDir = options.homeDir ?? homedir()
+  const shell =
+    "shell" in options
+      ? (options.shell ?? null)
+      : (options.platform ?? process.platform) === "win32"
+        ? null
+        : await loadShellEnv("", { ...options, inherited })
+  const root = (value?: string) => {
+    if (!value?.trim()) return undefined
+    const expanded = value.startsWith("~/") ? join(homeDir, value.slice(2)) : value
+    return isAbsolute(expanded) ? normalize(expanded) : undefined
+  }
+  const home = root(inherited.WOPAL_HOME) ?? root(shell?.WOPAL_HOME) ?? join(homeDir, ".wopal")
+  const file = join(home, "config", "settings.jsonc")
+  let text: string | undefined
+  try {
+    text = readFileSync(file, "utf8")
+  } catch (error) {
+    if (!(typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT")) throw error
+  }
+  let mode = "inherit"
+  let list: string[] = []
+  if (text !== undefined) {
+    const errors: { error: number; offset: number; length: number }[] = []
+    const settings: unknown = parse(text, errors, { allowTrailingComma: true })
+    if (errors.length) throw new Error("Invalid global settings JSONC")
+    const object = (value: unknown): Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value))
+        : {}
+    const policy = object(object(object(object(settings).wopal).execution).shellEnv)
+    if (policy.mode === "allowlist" || policy.mode === "denylist") mode = policy.mode
+    if (Array.isArray(policy.list)) list = policy.list.filter((value): value is string => typeof value === "string")
+  }
+  const env = { ...inherited }
+  for (const [key, value] of Object.entries(shell ?? {})) {
+    if (key === "WOPAL_HOME" || PROBE_ONLY_KEYS.has(key)) continue
+    const matches = list.some((pattern) =>
+      pattern.endsWith("*") ? key.startsWith(pattern.slice(0, -1)) : key === pattern,
+    )
+    if (mode === "allowlist" && !matches) continue
+    if (mode === "denylist" && matches) continue
+    env[key] = value
+  }
+  env.WOPAL_HOME = home
+  return { home, env }
+}
+
+function probe(
+  shell: string,
+  inherited: Record<string, string>,
+  cwd: string,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  onSpawn?: () => void,
+): Promise<Probe> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve({ type: "Failed", reason: "aborted" })
+      return
+    }
+    let child: ChildProcessByStdio<null, Readable, null>
+    try {
+      child = spawn(shell, ["-ilc", DUMP], {
+        cwd,
+        env: { ...inherited, ...PROBE_ENVIRONMENT },
+        stdio: ["ignore", "pipe", "ignore"],
+        shell: false,
+        detached: process.platform !== "win32",
+        windowsHide: true,
+      })
+    } catch {
+      resolve({ type: "Failed", reason: "spawn-error" })
+      return
+    }
+
+    const chunks: Buffer[] = []
+    let outputBytes = 0
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let exitStatus: number | null | undefined
+
+    const killGroup = () => {
+      if (!child.pid) return
+      try {
+        process.kill(-child.pid, "SIGKILL")
+      } catch {
+        try {
+          child.kill("SIGKILL")
+        } catch {}
+      }
+    }
+    const finish = (result: Probe) => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      signal?.removeEventListener("abort", onAbort)
+      child.stdout.off("data", onData)
+      child.stdout.destroy()
+      // An early marker can complete the read while rc-started descendants keep
+      // this process group alive. The probe owns that group, so its completion
+      // always terminates the group before another candidate starts.
+      if (child.exitCode !== null || child.signalCode !== null || !child.pid) {
+        killGroup()
+        resolve(result)
+        return
+      }
+      child.once("exit", () => resolve(result))
+      killGroup()
+    }
+    const stop = (reason: "timeout" | "aborted") => {
+      finish({ type: "Failed", reason })
+    }
+    const onAbort = () => stop("aborted")
+    const onData = (chunk: Buffer) => {
+      outputBytes += chunk.length
+      if (outputBytes > MAX_PROBE_OUTPUT_BYTES) {
+        finish({ type: "Failed", reason: "unparsed" })
+        return
+      }
+      chunks.push(chunk)
+      const parsed = parseFramedShellEnv(Buffer.concat(chunks).toString("utf8"))
+      if (parsed) {
+        finish({ type: "Loaded", value: parsed })
+      }
+    }
+    timer = setTimeout(() => stop("timeout"), timeoutMs)
+    signal?.addEventListener("abort", onAbort, { once: true })
+    child.stdout.on("data", onData)
+    child.on("spawn", () => onSpawn?.())
+    child.on("error", () => finish({ type: "Failed", reason: "spawn-error" }))
+    child.on("close", (code, closeSignal) => {
+      exitStatus = closeSignal ? 1 : code
+      if (exitStatus !== 0) finish({ type: "Failed", reason: "exit", status: exitStatus ?? undefined })
+      else finish({ type: "Failed", reason: "unparsed" })
+    })
+  })
+}
+
+function candidateName(shell: string): string {
+  const name = basename(shell).replace(/\.exe$/i, "")
+  const fallback = new Set(["zsh", "bash", "sh"])
+  if (fallback.has(name)) return name
+  try {
+    if (shell === userInfo().shell) return "account-shell"
+  } catch {}
+  return "custom"
+}
+
+function logFailure(
+  log: ShellEnvironmentLog,
+  failure: { candidate: string; attempt: number; reason: ProbeFailureReason; status?: number; durationMs?: number },
+) {
+  log.warn("desktop.shell_env.probe_failed", {
+    platform: "posix",
+    candidate: failure.candidate,
+    attempt: failure.attempt,
+    reason: failure.reason,
+    ...(failure.durationMs !== undefined ? { durationMs: failure.durationMs } : {}),
+    ...(failure.status !== undefined ? { status: failure.status } : {}),
+  })
+}
+
+function defaultShellLog(): ShellEnvironmentLog {
   return {
-    ...shell,
-    ...env,
+    warn(message, fields) {
+      getLogger()?.warn(message, fields)
+    },
   }
 }
 
-// GUI processes launched from Finder/Dock inherit a minimal system PATH that
-// omits user-level directories (e.g. /opt/homebrew/bin). The user's login shell
-// PATH is the authoritative source for tool discovery (gh, go, bun, ...), so
-// it must win over the GUI default PATH rather than be silently overridden.
-export function resolveShellPath(
-  shellEnv: Record<string, string> | null,
-  appPath: string | undefined,
-): string | undefined {
-  if (shellEnv?.PATH) return shellEnv.PATH
-  return appPath
+function abortError() {
+  return new DOMException("Host Environment resolution aborted", "AbortError")
 }
 
 const BLOCK_START = "# >>> wopal home >>>"

@@ -154,6 +154,7 @@ export function registerIpcHandlers(deps: Deps) {
         process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
       execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
     })
+    return undefined
   })
 
   ipcMain.handle("read-clipboard-image", () => {
@@ -216,49 +217,52 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
   })
-  ipcMain.handle("save-recent-model", (_event: IpcMainInvokeEvent, rawModel: { providerID?: string; modelID?: string } | string) => {
-    let providerID = ""
-    let modelID = ""
+  ipcMain.handle(
+    "save-recent-model",
+    (_event: IpcMainInvokeEvent, rawModel: { providerID?: string; modelID?: string } | string) => {
+      let providerID = ""
+      let modelID = ""
 
-    if (typeof rawModel === "string") {
-      const parts = rawModel.split("/")
-      providerID = parts[0] || ""
-      modelID = parts.slice(1).join("/") || ""
-    } else if (rawModel && typeof rawModel === "object") {
-      providerID = rawModel.providerID || ""
-      modelID = rawModel.modelID || ""
-    }
-
-    if (!providerID || !modelID) return
-
-    const stateDir = process.env.WOPAL_HOME
-      ? path.join(process.env.WOPAL_HOME, "ellamaka/state")
-      : (deps.homePath ? path.join(deps.homePath, "ellamaka/state") : path.join(os.homedir(), ".local/state/opencode"))
-    const filePath = path.join(stateDir, "model.json")
-
-    let data: { recent?: Array<{ providerID: string; modelID: string }>; favorite?: any; variant?: any } = {
-      recent: [],
-      favorite: [],
-      variant: {},
-    }
-    try {
-      if (fs.existsSync(filePath)) {
-        data = JSON.parse(fs.readFileSync(filePath, "utf-8"))
+      if (typeof rawModel === "string") {
+        const parts = rawModel.split("/")
+        providerID = parts[0] || ""
+        modelID = parts.slice(1).join("/") || ""
+      } else if (rawModel && typeof rawModel === "object") {
+        providerID = rawModel.providerID || ""
+        modelID = rawModel.modelID || ""
       }
-    } catch {}
 
-    const recent = Array.isArray(data.recent) ? data.recent : []
-    const filteredRecent = recent.filter(
-      (item) => !(item.providerID === providerID && item.modelID === modelID)
-    )
+      if (!providerID || !modelID) return
 
-    data.recent = [{ providerID, modelID }, ...filteredRecent].slice(0, 10)
+      // The product root is resolved once per launch and injected here; Main must
+      // not consult process.env.WOPAL_HOME, which a GUI cold start can leave unset.
+      const stateDir = deps.homePath
+        ? path.join(deps.homePath, "ellamaka/state")
+        : path.join(os.homedir(), ".local/state/opencode")
+      const filePath = path.join(stateDir, "model.json")
 
-    try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true })
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8")
-    } catch {}
-  })
+      let data: { recent?: Array<{ providerID: string; modelID: string }>; favorite?: any; variant?: any } = {
+        recent: [],
+        favorite: [],
+        variant: {},
+      }
+      try {
+        if (fs.existsSync(filePath)) {
+          data = JSON.parse(fs.readFileSync(filePath, "utf-8"))
+        }
+      } catch {}
+
+      const recent = Array.isArray(data.recent) ? data.recent : []
+      const filteredRecent = recent.filter((item) => !(item.providerID === providerID && item.modelID === modelID))
+
+      data.recent = [{ providerID, modelID }, ...filteredRecent].slice(0, 10)
+
+      try {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true })
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8")
+      } catch {}
+    },
+  )
 }
 
 // All channels registered by registerIpcHandlers live in ./ipc-channels.ts
@@ -266,7 +270,10 @@ export function registerIpcHandlers(deps: Deps) {
 // that file for the contract and the lockstep invariant with this function.
 
 // Exported for structural tests (re-exported from the channel registry).
-export { IPC_HANDLE_CHANNELS as __IPC_HANDLE_CHANNELS, IPC_EVENT_CHANNELS as __IPC_EVENT_CHANNELS } from "./ipc-channels"
+export {
+  IPC_HANDLE_CHANNELS as __IPC_HANDLE_CHANNELS,
+  IPC_EVENT_CHANNELS as __IPC_EVENT_CHANNELS,
+} from "./ipc-channels"
 
 // Remove every channel registered by registerIpcHandlers. Idempotent —
 // removeHandler/removeAllListeners are no-ops for unknown channels. Kept so a

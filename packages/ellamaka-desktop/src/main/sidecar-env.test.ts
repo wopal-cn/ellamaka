@@ -1,102 +1,41 @@
-import { describe, expect, mock, test } from "bun:test"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-
-// server.ts transitively imports electron-store (via ./store), which is not
-// installed in the bun test environment. Provide a minimal in-memory store so
-// the module can be imported for its pure env helpers.
-mock.module("electron-store", () => {
-  class MockStore {
-    private data = new Map<string, unknown>()
-    get(key: string) {
-      return this.data.get(key)
-    }
-    set(key: string, value: unknown) {
-      this.data.set(key, value)
-    }
-    delete(key: string) {
-      this.data.delete(key)
-    }
-  }
-  return { default: MockStore }
-})
-
-// Control the shell-env probe from the test. getUserShell/loadShellEnv are the
-// only side-effecting pieces preferAppEnv relies on; mergeShellEnv and
-// resolveShellPath are kept as their real behaviors so PATH resolution stays
-// covered without re-duplicating logic in tests.
-//
-// The factory spreads the real module first: bun's mock registry is process
-// global, so without the spread later-loaded test files (e.g.
-// shell-env.test.ts) would see only the four overridden exports and fail on
-// missing ones (resolveUserShell, isNushell, parseShellEnv, persistWopalHomeEnv).
-import * as shellEnvModule from "./shell-env"
-
-let shell: Record<string, string> | null = null
-
-mock.module("./shell-env", () => ({
-  ...shellEnvModule,
-  getUserShell: () => "/bin/zsh",
-  loadShellEnv: () => shell,
-  mergeShellEnv: (shellEnv: Record<string, string> | null, env: Record<string, string>) => ({
-    ...shellEnv,
-    ...env,
-  }),
-  resolveShellPath: (shellEnv: Record<string, string> | null, appPath: string | undefined) => shellEnv?.PATH ?? appPath,
-}))
-
-const { createSidecarEnv, createSidecarOutputForwarder, preferAppEnv } = await import("./server")
-const {
-  captureSidecarExperimentalConfig,
+import { describe, expect, test } from "bun:test"
+import { EventEmitter } from "node:events"
+import { app } from "electron"
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { isAbsolute, join } from "node:path"
+import { scopedEnv } from "../../test/fixture/process-env"
+import {
+  createSidecarEnv,
+  createSidecarOutputForwarder,
+  createSidecarSpawner,
+  type DesktopHostEnvironment,
+  type SidecarFork,
+} from "./server"
+import { resolveDesktopHostEnvironment } from "./shell-env"
+import {
   clearSidecarCredentials,
   isSidecarOnlyOpencodeKey,
   listenThenClearCredentials,
   SIDECAR_ONLY_OPENCODE_KEYS,
   stripSidecarOpencodeEnv,
-} = await import("./sidecar-credentials")
+} from "./sidecar-credentials"
 
-const OPENCODE_SWITCHES = [
-  "OPENCODE_CLIENT",
-  "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY",
-  "OPENCODE_EXPERIMENTAL_FILEWATCHER",
-  "OPENCODE_DISABLE_EMBEDDED_WEB_UI",
-] as const
-
-const OPENCODE_KEYS = [...OPENCODE_SWITCHES, "ELLAMAKA_SERVER_USERNAME", "ELLAMAKA_SERVER_PASSWORD"] as const
-
-function snapshotKeys(keys: readonly string[]): Map<string, string | undefined> {
-  const saved = new Map<string, string | undefined>()
-  for (const key of keys) saved.set(key, process.env[key])
-  return saved
-}
-
-function restoreKeys(saved: Map<string, string | undefined>) {
-  for (const [key, value] of saved) {
-    if (value === undefined) delete process.env[key]
-    else process.env[key] = value
-  }
-}
-
-// The dev/CI environment may already carry OPENCODE_* values (dev.sh injects
-// them). Clear them before exercising the functions so assertions observe only
-// what the function itself writes.
-function clearOpencodeEnv() {
-  for (const key of OPENCODE_KEYS) delete process.env[key]
-}
-
-// Reset the module-level captured experimental config so tests are isolated
-// from any prior capture by preferAppEnv.
-function resetCapturedExperimentalConfig() {
-  captureSidecarExperimentalConfig({})
+/** A resolved Host Environment snapshot, exactly what startup hands to the sidecar. */
+function host(env: Record<string, string>, home = join("/", "tmp", "wopal-home")): DesktopHostEnvironment {
+  return { home, env: { ...env, WOPAL_HOME: home } }
 }
 
 describe("createSidecarEnv", () => {
-  test("explicitly sets credentials, client identity, and switches", () => {
-    resetCapturedExperimentalConfig()
-    clearOpencodeEnv()
+  test("builds the sidecar env from the explicit Host Environment", () => {
+    const env = createSidecarEnv(
+      "secret",
+      host({ PATH: "/opt/homebrew/bin:/usr/bin:/bin", SOME_DESKTOP_VAR: "keep-me", DEBUG: "opencode*" }),
+    )
 
-    const env = createSidecarEnv("secret")
-
+    expect(env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
+    expect(env.SOME_DESKTOP_VAR).toBe("keep-me")
+    expect(env.DEBUG).toBeUndefined()
     expect(env.ELLAMAKA_SERVER_USERNAME).toBe("ellamaka")
     expect(env.ELLAMAKA_SERVER_PASSWORD).toBe("secret")
     expect(env.OPENCODE_CLIENT).toBe("ellamaka-desktop")
@@ -105,67 +44,75 @@ describe("createSidecarEnv", () => {
     expect(env.OPENCODE_EXPERIMENTAL_FILEWATCHER).toBe("true")
   })
 
-  test("inherits the rest of process.env but drops DEBUG", () => {
-    process.env.SOME_DESKTOP_VAR = "keep-me"
-    process.env.DEBUG = "opencode*"
+  test("does not copy anything the Host Environment does not carry", () => {
+    // Regression for the pre-#263 shape: the sidecar env must come from the
+    // resolved snapshot, never from whatever happens to sit in Main's process.
+    using _scope = scopedEnv({ MAIN_ONLY_VAR: "must-not-leak" })
 
-    try {
-      const env = createSidecarEnv("secret")
+    const env = createSidecarEnv("secret", host({ PATH: "/usr/bin:/bin" }))
 
-      expect(env.SOME_DESKTOP_VAR).toBe("keep-me")
-      expect(env.DEBUG).toBeUndefined()
-    } finally {
-      delete process.env.SOME_DESKTOP_VAR
-      delete process.env.DEBUG
-    }
+    expect(env.MAIN_ONLY_VAR).toBeUndefined()
   })
 
-  test("does not mutate process.env with credentials or switches", () => {
-    const saved = snapshotKeys(OPENCODE_KEYS)
-    clearOpencodeEnv()
+  test("pins WOPAL_HOME and an absolute DSH_HOME to the resolved product root", () => {
+    const home = join("/", "tmp", "isolated-wopal")
+    const env = createSidecarEnv("secret", host({}, home))
 
-    try {
-      createSidecarEnv("secret")
+    expect(env.WOPAL_HOME).toBe(home)
+    expect(env.DSH_HOME).toBe(join(home, "dsh", "home"))
+    expect(isAbsolute(env.DSH_HOME)).toBe(true)
+  })
 
-      expect(process.env.ELLAMAKA_SERVER_USERNAME).toBeUndefined()
-      expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
-      for (const key of OPENCODE_SWITCHES) expect(process.env[key]).toBeUndefined()
-    } finally {
-      restoreKeys(saved)
-    }
+  test("keeps Desktop-owned values over shell-provided sidecar switches", () => {
+    const env = createSidecarEnv(
+      "secret",
+      host({
+        ELLAMAKA_SERVER_PASSWORD: "shell-secret",
+        ELLAMAKA_SERVER_USERNAME: "shell-user",
+        OPENCODE_CLIENT: "shell-value",
+        OPENCODE_DISABLE_EMBEDDED_WEB_UI: "false",
+      }),
+    )
+
+    expect(env.ELLAMAKA_SERVER_PASSWORD).toBe("secret")
+    expect(env.ELLAMAKA_SERVER_USERNAME).toBe("ellamaka")
+    expect(env.OPENCODE_CLIENT).toBe("ellamaka-desktop")
+    expect(env.OPENCODE_DISABLE_EMBEDDED_WEB_UI).toBe("true")
   })
 
   test("forwards user-configured experimental switches over the desktop defaults", () => {
-    // Regression for B-02: user experimental switches captured by preferAppEnv
-    // must reach the sidecar child env even though they are stripped from the
-    // main process. User intent wins over the desktop defaults.
-    resetCapturedExperimentalConfig()
-    captureSidecarExperimentalConfig({
-      OPENCODE_EXPERIMENTAL_LSP_TY: "true",
-      OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true",
-      OPENCODE_EXPERIMENTAL: "true",
-    })
+    // Regression for B-02: user experimental switches present in the Host
+    // Environment must reach the sidecar child env even though they are
+    // sidecar-only. User intent wins over the desktop defaults.
+    const env = createSidecarEnv(
+      "secret",
+      host({
+        OPENCODE_EXPERIMENTAL_LSP_TY: "true",
+        OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true",
+        OPENCODE_EXPERIMENTAL: "true",
+      }),
+    )
 
-    const env = createSidecarEnv("secret")
-
-    // User-configured flags are forwarded...
     expect(env.OPENCODE_EXPERIMENTAL_LSP_TY).toBe("true")
     expect(env.OPENCODE_EXPERIMENTAL_NATIVE_LLM).toBe("true")
     expect(env.OPENCODE_EXPERIMENTAL).toBe("true")
-    // ...and the desktop defaults still apply for the two Workbench switches.
     expect(env.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY).toBe("true")
     expect(env.OPENCODE_EXPERIMENTAL_FILEWATCHER).toBe("true")
   })
 
-  test("user-configured value overrides a desktop default switch", () => {
-    resetCapturedExperimentalConfig()
-    captureSidecarExperimentalConfig({
-      OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "false",
-    })
-
-    const env = createSidecarEnv("secret")
+  test("lets a user-configured value override a desktop default switch", () => {
+    const env = createSidecarEnv("secret", host({ OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "false" }))
 
     expect(env.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY).toBe("false")
+  })
+
+  test("does not mutate the Host Environment snapshot", () => {
+    const snapshot = host({ PATH: "/usr/bin:/bin", OPENCODE_CLIENT: "shell-value" })
+    const before = { ...snapshot.env }
+
+    createSidecarEnv("secret", snapshot)
+
+    expect(snapshot.env).toEqual(before)
   })
 })
 
@@ -175,7 +122,7 @@ describe("sidecar diagnostic routing", () => {
     const sidecar = readFileSync(join(import.meta.dir, "sidecar.ts"), "utf8")
 
     expect(server).toContain('"--no-warnings"')
-    expect(sidecar).toContain('await Log.init({\n      print: false,')
+    expect(sidecar).toContain("await Log.init({\n      print: false,")
     expect(sidecar).not.toContain("console.warn(")
     expect(sidecar).toContain("logger: dshPluginLogger(")
   })
@@ -196,191 +143,43 @@ describe("sidecar diagnostic routing", () => {
     now = 1_001
     forward.write("after-window\n")
 
-    expect(output).toEqual([
-      "first",
-      "second",
-      "sidecar output suppressed 2 records in 1000ms",
-      "after-window",
-    ])
+    expect(output).toEqual(["first", "second", "sidecar output suppressed 2 records in 1000ms", "after-window"])
   })
 })
 
-describe("preferAppEnv", () => {
-  test("updates PATH from shell env without writing OPENCODE_* switches back to process.env", () => {
-    shell = { PATH: "/opt/homebrew/bin:/usr/bin:/bin" }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH"])
-    clearOpencodeEnv()
+describe("Desktop startup wiring", () => {
+  test("resolves the Host Environment exactly once and passes it to the sidecar and IPC", () => {
+    const index = readFileSync(join(import.meta.dir, "index.ts"), "utf8")
 
-    try {
-      preferAppEnv()
-
-      expect(process.env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
-      for (const key of OPENCODE_SWITCHES) expect(process.env[key]).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
+    // One resolution per launch (AC#5): restarts reuse the captured snapshot.
+    expect(index.match(/resolveDesktopHostEnvironment\(/g)).toHaveLength(1)
+    // The second WOPAL_HOME shell probe is gone.
+    expect(index).not.toContain("probeWopalHomeFromShell")
+    // The root is bound through the owning Home API (rebases Global.Path);
+    // assigning process.env alone would leave the initialized view stale.
+    expect(index).toContain("bindDesktopProductRoot(host.home)")
+    expect(index).not.toContain("process.env.WOPAL_HOME = host.home")
+    expect(index.indexOf("bindDesktopProductRoot(host.home)")).toBeLessThan(index.indexOf("yield* startWorkbench("))
+    expect(index).toContain("createSidecarSpawner(needsMigration, opts.host)")
+    expect(index).toContain("homePath: opts.host.home")
   })
 
-  test("keeps process.env free of OPENCODE_* switches when shell env is unavailable", () => {
-    shell = null
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH"])
-    clearOpencodeEnv()
+  test("never rebuilds the sidecar env from the Main process environment", () => {
+    const server = readFileSync(join(import.meta.dir, "server.ts"), "utf8")
 
-    try {
-      preferAppEnv()
-
-      for (const key of OPENCODE_SWITCHES) expect(process.env[key]).toBeUndefined()
-    } finally {
-      restoreKeys(saved)
-    }
-  })
-
-  test("strips sidecar-only OPENCODE_* values carried by the login shell", () => {
-    // Regression for B-01: a developer shell rc may export sidecar-only
-    // OPENCODE_* variables. preferAppEnv must never write them back into the
-    // main process, even when they come through the shell env.
-    shell = {
-      PATH: "/opt/homebrew/bin:/usr/bin:/bin",
-      OPENCODE_CLIENT: "shell-value",
-      OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
-      OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
-      OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
-      ELLAMAKA_SERVER_USERNAME: "ellamaka",
-      ELLAMAKA_SERVER_PASSWORD: "shell-secret",
-    }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH"])
-    clearOpencodeEnv()
-
-    try {
-      preferAppEnv()
-
-      expect(process.env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
-      for (const key of OPENCODE_KEYS) expect(process.env[key]).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
-  })
-
-  test("removes sidecar-only OPENCODE_* keys already present in process.env", () => {
-    // Even if the main process was started with sidecar-only keys injected by
-    // an outer environment (e.g. dev.sh), preferAppEnv must clear them.
-    shell = { PATH: "/opt/homebrew/bin:/usr/bin:/bin" }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH"])
-    clearOpencodeEnv()
-    process.env.OPENCODE_CLIENT = "pre-existing"
-    process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
-    process.env.ELLAMAKA_SERVER_PASSWORD = "pre-existing"
-
-    try {
-      preferAppEnv()
-
-      for (const key of OPENCODE_KEYS) expect(process.env[key]).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
-  })
-
-  test("strips an unlisted OPENCODE_EXPERIMENTAL_* flag carried by the login shell", () => {
-    // Regression for B-01: the engine consumes many OPENCODE_EXPERIMENTAL_*
-    // flags beyond the two the desktop explicitly injects. Any of them leaking
-    // from the login shell into the main process env must be stripped by prefix.
-    shell = {
-      PATH: "/opt/homebrew/bin:/usr/bin:/bin",
-      OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true",
-      OPENCODE_EXPERIMENTAL_PARALLEL: "true",
-    }
-    const saved = snapshotKeys([
-      ...OPENCODE_KEYS,
-      "PATH",
-      "OPENCODE_EXPERIMENTAL_NATIVE_LLM",
-      "OPENCODE_EXPERIMENTAL_PARALLEL",
-    ])
-    clearOpencodeEnv()
-
-    try {
-      preferAppEnv()
-
-      expect(process.env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
-      expect(process.env.OPENCODE_EXPERIMENTAL_NATIVE_LLM).toBeUndefined()
-      expect(process.env.OPENCODE_EXPERIMENTAL_PARALLEL).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
-  })
-
-  test("removes a pre-existing unlisted OPENCODE_EXPERIMENTAL_* flag from process.env", () => {
-    shell = { PATH: "/opt/homebrew/bin:/usr/bin:/bin" }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH", "OPENCODE_EXPERIMENTAL_LSP_TY"])
-    clearOpencodeEnv()
-    process.env.OPENCODE_EXPERIMENTAL_LSP_TY = "true"
-
-    try {
-      preferAppEnv()
-
-      expect(process.env.OPENCODE_EXPERIMENTAL_LSP_TY).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
-  })
-
-  test("strips the root OPENCODE_EXPERIMENTAL switch carried by the login shell", () => {
-    // Regression for B-01: the engine also consumes the root toggle
-    // OPENCODE_EXPERIMENTAL (no trailing underscore). It must not leak from the
-    // login shell into the main process env.
-    shell = {
-      PATH: "/opt/homebrew/bin:/usr/bin:/bin",
-      OPENCODE_EXPERIMENTAL: "true",
-    }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH", "OPENCODE_EXPERIMENTAL"])
-    clearOpencodeEnv()
-
-    try {
-      preferAppEnv()
-
-      expect(process.env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
-      expect(process.env.OPENCODE_EXPERIMENTAL).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
-  })
-
-  test("removes a pre-existing root OPENCODE_EXPERIMENTAL switch from process.env", () => {
-    shell = { PATH: "/opt/homebrew/bin:/usr/bin:/bin" }
-    const saved = snapshotKeys([...OPENCODE_KEYS, "PATH", "OPENCODE_EXPERIMENTAL"])
-    clearOpencodeEnv()
-    process.env.OPENCODE_EXPERIMENTAL = "true"
-
-    try {
-      preferAppEnv()
-
-      expect(process.env.OPENCODE_EXPERIMENTAL).toBeUndefined()
-    } finally {
-      shell = null
-      restoreKeys(saved)
-    }
+    expect(server).not.toContain("preferAppEnv")
+    expect(server).not.toContain("process.env.WOPAL_HOME")
   })
 })
 
 describe("sidecar credentials cleanup", () => {
   test("clearSidecarCredentials deletes both credential keys from process.env", () => {
-    process.env.ELLAMAKA_SERVER_PASSWORD = "secret"
-    process.env.ELLAMAKA_SERVER_USERNAME = "ellamaka"
+    using _scope = scopedEnv({ ELLAMAKA_SERVER_PASSWORD: "secret", ELLAMAKA_SERVER_USERNAME: "ellamaka" })
 
-    try {
-      clearSidecarCredentials()
+    clearSidecarCredentials()
 
-      expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
-      expect(process.env.ELLAMAKA_SERVER_USERNAME).toBeUndefined()
-    } finally {
-      delete process.env.ELLAMAKA_SERVER_PASSWORD
-      delete process.env.ELLAMAKA_SERVER_USERNAME
-    }
+    expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
+    expect(process.env.ELLAMAKA_SERVER_USERNAME).toBeUndefined()
   })
 
   test("stripSidecarOpencodeEnv removes every sidecar-only OPENCODE key", () => {
@@ -435,8 +234,7 @@ describe("sidecar credentials cleanup", () => {
     // Regression for W-01: the mock listener must stay pending until we release
     // it, so a future buggy change that clears credentials before awaiting the
     // listen promise would be caught.
-    process.env.ELLAMAKA_SERVER_PASSWORD = "secret"
-    process.env.ELLAMAKA_SERVER_USERNAME = "ellamaka"
+    using _scope = scopedEnv({ ELLAMAKA_SERVER_PASSWORD: "secret", ELLAMAKA_SERVER_USERNAME: "ellamaka" })
 
     let releaseListen!: () => void
     const pending = new Promise<void>((resolve) => {
@@ -465,13 +263,147 @@ describe("sidecar credentials cleanup", () => {
   })
 
   test("listenThenClearCredentials clears even when listen rejects", async () => {
-    process.env.ELLAMAKA_SERVER_PASSWORD = "secret"
+    using _scope = scopedEnv({ ELLAMAKA_SERVER_PASSWORD: "secret" })
 
+    await expect(listenThenClearCredentials(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom")
+    expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
+  })
+})
+
+type ForkCall = {
+  modulePath: string
+  args: string[]
+  options: { env: Record<string, string | undefined>; cwd: string; serviceName: string }
+}
+
+type StartMessage = {
+  type: string
+  hostname?: string
+  port?: number
+  wopalHome?: string
+  pluginLogDir?: string
+  runtimeLogFile?: string
+}
+
+function isCommand(value: unknown, type: string): value is StartMessage {
+  return typeof value === "object" && value !== null && "type" in value && value.type === type
+}
+
+/**
+ * Minimal Electron utility process double. `postMessage({type:"start"})`
+ * answers with `ready` on the next microtask (the sidecar protocol) and
+ * `{type:"stop"}` exits, so the supervisor's stop path settles immediately.
+ */
+function createFakeFork() {
+  const calls: ForkCall[] = []
+  const startMessages: StartMessage[] = []
+
+  const fork: SidecarFork = (modulePath, args, options) => {
+    calls.push({
+      modulePath,
+      args: args ?? [],
+      options: { env: options?.env ?? {}, cwd: options?.cwd ?? "", serviceName: options?.serviceName ?? "" },
+    })
+    const process = new EventEmitter()
+    const child = Object.assign(process, {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+      kill: () => {},
+      postMessage: (message: unknown) => {
+        if (isCommand(message, "start")) {
+          startMessages.push(message)
+          queueMicrotask(() => process.emit("message", { type: "ready" }))
+        }
+        if (isCommand(message, "stop")) queueMicrotask(() => process.emit("exit", 0))
+      },
+    })
+    // UtilityProcess cannot be constructed outside Electron; the fake implements
+    // exactly the members the spawn path uses.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+    return child as ReturnType<SidecarFork>
+  }
+
+  return { fork, calls, startMessages }
+}
+
+describe("spawnLocalServer fork contract", () => {
+  test("GUI-minimal inherited env becomes the sidecar env, start message and restart snapshot", async () => {
+    // The Electron mock does not implement EventEmitter.off, which the spawn
+    // path uses once the child exits; supply it instead of skipping the exit.
+    if (!Reflect.has(app, "off")) Reflect.set(app, "off", () => {})
+
+    const dir = mkdtempSync(join(tmpdir(), "sidecar-spawn-"))
     try {
-      await expect(listenThenClearCredentials(() => Promise.reject(new Error("boom")))).rejects.toThrow("boom")
-      expect(process.env.ELLAMAKA_SERVER_PASSWORD).toBeUndefined()
+      const root = join(dir, "inherited-root")
+      const failShell = join(dir, "failing-shell")
+      const okShell = join(dir, "dumping-shell")
+      writeFileSync(failShell, "#!/bin/sh\nexit 1\n")
+      writeFileSync(
+        okShell,
+        "#!/bin/sh\nprintf '\\000__WOPAL_ENV_START__\\000PATH=/opt/homebrew/bin:/usr/bin:/bin\\000CUSTOM_A=from-shell\\000SECRET_SHELL_ONLY=not-imported\\000__WOPAL_ENV_END__\\000'\n",
+      )
+      chmodSync(failShell, 0o755)
+      chmodSync(okShell, 0o755)
+      mkdirSync(join(root, "config"), { recursive: true })
+      writeFileSync(
+        join(root, "config", "settings.jsonc"),
+        JSON.stringify({ wopal: { execution: { shellEnv: { mode: "allowlist", list: ["PATH", "CUSTOM_*"] } } } }),
+      )
+
+      let probes = 0
+      const host = await resolveDesktopHostEnvironment({
+        inherited: { PATH: "/usr/bin:/bin", WOPAL_HOME: root },
+        candidates: [failShell, okShell],
+        homeDir: dir,
+        log: { warn: () => {} },
+        onSpawn: () => {
+          probes++
+        },
+      })
+
+      // First candidate fails, second supplies the Shell Environment, and the
+      // allowlist keeps PATH/CUSTOM_* while dropping the unlisted variable.
+      expect(probes).toBe(2)
+      expect(host.home).toBe(root)
+      expect(host.env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
+      expect(host.env.CUSTOM_A).toBe("from-shell")
+      expect(host.env.SECRET_SHELL_ONLY).toBeUndefined()
+
+      const fake = createFakeFork()
+      const spawner = createSidecarSpawner(false, host, fake.fork)
+
+      const first = await spawner("127.0.0.1", 1, "pw", {})
+      // The fake never becomes HTTP-healthy; settle the background wait on stop.
+      void first.health.wait.catch(() => {})
+      await first.listener.stop()
+
+      const second = await spawner("127.0.0.1", 1, "pw", {})
+      void second.health.wait.catch(() => {})
+      await second.listener.stop()
+
+      // The real spawn path forked twice and never re-resolved the environment.
+      expect(fake.calls).toHaveLength(2)
+      expect(probes).toBe(2)
+
+      for (const call of fake.calls) {
+        expect(call.modulePath.endsWith("sidecar.js")).toBe(true)
+        expect(call.options.env.PATH).toBe("/opt/homebrew/bin:/usr/bin:/bin")
+        expect(call.options.env.WOPAL_HOME).toBe(root)
+        expect(call.options.env.DSH_HOME).toBe(join(root, "dsh", "home"))
+        expect(isAbsolute(call.options.env.DSH_HOME ?? "")).toBe(true)
+      }
+      // Restart reuses the same snapshot byte for byte.
+      expect(fake.calls[1].options.env).toEqual(fake.calls[0].options.env)
+
+      expect(fake.startMessages).toHaveLength(2)
+      for (const message of fake.startMessages) {
+        expect(message.type).toBe("start")
+        expect(message.wopalHome).toBe(root)
+        expect(message.pluginLogDir).toBe(join(root, "logs"))
+        expect(message.runtimeLogFile).toBe(join(root, "logs", "dsh-runtime.log"))
+      }
     } finally {
-      delete process.env.ELLAMAKA_SERVER_PASSWORD
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

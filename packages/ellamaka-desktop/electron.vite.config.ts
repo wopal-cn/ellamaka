@@ -14,6 +14,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const channel = resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")
 
 const nodePtyPkg = `@lydell/node-pty-${process.platform}-${process.arch}`
+
+// `@wopal/ellamaka-core` exports TypeScript sources (`"./*": "./src/*.ts"`). A
+// packaged Electron main process cannot rely on runtime type stripping and
+// electron-builder must not have to ship the workspace package, so the main
+// bundle inlines it. Every other dependency keeps the default externalization.
+const BUNDLED_SOURCE_DEPS = ["@wopal/ellamaka-core"] as const
 const dshProxyTarget =
   process.env.ELLAMAKA_DSH_PROXY_TARGET ?? `http://127.0.0.1:${process.env.ELLAMAKA_PORT ?? "4097"}`
 
@@ -51,7 +57,7 @@ export default defineConfig({
         // lazily at runtime with a graceful fallback, so keep it external.
         external: ["kerberos"],
       },
-      externalizeDeps: { include: [nodePtyPkg] },
+      externalizeDeps: { include: [nodePtyPkg], exclude: [...BUNDLED_SOURCE_DEPS] },
     },
     plugins: [
       {

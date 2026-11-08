@@ -3,14 +3,13 @@ import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
 import { WSL_ENABLED_KEY } from "./constants"
-import { getUserShell, loadShellEnv, mergeShellEnv, resolveShellPath } from "./shell-env"
+import { resolveDesktopProductPaths } from "./onboarding-gate"
 import { getStore } from "./store"
 import type { SqliteMigrationProgress } from "../preload/types"
 import type { SidecarSpawnFactory } from "./sidecar-supervisor"
 import {
   captureSidecarExperimentalConfig,
   getCapturedSidecarExperimentalConfig,
-  isSidecarOnlyOpencodeKey,
   stripSidecarOpencodeEnv,
 } from "./sidecar-credentials"
 
@@ -45,8 +44,12 @@ const SIDECAR_STOP_TIMEOUT = 6_000
 const SIDECAR_OUTPUT_WINDOW_MS = 10_000
 const SIDECAR_OUTPUT_MAX_PER_WINDOW = 20
 
+/** Injection seam for the Electron utility-process fork (tests drive the real spawn path). */
+export type SidecarFork = typeof utilityProcess.fork
+
 type SpawnLocalServerOptions = {
   needsMigration: boolean
+  fork?: SidecarFork
   onSqliteProgress?: (progress: SqliteMigrationProgress) => void
   onDshLegacyAdoptionRequired?: () => void
   onStdout?: (message: string) => void
@@ -122,41 +125,30 @@ export function setWslConfig(config: WslConfig) {
   getStore().set(WSL_ENABLED_KEY, config.enabled)
 }
 
-export function preferAppEnv() {
-  const appEnv = Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  )
-  const shell = process.platform === "win32" ? null : getUserShell()
-  const shellEnv = shell ? loadShellEnv(shell) : null
-  const merged = mergeShellEnv(shellEnv, appEnv)
-  const resolvedPath = resolveShellPath(shellEnv, appEnv.PATH)
-  if (resolvedPath !== undefined) merged.PATH = resolvedPath
-  // The login shell may carry sidecar-only OPENCODE_* values (e.g. a developer
-  // who exported them in their shell rc). Those belong to the sidecar process
-  // (delivered via createSidecarEnv), never to the Electron main process, so
-  // capture the user-configured experimental switches to forward to the sidecar
-  // (D-03: move into createSidecarEnv, never discard), then strip them from the
-  // merged env before writing back — and drop any that are already present in
-  // process.env (predicate-matched, so the root switch and any
-  // OPENCODE_EXPERIMENTAL_* engine flag are covered).
-  captureSidecarExperimentalConfig(merged)
-  const clean = stripSidecarOpencodeEnv(merged)
-  for (const key of Object.keys(process.env)) {
-    if (isSidecarOnlyOpencodeKey(key)) delete process.env[key]
-  }
-  Object.assign(process.env, clean)
+/**
+ * One Host Environment snapshot for this Desktop run: the effective product
+ * root plus the environment the sidecar is created with. Production code never
+ * rebuilds this from `process.env`; the startup path resolves it once through
+ * `resolveDesktopHostEnvironment()` and hands the same value to every consumer.
+ */
+export type DesktopHostEnvironment = {
+  home: string
+  env: Record<string, string>
 }
 
 export async function spawnLocalServer(
   hostname: string,
   port: number,
   password: string,
+  host: DesktopHostEnvironment,
   options: SpawnLocalServerOptions,
 ) {
   const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
-  const child = utilityProcess.fork(sidecar, [], {
+  const paths = resolveDesktopProductPaths(host.home)
+  const fork: SidecarFork = options.fork ?? ((...args) => utilityProcess.fork(...args))
+  const child = fork(sidecar, [], {
     cwd: process.cwd(),
-    env: createSidecarEnv(password),
+    env: createSidecarEnv(password, host),
     serviceName: SIDECAR_SERVICE_NAME,
     stdio: "pipe",
     // Node otherwise prints process warnings directly to stderr even when the
@@ -250,14 +242,13 @@ export async function spawnLocalServer(
       port,
       password,
       needsMigration: options.needsMigration,
-      // Pass the wopal home and the DSH log paths explicitly so the sidecar
-      // drives the unified DSH Runtime Manager from the same WOPAL_HOME the
-      // Electron main process resolved (probe + shell-merge in index.ts), not
-      // from a possibly-stale child env. The plugin-log directory is enough;
-      // each profile derives its own `dsh-plugins-<profile>.log` inside it.
-      wopalHome: process.env.WOPAL_HOME,
-      pluginLogDir: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs") : undefined,
-      runtimeLogFile: process.env.WOPAL_HOME ? join(process.env.WOPAL_HOME, "logs", "dsh-runtime.log") : undefined,
+      // Drive the unified DSH Runtime Manager from the same product root this
+      // run resolved, never from a possibly-stale child env. The plugin-log
+      // directory is enough; each profile derives its own
+      // `dsh-plugins-<profile>.log` inside it.
+      wopalHome: paths.home,
+      pluginLogDir: paths.dshLogDir,
+      runtimeLogFile: paths.dshRuntimeLogFile,
     })
   }).catch((error) => {
     if (!exited) child.kill()
@@ -344,17 +335,19 @@ export async function checkHealth(url: string, password?: string | null): Promis
  * process.env — so the sidecar child env carries exactly what the engine needs
  * and no other process (agent terminal, etc.) inherits server credentials.
  */
-export function createSidecarEnv(password: string): Record<string, string> {
-  const env = Object.fromEntries(
-    Object.entries(process.env).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
-  )
+export function createSidecarEnv(password: string, host: DesktopHostEnvironment): Record<string, string> {
+  const env = { ...host.env }
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
-  // Desktop defaults are applied first, then the user-configured experimental
-  // switches captured by preferAppEnv are overlaid so explicit user intent wins
-  // (e.g. OPENCODE_EXPERIMENTAL_LSP_TY set in the shell reaches the sidecar).
+  // The login shell may carry sidecar-only OPENCODE_* values (e.g. a developer
+  // who exported them in their shell rc). Those belong to the sidecar process,
+  // never to the Electron main process: capture the user-configured switches
+  // from the Host Environment so they can be forwarded to the sidecar instead
+  // of silently dropped, then strip them from the sidecar base env before the
+  // Desktop-owned values are applied.
+  captureSidecarExperimentalConfig(env)
   return Object.assign(
-    env,
+    stripSidecarOpencodeEnv(env),
     {
       ELLAMAKA_SERVER_USERNAME: "ellamaka",
       ELLAMAKA_SERVER_PASSWORD: password,
@@ -362,13 +355,18 @@ export function createSidecarEnv(password: string): Record<string, string> {
       OPENCODE_DISABLE_EMBEDDED_WEB_UI: "true",
       OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
       OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
+      // The product root is an explicit Desktop startup parameter, independent
+      // of the shellEnv mode/list: the sidecar always runs against the root this
+      // run resolved.
+      WOPAL_HOME: host.home,
       // Official rc.1 packages resolve their harness home through $DSH_HOME
       // directly (e.g. dsh-agent-presets' user preset root), bypassing every
       // ctx/config seam the integration owns. Point it at the official-layout
       // home so those resolutions land inside $WOPAL_HOME/dsh/home (A1 layout
       // alignment) and never touch ~/.dsh.
-      DSH_HOME: join(process.env.WOPAL_HOME ?? "", "dsh", "home"),
+      DSH_HOME: join(host.home, "dsh", "home"),
     },
+    // User-configured experimental switches win over the desktop defaults.
     getCapturedSidecarExperimentalConfig(),
   )
 }
@@ -396,10 +394,15 @@ function defer<T>() {
  * Creates a SidecarSpawnFactory that wraps spawnLocalServer.
  * This is the injectable factory used by SidecarSupervisor.
  */
-export function createSidecarSpawner(needsMigration: boolean): SidecarSpawnFactory {
+export function createSidecarSpawner(
+  needsMigration: boolean,
+  host: DesktopHostEnvironment,
+  fork?: SidecarFork,
+): SidecarSpawnFactory {
   return (hostname, port, password, options) =>
-    spawnLocalServer(hostname, port, password, {
+    spawnLocalServer(hostname, port, password, host, {
       needsMigration,
+      fork,
       onSqliteProgress: options.onSqliteProgress,
       onDshLegacyAdoptionRequired: options.onDshLegacyAdoptionRequired,
       onStdout: options.onStdout,

@@ -32,7 +32,7 @@ import {
 } from "./logging"
 import { parseMarkdown } from "./markdown"
 import { createMenu } from "./menu"
-import { createSidecarSpawner, preferAppEnv } from "./server"
+import { createSidecarSpawner, type DesktopHostEnvironment } from "./server"
 import { SidecarSupervisor } from "./sidecar-supervisor"
 import {
   createLoadingWindow,
@@ -49,7 +49,8 @@ import { needsJsonMigration } from "./migration-check"
 import { enableQuitGuard, interceptWindowClose } from "./quit-guard"
 import { getReleaseInfo } from "./release-info"
 import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
-import { probeWopalHomeFromShell } from "./onboarding-gate"
+import { bindDesktopProductRoot } from "./onboarding-gate"
+import { resolveDesktopHostEnvironment } from "./shell-env"
 import { isVmwareVirtualGpu } from "./gpu-detect"
 import { recoverMainWindow } from "./window-show-guard"
 import { resolveAppId, resolveUserDataPath } from "./user-data"
@@ -100,7 +101,8 @@ const pendingDeepLinks: string[] = []
 function useEnvProxy() {
   try {
     // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
-    ;(http as any).setGlobalProxyFromEnv()
+    const withProxy = http as typeof http & { setGlobalProxyFromEnv?: () => void }
+    withProxy.setGlobalProxyFromEnv?.()
   } catch (error) {
     logger.warn("failed to load proxy environment", error)
   }
@@ -205,12 +207,15 @@ function attachWorkbenchChrome(win: BrowserWindow) {
 interface StartWorkbenchOpts {
   // Deferred resolved by the loading window's ready-to-show. Only used on
   // fresh boot when a sqlite migration overlay is shown.
-  loadingComplete?: Deferred.Deferred<void, never>
+  loadingComplete?: Deferred.Deferred<void>
+  // The one Host Environment snapshot resolved for this launch. Every consumer
+  // (sidecar env, DSH paths, IPC state root, restarts) reuses it unchanged.
+  host: DesktopHostEnvironment
 }
 
 // Bring up the workbench: allocate port, spawn SidecarSupervisor, register
 // IPC handlers, fork sidecar startup, await readiness, then show the window.
-const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
+const startWorkbench = (opts: StartWorkbenchOpts) =>
   Effect.gen(function* () {
     migrate()
     app.setAsDefaultProtocolClient("ellamaka")
@@ -225,7 +230,7 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
       ),
     )
 
-    const needsMigration = needsJsonMigration()
+    const needsMigration = needsJsonMigration(process.env, opts.host.home)
 
     const port = yield* allocatePort
     const hostname = "127.0.0.1"
@@ -233,7 +238,7 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
     const password = randomUUID()
 
     supervisor = new SidecarSupervisor({
-      spawn: createSidecarSpawner(needsMigration),
+      spawn: createSidecarSpawner(needsMigration, opts.host),
       setTimeout,
       clearTimeout,
       hostname,
@@ -257,7 +262,7 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
     // handler for the same channel.
     unregisterIpcHandlers()
     registerIpcHandlers({
-      homePath: process.env.WOPAL_HOME,
+      homePath: opts.host.home,
       killSidecar: () => killSidecar(),
       awaitInitialization: Effect.fnUntraced(
         function* (sendStep) {
@@ -288,7 +293,10 @@ const startWorkbench = (opts: StartWorkbenchOpts = {}) =>
       getDisplayBackend: async () => null,
       setDisplayBackend: async () => undefined,
       parseMarkdown: async (markdown) => parseMarkdown(markdown),
-      checkAppExists: (appName) => checkAppExists(appName),
+      // Native app discovery runs in Main, which keeps the GUI-minimal inherited
+      // PATH. Pass the resolved Host Environment so a login-shell-only executable
+      // is still found without writing the shell env back into process.env.
+      checkAppExists: (appName) => checkAppExists(appName, opts.host.env),
       loadingWindowComplete: () => {
         if (opts.loadingComplete) Deferred.doneUnsafe(opts.loadingComplete, Effect.void)
       },
@@ -396,8 +404,6 @@ const main = Effect.gen(function* () {
     return
   }
 
-  preferAppEnv()
-
   app.on("second-instance", (_event: Event, argv: string[]) => {
     const urls = argv.filter((arg: string) => arg.startsWith("ellamaka://"))
     if (urls.length) {
@@ -452,24 +458,22 @@ const main = Effect.gen(function* () {
 
   yield* Effect.promise(() => app.whenReady())
 
-  // GUI cold-start does not inherit shell rc variables, so process.env.WOPAL_HOME
-  // is empty when launched from Finder/Dock. install.sh wrote WOPAL_HOME into
-  // the user's shell rc at install time; probe the login shell to recover it
-  // so the sidecar and the terminal `wopal` command resolve the same home.
-  // Env var (dev mode, explicit override) wins; probe only fills the gap when
-  // env is absent.
-  if (!process.env.WOPAL_HOME) {
-    const probed = probeWopalHomeFromShell()
-    if (probed) {
-      process.env.WOPAL_HOME = probed
-      logger.log("probed WOPAL_HOME from shell env", { home: probed })
-    }
-  }
+  // Resolve the Host Environment exactly once for this run: POSIX login shell
+  // resolution, the global `wopal.execution.shellEnv` policy, and the effective
+  // product root all come from this one snapshot. It is passed explicitly to
+  // the sidecar and IPC; the Main process never re-probes for WOPAL_HOME.
+  const host = yield* Effect.promise(() => resolveDesktopHostEnvironment())
+  // Bind the resolved root into the initialized product path view before any
+  // consumer reads it (Global.Path is computed once at module load, so setting
+  // the env var alone would leave the view stale). Only the product root is
+  // bound; the full snapshot is never written back, and the sidecar receives it
+  // explicitly through createSidecarEnv.
+  bindDesktopProductRoot(host.home)
 
   // Single startup path: the sidecar always starts, then the main window
   // renders the embedded app, which routes to onboarding or workbench based
   // on its own state.
-  yield* startWorkbench({ loadingComplete })
+  yield* startWorkbench({ loadingComplete, host })
 })
 
 Effect.runFork(main)

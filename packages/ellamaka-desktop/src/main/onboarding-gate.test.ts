@@ -1,31 +1,70 @@
 import { describe, expect, test } from "bun:test"
-import { probeWopalHomeFromShell } from "./onboarding-gate"
+import { isAbsolute, join } from "node:path"
+import { Path, bindWopalHome } from "@wopal/ellamaka-core/global"
+import { scopedEnv } from "../../test/fixture/process-env"
+import { bindDesktopProductRoot, resolveDesktopProductPaths } from "./onboarding-gate"
 
-describe("probeWopalHomeFromShell", () => {
-  test("returns a non-empty string when shell env has WOPAL_HOME, or null when absent", () => {
-    // The probe spawns the real login shell. We can't deterministically set
-    // WOPAL_HOME in the user's real rc for a test, so we only assert the
-    // contract: either a trimmed non-empty string (probe found it) or null
-    // (probe failed or var absent). Never undefined, never untrimmed.
-    const result = probeWopalHomeFromShell()
-    if (result !== null) {
-      expect(typeof result).toBe("string")
-      expect(result.length).toBeGreaterThan(0)
-      expect(result).toBe(result.trim())
-    } else {
-      expect(result).toBeNull()
+describe("resolveDesktopProductPaths", () => {
+  test("derives every Desktop product path from the resolved root", () => {
+    const home = join("/", "opt", "wopal-home")
+    const paths = resolveDesktopProductPaths(home)
+
+    expect(paths.home).toBe(home)
+    expect(paths.dshHome).toBe(join(home, "dsh", "home"))
+    expect(paths.dshLogDir).toBe(join(home, "logs"))
+    expect(paths.dshRuntimeLogFile).toBe(join(home, "logs", "dsh-runtime.log"))
+    expect(isAbsolute(paths.dshHome)).toBe(true)
+    expect(isAbsolute(paths.dshLogDir)).toBe(true)
+  })
+
+  test("keeps a non-default root verbatim instead of falling back to ~/.wopal", () => {
+    const home = join("/", "tmp", "isolated-wopal")
+    expect(resolveDesktopProductPaths(home).home).toBe(home)
+  })
+})
+
+describe("bindDesktopProductRoot", () => {
+  test("rebases the already-initialized Global.Path view onto the resolved root", () => {
+    // Global.Path is computed once at module load, so the Desktop startup must
+    // rebind it; assigning process.env.WOPAL_HOME alone leaves this view stale.
+    const previous = Path.wopalHome
+    const home = join("/", "tmp", "wopal-bound-root")
+    using _env = scopedEnv({ WOPAL_HOME: undefined })
+
+    try {
+      const paths = bindDesktopProductRoot(home)
+
+      expect(process.env.WOPAL_HOME).toBe(home)
+      expect(Path.wopalHome).toBe(home)
+      expect(Path.data).toBe(join(home, "ellamaka", "data"))
+      expect(Path.state).toBe(join(home, "ellamaka", "state"))
+      expect(Path.log).toBe(join(home, "logs"))
+      expect(Path.bin).toBe(join(home, "ellamaka", "cache", "bin"))
+      expect(Path.repos).toBe(join(home, "ellamaka", "data", "repos"))
+      expect(paths).toEqual(resolveDesktopProductPaths(home))
+    } finally {
+      // The binding is process-global; restore it so later test files see the
+      // value their own module load produced.
+      bindWopalHome(previous)
     }
   })
 
-  test("does not throw when shell env probe fails", () => {
-    // Setting SHELL to a nonexistent binary forces loadShellEnv to fail;
-    // probeWopalHomeFromShell must swallow the error and return null.
-    const origShell = process.env.SHELL
-    process.env.SHELL = "/nonexistent/shell-for-test"
+  test("moves the view off a previously bound root", () => {
+    const previous = Path.wopalHome
+    const first = join("/", "tmp", "wopal-root-a")
+    const second = join("/", "tmp", "wopal-root-b")
+    using _env = scopedEnv({ WOPAL_HOME: first })
+
     try {
-      expect(probeWopalHomeFromShell()).toBeNull()
+      bindDesktopProductRoot(first)
+      expect(Path.wopalHome).toBe(first)
+
+      bindDesktopProductRoot(second)
+      expect(Path.wopalHome).toBe(second)
+      expect(Path.log).toBe(join(second, "logs"))
+      expect(process.env.WOPAL_HOME).toBe(second)
     } finally {
-      process.env.SHELL = origShell
+      bindWopalHome(previous)
     }
   })
 })

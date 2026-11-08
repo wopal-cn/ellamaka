@@ -1,5 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { homedir, tmpdir } from "node:os"
 import { isAbsolute, join, relative, sep } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -12,6 +21,7 @@ import { bootDshWeb, mountDshWeb, mountDshTools } from "../src/dsh-web"
 import { createDshRuntimeApi, createPackageDshRuntimeApi, type DshRuntimeApi } from "../src/runtime/loader"
 import { appendBundle, readProfileManifest, withProfileManifestWrite } from "../src/plugins/profile-manifest"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
+import { scopedEnv } from "./fixture/process-env"
 
 /** Read the tool names registered on a mounted container (typed guard, no `any`). */
 function readToolNames(ctx: Context): string[] {
@@ -20,6 +30,62 @@ function readToolNames(ctx: Context): string[] {
     throw new Error("mounted container exposes no tools.schemas()")
   }
   return tools.schemas().map((schema: { name: string }) => schema.name)
+}
+
+/**
+ * The service shapes this suite consumes, keyed by the cordis service name.
+ * cordis types ctx.get() as any; declaring the shapes here keeps the contract in
+ * one place and lets each read stay assertion-free (same intent as the checked
+ * read in readToolNames above).
+ */
+type MountedServices = {
+  tools: {
+    schemas(): { name: string; parameters: { properties: Record<string, unknown> } }[]
+    execute(exec: unknown): Promise<{
+      isError: boolean
+      content?: { type: string; text?: string }[]
+      error?: { info?: { code?: string } }
+    }>
+  }
+  sessions: { list(): unknown[] }
+  fs: { sandboxMode?: string }
+  shell: { sandboxMode?: string }
+  approval: { request(req: unknown): Promise<string> }
+  subprocess: OfficialSubprocess
+  desktopProfiles: { current: { name: string; dir: string } }
+  desktopPnpm: { runPlugin?: unknown }
+  ptcRuntime: { language?: string; isolation?: string }
+  agentPresets: { list(): Promise<{ id: string; broken?: unknown }[]> }
+}
+
+/**
+ * Read one mounted service by name from the keyed shape map above.
+ */
+function service<K extends keyof MountedServices>(ctx: Context, name: K): MountedServices[K] | undefined {
+  const value: MountedServices[K] | undefined = ctx.get(name)
+  return value
+}
+
+/**
+ * The official subprocess face the mounted tools profile publishes, narrowed
+ * to the parts this suite observes. `@deepseek-ai/dsh-subprocess-local` is the
+ * real provider behind it; nothing here is mocked.
+ */
+type OfficialSubprocess = {
+  resolveExecutable(command: string, env?: Readonly<Record<string, string>>): Promise<string>
+  spawn(spec: {
+    argv: readonly string[]
+    cwd: string
+    stdio: { stdin: "ignore"; stdout: { maxBytes: number }; stderr: { maxBytes: number } }
+    graceMs: number
+    env?: Record<string, string>
+  }): {
+    done: Promise<{ exitCode: number | null; signal: string | null }>
+    collected: {
+      stdout?: { readFrom(offset: number): { text: string } }
+      stderr?: { readFrom(offset: number): { text: string } }
+    }
+  }
 }
 
 /** Attach a VirtualWebServer to a raw server and return its base URL. */
@@ -49,7 +115,9 @@ async function loginCookie(baseUrl: string, authenticatedPath: string): Promise<
   const setCookie = res.headers.get("set-cookie")
   expect(setCookie).toBeDefined()
   expect(setCookie).toContain("HttpOnly")
-  return setCookie!.split(";")[0]!
+  // Narrow for the type checker: an absent cookie already failed above.
+  if (setCookie === null) throw new Error("browser auth did not set a cookie")
+  return setCookie.split(";")[0]
 }
 
 /**
@@ -61,15 +129,13 @@ function runInIsolatedVm(script: string, calls: { fetch: unknown[]; ws: unknown[
       calls.fetch.push(args)
       return Promise.resolve({ ok: true })
     },
-    WebSocket: class {
-      constructor(...args: unknown[]) {
-        calls.ws.push(args)
-      }
+    // Constructible stand-ins: `new` works on a plain function, and these only
+    // record the arguments the official adapter passes.
+    WebSocket: function (...args: unknown[]) {
+      calls.ws.push(args)
     },
-    EventSource: class {
-      constructor(...args: unknown[]) {
-        calls.es.push(args)
-      }
+    EventSource: function (...args: unknown[]) {
+      calls.es.push(args)
     },
     console,
   }
@@ -206,11 +272,11 @@ describe("dsh web engine", () => {
       // container before the Loader mounts plugin rows, so dshmarket's
       // `apply()` probe sees desktopProfiles and takes its Desktop path
       // (which calls desktopPnpm.runPlugin instead of spawning the CLI).
-      const desktopProfiles = ctx.get("desktopProfiles") as { current: { name: string; dir: string } } | undefined
+      const desktopProfiles = service(ctx, "desktopProfiles")
       expect(desktopProfiles).toBeDefined()
       expect(desktopProfiles!.current.name).toBe("web")
       expect(desktopProfiles!.current.dir).toBe(join(home, "home", "profiles", "web"))
-      const desktopPnpm = ctx.get("desktopPnpm") as { runPlugin?: unknown } | undefined
+      const desktopPnpm = service(ctx, "desktopPnpm")
       expect(desktopPnpm).toBeDefined()
       expect(typeof desktopPnpm!.runPlugin).toBe("function")
 
@@ -239,11 +305,11 @@ describe("dsh web engine", () => {
     const host = await mountDshWeb(ctx, { home, port: 0, installAnchor: anchor, runtime })
 
     try {
-      const ptcRuntime = ctx.get("ptcRuntime") as { language?: string; isolation?: string } | undefined
+      const ptcRuntime = service(ctx, "ptcRuntime")
       expect(ptcRuntime).toBeDefined()
       expect(ptcRuntime?.language).toBe("typescript")
       expect(ptcRuntime?.isolation).toBe("process")
-      const presets = await (ctx.get("agentPresets") as { list(): Promise<{ id: string; broken?: unknown }[]> }).list()
+      const presets = await service(ctx, "agentPresets")!.list()
       expect(presets.find((preset) => preset.id === "ptc")?.broken).toBeUndefined()
     } finally {
       await host.dispose()
@@ -428,8 +494,9 @@ describe("dsh web engine", () => {
     prepareDshProfiles(home)
     const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
 
-    const { server, baseUrl } = await attachAndListen(host.webServer)
-    const port = (server.address() as { port: number }).port
+    const { server } = await attachAndListen(host.webServer)
+    const address = server.address()
+    const port = typeof address === "object" && address !== null ? address.port : 0
     let socketClosed = false
     try {
       // rc.1 upgrade surface: the official mux lives at /api/remote.mux behind
@@ -753,7 +820,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const tools = ctx.get("tools") as { schemas(): { name: string }[] }
+      const tools = service(ctx, "tools")!
       const names = tools.schemas().map((t) => t.name)
       expect(names).toContain("grep")
       expect(names).toContain("glob")
@@ -775,9 +842,7 @@ describe("dsh tools profile", () => {
         writeFileSync(join(ws, `f${i}.txt`), `needle line ${i}\n`)
       }
 
-      const tools = ctx.get("tools") as {
-        execute(exec: unknown): Promise<{ isError: boolean; content?: { type: string; text?: string }[] }>
-      }
+      const tools = service(ctx, "tools")!
       const facade = { session: { header: { id: `tools-${Date.now()}`, cwd: ws } } }
       const result = await tools.execute({
         callId: "tools-profile-call",
@@ -791,7 +856,7 @@ describe("dsh tools profile", () => {
       expect(text).toContain("250 of 400")
 
       // No live session was created.
-      const sessions = ctx.get("sessions") as { list(): unknown[] } | undefined
+      const sessions = service(ctx, "sessions")
       expect(sessions?.list() ?? []).toEqual([])
     } finally {
       await host.dispose()
@@ -807,13 +872,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const tools = ctx.get("tools") as {
-        schemas(): { name: string }[]
-        execute(exec: unknown): Promise<{
-          isError: boolean
-          error?: { info?: { code?: string } }
-        }>
-      }
+      const tools = service(ctx, "tools")!
       const session = makeSessionFake("tools-fs-session", workspace)
       const execute = (name: string, arguments_: Record<string, unknown>) =>
         tools.execute({
@@ -824,7 +883,7 @@ describe("dsh tools profile", () => {
           agent: { session },
         })
 
-      expect((ctx.get("fs") as { sandboxMode?: string }).sandboxMode).toBe("workspace-write")
+      expect(service(ctx, "fs")!.sandboxMode).toBe("workspace-write")
       expect(tools.schemas().map((tool) => tool.name)).toEqual(expect.arrayContaining(["read", "write", "edit"]))
 
       expect((await execute("write", { file_path: "created.txt", content: "created" })).isError).toBe(false)
@@ -862,12 +921,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const tools = ctx.get("tools") as {
-        execute(exec: unknown): Promise<{
-          isError: boolean
-          error?: { info?: { code?: string } }
-        }>
-      }
+      const tools = service(ctx, "tools")!
       const session = makeSessionFake("tools-readonly-session", workspace, [
         { type: "sandbox/mode", data: { mode: "read-only" } },
       ])
@@ -896,14 +950,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const tools = ctx.get("tools") as {
-        schemas(): { name: string }[]
-        execute(exec: unknown): Promise<{
-          isError: boolean
-          content?: { type: string; text?: string }[]
-          error?: { info?: { code?: string } }
-        }>
-      }
+      const tools = service(ctx, "tools")!
       const session = makeSessionFake("tools-editor-session", workspace)
       let call = 0
       const execute = (arguments_: Record<string, unknown>) =>
@@ -976,13 +1023,7 @@ describe("dsh tools profile", () => {
     let outsidePath: string | undefined
 
     try {
-      const tools = ctx.get("tools") as {
-        schemas(): { name: string; parameters: { properties: Record<string, unknown> } }[]
-        execute(exec: unknown): Promise<{
-          isError: boolean
-          content?: { type: string; text?: string }[]
-        }>
-      }
+      const tools = service(ctx, "tools")!
       const session = makeSessionFake("tools-bash-session", workspace, [{ type: "sandbox/mode", data: { mode } }])
       let call = 0
       const execute = (arguments_: Record<string, unknown>) =>
@@ -999,7 +1040,7 @@ describe("dsh tools profile", () => {
       expect(tools.schemas().map((tool) => tool.name)).toEqual(
         expect.arrayContaining(["read", "write", "edit", "grep", "glob", "bash", "str_replace_editor"]),
       )
-      expect((ctx.get("shell") as { sandboxMode?: string }).sandboxMode).toBe("workspace-write")
+      expect(service(ctx, "shell")!.sandboxMode).toBe("workspace-write")
       expect(ctx.get("shellEnv")).toBeDefined()
       expect(bash).toBeDefined()
       expect(bash?.parameters.properties).not.toHaveProperty("run_in_background")
@@ -1083,7 +1124,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const approval = ctx.get("approval") as { request(req: unknown): Promise<string> } | undefined
+      const approval = service(ctx, "approval")
       expect(approval).toBeDefined()
       expect(typeof approval?.request).toBe("function")
     } finally {
@@ -1100,7 +1141,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const approval = ctx.get("approval") as { request(req: unknown): Promise<string> }
+      const approval = service(ctx, "approval")!
       expect(approval).toBeDefined()
 
       // The host-side answerer: resolve everything as allowed-once.
@@ -1144,7 +1185,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const approval = ctx.get("approval") as { request(req: unknown): Promise<string> }
+      const approval = service(ctx, "approval")!
       const session = makeSessionFake("esc-session-2", workspace, [
         { type: "sandbox/mode", data: { mode: "workspace-write" } },
       ])
@@ -1172,7 +1213,7 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const approval = ctx.get("approval") as { request(req: unknown): Promise<string> }
+      const approval = service(ctx, "approval")!
       let answered = 0
       ctx.on("approval/request", (_req, next) => {
         answered += 1
@@ -1201,4 +1242,161 @@ describe("dsh tools profile", () => {
       await ctx.fiber.dispose()
     }
   }, 30_000)
+
+  // Plan 263 Task 3 / AC#7 — the DSH half of the shared parent environment.
+  //
+  // #263 fixes the Desktop -> sidecar handoff; this suite proves the DSH
+  // consumer side needs no second mechanism. Every DSH child descends from the
+  // official `@deepseek-ai/dsh-subprocess-local` provider, which builds each
+  // child from `scrubbedParentEnv()` (parent environment minus
+  // credential-shaped names and minus ambient `DSH_*`). The sentinel tool and
+  // the PATH entry that finds it exist only inside this fixture, so a green
+  // assertion cannot come from the developer's own PATH.
+  //
+  // POSIX only: the sentinel is a `#!/bin/sh` executable. Windows runs the
+  // `pwsh` row instead of `bash`; that host is covered by the Desktop suite and
+  // by real-host validation, not by this fixture.
+  describe("official subprocess child environment", () => {
+    const SENTINEL_NAME = "ellamaka-263-path-sentinel"
+    const HOST_MARKER = "WOPAL_263_HOST_MARKER"
+    const HOST_MARKER_VALUE = "host-marker-263"
+    const CREDENTIAL_NAME = "WOPAL_263_FIXTURE_TOKEN"
+    const CREDENTIAL_VALUE = "fixture-not-a-credential"
+    const AMBIENT_DSH = "DSH_263_AMBIENT_SENTINEL"
+    const AMBIENT_DSH_VALUE = "ambient-dsh-value"
+    const OVERLAY_DSH = "DSH_SESSION_ID"
+    const OVERLAY_DSH_VALUE = "fixture-session-263"
+    // The official provider forwards a deliberately supplied spec `env` entry
+    // even when it is `DSH_*`; the overlay probe uses the same `DSH_SESSION_ID`
+    // shape the official terminal controller passes for Browser Terminal.
+    const SENTINEL_SCRIPT = [
+      "#!/bin/sh",
+      "printf 'PATH=%s\\n' \"$PATH\"",
+      "printf 'MARKER=%s\\n' \"${WOPAL_263_HOST_MARKER:-MISSING}\"",
+      "printf 'CREDENTIAL=%s\\n' \"${WOPAL_263_FIXTURE_TOKEN:-SCRUBBED}\"",
+      "printf 'AMBIENT_DSH=%s\\n' \"${DSH_263_AMBIENT_SENTINEL:-SCRUBBED}\"",
+      "printf 'OVERLAY_DSH=%s\\n' \"${DSH_SESSION_ID:-MISSING}\"",
+      "printf 'SENTINEL_RAN\\n'",
+      "",
+    ].join("\n")
+
+    /** Write the sentinel into a fixture-owned directory and return its paths. */
+    function writeSentinel(home: string) {
+      const bin = join(home, "sentinel-bin")
+      mkdirSync(bin)
+      const tool = join(bin, SENTINEL_NAME)
+      writeFileSync(tool, SENTINEL_SCRIPT)
+      chmodSync(tool, 0o755)
+      return { bin, tool }
+    }
+
+    /** Isolated Home + process environment; only fixture identities are named. */
+    function isolate(home: string, path: string) {
+      return scopedEnv({
+        PATH: path,
+        HOME: home,
+        WOPAL_HOME: home,
+        DSH_HOME: join(home, "dsh", "home"),
+        [HOST_MARKER]: HOST_MARKER_VALUE,
+        [CREDENTIAL_NAME]: CREDENTIAL_VALUE,
+        [AMBIENT_DSH]: AMBIENT_DSH_VALUE,
+      })
+    }
+
+    test("runs a PATH sentinel tool in a real official subprocess child", async () => {
+      if (process.platform === "win32") return
+      const home = mkdtempSync(join(tmpdir(), "dsh-tools-subprocess-env-"))
+      const { bin, tool } = writeSentinel(home)
+      const isolatedPath = `${bin}:/usr/bin:/bin`
+      const ctx = new Context()
+      try {
+        using _env = isolate(home, isolatedPath)
+        prepareDshProfiles(home)
+        const host = await mountDshTools(ctx, { home, port: 0, disablePtcRuntime: true })
+        try {
+          const subprocess = service(ctx, "subprocess")
+          expect(subprocess).toBeDefined()
+
+          // Executable lookup already runs on the scrubbed parent PATH.
+          expect(await subprocess!.resolveExecutable(SENTINEL_NAME)).toBe(tool)
+          // Negative control: the sentinel is reachable from the fixture
+          // directory only, so the positive assertion above is not vacuous.
+          await expect(
+            subprocess!.resolveExecutable(SENTINEL_NAME, { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" }),
+          ).rejects.toThrow(/was not found on PATH/)
+
+          const handle = subprocess!.spawn({
+            argv: [SENTINEL_NAME],
+            cwd: home,
+            stdio: { stdin: "ignore", stdout: { maxBytes: 32_768 }, stderr: { maxBytes: 32_768 } },
+            graceMs: 5_000,
+          })
+          expect(await handle.done).toEqual({ exitCode: 0, signal: null })
+          const stdout = handle.collected.stdout!.readFrom(0).text
+          const stderr = handle.collected.stderr!.readFrom(0).text
+          expect(stderr).toBe("")
+          // The real child reports exactly the PATH it inherited: the fixture
+          // directory is first, so no developer directory could have supplied it.
+          expect(stdout).toContain(`PATH=${isolatedPath}`)
+          expect(stdout).toContain("SENTINEL_RAN")
+          expect(stdout).toContain(`MARKER=${HOST_MARKER_VALUE}`)
+          expect(stdout).toContain("CREDENTIAL=SCRUBBED")
+          expect(stdout).toContain("AMBIENT_DSH=SCRUBBED")
+          expect(stdout).toContain("OVERLAY_DSH=MISSING")
+          // The incident shape, at the DSH layer: a GUI-minimal PATH in the
+          // parent makes the same fixture tool unreachable, so the assertion
+          // above fails whenever the inherited PATH stops reaching the child.
+          const minimal = subprocess!.spawn({
+            argv: [SENTINEL_NAME],
+            cwd: home,
+            env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+            stdio: { stdin: "ignore", stdout: { maxBytes: 8_192 }, stderr: { maxBytes: 8_192 } },
+            graceMs: 5_000,
+          })
+          await expect(minimal.done).rejects.toThrow(/not found/i)
+        } finally {
+          await host.dispose()
+        }
+      } finally {
+        await ctx.fiber.dispose()
+        rmSync(home, { recursive: true, force: true })
+      }
+    }, 60_000)
+
+    test("keeps the official child-env scrub and forwards an explicit DSH_* overlay", async () => {
+      if (process.platform === "win32") return
+      const home = mkdtempSync(join(tmpdir(), "dsh-tools-subprocess-overlay-"))
+      const { bin } = writeSentinel(home)
+      const ctx = new Context()
+      try {
+        using _env = isolate(home, `${bin}:/usr/bin:/bin`)
+        prepareDshProfiles(home)
+        const host = await mountDshTools(ctx, { home, port: 0, disablePtcRuntime: true })
+        try {
+          const subprocess = service(ctx, "subprocess")
+          expect(subprocess).toBeDefined()
+          const handle = subprocess!.spawn({
+            argv: [SENTINEL_NAME],
+            cwd: home,
+            // The explicit overlay is the official opt-in, merged AFTER the
+            // scrub; ambient names stay scrubbed either way.
+            env: { [OVERLAY_DSH]: OVERLAY_DSH_VALUE },
+            stdio: { stdin: "ignore", stdout: { maxBytes: 32_768 }, stderr: { maxBytes: 32_768 } },
+            graceMs: 5_000,
+          })
+          expect(await handle.done).toEqual({ exitCode: 0, signal: null })
+          const stdout = handle.collected.stdout!.readFrom(0).text
+          expect(stdout).toContain(`OVERLAY_DSH=${OVERLAY_DSH_VALUE}`)
+          expect(stdout).toContain("CREDENTIAL=SCRUBBED")
+          expect(stdout).toContain("AMBIENT_DSH=SCRUBBED")
+          expect(stdout).toContain(`MARKER=${HOST_MARKER_VALUE}`)
+        } finally {
+          await host.dispose()
+        }
+      } finally {
+        await ctx.fiber.dispose()
+        rmSync(home, { recursive: true, force: true })
+      }
+    }, 60_000)
+  })
 })

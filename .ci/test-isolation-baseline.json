@@ -399,18 +399,6 @@
     },
     {
       "rule": "TISO001",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "mock.module(./shell-env)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "mock.module(electron-store)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
       "file": "packages/opencode/test/mcp/oauth-browser.test.ts",
       "detail": "mock.module(open)",
       "count": 1
@@ -510,78 +498,6 @@
       "file": "packages/ellamaka-desktop/src/main/constants.test.ts",
       "detail": "process.env[...]",
       "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/onboarding-gate.test.ts",
-      "detail": "process.env.SHELL",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
-      "detail": "process.env.SHELL",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/shell-env.test.ts",
-      "detail": "process.env.WOPAL_DEV",
-      "count": 5
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.DEBUG",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD",
-      "count": 6
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.ELLAMAKA_SERVER_USERNAME",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.OPENCODE_CLIENT",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.OPENCODE_EXPERIMENTAL",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.OPENCODE_EXPERIMENTAL_LSP_TY",
-      "count": 1
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env.SOME_DESKTOP_VAR",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/ellamaka-desktop/src/main/sidecar-env.test.ts",
-      "detail": "process.env[...]",
-      "count": 3
     },
     {
       "rule": "TISO002",
@@ -894,12 +810,6 @@
       "file": "packages/opencode/test/provider/provider.test.ts",
       "detail": "process.env[...]",
       "count": 5
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/pty/pty-env.test.ts",
-      "detail": "process.env.COLORTERM",
-      "count": 3
     },
     {
       "rule": "TISO002",

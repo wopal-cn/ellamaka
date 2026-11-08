@@ -1,11 +1,15 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { Bus } from "../../src/bus"
 import { Config } from "../../src/config/config"
 import { Plugin } from "../../src/plugin"
 import { Pty } from "../../src/pty"
 import { Duration, Effect, Layer, Queue } from "effect"
 import { testEffect } from "../lib/effect"
+import { TestInstance } from "../fixture/fixture"
 import { ptyAvailable } from "../fixture/pty"
+import { scopedEnv } from "../fixture/process-env"
 
 type Socket = Parameters<Pty.Interface["connect"]>[1]
 
@@ -55,6 +59,14 @@ const waitForOutput = (output: Queue.Queue<string>, text: string, duration: Dura
     }),
   )
 
+// Fixture-owned identities only: the sentinel tool and the marker value live
+// inside this test's temp directory, so a passing assertion cannot come from the
+// developer PATH or from any real user environment.
+const SENTINEL_NAME = "ellamaka-263-pty-sentinel"
+const SENTINEL_OUTPUT = "WOPAL_263_PTY_SENTINEL_RAN"
+const HOST_MARKER = "WOPAL_263_PTY_HOST_MARKER"
+const HOST_MARKER_VALUE = "host-marker-263"
+
 describe("pty env", () => {
   ptyTest(
     "injects COLORTERM=truecolor while keeping TERM=xterm-256color",
@@ -63,7 +75,7 @@ describe("pty env", () => {
         const pty = yield* Pty.Service
         const p = yield* createPty({
           command: "sh",
-          args: ["-c", "printf 'COLORTERM=%s TERM=%s' \"$COLORTERM\" \"$TERM\""],
+          args: ["-c", 'printf \'COLORTERM=%s TERM=%s\' "$COLORTERM" "$TERM"'],
           title: "env",
         })
         const out = yield* makeSocket({ events: { connection: "env" } })
@@ -79,24 +91,72 @@ describe("pty env", () => {
     "fixed COLORTERM entry overrides an inherited conflicting value",
     () =>
       Effect.gen(function* () {
-        const prev = process.env.COLORTERM
-        process.env.COLORTERM = "8bit"
-        try {
-          const pty = yield* Pty.Service
-          const p = yield* createPty({
-            command: "sh",
-            args: ["-c", "printf 'COLORTERM=%s' \"$COLORTERM\""],
-            title: "env-override",
-          })
-          const out = yield* makeSocket({ events: { connection: "env-override" } })
-          yield* pty.connect(p.id, out.socket)
-          const received = yield* waitForOutput(out.output, "COLORTERM=")
-          expect(received).toContain("COLORTERM=truecolor")
-        } finally {
-          if (prev === undefined) delete process.env.COLORTERM
-          else process.env.COLORTERM = prev
-        }
+        yield* Effect.acquireUseRelease(
+          Effect.sync(() => scopedEnv({ COLORTERM: "8bit" })),
+          () =>
+            Effect.gen(function* () {
+              const pty = yield* Pty.Service
+              const p = yield* createPty({
+                command: "sh",
+                args: ["-c", "printf 'COLORTERM=%s' \"$COLORTERM\""],
+                title: "env-override",
+              })
+              const out = yield* makeSocket({ events: { connection: "env-override" } })
+              yield* pty.connect(p.id, out.socket)
+              const received = yield* waitForOutput(out.output, "COLORTERM=")
+              expect(received).toContain("COLORTERM=truecolor")
+            }),
+          (scope) => Effect.sync(() => scope[Symbol.dispose]()),
+        )
       }),
     { git: true },
+  )
+
+  // #263 evidence at the Native PTY boundary: the environment the sidecar hands
+  // to the Runtime must reach a real forkpty child, not just an env helper.
+  // PATH is replaced wholesale so the sentinel is only reachable through the
+  // injected value; a passing run therefore cannot be an accident of the
+  // developer's own PATH.
+  ptyTest("runs a PATH sentinel tool from the inherited parent environment in a real PTY child", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const bin = path.join(test.directory, "sentinel-bin")
+      const tool = path.join(bin, SENTINEL_NAME)
+      const isolatedPath = `${bin}:/usr/bin:/bin`
+      yield* Effect.promise(async () => {
+        await fs.mkdir(bin, { recursive: true })
+        await Bun.write(tool, "#!/bin/sh\nprintf '%s' " + JSON.stringify(SENTINEL_OUTPUT) + "\n")
+        await fs.chmod(tool, 0o755)
+      })
+
+      const script = [
+        "printf 'PATH=%s\\n' \"$PATH\"",
+        `printf 'RESOLVED=%s\\n' "$(command -v ${SENTINEL_NAME} || printf MISSING)"`,
+        "printf 'MARKER=%s\\n' \"$" + HOST_MARKER + '"',
+        `${SENTINEL_NAME} || printf 'SENTINEL_FAILED\\n'`,
+        "printf 'DONE\\n'",
+      ].join("; ")
+
+      const received = yield* Effect.acquireUseRelease(
+        Effect.sync(() => scopedEnv({ PATH: isolatedPath, [HOST_MARKER]: HOST_MARKER_VALUE })),
+        () =>
+          Effect.gen(function* () {
+            const pty = yield* Pty.Service
+            const p = yield* createPty({ command: "sh", args: ["-c", script], title: "host-env" })
+            const out = yield* makeSocket({ events: { connection: "host-env" } })
+            yield* pty.connect(p.id, out.socket)
+            return yield* waitForOutput(out.output, "DONE")
+          }),
+        (scope) => Effect.sync(() => scope[Symbol.dispose]()),
+      )
+
+      // The child reports its own PATH, so this compares the real PTY
+      // environment against the isolated value instead of our intent.
+      expect(received).toContain(`PATH=${isolatedPath}`)
+      expect(received).toContain(`RESOLVED=${tool}`)
+      expect(received).toContain(`MARKER=${HOST_MARKER_VALUE}`)
+      expect(received).toContain(SENTINEL_OUTPUT)
+      expect(received).not.toContain("SENTINEL_FAILED")
+    }),
   )
 })
