@@ -54,6 +54,7 @@ Keep these boundaries in mind when choosing an owner:
 | App boundary check         | bun run check:workbench-boundaries (from packages/ellamaka-app/)                         | Workbench changes                                 |
 | Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes                     |
 | Development entry          | ./scripts/dev.sh help                                                                    | GUI, TUI, and Server integration                  |
+| Local CI replica (macOS)   | bun run ci:local                                                                         | Local pre-flight for nightly CI                   |
 
 Run package-local tests from their owning package. Repository-root test commands are reserved for the explicit cross-package orchestration and repository-wide gates listed above; see package rules and script help for the full matrix and artifact checks.
 

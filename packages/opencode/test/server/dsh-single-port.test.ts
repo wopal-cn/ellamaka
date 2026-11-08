@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { connect } from "node:net"
 import { once } from "node:events"
+import { spawnSync } from "node:child_process"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { Server } from "../../src/server/server"
@@ -51,6 +52,31 @@ function authorization() {
 }
 
 /**
+ * Whether the OS sandbox backend is usable on this host. Mounting the DSH web
+ * profile runs plugins under native `sandbox-exec` on macOS; inside a nested
+ * seatbelt sandbox (e.g. an agent shell) `sandbox_apply` is denied with
+ * `Operation not permitted` (exit 71), so the mount can never succeed there.
+ * A lightweight probe decides once per test process. The profile must carry a
+ * real deny: a permissive `(allow default)` applies fine inside seatbelt.
+ * Non-darwin hosts assume a usable backend (the probe command is macOS-only).
+ */
+function isOsSandboxAvailable(): boolean {
+  if (process.platform !== "darwin") return true
+  try {
+    const res = spawnSync("sandbox-exec", [
+      "-p",
+      '(version 1)(allow default)(deny file-read-data (literal "/nonexistent-ci-probe"))',
+      "true",
+    ])
+    return res.status === 0
+  } catch {
+    return false
+  }
+}
+
+const osSandboxAvailable = isOsSandboxAvailable()
+
+/**
  * Mount the DSH web profile onto a real Ellamaka listener under /dsh, mirroring
  * the serve.ts wiring (DESIGN-dsh-base.md single-port scheme). Runs the real
  * unified Runtime Manager: a complete closure is seeded under a temp WOPAL_HOME
@@ -59,6 +85,13 @@ function authorization() {
  * serve/web entries do. A temp WOPAL_HOME keeps the test off the user's home.
  */
 async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
+  if (!osSandboxAvailable) {
+    throw new Error(
+      "DSH web mount requires a working OS sandbox backend, but sandbox_apply is denied in this environment " +
+        "(nested seatbelt sandbox). This is an environment limitation, not a product failure — run the suite " +
+        "outside the agent sandbox, e.g. `bun run ci:local`.",
+    )
+  }
   const wopalHome = mkdtempSync(join(tmpdir(), "dsh-single-port-"))
   const anchor = seedDshClosure(wopalHome)
   const manifest = DEFAULT_DSH_RUNTIME_MANIFEST

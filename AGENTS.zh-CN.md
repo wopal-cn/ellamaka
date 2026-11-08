@@ -54,6 +54,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 | App boundary check         | bun run check:workbench-boundaries（在 packages/ellamaka-app/）                         | Workbench 目录变化                      |
 | Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src（在 packages/ellamaka-desktop/） | Desktop 主进程/渲染器变化               |
 | Development entry          | ./scripts/dev.sh help                                                                   | GUI、TUI、Server 联调                   |
+| 本地 CI 复刻（macOS）      | bun run ci:local                                                                        | 依赖 nightly CI 前的本地验证            |
 
 包内测试从所属 package 执行；仓库根只用于上表明确列出的跨包编排与全仓门禁。完整命令和制品验证方式看各包规范与脚本 help。
 
