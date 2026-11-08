@@ -15,6 +15,7 @@ export type RuleId =
   | "TISO006" // test writes a shared path without an owning fixture
   | "TISO007" // baseline entry no longer matches any source violation
   | "TISO008" // ordinary test enables in-process concurrent execution
+  | "TISO009" // package test or helper uses Global / Home-bound layer without a valid Home preload
 
 export type Rule = {
   id: RuleId
@@ -82,6 +83,15 @@ export const RULES: Record<RuleId, Rule> = {
       "listeners and filesystem globals with other tests. Keep ordinary direct controls serial. If concurrency " +
       "is needed, create it inside one test with explicitly owned dependencies, use a documented owner-aware " +
       "package helper, or isolate each worker in a separate process.",
+  },
+  TISO009: {
+    id: "TISO009",
+    title: "package test or helper uses Global / Home-bound layer without a valid Home preload",
+    message:
+      "Tests or reachable test helpers that reference Global, Global.Path, or a Home-bound defaultLayer " +
+      "require a valid package-local Home preload in bunfig.toml [test].preload that redirects WOPAL_HOME " +
+      "to a process-owned temporary directory before any Global.Path module evaluation (and without test scripts " +
+      "overriding it). See packages/opencode/test/preload.ts for the reference implementation.",
   },
 }
 

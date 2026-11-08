@@ -1,17 +1,13 @@
 import { describe, expect, mock } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { AccountV2 } from "@wopal/ellamaka-core/account"
 import { Catalog } from "@wopal/ellamaka-core/catalog"
 import { EventV2 } from "@wopal/ellamaka-core/event"
-import { Location } from "@wopal/ellamaka-core/location"
 import { PluginV2 } from "@wopal/ellamaka-core/plugin"
-import { Policy } from "@wopal/ellamaka-core/policy"
 import { AccountPlugin } from "@wopal/ellamaka-core/plugin/account"
 import { GitLabPlugin } from "@wopal/ellamaka-core/plugin/provider/gitlab"
 import { ProviderV2 } from "@wopal/ellamaka-core/provider"
-import { AbsolutePath } from "@wopal/ellamaka-core/schema"
-import { testEffect } from "../lib/effect"
-import { it, model, npmLayer, withEnv } from "./provider-helper"
+import { it, itWithAccount, model, withEnv } from "./provider-helper"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
 
@@ -27,19 +23,6 @@ void mock.module("gitlab-ai-provider", () => ({
   discoverWorkflowModels: async () => ({ models: [], project: undefined }),
   isWorkflowModel: (id: string) => id === "duo-workflow" || id === "duo-workflow-exact",
 }))
-
-const itWithAccount = testEffect(
-  Layer.mergeAll(
-    Catalog.defaultLayer,
-    PluginV2.defaultLayer,
-    AccountV2.defaultLayer,
-    EventV2.defaultLayer,
-    npmLayer,
-  ).pipe(
-    Layer.provide(Policy.defaultLayer),
-    Layer.provide(Location.defaultLayer({ directory: AbsolutePath.make("/") })),
-  ),
-)
 
 describe("GitLabPlugin", () => {
   it.effect("creates SDKs with legacy default instance URL, token env, headers, and feature flags", () =>
@@ -64,7 +47,8 @@ describe("GitLabPlugin", () => {
           expect(gitlabSDKOptions[0].aiGatewayHeaders).toMatchObject({
             "anthropic-beta": "context-1m-2025-08-07",
           })
-          expect(String((gitlabSDKOptions[0].aiGatewayHeaders as Record<string, string>)["User-Agent"])).toContain(
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          expect((gitlabSDKOptions[0].aiGatewayHeaders as Record<string, string>)["User-Agent"]).toContain(
             "gitlab-ai-provider/test-version",
           )
           expect(gitlabSDKOptions[0].featureFlags).toEqual({
@@ -357,6 +341,7 @@ describe("GitLabPlugin", () => {
           sdk: {
             workflowChat: () => undefined,
             agenticChat: (id: string, options: unknown) => {
+              // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
               const selected = options as {
                 aiGatewayHeaders?: Record<string, string>
                 featureFlags?: Record<string, boolean>

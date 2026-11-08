@@ -87,7 +87,6 @@ describe("dev log directory resolution", () => {
       expect(r.exitCode).toBe(0)
     } finally {
       await fs.rm(probeFile, { force: true })
-      await fs.rm(path.join(os.homedir(), ".wopal", "logs", "probe-dev.log"), { force: true }).catch(() => {})
     }
   })
 })

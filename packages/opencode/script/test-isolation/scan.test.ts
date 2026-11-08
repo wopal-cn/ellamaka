@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test"
-import { scanSource, violationKey } from "./scan"
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { runGateCheck } from "./check"
+import { scanRepository, scanSource, validateHomePreloadSource, violationKey } from "./scan"
 
 const options = { root: "/repo", relative: (value: string) => value }
 
@@ -249,4 +253,289 @@ test("the violation key identifies one violation precisely", () => {
     ['void mock.module("@wopal/ui/toast", () => ({}))'].join("\n"),
   )[0]
   expect(violationKey(first)).not.toBe(violationKey(second))
+})
+
+const VALID_PRELOAD_SOURCE = [
+  'import os from "os"',
+  'import path from "path"',
+  'import fs from "fs/promises"',
+  'import { afterAll } from "bun:test"',
+  'const dir = path.join(os.tmpdir(), "pkg-test-home-" + process.pid)',
+  "await fs.mkdir(dir, { recursive: true })",
+  'process.env["WOPAL_HOME"] = dir',
+  "afterAll(async () => { await fs.rm(dir, { recursive: true, force: true }) })",
+].join("\n")
+
+test("TISO009 reports direct Global, Global.Path, and Home-bound layer (including direct/destructured defaultLayer imports) in a package without Home preload", () => {
+  const result = scanRepository({
+    files: new Map([
+      ["packages/alpha/package.json", JSON.stringify({ name: "@wopal/alpha", scripts: { test: "bun test" } })],
+      [
+        "packages/alpha/test/direct.test.ts",
+        [
+          'import { Global } from "@wopal/ellamaka-core/global"',
+          'import { AccountV2, defaultLayer as accountLayer } from "@wopal/ellamaka-core/account"',
+          'import { Config } from "@wopal/ellamaka-core/config"',
+          "const home = Global.Path.wopalHome",
+          "void AccountV2.defaultLayer",
+          "void accountLayer",
+          "const { defaultLayer: cfgLayer } = Config",
+          "void [home, cfgLayer]",
+        ].join("\n"),
+      ],
+    ]),
+  })
+  const tiso009 = result.violations.filter((v) => v.rule === "TISO009")
+  expect(tiso009.map((v) => v.detail)).toEqual([
+    expect.stringContaining("Global.Path.wopalHome"),
+    expect.stringContaining("AccountV2.defaultLayer"),
+    expect.stringContaining("account.defaultLayer"),
+    expect.stringContaining("Config.defaultLayer"),
+  ])
+})
+
+test("TISO009 follows reachable test helpers across test/, src/, script/, e2e, .spec.ts, and nested fixture packages", () => {
+  const result = scanRepository({
+    files: new Map([
+      ["packages/nested/subpkg/package.json", JSON.stringify({ name: "@wopal/subpkg", scripts: { test: "bun test" } })],
+      [
+        "packages/nested/subpkg/src/feature.spec.ts",
+        'import { makeTestLayer } from "../script/helper"\nimport { makeLayer } from "./setup"\nmakeTestLayer()\nmakeLayer()',
+      ],
+      ["packages/nested/subpkg/src/setup.ts", 'export { makeLayer } from "./assembly"'],
+      [
+        "packages/nested/subpkg/src/assembly.ts",
+        'import { AccountV2 } from "@wopal/ellamaka-core/account"\nexport const makeLayer = () => AccountV2.defaultLayer',
+      ],
+      [
+        "packages/nested/subpkg/script/helper.ts",
+        'import { Config } from "@wopal/ellamaka-core/config"\nexport const makeTestLayer = () => Config.defaultLayer',
+      ],
+      [
+        "packages/nested/subpkg/e2e/smoke.test.ts",
+        'import { Global } from "@wopal/ellamaka-core/global"\nvoid Global.ensure()',
+      ],
+      // Parent package has a valid preload, but nested child under test/fixtures/child has its own package.json without preload
+      ["packages/isolated/package.json", JSON.stringify({ name: "@wopal/isolated", scripts: { test: "bun test" } })],
+      ["packages/isolated/bunfig.toml", '[test]\npreload = ["./test/preload.ts"]\n'],
+      ["packages/isolated/test/preload.ts", VALID_PRELOAD_SOURCE],
+      [
+        "packages/isolated/test/fixtures/child/package.json",
+        JSON.stringify({ name: "@wopal/fixture-child", scripts: { test: "bun test" } }),
+      ],
+      [
+        "packages/isolated/test/fixtures/child/test/child.test.ts",
+        'import { AccountV2 } from "@wopal/ellamaka-core/account"\nvoid AccountV2.defaultLayer',
+      ],
+    ]),
+  })
+  const tiso009 = result.violations.filter((v) => v.rule === "TISO009")
+  expect(tiso009.map((v) => ({ file: v.file, detail: v.detail }))).toEqual([
+    {
+      file: "packages/isolated/test/fixtures/child/test/child.test.ts",
+      detail: expect.stringContaining(
+        "@wopal/fixture-child (packages/isolated/test/fixtures/child): AccountV2.defaultLayer",
+      ),
+    },
+    {
+      file: "packages/nested/subpkg/e2e/smoke.test.ts",
+      detail: expect.stringContaining("@wopal/subpkg (packages/nested/subpkg): Global.ensure"),
+    },
+    {
+      file: "packages/nested/subpkg/script/helper.ts",
+      detail: expect.stringContaining("@wopal/subpkg (packages/nested/subpkg): Config.defaultLayer"),
+    },
+    {
+      file: "packages/nested/subpkg/src/assembly.ts",
+      detail: expect.stringContaining("@wopal/subpkg (packages/nested/subpkg): AccountV2.defaultLayer"),
+    },
+  ])
+})
+
+test("TISO009 does not false-positive on non-Home defaultLayer such as AppFileSystem.defaultLayer or EventV2.defaultLayer", () => {
+  const result = scanRepository({
+    files: new Map([
+      ["packages/pure/package.json", JSON.stringify({ name: "@wopal/pure", scripts: { test: "bun test" } })],
+      [
+        "packages/pure/test/pure.test.ts",
+        [
+          'import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"',
+          'import { EventV2 } from "@wopal/ellamaka-core/event"',
+          'import { Policy } from "@wopal/ellamaka-core/policy"',
+          "const layer = [AppFileSystem.defaultLayer, EventV2.defaultLayer, Policy.defaultLayer]",
+          "void layer",
+        ].join("\n"),
+      ],
+    ]),
+  })
+  expect(result.violations.filter((v) => v.rule === "TISO009")).toEqual([])
+})
+
+test("TISO009 accepts a package with a valid Home preload and rejects invalid preload variants", () => {
+  // Valid preload passes
+  const validRepo = scanRepository({
+    files: new Map([
+      ["packages/isolated/package.json", JSON.stringify({ name: "@wopal/isolated", scripts: { test: "bun test" } })],
+      ["packages/isolated/bunfig.toml", '[test]\npreload = ["./test/preload.ts"]\n'],
+      ["packages/isolated/test/preload.ts", VALID_PRELOAD_SOURCE],
+      [
+        "packages/isolated/test/account.test.ts",
+        'import { AccountV2 } from "@wopal/ellamaka-core/account"\nvoid AccountV2.defaultLayer',
+      ],
+    ]),
+  })
+  expect(validRepo.violations.filter((v) => v.rule === "TISO009")).toEqual([])
+
+  // 1. Self-assignment: process.env.WOPAL_HOME = process.env.WOPAL_HOME ?? ...
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import os from "os"',
+        'import path from "path"',
+        'import { afterAll } from "bun:test"',
+        'process.env.WOPAL_HOME = process.env.WOPAL_HOME || path.join(os.tmpdir(), "x")',
+        "afterAll(() => {})",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+
+  // 2. Fixed literal path or real homedir
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import { afterAll } from "bun:test"',
+        'process.env.WOPAL_HOME = "/tmp/fixed-shared-home"',
+        "afterAll(() => {})",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import os from "os"',
+        'import path from "path"',
+        'import { afterAll } from "bun:test"',
+        'process.env.WOPAL_HOME = path.join(os.homedir(), ".wopal")',
+        "afterAll(() => {})",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+
+  // 3. Evaluated after Global import (both before-statement and hoisted static import after assignment)
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import os from "os"',
+        'import path from "path"',
+        'import fs from "fs/promises"',
+        'import { afterAll } from "bun:test"',
+        'import { Global } from "@wopal/ellamaka-core/global"',
+        'const dir = path.join(os.tmpdir(), "late-" + process.pid)',
+        "process.env.WOPAL_HOME = dir",
+        "void Global.Path.wopalHome",
+        "afterAll(async () => { await fs.rm(dir, { recursive: true, force: true }) })",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import os from "os"',
+        'import path from "path"',
+        'import fs from "fs/promises"',
+        'import { afterAll } from "bun:test"',
+        'const dir = path.join(os.tmpdir(), "hoisted-" + process.pid)',
+        "process.env.WOPAL_HOME = dir",
+        'import { Global } from "@wopal/ellamaka-core/global"',
+        "void Global.Path.wopalHome",
+        "afterAll(async () => { await fs.rm(dir, { recursive: true, force: true }) })",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+
+  // 3b. Shared non-unique tmpdir or empty afterAll without rm/rmSync
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import os from "os"',
+        'import path from "path"',
+        'import fs from "fs/promises"',
+        'import { afterAll } from "bun:test"',
+        'const dir = path.join(os.tmpdir(), "shared-fixed-name")',
+        "process.env.WOPAL_HOME = dir",
+        "afterAll(async () => { await fs.rm(dir, { recursive: true, force: true }) })",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+  expect(
+    validateHomePreloadSource(
+      "test/preload.ts",
+      [
+        'import os from "os"',
+        'import path from "path"',
+        'import { afterAll } from "bun:test"',
+        'const dir = path.join(os.tmpdir(), "no-rm-" + process.pid)',
+        "process.env.WOPAL_HOME = dir",
+        "afterAll(() => {})",
+      ].join("\n"),
+    ).valid,
+  ).toBe(false)
+
+  // 4. Test script overrides preload with --config /dev/null, --config ./other.toml, bun --config /dev/null test, or another --preload
+  for (const badScript of [
+    "bun test --preload ./other-mock.ts",
+    "bun test --config ./test/empty.toml",
+    "bun --config /dev/null test",
+  ]) {
+    const overriddenRepo = scanRepository({
+      files: new Map([
+        [
+          "packages/overridden/package.json",
+          JSON.stringify({
+            name: "@wopal/overridden",
+            scripts: { test: badScript },
+          }),
+        ],
+        ["packages/overridden/bunfig.toml", '[test]\npreload = ["./test/preload.ts"]\n'],
+        ["packages/overridden/test/preload.ts", VALID_PRELOAD_SOURCE],
+        [
+          "packages/overridden/test/use-global.test.ts",
+          'import { Global } from "@wopal/ellamaka-core/global"\nvoid Global.Path.data',
+        ],
+      ]),
+    })
+    expect(
+      overriddenRepo.violations.filter((v) => v.rule === "TISO009"),
+      badScript,
+    ).toHaveLength(1)
+  }
+})
+
+test("full gate entry (runGateCheck) catches violations in test/fixture/ and temporary package structures without directory exemption", async () => {
+  const tmpRoot = mkdtempSync(path.join(os.tmpdir(), "ellamaka-gate-entry-"))
+  try {
+    mkdirSync(path.join(tmpRoot, "packages", "sample", "test", "fixture"), { recursive: true })
+    writeFileSync(path.join(tmpRoot, "package.json"), JSON.stringify({ name: "sample-root", private: true }))
+    writeFileSync(
+      path.join(tmpRoot, "packages", "sample", "package.json"),
+      JSON.stringify({ name: "@wopal/sample", scripts: { test: "bun test" } }),
+    )
+    // Put a violation inside test/fixture/ to verify no directory-wide exemption exists
+    writeFileSync(
+      path.join(tmpRoot, "packages", "sample", "test", "fixture", " sneaky.test.ts"),
+      ['import { Global } from "@wopal/ellamaka-core/global"', "void Global.Path.wopalHome"].join("\n"),
+    )
+
+    const report = await runGateCheck(tmpRoot)
+    expect(report.freshViolations.map((v) => v.rule)).toContain("TISO009")
+    expect(report.freshViolations[0]?.file).toBe("packages/sample/test/fixture/ sneaky.test.ts")
+  } finally {
+    rmSync(tmpRoot, { recursive: true, force: true })
+  }
 })

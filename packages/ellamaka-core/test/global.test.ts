@@ -25,7 +25,6 @@ describe("global env isolation", () => {
     const sentinelValue = "loaded-from-file"
 
     const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), "ellamaka-global-env-"))
-    const probeDir = path.join(os.tmpdir(), "ellamaka-global-env-probe-")
     try {
       // Write a non-sensitive sentinel into $WOPAL_HOME/.env
       await fs.writeFile(path.join(tmpHome, ".env"), `${sentinel}=${sentinelValue}\n`)
@@ -34,7 +33,11 @@ describe("global env isolation", () => {
       // It must live inside this package so `@wopal/ellamaka-core/global` resolves.
       const probeDir = path.join(process.cwd(), ".tmp")
       await fs.mkdir(probeDir, { recursive: true })
+      const probePreload = path.join(probeDir, "child-env-preload.ts")
       const probeFile = path.join(probeDir, "child-env-probe.test.ts")
+      // Set WOPAL_HOME to tmpHome in the subprocess preload BEFORE Global is imported
+      // so initial module evaluation observes tmpHome (not after import via bindWopalHome).
+      await fs.writeFile(probePreload, `process.env.WOPAL_HOME = ${JSON.stringify(tmpHome)}\n`)
       await fs.writeFile(
         probeFile,
         [
@@ -50,7 +53,7 @@ describe("global env isolation", () => {
       )
 
       const proc = Bun.spawn({
-        cmd: [process.execPath, "test", "./.tmp/child-env-probe.test.ts"],
+        cmd: [process.execPath, "test", "./.tmp/child-env-probe.test.ts", "--preload", "./.tmp/child-env-preload.ts"],
         cwd: process.cwd(),
         env: {
           // Minimal env: WOPAL_HOME points to the temp home.
@@ -63,25 +66,24 @@ describe("global env isolation", () => {
         stderr: "pipe",
       })
       const stdout = await new Response(proc.stdout).text()
-      const stderr = await new Response(proc.stderr).text()
+      await new Response(proc.stderr).text()
       const exitCode = await proc.exited
 
       expect(exitCode).toBe(0)
 
       // Parse the PROBE_RESULT line emitted by the child test.
-      const probeLine = stdout
-        .split("\n")
-        .find((line) => line.startsWith("PROBE_RESULT="))
+      const probeLine = stdout.split("\n").find((line) => line.startsWith("PROBE_RESULT="))
       expect(probeLine).toBeDefined()
       const result = JSON.parse(probeLine!.slice("PROBE_RESULT=".length))
 
       // The Global module must NOT write .env keys into process.env.
       expect(result.leaked).toBeUndefined()
-      // WOPAL_HOME path resolution still works.
+      // WOPAL_HOME path resolution still works at initial import time.
       expect(result.wopalHome).toBe(tmpHome)
     } finally {
       await Promise.all([
         fs.rm(tmpHome, { recursive: true, force: true }),
+        fs.rm(path.join(process.cwd(), ".tmp", "child-env-preload.ts"), { force: true }),
         fs.rm(path.join(process.cwd(), ".tmp", "child-env-probe.test.ts"), { force: true }),
       ])
     }

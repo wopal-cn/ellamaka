@@ -1,31 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { AccountV2 } from "@wopal/ellamaka-core/account"
 import { Catalog } from "@wopal/ellamaka-core/catalog"
 import { EventV2 } from "@wopal/ellamaka-core/event"
-import { Location } from "@wopal/ellamaka-core/location"
 import { PluginV2 } from "@wopal/ellamaka-core/plugin"
-import { Policy } from "@wopal/ellamaka-core/policy"
 import { AccountPlugin } from "@wopal/ellamaka-core/plugin/account"
 import { AzurePlugin } from "@wopal/ellamaka-core/plugin/provider/azure"
 import { ProviderV2 } from "@wopal/ellamaka-core/provider"
-import { AbsolutePath } from "@wopal/ellamaka-core/schema"
-import { location } from "../fixture/location"
-import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
-
-const itWithAccount = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
-    Layer.provideMerge(AccountV2.defaultLayer),
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(Policy.defaultLayer),
-    Layer.provideMerge(
-      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
-    ),
-    Layer.provideMerge(npmLayer),
-  ),
-)
+import { fakeSelectorSdk, it, itWithAccount, model, provider, withEnv } from "./provider-helper"
 
 describe("AzurePlugin", () => {
   it.effect("resolves resourceName from env", () =>

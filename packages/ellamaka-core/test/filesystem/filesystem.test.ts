@@ -109,6 +109,45 @@ describe("AppFileSystem", () => {
         expect(result).toEqual(data)
       }),
     )
+
+    it(
+      "creates missing parent directories and preserves mode on writeJson",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "missing", "nested", "account.json")
+        const data = { accounts: { a: { id: "a" } } }
+
+        yield* fs.writeJson(file, data, 0o600)
+        const result = yield* fs.readJson(file)
+        expect(result).toEqual(data)
+
+        if (process.platform !== "win32") {
+          const stat = yield* Effect.tryPromise(() => import("node:fs/promises").then((m) => m.stat(file)))
+          expect(stat.mode & 0o777).toBe(0o600)
+        }
+      }),
+    )
+
+    it(
+      "propagates directory creation failure when parent path is a file",
+      Effect.gen(function* () {
+        const fs = yield* AppFileSystem.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const blocker = path.join(tmp, "blocker-file")
+        yield* filesys.writeFileString(blocker, "not-a-directory")
+        const target = path.join(blocker, "nested", "data.json")
+
+        const exit = yield* Effect.exit(fs.writeJson(target, { ok: false }))
+        expect(exit._tag).toBe("Failure")
+        if (exit._tag === "Failure") {
+          expect(String(exit.cause)).toContain("makeDirectory")
+        }
+        expect(yield* filesys.readFileString(blocker)).toBe("not-a-directory")
+      }),
+    )
   })
 
   describe("ensureDir", () => {

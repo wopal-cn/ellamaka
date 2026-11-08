@@ -89,6 +89,7 @@ export namespace AppFileSystem {
 
       const writeJson = Effect.fn("FileSystem.writeJson")(function* (path: string, data: unknown, mode?: number) {
         const content = JSON.stringify(data, null, 2)
+        yield* fs.makeDirectory(dirname(path), { recursive: true })
         yield* fs.writeFileString(path, content)
         if (mode) yield* fs.chmod(path, mode)
       })

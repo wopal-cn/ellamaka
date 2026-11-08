@@ -17,7 +17,7 @@ function run(args: string[], env: Record<string, string> = {}) {
     env: { ...process.env, ...env },
     encoding: "utf8",
     timeout: 60_000,
-    stdin: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
   })
   return {
     exitCode: result.status ?? -1,

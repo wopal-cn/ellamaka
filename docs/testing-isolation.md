@@ -1,9 +1,9 @@
 # 测试隔离规范（Test Isolation）
 
 > **Status**: Active
-> **Updated**: 2026-11-06
+> **Updated**: 2026-11-08
 > **Parent**: `./DESIGN.md`
-> **Scope**: 全仓每个带 `test/` 的 package 的隔离基座、门禁规则与验证责任
+> **Scope**: 全仓所有拥有可执行测试文件的 package（含 `test/`、`src/`、`script/` 和嵌套包）的 Home 隔离契约、门禁与验证
 
 本文件解释 Ellamaka 测试隔离的「为什么」和「怎么判」，不是另一份通用测试政策。跨项目测试原则与 TDD 语义由
 WopalSpace 装配的 `testing.md` 统一拥有；Ellamaka 特有、需要全仓执行的隔离约束写在根 `AGENTS.md`，
@@ -25,20 +25,20 @@ CI 上 runner 的文件顺序是稳定的，所以 CI 每次都以同样的方�
 
 下表是真实事故复盘，每一条都对应一个已经修过的 bug。设计任何新测试前先对照这张表。
 
-| 类别                     | 事故形态                                                                                                        | 后果                                           |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| A 进程级模块替换污染     | Bun `mock.module` 替换共享模块；`mock.restore()` 不撤销它，且对已 import 的绑定生效                             | 后续文件拿到假的实现，CI 与本地结果不一致      |
-| B 进程级环境变量污染     | 测试写 `process.env`；Effect `ConfigProvider` 默认层在首次读取时快照 `process.env` 并缓存在 module 级 Reference | 标志位被永久固化，同进程后续文件全部读到错误值 |
-| C 进程级文件系统状态污染 | 多个 fixture 争抢同一个全局配置文件                                                                             | 先写者被后写者整段清空，断言随机失败           |
-| D 共享单例 / 进程级缓存  | Effect `ScopedCache` / `memoMap` 缓存跨文件存活；共享的 mock server 残留状态                                    | 上一个用例的残留被下一个用例计入               |
-| E 靠 sleep 掩盖竞态      | 固定 `Effect.sleep(N)` 等某个后台任务就绪                                                                       | 慢机器上超时，快机器上白等；永远不可靠         |
-| F 断言被削弱换绿灯       | 删掉一条 retention 断言；把观察窗口从 12 秒缩到 1.5 秒                                                          | 测试不再验证它声称验证的行为                   |
-| G 分层与预算失守         | 真实子进程 / fs watch / git / 网络测试混进 unit 层                                                              | unit 层超时、随机失败                          |
-| H 规则无门禁             | 规则只写在文档里                                                                                                | 几个月后同样的违规再次进入仓库                 |
+| 类别                     | 事故形态                                                                                                                   | 后果                                             |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| A 进程级模块替换污染     | Bun `mock.module` 替换共享模块；`mock.restore()` 不撤销它，且对已 import 的绑定生效                                        | 后续文件拿到假的实现，CI 与本地结果不一致        |
+| B 进程级环境变量污染     | 测试写 `process.env`；Effect `ConfigProvider` 默认层在首次读取时快照 `process.env` 并缓存在 module 级 Reference            | 标志位被永久固化，同进程后续文件全部读到错误值   |
+| C 进程级文件系统状态污染 | 多个 fixture 争抢同一个全局配置文件                                                                                        | 先写者被后写者整段清空，断言随机失败             |
+| D 共享单例 / 进程级缓存  | Effect `ScopedCache` / `memoMap` 缓存跨文件存活；共享的 mock server 残留状态                                               | 上一个用例的残留被下一个用例计入                 |
+| E 靠 sleep 掩盖竞态      | 固定 `Effect.sleep(N)` 等某个后台任务就绪                                                                                  | 慢机器上超时，快机器上白等；永远不可靠           |
+| F 断言被削弱换绿灯       | 删掉一条 retention 断言；把观察窗口从 12 秒缩到 1.5 秒                                                                     | 测试不再验证它声称验证的行为                     |
+| G 分层与预算失守         | 真实子进程 / fs watch / git / 网络测试混进 unit 层                                                                         | unit 层超时、随机失败                            |
+| H 规则无门禁             | 规则只写在文档里                                                                                                           | 几个月后同样的违规再次进入仓库                   |
 | I 真实 Home 依赖         | 测试通过 `defaultLayer` / `Global.Path` 直接读写开发者真实 `$WOPAL_HOME`；本地因目录已存在而通过，CI 干净 runner 上 ENOENT | 本地静默污染用户数据，CI 必红；同一 bug 两种症状 |
 
 A-I 里的每一类都曾单独修过，又复发。区别在于：A-G、I 修的是**这一次的具体代码**，
-H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的是 H，并通过包级基座（见下节）让 I 无法复发。
+H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的是 H；包级基座及独立进程验证共同阻止 I 中已识别的真实 Home 依赖复发。
 
 ## 三种隔离模型与选择规则
 
@@ -102,26 +102,37 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 ## 包级测试基座
 
 事故 I 的根因不是某一行写错，而是**包的测试基座存在与否全凭个人习惯**：同一个 `ellamaka-core` 里，
-`account.test.ts` 用 `Global.layerWith` 注入临时目录，而三个 provider 测试用 `defaultLayer` 直连真实 Home。
-两种写法都能通过评审，因为规范没有说清「一个包必须具备什么才能写测试」。
+`account.test.ts` 用 `Global.layerWith` 注入临时目录，而 provider 测试曾用 `AccountV2.defaultLayer` 直连真实 Home。
+要同时约束包的测试入口、间接测试 helper 和实际启动顺序，不能只检查顶层 `test/` 目录。
 
 ### 基座契约
 
-每个带 `test/` 的 package 都必须满足下列之一，并在 `test/AGENTS.md` 记录它选了哪一条：
+每个拥有可执行测试文件的 package 都必须满足下列之一：
 
-1. **拥有 Home 隔离基座**：`bunfig.toml` 的 `[test].preload` 指向一个 package-local preload，
-   在**任何 `src/` import 之前**把 `WOPAL_HOME` 重定向到临时目录，并在测试结束后清理。
-   `packages/opencode/test/preload.ts` 是参考实现。
-2. **声明不触碰全局路径**：包里没有任何测试导入 `Global`、`defaultLayer`、`Global.Path.*`
-   或其它读取进程级路径的模块。一旦出现这类导入，必须转为第 1 条。
+1. **`home-preload`**：该包的真实测试命令加载 package-local Home preload，在任何读取 `Global.Path` 的模块求值前，
+   把 `WOPAL_HOME` 重定向到进程独占的临时目录；进程退出或测试清理后释放目录。
+   `packages/opencode/test/preload.ts` 是参考实现。静态存在一个赋值表达式**不是**基座生效的证明。
+2. **`no-global-paths`**：该包的测试入口与其可达的测试专用 helper 均不使用 `Global`、`Global.Path.*`、
+   依赖 `Global.defaultLayer` 的 Home-bound layer，或其它已经确认会解析进程级 Home 的路径装配。
+   与 Home 无关的 `AppFileSystem.defaultLayer` 等不能仅凭成员名判为违规。引入上述风险后须先补第 1 类基座。
 
-判据只有一条：**在 `$WOPAL_HOME` 指向一个空的不存在目录时，整个包的测试必须全绿，且不创建任何真实
-`$WOPAL_HOME` 内容。** 这条判据同时覆盖本地与 CI，因为它不依赖开发者机器上恰好存在某个目录。
+包的发现以实际测试文件和 runner 配置为准，**不以 `test/` 存在与否为准**：检查 `test/`、`src/`、`script/`、
+嵌套 package 以及 e2e 入口；按最近的 `package.json` 归属 package。测试入口以可执行的 Bun 测试文件为准，
+关联的测试 helper 通过 import 关系继续检查；新增测试布局不得只因旧扫描器不认识而绕过 TISO009。
+
+判据是：**在调用方 `WOPAL_HOME` 指向独立、空且不存在的哨兵目录时，包的实际测试命令全绿，
+该哨兵目录仍不存在、隔离 Home 不越界，也没有改写调用方真实 Home。** 对 `home-preload`，还须在
+独立 Bun 进程中确认 `Global.Path.wopalHome` 等于基座指定的临时 Home，并与调用方值不同，
+以及退出后的清理。测试不得用开发者的真实 Home 充当故障注入哨兵。
+
+TISO009 负责阻止**可静态识别**的新增风险；实际测试命令、preload 顺序及清理由运行时回归兜底。
+这两类验证不能证明任意第三方代码绝无越界写入，因而“零真实 Home 写入”只对明确的
+`WOPAL_HOME`/`Global.Path` 保护面作承诺；其他进程级路径须按测试隔离总规则单独隔离和审查。
 
 ### 禁止的写法
 
-- 测试文件里用 `*.defaultLayer` 装配一个会写文件的 service。`defaultLayer` 绑定 `Global.defaultLayer`，
-  因此指向真实 Home。用 `Global.layerWith(...)` 注入临时目录，或用 `Layer.mock` 注入替身。
+- 无 Home 基座的测试通过 Home-bound `*.defaultLayer` 装配真实持久化 service（例如原 `AccountV2.defaultLayer`）。
+  这类 layer 可能绑定 `Global.defaultLayer`，应改用 `Global.layerWith(...)` 注入临时目录，或用 `Layer.mock` 注入替身。
 - 测试断言依赖「本机某个目录/文件已经存在」。这类断言在 CI 上必红，在本地则掩盖真实缺陷。
 - 在 `null` / 缺失父目录时依赖写入成功。文件系统写入必须自己确保父目录存在；测试不得把
   「父目录恰好存在」当成前提。
@@ -133,19 +144,18 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 
 ## 规则与门禁的对应
 
-| 规则                                     | 门禁    | 判定方式                                                                |
-| ---------------------------------------- | ------- | ----------------------------------------------------------------------- |
-| 普通测试不出现 `mock.module`             | TISO001 | AST 扫描，命中 baseline 外的记录即失败                                  |
-| 环境变量变更必须走 scoped helper         | TISO002 | AST 扫描 `process.env.X = ...` / `delete process.env.X`                 |
-| 不用固定 sleep 当同步                    | TISO003 | AST 扫描 `Effect.sleep(` / `Bun.sleep(` / `setTimeout` 作为等待         |
-| unit 层不含真实 I/O                      | TISO004 | 扫描 unit 层文件里的 subprocess / fs.watch / 网络调用                   |
-| 不新增 skip/todo，禁用 .only             | TISO005 | AST 扫描 `.only` 与新增的 `.skip` / `.todo`                             |
-| 共享路径必须走 ownership-aware fixture   | TISO006 | 扫描直接写 `Global.Path.*`、固定 `/tmp` 路径                            |
-| baseline 不得有 stale 条目               | TISO007 | baseline 里记录的违规在源码中已不存在即失败                             |
-| 普通测试不直接启用 Bun 进程内 concurrent | TISO008 | 识别 bun:test 控制器（含 alias/namespace/chained form）的 `.concurrent` |
-| OpenCode 测试不得泄漏 env/cwd            | TISO101 | OpenCode preload 记录 env/cwd 基线，测试结束后比对并先恢复再报错        |
-| 无 Home 基座的包不得使用全局路径装配      | TISO009 | 包无 Home 重定向 preload 时，扫描测试中的 `Global` / `*.defaultLayer` / `Global.Path` 使用 |
-| 每个带 test 的包须声明测试基座            | TISO010 | 包存在 `test/AGENTS.md` 声明基座契约，且声明与实际导入一致               |
+| 规则                                     | 门禁    | 判定方式                                                                                                       |
+| ---------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| 普通测试不出现 `mock.module`             | TISO001 | AST 扫描，命中 baseline 外的记录即失败                                                                         |
+| 环境变量变更必须走 scoped helper         | TISO002 | AST 扫描 `process.env.X = ...` / `delete process.env.X`                                                        |
+| 不用固定 sleep 当同步                    | TISO003 | AST 扫描 `Effect.sleep(` / `Bun.sleep(` / `setTimeout` 作为等待                                                |
+| unit 层不含真实 I/O                      | TISO004 | 扫描 unit 层文件里的 subprocess / fs.watch / 网络调用                                                          |
+| 不新增 skip/todo，禁用 .only             | TISO005 | AST 扫描 `.only` 与新增的 `.skip` / `.todo`                                                                    |
+| 共享路径必须走 ownership-aware fixture   | TISO006 | 扫描直接写 `Global.Path.*`、固定 `/tmp` 路径                                                                   |
+| baseline 不得有 stale 条目               | TISO007 | baseline 里记录的违规在源码中已不存在即失败                                                                    |
+| 普通测试不直接启用 Bun 进程内 concurrent | TISO008 | 识别 bun:test 控制器（含 alias/namespace/chained form）的 `.concurrent`                                        |
+| OpenCode 测试不得泄漏 env/cwd            | TISO101 | OpenCode preload 记录 env/cwd 基线，测试结束后比对并先恢复再报错                                               |
+| 无 Home 基座的包不得使用全局路径装配     | TISO009 | 枚举实际测试入口及测试 helper，识别 `Global` / `Global.Path` / Home-bound layer；核对有效 preload 与运行时探针 |
 
 TISO008 是**直接 Bun test control 门禁**，不是“禁止一切并发”。测试可以在一个普通用例内部并发执行
 由该用例明确拥有的操作；也可以通过经过审查的 owner-aware helper 开启 test-level concurrency。
@@ -156,11 +166,15 @@ TISO008 是**直接 Bun test control 门禁**，不是“禁止一切并发”�
 TISO101 当前是 **OpenCode package 的运行时 backstop**，由 `packages/opencode/bunfig.toml` 加载
 `test/preload.ts` 后生效；它不是全仓每个 Bun test process 都已安装的保证。
 
-TISO009 补上这个洞：它不要求每个包都装运行时哨兵，而是**要求使用全局路径装配的包必须同时拥有 Home 隔离基座**。
-没有基座、也不碰全局路径的包保持现状；一旦这样的包引入了 `Global` 或 `defaultLayer`，门禁立即失败，
-必须补基座才能继续。这样防护覆盖的是真实风险面，而不是逼所有包做同一种改造。
+TISO009 补上这个洞：它不要求每个包都安装 preload，而是**要求可达的测试代码使用全局 Home 装配时，
+该包拥有已验证生效的 Home 隔离基座**。判定与报错共用一份包发现结果，不另设 TISO010 或为每个包
+维护一份重复的 `test/AGENTS.md` 声明。`no-global-paths` 是扫描结果，不是可以靠声明绕过的白名单。
 
-TISO010 让「包选了什么基座」成为可检查的事实，而不是口口相传的约定：声明缺失或声明与实际导入矛盾都算失败。
+有效 preload 的静态检查核对实际 `bunfig.toml` 的 `[test].preload`、测试命令的覆盖参数、路径存在性及
+执行顺序；认可直接的顶层 `process.env.WOPAL_HOME` / `process.env["WOPAL_HOME"]` 赋值，但不能只匹配
+这段字面代码。赋值给原值、固定真实目录、在读取 `Global.Path` 后才赋值，均不能被视为安全证明。
+对无法静态判定的调用/helper 或导入顺序，检查应失败并指向需要补充的隔离验证，不能静默放行。
+实际探针使用真实 runner 的独立进程验证环境重定向、`Global.Path`、临时目录归属与清理。
 
 **baseline 的维护规则**：baseline 是**精确债务清单**，每条记录「规则 + 文件 + 具体目标（模块 id / env key / API）+ 出现次数」。
 出现次数是必需的：同一个文件里第二条完全相同的违规如果没有计数，就会匹配上只记录了一次的条目而被漏掉。
@@ -178,7 +192,9 @@ TISO010 让「包选了什么基座」成为可检查的事实，而不是口口
 这样「某个包的整个 `test/` 目录被当成 integration 而整片豁免检查」这类弱化不会悄悄发生。
 
 固定 process preload（例如 `electron-mock.ts`）不进 baseline，单独登记为合法架构例外。
-故意含违规的扫描器样本也必须精确登记到文件，不能因为目录叫 `fixture` 就整体豁免。
+故意含违规的扫描器样本应优先作为内存中的扫描器输入，或放在与正式仓库隔离的临时包结构中。
+若必须将样本保留在仓库内，只能按精确文件路径配置样本例外，不得因目录叫 `fixture`、`e2e` 就整体豁免；
+新增同目录违规样本须照常失败。现有 baseline 的精确目标与次数规则继续适用，新门禁不以扩大 baseline 交付。
 
 ## 故障模拟与稳定性验证
 

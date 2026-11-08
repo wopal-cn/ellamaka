@@ -14,28 +14,66 @@
 import { readdir, readFile, writeFile, stat } from "node:fs/promises"
 import path from "node:path"
 import { RULES, type RuleId } from "./rules"
-import { scanSource, violationKey, type Violation } from "./scan"
+import { scanRepository, violationKey, type GateFileSystem, type PackageDiscovery, type Violation } from "./scan"
 import { baselineSize, compareBaseline, entryKey, type Baseline } from "./baseline"
 
 const BASELINE_PATH = ".ci/test-isolation-baseline.json"
 const SCAN_ROOTS = ["packages", "scripts"]
 const NL = "\n"
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "test-results", "coverage", "e2e", "build"])
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "test-results", "coverage", "build"])
 
-async function collectTestFiles(root: string, current: string, out: string[] = []) {
+async function collectRepoFiles(root: string, current: string, files: Map<string, string>) {
   const entries = await readdir(current, { withFileTypes: true })
   for (const entry of entries) {
     if (SKIP_DIRS.has(entry.name)) continue
     const absolute = path.join(current, entry.name)
     if (entry.isDirectory()) {
-      await collectTestFiles(root, absolute, out)
+      await collectRepoFiles(root, absolute, files)
       continue
     }
     if (!entry.isFile()) continue
-    if (!/\.test\.(?:ts|tsx)$/.test(entry.name)) continue
-    out.push(path.relative(root, absolute).split(path.sep).join("/"))
+    if (!/\.(?:[cm]?[jt]s|[jt]sx)$/.test(entry.name) && entry.name !== "package.json" && entry.name !== "bunfig.toml") {
+      continue
+    }
+    const rel = path.relative(root, absolute).split(path.sep).join("/")
+    const content = await readFile(absolute, "utf8")
+    files.set(rel, content)
   }
-  return out
+}
+
+export async function loadRepositoryFiles(root: string): Promise<GateFileSystem> {
+  const files = new Map<string, string>()
+  const rootPkg = path.join(root, "package.json")
+  const rootPkgContent = await readFile(rootPkg, "utf8").catch(() => undefined)
+  if (rootPkgContent !== undefined) files.set("package.json", rootPkgContent)
+
+  for (const scanRoot of SCAN_ROOTS) {
+    const absolute = path.join(root, scanRoot)
+    const exists = await stat(absolute).catch(() => undefined)
+    if (!exists) continue
+    await collectRepoFiles(root, absolute, files)
+  }
+  return { files }
+}
+
+export async function runGateCheck(root: string): Promise<{
+  violations: Violation[]
+  packages: PackageDiscovery[]
+  testFiles: string[]
+  baseline: Baseline
+  comparison: ReturnType<typeof compareBaseline>
+  freshViolations: Violation[]
+}> {
+  const fs = await loadRepositoryFiles(root)
+  const { violations, packages, testFiles } = scanRepository(fs, root)
+  const baseline = await readBaseline(root)
+  const comparison = compareBaseline(
+    baseline,
+    violations.map((violation) => violationKey(violation)),
+  )
+  const fresh = comparison.fresh
+  const freshViolations = violations.filter((violation) => fresh.includes(violationKey(violation)))
+  return { violations, packages, testFiles, baseline, comparison, freshViolations }
 }
 
 async function readBaseline(root: string): Promise<Baseline> {
@@ -80,28 +118,8 @@ function rebuildBaseline(baseline: Baseline, violations: Violation[]): Baseline 
 async function main() {
   const root = path.resolve(import.meta.dir, "..", "..", "..", "..")
   const fix = process.argv.includes("--fix")
-  const files: string[] = []
-  for (const scanRoot of SCAN_ROOTS) {
-    const absolute = path.join(root, scanRoot)
-    const exists = await stat(absolute).catch(() => undefined)
-    if (!exists) continue
-    await collectTestFiles(root, absolute, files)
-  }
-  files.sort()
-
-  const violations: Violation[] = []
-  for (const file of files) {
-    const source = await readFile(path.join(root, file), "utf8")
-    violations.push(...scanSource(file, source, { root }))
-  }
-
-  const baseline = await readBaseline(root)
-  const comparison = compareBaseline(
-    baseline,
-    violations.map((violation) => violationKey(violation)),
-  )
+  const { violations, testFiles: files, baseline, comparison, freshViolations } = await runGateCheck(root)
   const fresh = comparison.fresh
-  const freshViolations = violations.filter((violation) => fresh.includes(violationKey(violation)))
 
   if (fix) {
     const next = rebuildBaseline(baseline, violations)
@@ -125,6 +143,7 @@ async function main() {
     for (const violation of freshViolations) {
       const rule = RULES[violation.rule]
       process.stdout.write("\n  " + violation.rule + "  " + violation.file + ":" + violation.line + "\n")
+      process.stdout.write("    " + violation.detail + "\n")
       process.stdout.write("    " + rule.title + "\n")
       process.stdout.write("    " + rule.message + "\n")
     }
@@ -164,4 +183,6 @@ async function main() {
   process.stdout.write("all test isolation rules satisfied\n")
 }
 
-await main()
+if (import.meta.main) {
+  await main()
+}

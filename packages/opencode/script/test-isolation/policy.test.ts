@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test"
 import { readFileSync, statSync } from "node:fs"
 import path from "node:path"
+import { planning } from "../run-tests"
+import { planLayer, type ConcretePackage } from "../run-tests-root"
+import { loadRepositoryFiles } from "./check"
 import { INTEGRATION_FILES, INTEGRATION_ROOTS } from "./rules"
+import { scanRepository } from "./scan"
 
 const repoRoot = path.resolve(import.meta.dir, "..", "..", "..", "..")
 
@@ -53,4 +57,91 @@ test("cordis excludes every declared integration file from its unit command", ()
   for (const file of INTEGRATION_FILES.filter((file) => file.startsWith(prefix))) {
     expect(ignored.match(file.slice(prefix.length)), file).toBe(true)
   }
+})
+
+test("package discovery covers every package with executable Bun tests across test/, src/, script/, and nested sdk/js", async () => {
+  const fs = await loadRepositoryFiles(repoRoot)
+  const { packages } = scanRepository(fs, repoRoot)
+  const discoveredDirs = packages.map((p) => p.packageDir)
+
+  expect(discoveredDirs).toContain("packages/opencode")
+  expect(discoveredDirs).toContain("packages/ellamaka-core")
+  expect(discoveredDirs).toContain("packages/ellamaka-app")
+  expect(discoveredDirs).toContain("packages/ellamaka-desktop")
+  expect(discoveredDirs).toContain("packages/ellamaka-cordis")
+  expect(discoveredDirs).toContain("packages/ui")
+  expect(discoveredDirs).toContain("packages/sdk/js")
+  expect(discoveredDirs).toContain("packages/wopalspace")
+
+  const opencodePkg = packages.find((p) => p.packageDir === "packages/opencode")!
+  expect(opencodePkg.preloadValid).toBe(true)
+  expect(opencodePkg.testFiles.some((f) => f.startsWith("packages/opencode/script/"))).toBe(true)
+  expect(opencodePkg.testFiles.some((f) => f.startsWith("packages/opencode/src/"))).toBe(true)
+
+  const corePkg = packages.find((p) => p.packageDir === "packages/ellamaka-core")!
+  expect(corePkg.preloadValid).toBe(true)
+  expect(corePkg.homeBindings.length).toBeGreaterThan(0)
+
+  // Every package configured in run-tests-root.ts must be present in the scanner discovery list
+  const rootPlanned = new Set<ConcretePackage>([
+    ...planLayer("unit", "all").map((c) => c.pkg),
+    ...planLayer("integration", "all").map((c) => c.pkg),
+    ...planLayer("e2e", "all").map((c) => c.pkg),
+  ])
+  for (const pkg of rootPlanned) {
+    expect(discoveredDirs).toContain(`packages/${pkg}`)
+  }
+
+  // Every non-preload package must have zero Home bindings (no-global-paths)
+  for (const pkg of packages) {
+    if (!pkg.preloadValid) {
+      expect(pkg.homeBindings, `${pkg.packageDir} has Home bindings without valid preload`).toEqual([])
+    }
+  }
+
+  // File-level coverage check against opencode's actual runner planning (unit + integration + e2e)
+  const opencodeTestRoot = path.join(repoRoot, "packages/opencode/test")
+  const runnerEntries = [
+    ...planning("unit", opencodeTestRoot),
+    ...planning("integration", opencodeTestRoot),
+    ...planning("e2e", opencodeTestRoot),
+  ]
+  const scannedOpencodeFiles = new Set(opencodePkg.testFiles)
+  const scannedOpencodeHelpers = new Set(opencodePkg.reachableHelpers)
+  for (const entry of runnerEntries) {
+    const normalized = `packages/opencode/${entry.replace(/\/$/, "")}`
+    if (entry.endsWith(".test.ts") || entry.endsWith(".test.tsx")) {
+      expect(scannedOpencodeFiles.has(normalized), `missing runner file ${normalized}`).toBe(true)
+    } else {
+      const existingCodeFiles = [...fs.files.keys()].filter(
+        (f) => f.startsWith(normalized + "/") && /\.(?:[cm]?[jt]s|[jt]sx)$/.test(f),
+      )
+      for (const file of existingCodeFiles) {
+        expect(
+          scannedOpencodeFiles.has(file) || scannedOpencodeHelpers.has(file),
+          `runner dir ${normalized} code file ${file} not covered by scan`,
+        ).toBe(true)
+      }
+    }
+  }
+  expect(scannedOpencodeHelpers.size).toBeGreaterThan(0)
+
+  // File-level coverage check against ellamaka-cordis test:contracts and test:integration
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+  const cordisManifest = JSON.parse(read("packages/ellamaka-cordis/package.json")) as {
+    scripts: Record<string, string>
+  }
+  const cordisPkg = packages.find((p) => p.packageDir === "packages/ellamaka-cordis")!
+  const scannedCordisFiles = new Set(cordisPkg.testFiles)
+  for (const scriptKey of ["test:contracts", "test:integration", "test:tools"]) {
+    const cmd = cordisManifest.scripts[scriptKey] ?? ""
+    for (const match of cmd.matchAll(/(?:src|script|test)\/[A-Za-z0-9_./-]+\.test\.ts/g)) {
+      const rel = `packages/ellamaka-cordis/${match[0]}`
+      expect(scannedCordisFiles.has(rel), `cordis ${scriptKey} file ${rel} missing from scan`).toBe(true)
+    }
+  }
+
+  // Verify Playwright .spec.ts e2e entries under packages/ellamaka-app/e2e are also in the scanned file set
+  const appPkg = packages.find((p) => p.packageDir === "packages/ellamaka-app")!
+  expect(appPkg.testFiles.some((f) => f.startsWith("packages/ellamaka-app/e2e/") && f.endsWith(".spec.ts"))).toBe(true)
 })

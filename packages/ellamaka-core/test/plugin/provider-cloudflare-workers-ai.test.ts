@@ -1,34 +1,17 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { AccountV2 } from "@wopal/ellamaka-core/account"
 import { Catalog } from "@wopal/ellamaka-core/catalog"
-import { Location } from "@wopal/ellamaka-core/location"
 import { EventV2 } from "@wopal/ellamaka-core/event"
 import { ModelV2 } from "@wopal/ellamaka-core/model"
 import { PluginV2 } from "@wopal/ellamaka-core/plugin"
-import { Policy } from "@wopal/ellamaka-core/policy"
 import { AccountPlugin } from "@wopal/ellamaka-core/plugin/account"
 import { CloudflareWorkersAIPlugin } from "@wopal/ellamaka-core/plugin/provider/cloudflare-workers-ai"
 import { ProviderV2 } from "@wopal/ellamaka-core/provider"
-import { AbsolutePath } from "@wopal/ellamaka-core/schema"
-import { location } from "../fixture/location"
-import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk, it, model, npmLayer, withEnv } from "./provider-helper"
-
-const itWithAccount = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
-    Layer.provideMerge(AccountV2.defaultLayer),
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(Policy.defaultLayer),
-    Layer.provideMerge(
-      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
-    ),
-    Layer.provideMerge(npmLayer),
-  ),
-)
+import { fakeSelectorSdk, it, itWithAccount, model, withEnv } from "./provider-helper"
 
 function cloudflareLanguage(sdk: unknown, modelID = "@cf/model") {
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
   return (sdk as { languageModel: (id: string) => { config: CloudflareConfig; provider: string } }).languageModel(
     modelID,
   )
