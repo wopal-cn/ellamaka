@@ -1353,7 +1353,7 @@ describe("dsh tools profile", () => {
             stdio: { stdin: "ignore", stdout: { maxBytes: 8_192 }, stderr: { maxBytes: 8_192 } },
             graceMs: 5_000,
           })
-          await expect(minimal.done).rejects.toThrow(/not found/i)
+          await expect(minimal.done).rejects.toMatchObject({ code: "ENOENT" })
         } finally {
           await host.dispose()
         }
