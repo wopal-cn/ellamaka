@@ -89,6 +89,10 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 原理、三种隔离模型、规则到门禁的完整对照见
 [docs/testing-isolation.md](docs/testing-isolation.md)。
 
+- 临时文件不许落在仓库目录里。测试需要临时文件或目录时，写到 `.wopal-space/.tmp/` 或所属 package 自带的
+  scoped 临时目录 fixture，并在 `finally` 里删除；禁止对 `<package>/.tmp`（或 package 内任何路径）执行 `mkdir`。
+  自动化、pre-commit 和 agent 操作都跑在同一份 checkout 上，残留目录会污染之后每一次扫描。
+  只要存在任何 `packages/*/.tmp` 目录，`policy.test.ts` 就会失败。
 - 替换依赖要用**依赖注入**，不要用进程级替换。普通测试文件禁止调用 `mock.module`：Bun 的模块替换是进程级的，
   `mock.restore()` 不撤销它，且对已经 import 的绑定也生效，会泄漏给之后加载的每个测试文件。
   正确做法是给产品加一个接缝（service、factory、`Layer.mock`），由测试注入替身。

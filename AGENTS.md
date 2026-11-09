@@ -89,6 +89,11 @@ behavioral tests and implementation review verify the remaining obligations.
 The reasoning, the three isolation models, and the full rule-to-gate map live in
 [docs/testing-isolation.md](docs/testing-isolation.md).
 
+- Keep scratch files out of the repository tree. A test that needs a throwaway file or directory writes it to
+  `.wopal-space/.tmp/` or the owning package's scoped temp fixture and removes it in a `finally` block; never call
+  `mkdir` on a `<package>/.tmp` (or any other path inside a package). Automated, pre-commit, and agent-driven runs all
+  run inside the same checkout, so a leftover directory silently pollutes every later scan. `policy.test.ts` fails
+  when any `packages/*/.tmp` directory exists.
 - Replace a dependency by **injection**, not by process-wide replacement. Ordinary test files must not
   call `mock.module`: Bun module mocks are process-wide, are not undone by `mock.restore()`, and apply to
   bindings that were already imported, so they leak into every test file loaded later. Give the product a

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { readFileSync, statSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
 import { planning } from "../run-tests"
 import { planLayer, type ConcretePackage } from "../run-tests-root"
@@ -144,4 +144,21 @@ test("package discovery covers every package with executable Bun tests across te
   // Verify Playwright .spec.ts e2e entries under packages/ellamaka-app/e2e are also in the scanned file set
   const appPkg = packages.find((p) => p.packageDir === "packages/ellamaka-app")!
   expect(appPkg.testFiles.some((f) => f.startsWith("packages/ellamaka-app/e2e/") && f.endsWith(".spec.ts"))).toBe(true)
+})
+
+// Tests must never turn a package directory into scratch space. A probe written
+// under `<package>/.tmp` survives its test run as an empty directory, is not
+// gitignored, and silently pollutes every later scan of the repository.
+test("no package directory contains a stray temporary directory", () => {
+  const strays: string[] = []
+  const packagesDir = path.join(repoRoot, "packages")
+  if (existsSync(path.join(repoRoot, ".tmp"))) strays.push(".tmp")
+  for (const entry of readdirSync(packagesDir)) {
+    const candidate = path.join(packagesDir, entry, ".tmp")
+    if (existsSync(candidate)) strays.push(`packages/${entry}/.tmp`)
+  }
+  expect(
+    strays,
+    "test probes belong in .wopal-space/.tmp or the owning package's scoped temp fixture, never in a package directory",
+  ).toEqual([])
 })
