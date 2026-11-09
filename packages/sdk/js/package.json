@@ -21,6 +21,11 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./http": "./src/v2/client.ts",
+    "./v2/gen/sdk": "./src/v2/gen/sdk.gen.ts",
+    "./v2/gen/types": "./src/v2/gen/types.gen.ts",
+    "./openapi": "./src/openapi.ts",
+    "./openapi.json": "./src/openapi.json",
     "./client": "./src/client.ts",
     "./server": "./src/server.ts",
     "./v2": "./src/v2/index.ts",
@@ -29,7 +34,8 @@
     "./v2/server": "./src/v2/server.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "devDependencies": {
     "@hey-api/openapi-ts": "0.90.10",

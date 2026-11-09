@@ -32,6 +32,7 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  DiscoveryDocumentResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute2,
   EventTuiPromptAppend2,
@@ -151,7 +152,6 @@ import type {
   ProviderOauthCallbackErrors,
   ProviderOauthCallbackResponses,
   PtyConnectErrors,
-  PtyConnectResponses,
   PtyConnectTokenErrors,
   PtyConnectTokenResponses,
   PtyCreateErrors,
@@ -3788,7 +3788,7 @@ export class Pty extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<PtyConnectResponses, PtyConnectErrors, ThrowOnError>({
+    return (options?.client ?? this.client).get<unknown, PtyConnectErrors, ThrowOnError>({
       url: "/pty/{ptyID}/connect",
       ...options,
       ...params,
@@ -6072,6 +6072,20 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class Discovery extends HeyApiClient {
+  /**
+   * Discover server HTTP APIs
+   *
+   * Returns the complete Server OpenAPI document, including public platform and official App endpoints.
+   */
+  public document<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<DiscoveryDocumentResponses, unknown, ThrowOnError>({
+      url: "/doc",
+      ...options,
+    })
+  }
+}
+
 export class OpencodeClient extends HeyApiClient {
   public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
 
@@ -6218,5 +6232,10 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _discovery?: Discovery
+  get discovery(): Discovery {
+    return (this._discovery ??= new Discovery({ client: this.client }))
   }
 }

@@ -1,5 +1,5 @@
 import { Config as EffectConfig, Context, Effect, Layer } from "effect"
-import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/unstable/httpapi"
 import {
   FetchHttpClient,
   HttpClient,
@@ -58,7 +58,7 @@ import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { AppBffInstanceApi, AppBffRootApi, InstanceHttpApi, RootHttpApi } from "./api"
-import { PublicApi } from "./public"
+import { serverOpenApi } from "./openapi"
 import {
   authorizationLayer,
   authorizationRouterMiddleware,
@@ -198,7 +198,7 @@ const appBffInstanceRoutes = appBffInstanceApiRoutes.pipe(
 // `HttpServerResponse.jsonUnsafe` runs JSON.stringify eagerly, so caching
 // the response also caches the serialized body — every /doc request reuses
 // the same Uint8Array instead of re-stringifying the spec.
-const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(OpenApi.fromApi(PublicApi)))
+const docResponse = lazy(() => HttpServerResponse.jsonUnsafe(serverOpenApi()))
 
 const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effect.succeed(docResponse()))).pipe(
   Layer.provide(authOnlyRouterLayer),

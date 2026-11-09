@@ -129,7 +129,7 @@ const WorkbenchErrors = [
 ] as const
 
 // Official App BFF: private ids keep this group out of the Public Platform
-// HttpApi composition (and therefore out of /doc and the published SDK).
+// SDK composition; the complete Server /doc identifies it as App-specific.
 export const WorkbenchApi = HttpApi.make("app-bff-root").add(
   HttpApiGroup.make("workbench")
     .add(
@@ -144,7 +144,13 @@ export const WorkbenchApi = HttpApi.make("app-bff-root").add(
         }),
       ),
     )
-    .annotateMerge(OpenApi.annotations({ title: "workbench", description: "Workbench private App BFF routes: session creation, session tree, creation locations and the DSH entry." }))
+    .annotateMerge(
+      OpenApi.annotations({
+        title: "workbench",
+        description:
+          "Workbench private App BFF routes: session creation, session tree, creation locations and the DSH entry.",
+      }),
+    )
     .middleware(Authorization),
 )
 export const WorkbenchInstanceApi = HttpApi.make("app-bff-instance").add(

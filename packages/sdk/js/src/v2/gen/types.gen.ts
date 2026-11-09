@@ -10004,11 +10004,31 @@ export type PtyConnectErrors = {
 
 export type PtyConnectError = PtyConnectErrors[keyof PtyConnectErrors]
 
-export type PtyConnectResponses = {
-  /**
-   * Connected session
-   */
-  200: boolean
+export type DiscoveryDocumentData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/doc"
 }
 
-export type PtyConnectResponse = PtyConnectResponses[keyof PtyConnectResponses]
+export type DiscoveryDocumentResponses = {
+  /**
+   * Success
+   */
+  200: {
+    openapi: "3.1.0"
+    info: {
+      title: string
+      version: string
+      description?: string
+    }
+    paths: {
+      [key: string]: unknown
+    }
+    components?: unknown
+    security?: unknown
+    tags?: unknown
+  }
+}
+
+export type DiscoveryDocumentResponse = DiscoveryDocumentResponses[keyof DiscoveryDocumentResponses]

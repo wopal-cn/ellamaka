@@ -433,6 +433,7 @@
         "@typescript/native-preview": "catalog:",
         "@wopal/ellamaka-core": "workspace:*",
         "@wopal/http-recorder": "workspace:*",
+        "ajv": "8.18.0",
         "drizzle-kit": "catalog:",
         "drizzle-orm": "catalog:",
         "prettier": "3.6.2",

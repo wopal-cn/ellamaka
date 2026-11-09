@@ -12,7 +12,12 @@ import { normalizeGeneratedUnions } from "./normalize-unions"
 
 const opencode = path.resolve(dir, "../../opencode")
 
-await $`${process.execPath} ${path.join(opencode, "script/generate-openapi.ts")} > ${dir}/openapi.json`.cwd(opencode)
+const generated = await $`${process.execPath} ${path.join(opencode, "script/generate-openapi.ts")}`.cwd(opencode).text()
+const contract = JSON.parse(generated) as { paths: Record<string, unknown> }
+if (Object.keys(contract.paths).some((path) => path.startsWith("/workbench/")))
+  throw new Error("SDK OpenAPI must not contain Official App BFF operations")
+await Bun.write(path.join(dir, "openapi.json"), generated)
+await Bun.write(path.join(dir, "src/openapi.json"), generated)
 
 await createClient({
   input: "./openapi.json",
@@ -63,7 +68,6 @@ if (sseTypesPatched === sseTypesSource) {
 }
 await Bun.write(sseTypesPath, sseTypesPatched)
 
-await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`
 await $`rm -rf dist tsconfig.tsbuildinfo`
 await $`bun tsc`

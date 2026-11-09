@@ -20,11 +20,13 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./client-compat": "./src/client-compat.ts",
     "./tool": "./src/tool.ts",
     "./tui": "./src/tui.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "dependencies": {
     "@wopal/ellamaka-sdk": "workspace:*",

@@ -46,10 +46,7 @@ function toDistTarget(source: string): string {
 const PLUGIN = "packages/plugin/package.json"
 const SDK = "packages/sdk/js/package.json"
 
-// The public npm packages own an independent SemVer line. The SDK package is
-// the anchor and the Plugin must match it exactly, including any prerelease.
-// Import the anchor path from the release package rather than restating it here
-// so moving the npm anchor cannot silently leave this contract test stale.
+// The SDK owns its version; Plugin may advance independently.
 async function npmReleaseVersion(): Promise<string> {
   const anchor = await readPackage(SDK_VERSION_ANCHOR)
   return anchor.version
@@ -57,12 +54,18 @@ async function npmReleaseVersion(): Promise<string> {
 
 const PLUGIN_EXPORTS: Record<string, string> = {
   ".": "./src/index.ts",
+  "./client-compat": "./src/client-compat.ts",
   "./tool": "./src/tool.ts",
   "./tui": "./src/tui.ts",
 }
 
 const SDK_EXPORTS: Record<string, string> = {
   ".": "./src/index.ts",
+  "./http": "./src/v2/client.ts",
+  "./v2/gen/sdk": "./src/v2/gen/sdk.gen.ts",
+  "./v2/gen/types": "./src/v2/gen/types.gen.ts",
+  "./openapi": "./src/openapi.ts",
+  "./openapi.json": "./src/openapi.json",
   "./client": "./src/client.ts",
   "./server": "./src/server.ts",
   "./v2": "./src/v2/index.ts",
@@ -90,7 +93,7 @@ describe("published plugin package", () => {
   test("is branded @wopal/ellamaka-plugin at the independent npm release version", async () => {
     const pkg = await readPackage(PLUGIN)
     expect(pkg.name).toBe("@wopal/ellamaka-plugin")
-    expect(pkg.version).toBe(await npmReleaseVersion())
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+/)
   })
 
   test("is public and ships dist with types", async () => {
@@ -100,7 +103,7 @@ describe("published plugin package", () => {
 
   test("publishes every subpath from dist", async () => {
     for (const source of Object.values(PLUGIN_EXPORTS)) {
-      expect(toDistTarget(source)).toMatch(/^\.\/dist\/.*\.js$/)
+      expect(toDistTarget(source)).toMatch(/^\.\/dist\/.*\.(js|json)$/)
     }
   })
 
@@ -130,7 +133,7 @@ describe("published sdk package", () => {
 
   test("publishes every subpath including /v2 from dist", async () => {
     for (const source of Object.values(SDK_EXPORTS)) {
-      expect(toDistTarget(source)).toMatch(/^\.\/dist\/.*\.js$/)
+      expect(toDistTarget(source)).toMatch(/^\.\/dist\/.*\.(js|json)$/)
     }
     expect(Object.keys(SDK_EXPORTS)).toContain("./v2")
   })

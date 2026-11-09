@@ -32,6 +32,7 @@ const JS_EXT = ".js"
  * ships.
  */
 export function toDistTarget(source: string): string {
+  if (source === "./src/openapi.json") return "./dist/openapi.json"
   if (!source.startsWith(DEV_SOURCE_PREFIX)) {
     throw new Error(`cannot publish export target "${source}": expected a "${DEV_SOURCE_PREFIX}*.ts" source path`)
   }
@@ -44,7 +45,7 @@ export function toDistTarget(source: string): string {
 /** The `{ import, types }` pair shipped for a development export target. */
 export function distExportTarget(source: string): DistExportTarget {
   const file = toDistTarget(source)
-  return { import: file, types: `${file.slice(0, -JS_EXT.length)}.d.ts` }
+  return { import: file, types: file.endsWith(".json") ? file : `${file.slice(0, -JS_EXT.length)}.d.ts` }
 }
 
 /**

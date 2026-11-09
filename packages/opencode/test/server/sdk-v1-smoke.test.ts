@@ -4,6 +4,7 @@
 // for endpoints the v1 SDK was generated against.
 import { afterEach, describe, expect, test } from "bun:test"
 import { createOpencodeClient } from "@wopal/ellamaka-sdk"
+import { createPluginClient } from "../../src/plugin/client-compat"
 import { Server } from "../../src/server/server"
 import { tmpdir, disposeAllInstances } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
@@ -17,11 +18,13 @@ afterEach(async () => {
 })
 
 function client(directory: string) {
-  return createOpencodeClient({
-    baseUrl: "http://test",
-    directory,
-    fetch: ((req: Request) => Server.Default().app.fetch(req)) as unknown as typeof fetch,
-  })
+  return createPluginClient(
+    createOpencodeClient({
+      baseUrl: "http://test",
+      directory,
+      fetch: ((req: Request) => Server.Default().app.fetch(req)) as unknown as typeof fetch,
+    }),
+  )
 }
 
 describe("v1 SDK runtime smoke", () => {

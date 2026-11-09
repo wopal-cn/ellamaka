@@ -1,21 +1,35 @@
 import type {
   Event,
-  createOpencodeClient,
   Project,
   Model,
   Provider,
-  Permission,
   UserMessage,
   Message,
   Part,
   Config as SDKConfig,
 } from "@wopal/ellamaka-sdk"
 import type { Provider as ProviderV2, Model as ModelV2, Auth, PermissionRule } from "@wopal/ellamaka-sdk/v2"
+import type { PluginClient } from "./client-compat.js"
+export type { PluginClient } from "./client-compat.js"
 
 import type { BunShell } from "./shell.js"
 import { type ToolDefinition } from "./tool.js"
 
 export * from "./tool.js"
+
+// The legacy permission.ask hook is not emitted by the current Runtime, but
+// remains a plugin contract and is distinct from the current PermissionRequest.
+export type Permission = {
+  id: string
+  type: string
+  pattern?: string | string[]
+  sessionID: string
+  messageID: string
+  callID?: string
+  title: string
+  metadata: Record<string, unknown>
+  time: { created: number }
+}
 
 export type SystemPromptSectionKind =
   | "agent-prompt"
@@ -75,7 +89,7 @@ export type WorkspaceAdapter = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClient>
+  client: PluginClient
   project: Project
   directory: string
   worktree: string
