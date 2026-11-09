@@ -45,3 +45,21 @@ await client.session.get({ sessionID })
 ```
 
 `@wopal/ellamaka-sdk/client`, `/server`, and `/v2/*` remain available for existing consumers. The compatibility adapter for `PluginInput.client` remains in `@wopal/ellamaka-plugin` and keeps the old nested shape for plugin authors.
+
+## Trusted-local Worker
+
+Use `@wopal/ellamaka-sdk/local` for Ontology and Space operations that must run on the same machine without starting an HTTP Server:
+
+```ts
+import { createEllamakaLocalClient } from "@wopal/ellamaka-sdk/local"
+
+const local = await createEllamakaLocalClient({
+  wopalHome: "/path/to/.wopal",
+  directory: "/path/to/space",
+})
+
+const spaces = await local.client.wopalSpace.space.list()
+await local.dispose()
+```
+
+The client launches the published, self-contained Worker asset under `dist/local/worker.js`; it does not start the Ellamaka Runtime or DSH. `client.wopalSpace.ontology` and `client.wopalSpace.space` are the only exposed operation groups. Setup and Runtime routes return `LOCAL_OPERATION_UNSUPPORTED` before business handlers run. `dispose()` waits for accepted requests to finish and then shuts down the Worker. Relocators such as a Node SEA launcher can pass the published Worker asset location with `workerPath`.

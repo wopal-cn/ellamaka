@@ -31,6 +31,7 @@ const PLUGIN_DIST: Record<string, DistTarget> = {
 const SDK_DIST: Record<string, DistTarget> = {
   ".": { import: "./dist/index.js", types: "./dist/index.d.ts" },
   "./http": { import: "./dist/v2/client.js", types: "./dist/v2/client.d.ts" },
+  "./local": { import: "./dist/local.js", types: "./dist/local.d.ts" },
   "./v2/gen/sdk": { import: "./dist/v2/gen/sdk.gen.js", types: "./dist/v2/gen/sdk.gen.d.ts" },
   "./v2/gen/types": { import: "./dist/v2/gen/types.gen.js", types: "./dist/v2/gen/types.gen.d.ts" },
   "./openapi": { import: "./dist/openapi.js", types: "./dist/openapi.d.ts" },

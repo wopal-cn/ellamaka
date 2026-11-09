@@ -60,6 +60,8 @@ export function verifyNpmCleanInstall(options: NpmCleanInstallOptions): void {
                   'await import("@wopal/ellamaka-sdk")',
                   'import.meta.resolve("@wopal/ellamaka-sdk/client")',
                   'import.meta.resolve("@wopal/ellamaka-sdk/v2")',
+                  'import.meta.resolve("@wopal/ellamaka-sdk/local")',
+                  'import.meta.resolve("@wopal/ellamaka-sdk/openapi.json")',
                 ]
               : [
                   'await import("@wopal/ellamaka-plugin")',

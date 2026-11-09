@@ -62,6 +62,7 @@ const PLUGIN_EXPORTS: Record<string, string> = {
 const SDK_EXPORTS: Record<string, string> = {
   ".": "./src/index.ts",
   "./http": "./src/v2/client.ts",
+  "./local": "./src/local.ts",
   "./v2/gen/sdk": "./src/v2/gen/sdk.gen.ts",
   "./v2/gen/types": "./src/v2/gen/types.gen.ts",
   "./openapi": "./src/openapi.ts",
