@@ -6,8 +6,8 @@ on:
       - "ellamaka-npm-v*"
   workflow_dispatch:
     inputs:
-      version:
-        description: "Exact npm version to retry (must match the selected ellamaka-npm-v* tag)"
+      tag:
+        description: "Exact ellamaka-npm tag to retry; select the same tag as the ref"
         required: true
         type: string
 
@@ -27,37 +27,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve and validate npm release version
-        id: version
+      - name: Resolve and validate selected npm packages
+        id: selection
         shell: bash
+        env:
+          RETRY_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "push" ]; then
-            case "$GITHUB_REF_NAME" in
-              ellamaka-npm-v*) VERSION="${GITHUB_REF_NAME#ellamaka-npm-v}" ;;
-              *) echo "ERROR: unexpected npm release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
-            esac
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo "ERROR: a release tag is required" >&2; exit 1
+          fi
+          if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "$RETRY_TAG" != "$GITHUB_REF_NAME" ]; then
+            echo "ERROR: retry tag must match selected ref" >&2; exit 1
+          fi
+          tag="$GITHUB_REF_NAME"
+          sdk=false
+          plugin=false
+          version_re='[0-9]+\.[0-9]+\.[0-9]+'
+          if [[ "$tag" =~ ^ellamaka-npm-v($version_re)-sdk-v($version_re)-plugin$ ]]; then
+            sdk=true; plugin=true; sdk_version="${BASH_REMATCH[1]}"; plugin_version="${BASH_REMATCH[2]}"
+          elif [[ "$tag" =~ ^ellamaka-npm-v($version_re)-sdk$ ]]; then
+            sdk=true; sdk_version="${BASH_REMATCH[1]}"
+          elif [[ "$tag" =~ ^ellamaka-npm-v($version_re)-plugin$ ]]; then
+            plugin=true; plugin_version="${BASH_REMATCH[1]}"
           else
-            VERSION="${{ inputs.version }}"
-            EXPECTED_TAG="ellamaka-npm-v${VERSION}"
-            if [ "$GITHUB_REF_TYPE" != "tag" ] || [ "$GITHUB_REF_NAME" != "$EXPECTED_TAG" ]; then
-              echo "ERROR: workflow_dispatch retry must use --ref $EXPECTED_TAG" >&2
-              exit 1
-            fi
+            echo "ERROR: invalid package selection tag $tag" >&2; exit 1
           fi
-
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "ERROR: npm release workflow only supports stable X.Y.Z: $VERSION" >&2
-            exit 1
+          if $sdk && [ "$(node -p "require('./packages/sdk/js/package.json').version")" != "$sdk_version" ]; then
+            echo "ERROR: SDK version does not match tag" >&2; exit 1
           fi
-
-          SDK_VERSION="$(node -p "require('./packages/sdk/js/package.json').version")"
-          PLUGIN_VERSION="$(node -p "require('./packages/plugin/package.json').version")"
-          if [ "$SDK_VERSION" != "$VERSION" ] || [ "$PLUGIN_VERSION" != "$VERSION" ]; then
-            echo "ERROR: tag version $VERSION must match SDK ($SDK_VERSION) and Plugin ($PLUGIN_VERSION)." >&2
-            exit 1
+          if $plugin && [ "$(node -p "require('./packages/plugin/package.json').version")" != "$plugin_version" ]; then
+            echo "ERROR: Plugin version does not match tag" >&2; exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sdk=$sdk" >> "$GITHUB_OUTPUT"
+          echo "plugin=$plugin" >> "$GITHUB_OUTPUT"
 
       - uses: oven-sh/setup-bun@v2
 
@@ -76,8 +79,10 @@ jobs:
 
       - name: Pack and clean-install npm packages
         run: |
-          bun packages/ellamaka-release/src/cli/verify-npm.ts \
-            --version "${{ steps.version.outputs.version }}"
+          args=()
+          if [ "${{ steps.selection.outputs.sdk }}" = true ]; then args+=(--package @wopal/ellamaka-sdk); fi
+          if [ "${{ steps.selection.outputs.plugin }}" = true ]; then args+=(--package @wopal/ellamaka-plugin); fi
+          bun packages/ellamaka-release/src/cli/verify-npm.ts "${args[@]}"
 
       - uses: actions/setup-node@v6
         with:
@@ -88,5 +93,7 @@ jobs:
 
       - name: Publish @wopal/ellamaka-sdk and @wopal/ellamaka-plugin
         run: |
-          bun packages/ellamaka-release/src/cli/publish-npm.ts \
-            --version "${{ steps.version.outputs.version }}"
+          args=()
+          if [ "${{ steps.selection.outputs.sdk }}" = true ]; then args+=(--package @wopal/ellamaka-sdk); fi
+          if [ "${{ steps.selection.outputs.plugin }}" = true ]; then args+=(--package @wopal/ellamaka-plugin); fi
+          bun packages/ellamaka-release/src/cli/publish-npm.ts "${args[@]}"

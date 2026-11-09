@@ -2,11 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os"
 import { join } from "path"
 import { createBunRuntime, packLocalTarball, type PublishRuntime } from "./execute"
-import { buildPublishPlan, loadPublishTargets } from "./plan"
+import { buildPublishPlan, loadPublishTargets, selectPublishTargets } from "./plan"
 
 export interface NpmCleanInstallOptions {
   repoRoot: string
-  version: string
+  packages: string[]
+  version?: string
   runtime?: PublishRuntime
   log?: (line: string) => void
 }
@@ -19,11 +20,16 @@ export interface NpmCleanInstallOptions {
 export function verifyNpmCleanInstall(options: NpmCleanInstallOptions): void {
   const runtime = options.runtime ?? createBunRuntime()
   const log = options.log ?? console.log
-  const plan = buildPublishPlan({
-    targets: loadPublishTargets(options.repoRoot),
-    releaseVersion: options.version,
-    isPublished: () => false,
-  })
+  const targets = selectPublishTargets(loadPublishTargets(options.repoRoot), options.packages)
+  if (options.version && targets.length !== 1) throw new Error("--version requires exactly one package")
+  const entries = targets.flatMap(
+    (target) =>
+      buildPublishPlan({
+        targets: [target],
+        releaseVersion: options.version ?? target.manifest.version,
+        isPublished: () => false,
+      }).entries,
+  )
   const tempRoot = mkdtempSync(join(tmpdir(), "ellamaka-npm-smoke-"))
   const stagingDir = join(tempRoot, "tarballs")
   const installDir = join(tempRoot, "consumer")
@@ -36,7 +42,7 @@ export function verifyNpmCleanInstall(options: NpmCleanInstallOptions): void {
     )
 
     const tarballs: string[] = []
-    for (const entry of plan.entries) {
+    for (const entry of entries) {
       packLocalTarball(entry, { repoRoot: options.repoRoot, stagingDir, runtime, log })
       tarballs.push(join(stagingDir, entry.tarball))
     }
@@ -47,18 +53,25 @@ export function verifyNpmCleanInstall(options: NpmCleanInstallOptions): void {
         "node",
         "--input-type=module",
         "-e",
-        [
-          'await import("@wopal/ellamaka-sdk")',
-          'await import("@wopal/ellamaka-plugin")',
-          'import.meta.resolve("@wopal/ellamaka-sdk/client")',
-          'import.meta.resolve("@wopal/ellamaka-sdk/v2")',
-          'import.meta.resolve("@wopal/ellamaka-plugin/tool")',
-          'import.meta.resolve("@wopal/ellamaka-plugin/tui")',
-        ].join(";"),
+        entries
+          .flatMap((entry) =>
+            entry.name === "@wopal/ellamaka-sdk"
+              ? [
+                  'await import("@wopal/ellamaka-sdk")',
+                  'import.meta.resolve("@wopal/ellamaka-sdk/client")',
+                  'import.meta.resolve("@wopal/ellamaka-sdk/v2")',
+                ]
+              : [
+                  'await import("@wopal/ellamaka-plugin")',
+                  'import.meta.resolve("@wopal/ellamaka-plugin/tool")',
+                  'import.meta.resolve("@wopal/ellamaka-plugin/tui")',
+                ],
+          )
+          .join(";"),
       ],
       { cwd: installDir },
     )
-    log(`npm clean-install smoke passed for ${options.version}`)
+    log(`npm clean-install smoke passed for ${entries.map((entry) => `${entry.name}@${entry.version}`).join(", ")}`)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

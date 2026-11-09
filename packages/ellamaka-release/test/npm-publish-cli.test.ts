@@ -62,16 +62,26 @@ function withStalePlugin(): NpmPublishTarget[] {
   )
 }
 
+function runBoth(args: string[], deps: PublishCliDeps): number {
+  return runPublishCli([...args, "--package", "@wopal/ellamaka-sdk", "--package", "@wopal/ellamaka-plugin"], deps)
+}
+
 describe("argument parsing", () => {
   test("defaults to a real publish against the public registry", () => {
     expect(parsePublishArgs([])).toEqual({
-      options: { dryRun: false, check: false, registry: "https://registry.npmjs.org/", version: undefined },
+      options: {
+        dryRun: false,
+        check: false,
+        registry: "https://registry.npmjs.org/",
+        version: undefined,
+        packages: [],
+      },
     })
   })
 
   test("parses --dry-run, --version and --registry", () => {
     expect(parsePublishArgs(["--dry-run", "--version", "2.0.5-rc.7", "--registry", "https://r.example/"])).toEqual({
-      options: { dryRun: true, check: false, version: "2.0.5-rc.7", registry: "https://r.example/" },
+      options: { dryRun: true, check: false, version: "2.0.5-rc.7", registry: "https://r.example/", packages: [] },
     })
   })
 
@@ -87,7 +97,7 @@ describe("argument parsing", () => {
 describe("skip verification", () => {
   test("verifies every version it is about to skip", () => {
     const record = recorder({ published: ["@wopal/ellamaka-sdk"] })
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(record.verified.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk"])
     expect(record.published.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-plugin"])
   })
@@ -96,14 +106,14 @@ describe("skip verification", () => {
     // Verification is the guard: it must run before the first publish, so a
     // divergent skip cannot be discovered after a sibling has shipped.
     const record = recorder({ published: ["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"] })
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(record.verified.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"])
     expect(record.published).toEqual([])
   })
 
   test("does not verify a version it is going to publish", () => {
     const record = recorder()
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(record.verified).toEqual([])
   })
 
@@ -115,7 +125,7 @@ describe("skip verification", () => {
           "(registry deadbeef, local cafef00d): the version is permanently burned — bump the version and re-release",
       ),
     })
-    expect(runPublishCli([], record.deps)).toBe(1)
+    expect(runBoth([], record.deps)).toBe(1)
     // Nothing is published after a failed verification: the release is broken.
     expect(record.published).toEqual([])
     expect(record.err.join("\n")).toMatch(/2\.0\.5/)
@@ -127,7 +137,7 @@ describe("skip verification", () => {
       published: ["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"],
       verifyError: new Error("@wopal/ellamaka-sdk@2.0.5 contents differ"),
     })
-    expect(runPublishCli([], record.deps)).toBe(1)
+    expect(runBoth([], record.deps)).toBe(1)
     expect(record.authChecks).toEqual([])
   })
 
@@ -140,7 +150,7 @@ describe("skip verification", () => {
       },
       publishError: new Error("npm publish failed with exit code 1: npm error code E403 Forbidden"),
     })
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(record.verified.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"])
   })
 })
@@ -148,7 +158,7 @@ describe("skip verification", () => {
 describe("dry run", () => {
   test("prints the expected manifest and performs zero side effects", () => {
     const record = recorder()
-    const exitCode = runPublishCli(["--dry-run"], record.deps)
+    const exitCode = runBoth(["--dry-run"], record.deps)
 
     expect(exitCode).toBe(0)
     expect(record.authChecks).toEqual([])
@@ -168,7 +178,7 @@ describe("dry run", () => {
 
   test("reports skips without publishing them", () => {
     const record = recorder({ published: ["@wopal/ellamaka-sdk"] })
-    expect(runPublishCli(["--dry-run"], record.deps)).toBe(0)
+    expect(runBoth(["--dry-run"], record.deps)).toBe(0)
 
     const output = record.out.join("\n")
     expect(output).toContain("[skip] @wopal/ellamaka-sdk@")
@@ -180,14 +190,14 @@ describe("dry run", () => {
     // The digest comparison fetches a registry tarball and packs the local
     // build; a dry run must do neither.
     const record = recorder({ published: ["@wopal/ellamaka-sdk"] })
-    expect(runPublishCli(["--dry-run"], record.deps)).toBe(0)
+    expect(runBoth(["--dry-run"], record.deps)).toBe(0)
     expect(record.verified).toEqual([])
     expect(record.published).toEqual([])
   })
 
   test("keeps the sdk-first order in the plan", () => {
     const record = recorder()
-    runPublishCli(["--dry-run"], record.deps)
+    runBoth(["--dry-run"], record.deps)
     const output = record.out.join("\n")
     expect(output.indexOf("@wopal/ellamaka-sdk")).toBeLessThan(output.indexOf("@wopal/ellamaka-plugin"))
   })
@@ -196,7 +206,7 @@ describe("dry run", () => {
 describe("publish", () => {
   test("authenticates, then publishes sdk before plugin", () => {
     const record = recorder()
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
 
     expect(record.authChecks).toEqual(["https://registry.npmjs.org/"])
     expect(record.published.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"])
@@ -204,13 +214,13 @@ describe("publish", () => {
 
   test("skips an already published version instead of republishing it", () => {
     const record = recorder({ published: ["@wopal/ellamaka-sdk"] })
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(record.published.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-plugin"])
   })
 
   test("does not authenticate when every version is already published", () => {
     const record = recorder({ published: ["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"] })
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(record.authChecks).toEqual([])
     expect(record.published).toEqual([])
     expect(record.out.join("\n")).toContain("nothing to do")
@@ -219,14 +229,14 @@ describe("publish", () => {
   test("fails with an explicit message when the registry rejects the login", () => {
     // The real credential check, with `npm whoami` stubbed as unauthenticated.
     const record = recorder({ auth: createAuthCheck({ whoami: () => false, env: {} }) })
-    expect(runPublishCli([], record.deps)).toBe(1)
+    expect(runBoth([], record.deps)).toBe(1)
     expect(record.published).toEqual([])
     expect(record.err.join("\n")).toMatch(/NPM_TOKEN|npm login|authenticat/i)
   })
 
   test("fails with a permission hint when publish is rejected", () => {
     const record = recorder({ publishError: new Error("npm publish failed with exit code 1: npm error code E403") })
-    expect(runPublishCli([], record.deps)).toBe(1)
+    expect(runBoth([], record.deps)).toBe(1)
     const errors = record.err.join("\n")
     expect(errors).toContain("@wopal/ellamaka-sdk@")
     expect(errors).toMatch(/permission|trusted publishing|403/i)
@@ -248,7 +258,7 @@ describe("publish", () => {
       publishError: new Error("npm publish failed with exit code 1: npm error code E403 Forbidden"),
     })
 
-    expect(runPublishCli([], record.deps)).toBe(0)
+    expect(runBoth([], record.deps)).toBe(0)
     expect(probes).toEqual([
       `@wopal/ellamaka-sdk@${version}`,
       `@wopal/ellamaka-plugin@${version}`,
@@ -263,7 +273,7 @@ describe("publish", () => {
     // A genuine credential/permission rejection must not be excused by the
     // re-probe: nothing published the version, so the release is broken.
     const record = recorder({ publishError: new Error("npm publish failed with exit code 1: npm error code E403") })
-    expect(runPublishCli([], record.deps)).toBe(1)
+    expect(runBoth([], record.deps)).toBe(1)
     expect(record.err.join("\n")).toMatch(/failed to publish @wopal\/ellamaka-sdk@/)
   })
 })
@@ -275,14 +285,20 @@ describe("check mode", () => {
   // discovered before the npm tag is cut.
   test("parses --check and rejects combining it with --dry-run", () => {
     expect(parsePublishArgs(["--check"])).toEqual({
-      options: { dryRun: false, check: true, registry: "https://registry.npmjs.org/", version: undefined },
+      options: {
+        dryRun: false,
+        check: true,
+        registry: "https://registry.npmjs.org/",
+        version: undefined,
+        packages: [],
+      },
     })
     expect(parsePublishArgs(["--dry-run", "--check"])).toMatchObject({ exitCode: 2 })
   })
 
   test("verifies skipped versions and publishes nothing", () => {
     const record = recorder({ published: ["@wopal/ellamaka-sdk"] })
-    expect(runPublishCli(["--check"], record.deps)).toBe(0)
+    expect(runBoth(["--check"], record.deps)).toBe(0)
     expect(record.verified.map((entry) => entry.name)).toEqual(["@wopal/ellamaka-sdk"])
     expect(record.published).toEqual([])
     expect(record.authChecks).toEqual([])
@@ -301,7 +317,7 @@ describe("check mode", () => {
           "permanently burned: bump the version and re-release.",
       ),
     })
-    expect(runPublishCli(["--check"], record.deps)).toBe(1)
+    expect(runBoth(["--check"], record.deps)).toBe(1)
     expect(record.published).toEqual([])
     expect(record.err.join("\n")).toMatch(/permanently burned/)
   })
@@ -309,7 +325,7 @@ describe("check mode", () => {
   test("reports an unpublished version as publishable and exits 0", () => {
     // Version never published: the plan is pure [publish], nothing to verify.
     const record = recorder()
-    expect(runPublishCli(["--check"], record.deps)).toBe(0)
+    expect(runBoth(["--check"], record.deps)).toBe(0)
     expect(record.verified).toEqual([])
     expect(record.published).toEqual([])
     expect(record.authChecks).toEqual([])
@@ -318,26 +334,15 @@ describe("check mode", () => {
 })
 
 describe("version validation", () => {
-  test("fails fast on a mismatch before any registry access", () => {
+  test("allows selected packages to have independent manifest versions", () => {
     const record = recorder({ targets: withStalePlugin })
-    expect(runPublishCli([], record.deps)).toBe(1)
-    expect(record.authChecks).toEqual([])
-    expect(record.published).toEqual([])
-    expect(record.err.join("\n")).toContain("@wopal/ellamaka-plugin@2.0.4")
+    expect(runBoth(["--dry-run"], record.deps)).toBe(0)
+    expect(record.out.join("\n")).toContain("@wopal/ellamaka-plugin@2.0.4")
   })
 
-  test("--version overrides the SDK anchor version", () => {
+  test("rejects a version assertion for more than one selected package", () => {
     const record = recorder()
-    expect(runPublishCli(["--dry-run", "--version", "2.0.6"], record.deps)).toBe(1)
-    expect(record.err.join("\n")).toContain("2.0.6")
-  })
-
-  test("defaults to the exact SDK anchor version", () => {
-    const anchor = readSdkVersion(repoRoot)
-    expect(anchor).toMatch(/^\d+\.\d+\.\d+/)
-    const record = recorder()
-    expect(runPublishCli(["--dry-run"], record.deps)).toBe(0)
-    expect(record.out.join("\n")).toContain(`version ${anchor}`)
-    expect(record.err).toEqual([])
+    expect(runBoth(["--dry-run", "--version", "2.0.6"], record.deps)).toBe(1)
+    expect(record.err.join("\n")).toContain("exactly one package")
   })
 })

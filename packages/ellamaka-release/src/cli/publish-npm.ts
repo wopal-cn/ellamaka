@@ -4,15 +4,15 @@
 // `@wopal/ellamaka-plugin`) on their independent npm release line.
 //
 // Usage:
-//   bun packages/ellamaka-release/src/cli/publish-npm.ts [--dry-run] [--check] [--version <v>] [--registry <url>]
+//   bun packages/ellamaka-release/src/cli/publish-npm.ts --package <name> [--package <name>] [--check|--dry-run] [--version <v>] [--registry <url>]
 //
 // The publish is idempotent (a version already on the registry is skipped), so
 // the npm release workflow can re-run after a failed attempt. A skip is not blind:
 // the registry tarball is compared against this build's tarball by canonical
 // content digest, and a version whose contents have diverged aborts the release
 // — see `../npm/verify.ts`. The SDK is published before the plugin (the plugin
-// depends on the SDK, including its `/v2` subpaths). The npm release version
-// must match both package manifests exactly, including any prerelease suffix.
+// depends on the SDK, including its `/v2` subpaths). Each selected package
+// uses its own manifest version. A single-package --version asserts that version.
 //
 // `--check` is a side-effect-free npm release preflight: same plan, full skip
 // verification for every version already on the registry, zero publishes.
@@ -37,6 +37,7 @@ import {
   buildPublishPlan,
   loadPublishTargets,
   readSdkVersion,
+  selectPublishTargets,
   type NpmPublishTarget,
   type PublishPlanEntry,
 } from "../npm/plan"
@@ -46,6 +47,7 @@ const DEFAULT_REGISTRY = "https://registry.npmjs.org/"
 
 export interface PublishCliOptions {
   dryRun: boolean
+  packages: string[]
   /**
    * Release preflight: run the full plan, then the skip verification (registry
    * tarball vs local build) for every version already on the registry, and
@@ -54,7 +56,7 @@ export interface PublishCliOptions {
    */
   check: boolean
   registry: string
-  /** Exact npm release version; defaults to the SDK version anchor. */
+  /** Optional exact-version assertion for a single selected package. */
   version?: string
 }
 
@@ -74,7 +76,13 @@ export interface PublishCliDeps {
 }
 
 export function parsePublishArgs(argv: string[]): { options: PublishCliOptions } | { error: string; exitCode: number } {
-  const options: PublishCliOptions = { dryRun: false, check: false, registry: DEFAULT_REGISTRY, version: undefined }
+  const options: PublishCliOptions = {
+    dryRun: false,
+    check: false,
+    registry: DEFAULT_REGISTRY,
+    version: undefined,
+    packages: [],
+  }
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
     if (arg === "--dry-run") {
@@ -85,10 +93,11 @@ export function parsePublishArgs(argv: string[]): { options: PublishCliOptions }
       options.check = true
       continue
     }
-    if (arg === "--version" || arg === "--registry") {
+    if (arg === "--version" || arg === "--registry" || arg === "--package") {
       const value = argv[++index]
       if (!value || value.startsWith("--")) return { error: `${arg} requires a value`, exitCode: 2 }
       if (arg === "--version") options.version = value
+      else if (arg === "--package") options.packages.push(value)
       else options.registry = value
       continue
     }
@@ -105,15 +114,31 @@ export function runPublishCli(argv: string[], deps: PublishCliDeps): number {
     return parsed.exitCode
   }
   const { dryRun, check, registry } = parsed.options
-  const releaseVersion = parsed.options.version ?? deps.readSdkVersion()
-
   let plan
   try {
-    plan = buildPublishPlan({
-      targets: deps.loadTargets(),
-      releaseVersion,
-      isPublished: (name, version) => deps.isPublished(name, version, registry),
-    })
+    const requested = parsed.options.packages
+    const targets = selectPublishTargets(deps.loadTargets(), requested)
+    if (parsed.options.version && requested.length !== 1) throw new Error("--version requires exactly one package")
+    if (parsed.options.version && targets[0]!.manifest.version !== parsed.options.version) {
+      throw new Error(
+        `requested version ${parsed.options.version} does not match ${targets[0]!.manifest.name}@${targets[0]!.manifest.version}`,
+      )
+    }
+    if (requested.includes("@wopal/ellamaka-plugin") && !requested.includes("@wopal/ellamaka-sdk")) {
+      const version = deps.readSdkVersion()
+      if (!deps.isPublished("@wopal/ellamaka-sdk", version, registry)) {
+        throw new Error(`publish owning @wopal/ellamaka-sdk@${version} first`)
+      }
+    }
+    const entries = targets.flatMap(
+      (target) =>
+        buildPublishPlan({
+          targets: [target],
+          releaseVersion: parsed.options.version ?? target.manifest.version,
+          isPublished: (name, version) => deps.isPublished(name, version, registry),
+        }).entries,
+    )
+    plan = { version: entries.map((entry) => `${entry.name}@${entry.version}`).join(", "), entries }
   } catch (err) {
     deps.logError(`Error: ${errorMessage(err)}`)
     return 1

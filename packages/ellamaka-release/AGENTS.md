@@ -49,8 +49,8 @@ into other modules (they carry top-level CLI side effects).
 | `cleanup.ts`       | Release cleanup (retention / withdraw), `--product ellamaka-cli\|ellamaka-desktop`.                                  |
 | `upstream-lock.ts` | Update upstream lock (`engine --version X.Y.Z [--dry-run]`).                                                         |
 | `inventory.ts`     | Legacy inventory capture (`--dry-run` / `--output`).                                                                 |
-| `publish-npm.ts`   | Independent npm publisher for `@wopal/ellamaka-sdk` + `@wopal/ellamaka-plugin`; exact shared npm version, SDK first. |
-| `verify-npm.ts`    | Build/pack both npm packages and run a source-tree-external clean-install smoke before publishing.                   |
+| `publish-npm.ts`   | Publish explicitly selected SDK/Plugin packages at their own manifest versions, with SDK first. |
+| `verify-npm.ts`    | Build/pack selected npm packages and run a source-tree-external clean-install smoke before publishing. |
 
 ## Development Commands
 

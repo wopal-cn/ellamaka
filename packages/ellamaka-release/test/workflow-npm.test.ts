@@ -11,8 +11,8 @@ describe("publish-ellamaka-npm workflow", () => {
   test("owns an independent npm tag line and retry path", () => {
     expect(workflow).toContain("ellamaka-npm-v*")
     expect(workflow).toContain("workflow_dispatch:")
-    expect(workflow).toContain('EXPECTED_TAG="ellamaka-npm-v${VERSION}"')
-    expect(workflow).toContain('GITHUB_REF_TYPE" != "tag"')
+    expect(workflow).toContain('GITHUB_REF_TYPE" != tag')
+    expect(workflow).toContain('RETRY_TAG" != "$GITHUB_REF_NAME"')
   })
 
   test("validates the exact SDK and Plugin version instead of product versions", () => {
