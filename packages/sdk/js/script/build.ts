@@ -72,6 +72,5 @@ await Bun.write(sseTypesPath, sseTypesPatched)
 
 await $`bun prettier --write src/v2`
 await $`rm -rf dist tsconfig.tsbuildinfo`
-await $`bun tsc`
-await $`bun script/bundle-local-worker.ts`
+await $`bun run build`
 await $`rm openapi.json`

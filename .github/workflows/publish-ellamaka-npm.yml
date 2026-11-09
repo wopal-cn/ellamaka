@@ -73,11 +73,26 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # The published contract is generated from the Server composition and
+      # committed. A stale generated client or openapi.json would ship a contract
+      # that no longer matches the Server, so regeneration must be a no-op.
+      - name: Verify the generated SDK contract is up to date
+        run: |
+          bun run --cwd packages/sdk/js generate
+          if ! git diff --exit-code -- packages/sdk/js; then
+            echo 'ERROR: the generated SDK contract is stale; run bun run generate in packages/sdk/js and commit it' >&2
+            exit 1
+          fi
+
       - name: Verify npm publisher
         working-directory: packages/ellamaka-release
         run: bun test test/npm-publish-*.test.ts
 
-      - name: Pack and clean-install npm packages
+      # Proves the packed artifact, not the source tree: the SDK contract in the
+      # tarball must equal the public subset of the Server's complete document,
+      # the Official App BFF must stay Server-only, the Worker asset must ship,
+      # and no dependency may be an unpublished workspace path.
+      - name: Pack, verify the packed contract and clean-install npm packages
         run: |
           args=()
           if [ "${{ steps.selection.outputs.sdk }}" = true ]; then args+=(--package @wopal/ellamaka-sdk); fi

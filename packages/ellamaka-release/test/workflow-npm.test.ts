@@ -22,6 +22,17 @@ describe("publish-ellamaka-npm workflow", () => {
     expect(workflow).not.toContain("packages/ellamaka-desktop/package.json")
   })
 
+  test("regenerates the SDK contract and fails on drift before packing", () => {
+    // Shipping a stale generated client would publish a contract the Server no
+    // longer serves, so regeneration must be a no-op in the release job.
+    const regenerate = workflow.indexOf("bun run --cwd packages/sdk/js generate")
+    const drift = workflow.indexOf("git diff --exit-code -- packages/sdk/js")
+    const pack = workflow.indexOf("bun packages/ellamaka-release/src/cli/verify-npm.ts")
+    expect(regenerate).toBeGreaterThan(-1)
+    expect(drift).toBeGreaterThan(regenerate)
+    expect(pack).toBeGreaterThan(drift)
+  })
+
   test("runs publisher tests and clean-install smoke before publishing", () => {
     const testIdx = workflow.indexOf("bun test test/npm-publish-*.test.ts")
     const smokeIdx = workflow.indexOf("bun packages/ellamaka-release/src/cli/verify-npm.ts")
