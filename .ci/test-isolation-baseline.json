@@ -339,60 +339,6 @@
     },
     {
       "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-cerebras.test.ts",
-      "detail": "mock.module(@ai-sdk/cerebras)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-cloudflare-ai-gateway.test.ts",
-      "detail": "mock.module(ai-gateway-provider)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-cloudflare-ai-gateway.test.ts",
-      "detail": "mock.module(ai-gateway-provider/providers/unified)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-cohere.test.ts",
-      "detail": "mock.module(@ai-sdk/cohere)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-deepinfra.test.ts",
-      "detail": "mock.module(@ai-sdk/deepinfra)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-gateway.test.ts",
-      "detail": "mock.module(@ai-sdk/gateway)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-gitlab.test.ts",
-      "detail": "mock.module(gitlab-ai-provider)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-google-vertex.test.ts",
-      "detail": "mock.module(@ai-sdk/google-vertex)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
-      "file": "packages/ellamaka-core/test/plugin/provider-google-vertex.test.ts",
-      "detail": "mock.module(google-auth-library)",
-      "count": 1
-    },
-    {
-      "rule": "TISO001",
       "file": "packages/ellamaka-desktop/src/main/menu.test.ts",
       "detail": "mock.module(./desktop-menu-actions)",
       "count": 1
@@ -1872,18 +1818,6 @@
       "file": "packages/ellamaka-cordis/test/web-child.test.ts",
       "detail": "Bun.spawn(childArgv(home), {\n      stdout: \"pipe\",\n      stderr: \"pipe\",\n      s",
       "count": 3
-    },
-    {
-      "rule": "TISO004",
-      "file": "packages/ellamaka-core/test/global.test.ts",
-      "detail": "Bun.spawn({\n        cmd: [process.execPath, \"test\", \"./.tmp/child-env-probe.test",
-      "count": 1
-    },
-    {
-      "rule": "TISO004",
-      "file": "packages/ellamaka-core/test/util-log.test.ts",
-      "detail": "Bun.spawnSync({\n      cmd: [\"bun\", \"test\", probeFile],\n      cwd: import.meta.di",
-      "count": 1
     },
     {
       "rule": "TISO004",

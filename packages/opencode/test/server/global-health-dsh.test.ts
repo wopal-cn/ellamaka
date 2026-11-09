@@ -1,4 +1,4 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
 import { afterEach, describe, expect } from "bun:test"
 import { Context, Effect, Layer, Option } from "effect"
 import { HttpClient, HttpRouter } from "effect/unstable/http"
@@ -37,7 +37,7 @@ const apiLayer = HttpRouter.serve(
   ).pipe(Layer.provide([authorizationLayer, schemaErrorLayer])),
   { disableListenLog: true, disableLogger: true },
 ).pipe(
-  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(loopbackHttpServer),
   Layer.provide(Layer.mock(Session.Service)({})),
   Layer.provide(Layer.mock(Auth.Service)({})),
   Layer.provide(Layer.mock(Config.Service)({})),

@@ -22,8 +22,8 @@ import * as Log from "@wopal/ellamaka-core/util/log"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@wopal/ellamaka-core/session-event"
-import { ModelV2 } from "@wopal/ellamaka-core/model"
-import { ProviderV2 } from "@wopal/ellamaka-core/provider"
+import { ModelV2 } from "@wopal/ellamaka-core/model-ref"
+import { ProviderV2 } from "@wopal/ellamaka-core/provider-id"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Usage, type LLMEvent } from "@wopal/llm"
@@ -462,7 +462,7 @@ export const layer = Layer.effect(
                     ),
                     Effect.exit,
                   )
-                : Effect.succeed(Exit.succeed<MessageV2.FilePart>(attachment)),
+                : Effect.succeed(Exit.succeed(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)

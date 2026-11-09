@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
+import { pathToFileURL } from "node:url"
 import { Global } from "../src/global"
 import { loadRepositoryFiles } from "../../opencode/script/test-isolation/check"
 import { scanRepository } from "../../opencode/script/test-isolation/scan"
+import { temporaryDirectory } from "./fixture/temp"
 
 const coreRoot = path.resolve(import.meta.dir, "..")
 const repoRoot = path.resolve(coreRoot, "../..")
+const coreGlobalUrl = pathToFileURL(path.join(coreRoot, "src/global.ts")).href
 
 describe("ellamaka-core Home isolation base", () => {
   test("in-process Global.Path.wopalHome is bound to the isolated per-PID directory", () => {
@@ -19,12 +22,9 @@ describe("ellamaka-core Home isolation base", () => {
   })
 
   test("real bun test runner redirects WOPAL_HOME before Global.Path evaluation, ignores caller sentinel, and cleans up on pass and fail", () => {
-    const workTmp = path.join(os.tmpdir(), `ellamaka-core-base-verify-${process.pid}-${Date.now()}`)
-    mkdirSync(workTmp, { recursive: true })
-    const probeDir = path.join(coreRoot, ".tmp")
-    mkdirSync(probeDir, { recursive: true })
-    const passProbe = path.join(probeDir, `home-base-pass-${process.pid}.test.ts`)
-    const failProbe = path.join(probeDir, `home-base-fail-${process.pid}.test.ts`)
+    const workTmp = temporaryDirectory("ellamaka-core-base-verify-")
+    const passProbe = path.join(workTmp, "home-base-pass.test.ts")
+    const failProbe = path.join(workTmp, "home-base-fail.test.ts")
 
     try {
       writeFileSync(
@@ -33,7 +33,7 @@ describe("ellamaka-core Home isolation base", () => {
           'import { expect, test } from "bun:test"',
           'import { existsSync, writeFileSync } from "node:fs"',
           'import path from "node:path"',
-          'import { Global } from "@wopal/ellamaka-core/global"',
+          `import { Global } from ${JSON.stringify(coreGlobalUrl)}`,
           'test("pass probe records isolated home", () => {',
           "  expect(existsSync(Global.Path.wopalHome)).toBe(true)",
           '  writeFileSync(path.join(Global.Path.wopalHome, "marker.txt"), "ok")',
@@ -70,7 +70,7 @@ describe("ellamaka-core Home isolation base", () => {
           'import { expect, test } from "bun:test"',
           'import { existsSync, writeFileSync } from "node:fs"',
           'import path from "node:path"',
-          'import { Global } from "@wopal/ellamaka-core/global"',
+          `import { Global } from ${JSON.stringify(coreGlobalUrl)}`,
           'test("fail probe still cleans up isolated home", () => {',
           '  writeFileSync(path.join(Global.Path.wopalHome, "marker.txt"), "fail")',
           '  console.log("ISOLATED_HOME=" + Global.Path.wopalHome)',
@@ -105,9 +105,7 @@ describe("ellamaka-core Home isolation base", () => {
   })
 
   test("a defective preload that evaluates Global.Path before assigning WOPAL_HOME fails runtime isolation", () => {
-    const workTmp = path.join(os.tmpdir(), `ellamaka-core-late-preload-${process.pid}-${Date.now()}`)
-    mkdirSync(workTmp, { recursive: true })
-    const coreGlobalPath = path.resolve(coreRoot, "src/global.ts")
+    const workTmp = temporaryDirectory("ellamaka-core-late-preload-")
     try {
       const sentinel = path.join(workTmp, "caller-sentinel-home")
       const lateIsolated = path.join(workTmp, "late-isolated-home")
@@ -117,7 +115,7 @@ describe("ellamaka-core Home isolation base", () => {
       writeFileSync(
         latePreload,
         [
-          `import { Global } from ${JSON.stringify(coreGlobalPath)}`,
+          `import { Global } from ${JSON.stringify(coreGlobalUrl)}`,
           `void Global.Path.wopalHome`,
           `process.env.WOPAL_HOME = ${JSON.stringify(lateIsolated)}`,
         ].join("\n"),
@@ -126,7 +124,7 @@ describe("ellamaka-core Home isolation base", () => {
         sampleTest,
         [
           'import { expect, test } from "bun:test"',
-          `import { Global } from ${JSON.stringify(coreGlobalPath)}`,
+          `import { Global } from ${JSON.stringify(coreGlobalUrl)}`,
           'test("late preload fails to redirect Global.Path before evaluation", () => {',
           '  console.log("LATE_PROBE_HOME=" + Global.Path.wopalHome)',
           `  expect(Global.Path.wopalHome).not.toBe(${JSON.stringify(sentinel)})`,
@@ -158,11 +156,8 @@ describe("ellamaka-core Home isolation base", () => {
 
   test("opencode real bun test runner redirects WOPAL_HOME before Global.Path evaluation, ignores caller sentinel, and cleans up its per-PID Home", () => {
     const opencodeRoot = path.resolve(coreRoot, "../opencode")
-    const workTmp = path.join(os.tmpdir(), `opencode-base-verify-${process.pid}-${Date.now()}`)
-    mkdirSync(workTmp, { recursive: true })
-    const probeDir = path.join(opencodeRoot, ".tmp")
-    mkdirSync(probeDir, { recursive: true })
-    const passProbe = path.join(probeDir, `opencode-home-base-pass-${process.pid}.test.ts`)
+    const workTmp = temporaryDirectory("opencode-base-verify-")
+    const passProbe = path.join(workTmp, "opencode-home-base-pass.test.ts")
 
     try {
       writeFileSync(
@@ -170,7 +165,7 @@ describe("ellamaka-core Home isolation base", () => {
         [
           'import { expect, test } from "bun:test"',
           'import { existsSync } from "node:fs"',
-          'import { Global } from "@wopal/ellamaka-core/global"',
+          `import { Global } from ${JSON.stringify(coreGlobalUrl)}`,
           'test("opencode pass probe records isolated home", () => {',
           "  expect(existsSync(Global.Path.wopalHome)).toBe(true)",
           '  console.log("OPENCODE_ISOLATED_HOME=" + Global.Path.wopalHome)',
@@ -210,16 +205,13 @@ describe("ellamaka-core Home isolation base", () => {
     const homeBoundPkgs = packages.filter((p) => p.homeBindings.length > 0)
     expect(homeBoundPkgs.length).toBeGreaterThanOrEqual(2)
 
-    const workTmp = path.join(os.tmpdir(), `all-home-pkgs-verify-${process.pid}-${Date.now()}`)
-    mkdirSync(workTmp, { recursive: true })
+    const workTmp = temporaryDirectory("all-home-pkgs-verify-")
 
     try {
       for (const pkg of homeBoundPkgs) {
         expect(pkg.preloadValid).toBe(true)
         const pkgAbs = path.join(repoRoot, pkg.packageDir)
-        const probeDir = path.join(pkgAbs, ".tmp")
-        mkdirSync(probeDir, { recursive: true })
-        const probeFile = path.join(probeDir, `pkg-home-probe-${process.pid}.test.ts`)
+        const probeFile = path.join(workTmp, `pkg-home-probe-${pkg.packageDir.replace(/\//g, "_")}.test.ts`)
         const sentinel = path.join(workTmp, `sentinel-${pkg.packageDir.replace(/\//g, "_")}`)
 
         try {
@@ -228,7 +220,7 @@ describe("ellamaka-core Home isolation base", () => {
             [
               'import { expect, test } from "bun:test"',
               'import { existsSync } from "node:fs"',
-              'import { Global } from "@wopal/ellamaka-core/global"',
+              `import { Global } from ${JSON.stringify(coreGlobalUrl)}`,
               'test("pkg home probe", () => {',
               "  expect(existsSync(Global.Path.wopalHome)).toBe(true)",
               '  console.log("PKG_ISOLATED_HOME=" + Global.Path.wopalHome)',

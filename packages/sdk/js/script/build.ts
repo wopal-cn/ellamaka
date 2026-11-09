@@ -8,6 +8,7 @@ import { $ } from "bun"
 import path from "path"
 
 import { createClient } from "@hey-api/openapi-ts"
+import { normalizeGeneratedUnions } from "./normalize-unions"
 
 const opencode = path.resolve(dir, "../../opencode")
 
@@ -39,6 +40,10 @@ await createClient({
     },
   ],
 })
+
+// Remove redundant union members emitted by the generator while preserving their meaning.
+const typesPath = "./src/v2/gen/types.gen.ts"
+await Bun.write(typesPath, normalizeGeneratedUnions(await Bun.file(typesPath).text()))
 
 // Patch a @hey-api/openapi-ts codegen bug: SseFn incorrectly passes the
 // endpoint's TError into the second generic of ServerSentEventsResult, which

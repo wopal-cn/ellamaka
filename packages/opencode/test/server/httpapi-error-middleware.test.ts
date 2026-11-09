@@ -1,4 +1,5 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
+import { NodeServices } from "@effect/platform-node"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { describe, expect } from "bun:test"
 import { ConfigError } from "../../src/config/error"
@@ -8,14 +9,16 @@ import { errorLayer } from "../../src/server/routes/instance/httpapi/middleware/
 import { NotFoundError } from "../../src/storage/storage"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(NodeHttpServer.layerTest, NodeServices.layer))
+const it = testEffect(Layer.mergeAll(loopbackHttpServer, NodeServices.layer))
 
 function expectUnknownErrorBody(body: unknown) {
   expect(body).toMatchObject({
     name: "UnknownError",
-    data: { message: "Unexpected server error. Check server logs for details." },
+    data: {
+      message: "Unexpected server error. Check server logs for details.",
+      ref: expect.stringMatching(/^err_[0-9a-f-]{8}$/),
+    },
   })
-  expect((body as { data?: { ref?: unknown } }).data?.ref).toMatch(/^err_[0-9a-f-]{8}$/)
 }
 
 describe("HttpApi error middleware", () => {

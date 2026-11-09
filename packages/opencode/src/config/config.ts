@@ -44,7 +44,6 @@ import { resolveWopalSpaceRoot } from "./wopal-space-settings"
 import { preparePluginDependencies } from "@/core/plugin-dependency-preparation"
 import { ConfigWopalPluginConfig, type PluginConfigSources, type PluginConfigTable } from "./wopal-plugin-config"
 import { withTransientReadRetry } from "@/util/effect-http-client"
-import { ConfigExperimental } from "@wopal/ellamaka-core/config/experimental"
 
 const log = Log.create({ service: "config" })
 
@@ -319,9 +318,6 @@ export const Info = Schema.Struct({
       }),
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
-      }),
-      policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
-        description: "Policy statements applied to supported resources, such as provider access",
       }),
     }),
   ),

@@ -50,8 +50,8 @@ import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@wopal/ellamaka-core/session-event"
-import { ModelV2 } from "@wopal/ellamaka-core/model"
-import { ProviderV2 } from "@wopal/ellamaka-core/provider"
+import { ModelV2 } from "@wopal/ellamaka-core/model-ref"
+import { ProviderV2 } from "@wopal/ellamaka-core/provider-id"
 import { AgentAttachment, FileAttachment, ReferenceAttachment, Source } from "@wopal/ellamaka-core/session-prompt"
 import { Reference } from "@/reference/reference"
 import * as DateTime from "effect/DateTime"
@@ -714,9 +714,12 @@ export const layer = Layer.effect(
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
-          ? yield* provider
-              .getModel(model.providerID, model.modelID)
-              .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
+          ? yield* provider.getModel(model.providerID, model.modelID).pipe(
+              Effect.catchIf(
+                (error): error is Provider.ModelNotFoundError => Provider.ModelNotFoundError.isInstance(error),
+                () => Effect.succeed(undefined),
+              ),
+            )
           : undefined
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
@@ -773,16 +776,16 @@ export const layer = Layer.effect(
         filepath: string,
       ) {
         const name = part.filename?.replace(/#\d+(?:-\d*)?$/, "")
-        if (!name) return
+        if (!name) return undefined
         const slash = name.indexOf("/")
-        if (slash === -1) return
+        if (slash === -1) return undefined
 
         const reference = yield* references.get(name.slice(0, slash))
-        if (!reference || reference.kind === "invalid") return
-        if (!AppFileSystem.contains(reference.path, filepath)) return
+        if (!reference || reference.kind === "invalid") return undefined
+        if (!AppFileSystem.contains(reference.path, filepath)) return undefined
 
         const target = path.relative(reference.path, filepath).split(path.sep).join("/")
-        if (!target || target.startsWith("../") || target === "..") return
+        if (!target || target.startsWith("../") || target === "..") return undefined
 
         return referenceTextPart({
           reference,

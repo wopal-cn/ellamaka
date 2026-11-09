@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test"
 import * as DateTime from "effect/DateTime"
+import { Schema } from "effect"
 import { SessionID } from "../../src/session/schema"
 import { EventV2 } from "@wopal/ellamaka-core/event"
-import { ModelV2 } from "@wopal/ellamaka-core/model"
-import { ProviderV2 } from "@wopal/ellamaka-core/provider"
+import { ModelV2 } from "@wopal/ellamaka-core/model-ref"
+import { ProviderV2 } from "@wopal/ellamaka-core/provider-id"
 import { SessionEvent } from "@wopal/ellamaka-core/session-event"
 import { SessionMessageUpdater } from "@wopal/ellamaka-core/session-message-updater"
 
@@ -214,4 +215,15 @@ test("compaction events reduce to compaction message", () => {
     include: "recent context",
     time: { created: DateTime.makeUnsafe(1) },
   })
+})
+
+test("persisted model-switch events retain the model reference", () => {
+  const stored = {
+    id: "evt_saved",
+    type: "session.next.model.switched",
+    version: 1,
+    data: { timestamp: 1234, sessionID: "ses_saved", model: { id: "model", providerID: "provider", variant: "fast" } },
+  }
+  const decoded = Schema.decodeUnknownSync(SessionEvent.ModelSwitched.data)(stored.data)
+  expect(Schema.encodeSync(SessionEvent.ModelSwitched.data)(decoded)).toEqual(stored.data)
 })

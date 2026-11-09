@@ -7,8 +7,6 @@ import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { SyncEvent } from "@/sync"
 import { EventV2 } from "@wopal/ellamaka-core/event"
-import "@wopal/ellamaka-core/account"
-import "@wopal/ellamaka-core/catalog"
 import "@wopal/ellamaka-core/session-event"
 import { Context, Effect, Layer, Option } from "effect"
 
@@ -20,6 +18,7 @@ export function toSyncDefinition<D extends EventV2.Definition>(definition: D) {
     schema: definition.data,
     properties: definition.data,
   }
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- bridge preserves the event definition schema
   return result as SyncEvent.Definition<D["type"], D["data"], D["data"]>
 }
 
@@ -64,7 +63,8 @@ export const layer = Layer.effect(
       const definition = EventV2.registry.get(event.type)
       if (!definition) return Effect.void
       const aggregateID = definition.aggregate
-        ? (event.data as Record<string, unknown>)[definition.aggregate]
+        ? // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- registered aggregate names index event data
+          (event.data as Record<string, unknown>)[definition.aggregate]
         : undefined
 
       if (definition.version !== undefined && typeof aggregateID === "string") {

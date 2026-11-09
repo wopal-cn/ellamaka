@@ -1,3 +1,4 @@
+import { loopbackHttpServer } from "../fixture/http-server"
 // Regression coverage for issue #26526's claim that promptAsync's
 // Effect.forkIn loses the request's InstanceRef/WorkspaceRef. It does not —
 // forkIn preserves Context.Reference values via standard fiber inheritance.
@@ -7,7 +8,7 @@
 // body runs detached from the request fiber's context, so the explicit
 // Effect.provideService calls there are required, not defensive duplication.
 
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeServices } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Layer, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
@@ -53,7 +54,7 @@ const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: 
 const it = testEffect(
   Layer.mergeAll(
     testStateLayer,
-    NodeHttpServer.layerTest,
+    loopbackHttpServer,
     NodeServices.layer,
     InstanceLayer.layer,
     Project.defaultLayer,

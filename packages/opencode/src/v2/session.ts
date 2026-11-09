@@ -12,8 +12,8 @@ import { V2Schema } from "@wopal/ellamaka-core/v2-schema"
 import { optionalOmitUndefined } from "@wopal/ellamaka-core/schema"
 import { EventV2 } from "@wopal/ellamaka-core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { ModelV2 } from "@wopal/ellamaka-core/model"
-import { ProviderV2 } from "@wopal/ellamaka-core/provider"
+import { ModelV2 } from "@wopal/ellamaka-core/model-ref"
+import { ProviderV2 } from "@wopal/ellamaka-core/provider-id"
 
 export const Delivery = Schema.Literals(["immediate", "deferred"]).annotate({
   identifier: "Session.Delivery",
@@ -99,7 +99,7 @@ export interface Interface {
       time: number
       direction: "previous" | "next"
     }
-  }) => Effect.Effect<Info[], never>
+  }) => Effect.Effect<Info[]>
   readonly messages: (input: {
     sessionID: SessionID
     limit?: number
@@ -119,8 +119,8 @@ export interface Interface {
     prompt: Prompt
     delivery?: Delivery
   }) => Effect.Effect<SessionMessage.User, NotFoundError | OperationUnavailableError>
-  readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void, never>
-  readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void, never>
+  readonly shell: (input: { id?: EventV2.ID; sessionID: SessionID; command: string }) => Effect.Effect<void>
+  readonly skill: (input: { id?: EventV2.ID; sessionID: SessionID; skill: string }) => Effect.Effect<void>
   readonly subagent: (input: {
     id?: EventV2.ID
     parentID: SessionID
@@ -128,8 +128,8 @@ export interface Interface {
     agent: string
     model?: ModelV2.Ref
   }) => Effect.Effect<void, NotFoundError | OperationUnavailableError | MessageDecodeError>
-  readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void, never>
-  readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void, never>
+  readonly switchAgent: (input: { sessionID: SessionID; agent: string }) => Effect.Effect<void>
+  readonly switchModel: (input: { sessionID: SessionID; model: ModelV2.Ref }) => Effect.Effect<void>
   readonly compact: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (sessionID: SessionID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
 }
@@ -189,6 +189,7 @@ export const layer = Layer.effect(
 
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (_input) {
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- existing unfinished create implementation
         return {} as any
       }),
       get: Effect.fn("V2Session.get")(function* (sessionID) {

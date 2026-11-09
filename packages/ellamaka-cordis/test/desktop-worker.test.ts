@@ -12,10 +12,10 @@ function tempRoot(): string {
 /**
  * A throwaway executable "ellamaka" that records its argv to FAKE_OUTPUT,
  * writes a greeting to stdout, a note to stderr, and exits with FAKE_EXIT
- * (default 0). Real installation is never reached — the worker's spawn
- * boundary is what these tests pin.
+ * (default 0), or stays alive until cancelled when requested. Real installation
+ * is never reached — the worker's spawn boundary is what these tests pin.
  */
-function fakeEllamaka(script = ""): string {
+function fakeEllamaka(script = "", keepAlive = false): string {
   const dir = mkdtempSync(join(tmpdir(), "dsh-desktop-fake-"))
   const file = join(dir, "fake-ellamaka")
   writeFileSync(
@@ -27,7 +27,7 @@ function fakeEllamaka(script = ""): string {
       "process.stdout.write('FAKE-STDOUT\\n')",
       "process.stderr.write('FAKE-STDERR\\n')",
       script,
-      "process.exit(Number(process.env.FAKE_EXIT ?? 0))",
+      keepAlive ? "setInterval(() => {}, 60000)" : "process.exit(Number(process.env.FAKE_EXIT ?? 0))",
     ].join("\n") + "\n",
     "utf-8",
   )
@@ -115,13 +115,7 @@ describe("desktopPnpm.runPlugin spawn shape", () => {
     ])
     const install = worker.desktopPnpm.runPlugin(["install"], ".")
     await install.done
-    expect(JSON.parse(readFileSync(fakeOutput, "utf-8"))).toEqual([
-      "dsh",
-      "plugin",
-      "--profile",
-      "web",
-      "install",
-    ])
+    expect(JSON.parse(readFileSync(fakeOutput, "utf-8"))).toEqual(["dsh", "plugin", "--profile", "web", "install"])
   })
 })
 
@@ -150,13 +144,7 @@ describe("pnpm flag stripping", () => {
       ".",
     )
     await handle.done
-    expect(JSON.parse(readFileSync(fakeOutput, "utf-8"))).toEqual([
-      "dsh",
-      "plugin",
-      "--profile",
-      "web",
-      "install",
-    ])
+    expect(JSON.parse(readFileSync(fakeOutput, "utf-8"))).toEqual(["dsh", "plugin", "--profile", "web", "install"])
   })
 
   test("strips the workspace flag -w", async () => {
@@ -200,7 +188,7 @@ describe("failure and isolation semantics", () => {
     const { worker } = makeWorker({ ellamakaCommand: [missing] })
     const handle = worker.desktopPnpm.runPlugin(["add", "dshmarket"], ".")
     const chunks: string[] = []
-    handle.stderr.on("data", (chunk: Buffer | string) => chunks.push(chunk.toString()))
+    handle.stderr.on("data", (chunk: unknown) => chunks.push(String(chunk)))
     const outcome = await handle.done
     expect(outcome.exitCode).toBe(127)
     expect(chunks.join("")).toContain("no-such-ellamaka")
@@ -224,8 +212,8 @@ describe("failure and isolation semantics", () => {
     const handle = worker.desktopPnpm.runPlugin(["add", "dshmarket"], ".")
     const outChunks: string[] = []
     const errChunks: string[] = []
-    handle.stdout.on("data", (chunk: Buffer | string) => outChunks.push(chunk.toString()))
-    handle.stderr.on("data", (chunk: Buffer | string) => errChunks.push(chunk.toString()))
+    handle.stdout.on("data", (chunk: unknown) => outChunks.push(String(chunk)))
+    handle.stderr.on("data", (chunk: unknown) => errChunks.push(String(chunk)))
     await handle.done
     expect(outChunks.join("")).toContain("FAKE-STDOUT")
     expect(errChunks.join("")).toContain("FAKE-STDERR")
@@ -234,25 +222,45 @@ describe("failure and isolation semantics", () => {
 
 describe("cancellation", () => {
   test("aborting the signal kills the process group and resolves { exitCode: null, signal: 'SIGTERM' }", async () => {
-    const bin = fakeEllamaka("setTimeout(() => {}, 30000)")
+    const bin = fakeEllamaka("", true)
     const { worker } = makeWorker({ ellamakaCommand: [bin] })
     const ac = new AbortController()
     const handle = worker.desktopPnpm.runPlugin(["install"], ".", ac.signal)
-    await once(handle.stdout, "data")
-    ac.abort()
-    const outcome = await handle.done
-    expect(outcome.exitCode).toBeNull()
-    expect(outcome.signal).toBe("SIGTERM")
+    try {
+      await Promise.race([
+        once(handle.stdout, "data"),
+        handle.done.then(() => {
+          throw new Error("child exited before announcing readiness")
+        }),
+      ])
+      ac.abort()
+      const outcome = await handle.done
+      expect(outcome.exitCode).toBeNull()
+      expect(outcome.signal).toBe("SIGTERM")
+    } finally {
+      handle.cancel()
+      await handle.done
+    }
   })
 
   test("cancel() kills the process group and resolves { exitCode: null, signal: 'SIGTERM' }", async () => {
-    const bin = fakeEllamaka("setTimeout(() => {}, 30000)")
+    const bin = fakeEllamaka("", true)
     const { worker } = makeWorker({ ellamakaCommand: [bin] })
     const handle = worker.desktopPnpm.runPlugin(["install"], ".")
-    await once(handle.stdout, "data")
-    handle.cancel()
-    const outcome = await handle.done
-    expect(outcome.exitCode).toBeNull()
-    expect(outcome.signal).toBe("SIGTERM")
+    try {
+      await Promise.race([
+        once(handle.stdout, "data"),
+        handle.done.then(() => {
+          throw new Error("child exited before announcing readiness")
+        }),
+      ])
+      handle.cancel()
+      const outcome = await handle.done
+      expect(outcome.exitCode).toBeNull()
+      expect(outcome.signal).toBe("SIGTERM")
+    } finally {
+      handle.cancel()
+      await handle.done
+    }
   })
 })

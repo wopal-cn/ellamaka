@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { EventV2 } from "./event"
-import { ModelV2 } from "./model"
+import { ModelV2 } from "./model-ref"
 import { NonNegativeInt } from "./schema"
 import { Session } from "./session"
 import { FileAttachment, Prompt } from "./session-prompt"

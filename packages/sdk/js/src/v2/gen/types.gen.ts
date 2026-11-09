@@ -53,11 +53,6 @@ export type Event =
   | EventRuntimeReloaded1
   | EventCorePreparation
   | EventModelsDevRefreshed
-  | EventPluginAdded
-  | EventCatalogModelUpdated
-  | EventAccountAdded
-  | EventAccountRemoved
-  | EventAccountSwitched
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextPrompted
@@ -134,10 +129,10 @@ export type CorePreparationResult = {
   reason?: string
   run?: {
     runId: string
-    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sequence: number | "NaN" | "Infinity" | "-Infinity"
     step: string
     phase: string
-    elapsedMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    elapsedMs: number | "NaN" | "Infinity" | "-Infinity"
   }
   steps: Array<{
     step: string
@@ -694,24 +689,7 @@ export type EventTuiCommandExecute = {
   id: string
   type: "tui.command.execute"
   properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
+    command: string
   }
 }
 
@@ -834,7 +812,7 @@ export type Todo = {
 
 export type CorePreparationEvent = {
   runId: string
-  sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  sequence: number | "NaN" | "Infinity" | "-Infinity"
   target:
     | {
         kind: "host"
@@ -846,9 +824,9 @@ export type CorePreparationEvent = {
   step: string
   phase: string
   state: "READY" | "NEEDS_PREPARATION" | "PREPARING" | "BUSY" | "DEGRADED"
-  elapsedMs: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  current?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  total?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  elapsedMs: number | "NaN" | "Infinity" | "-Infinity"
+  current?: number | "NaN" | "Infinity" | "-Infinity"
+  total?: number | "NaN" | "Infinity" | "-Infinity"
   unit?: string
   code?: string
 }
@@ -913,11 +891,6 @@ export type GlobalEvent = {
     | EventRuntimeReloaded
     | EventCorePreparation
     | EventModelsDevRefreshed
-    | EventPluginAdded
-    | EventCatalogModelUpdated
-    | EventAccountAdded
-    | EventAccountRemoved
-    | EventAccountSwitched
     | EventSessionNextAgentSwitched
     | EventSessionNextModelSwitched
     | EventSessionNextPrompted
@@ -1065,35 +1038,11 @@ export type AgentConfig = {
   /**
    * Hex color code (e.g., #FF5733) or theme color (e.g., primary)
    */
-  color?: string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
+  color?: string
   steps?: number
   maxSteps?: number
   permission?: PermissionConfig
-  [key: string]:
-    | unknown
-    | string
-    | number
-    | {
-        [key: string]: boolean
-      }
-    | boolean
-    | "subagent"
-    | "primary"
-    | "all"
-    | {
-        [key: string]: unknown
-      }
-    | string
-    | "primary"
-    | "secondary"
-    | "accent"
-    | "success"
-    | "warning"
-    | "error"
-    | "info"
-    | number
-    | PermissionConfig
-    | undefined
+  [key: string]: unknown
 }
 
 export type ProviderConfig = {
@@ -1118,7 +1067,7 @@ export type ProviderConfig = {
      */
     headerTimeout?: number | false
     chunkTimeout?: number
-    [key: string]: unknown | string | boolean | number | false | number | false | number | undefined
+    [key: string]: unknown
   }
   models?: {
     [key: string]: {
@@ -1174,7 +1123,7 @@ export type ProviderConfig = {
       variants?: {
         [key: string]: {
           disabled?: boolean
-          [key: string]: unknown | boolean | undefined
+          [key: string]: unknown
         }
       }
     }
@@ -1377,7 +1326,6 @@ export type Config = {
     primary_tools?: Array<string>
     continue_loop_on_deny?: boolean
     mcp_timeout?: number
-    policies?: Array<ConfigV2ExperimentalPolicy>
   }
 }
 
@@ -2001,12 +1949,6 @@ export type V2SessionMessagesResponse = {
   }
 }
 
-export type ProviderNotFoundError = {
-  _tag: "ProviderNotFoundError"
-  providerID: string
-  message: string
-}
-
 export type EventTuiPromptAppend2 = {
   type: "tui.prompt.append"
   properties: {
@@ -2017,24 +1959,7 @@ export type EventTuiPromptAppend2 = {
 export type EventTuiCommandExecute2 = {
   type: "tui.command.execute"
   properties: {
-    command:
-      | "session.list"
-      | "session.new"
-      | "session.share"
-      | "session.interrupt"
-      | "session.compact"
-      | "session.page.up"
-      | "session.page.down"
-      | "session.line.up"
-      | "session.line.down"
-      | "session.half.page.up"
-      | "session.half.page.down"
-      | "session.first"
-      | "session.last"
-      | "prompt.clear"
-      | "prompt.submit"
-      | "agent.cycle"
-      | string
+    command: string
   }
 }
 
@@ -2064,9 +1989,9 @@ export type Workspace = {
   name: string
   branch?: string | null
   directory?: string | null
-  extra?: unknown | null
+  extra?: unknown
   projectID: string
-  timeUsed: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  timeUsed: number | "NaN" | "Infinity" | "-Infinity"
 }
 
 export type WorkspaceCreateError = {
@@ -3000,7 +2925,7 @@ export type EventRuntimeReloaded = {
   type: "runtime.reloaded"
   properties: {
     unit: string
-    revision: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    revision: number | "NaN" | "Infinity" | "-Infinity"
   }
 }
 
@@ -3015,170 +2940,6 @@ export type EventModelsDevRefreshed = {
   type: "models-dev.refreshed"
   properties: {
     [key: string]: unknown
-  }
-}
-
-export type EventPluginAdded = {
-  id: string
-  type: "plugin.added"
-  properties: {
-    id: string
-  }
-}
-
-export type ModelV2Info = {
-  id: string
-  apiID: string
-  providerID: string
-  family?: string
-  name: string
-  endpoint:
-    | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
-    | {
-        type: "aisdk"
-        package: string
-        url?: string
-      }
-  capabilities: {
-    tools: boolean
-    input: Array<string>
-    output: Array<string>
-  }
-  options: {
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-    variant?: string
-  }
-  variants: Array<{
-    id: string
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-  }>
-  time: {
-    released: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-  }
-  cost: Array<{
-    tier?: {
-      type: "context"
-      size: number
-    }
-    input: number
-    output: number
-    cache: {
-      read: number
-      write: number
-    }
-  }>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: {
-    context: number
-    input?: number
-    output: number
-  }
-}
-
-export type EventCatalogModelUpdated = {
-  id: string
-  type: "catalog.model.updated"
-  properties: {
-    model: ModelV2Info
-  }
-}
-
-export type AccountV2oAuthCredential = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-}
-
-export type AccountV2ApiKeyCredential = {
-  type: "api"
-  key: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type AccountV2Credential = AccountV2oAuthCredential | AccountV2ApiKeyCredential
-
-export type AccountV2Info = {
-  id: string
-  serviceID: string
-  description: string
-  credential: AccountV2Credential
-}
-
-export type EventAccountAdded = {
-  id: string
-  type: "account.added"
-  properties: {
-    account: AccountV2Info
-  }
-}
-
-export type EventAccountRemoved = {
-  id: string
-  type: "account.removed"
-  properties: {
-    account: AccountV2Info
-  }
-}
-
-export type EventAccountSwitched = {
-  id: string
-  type: "account.switched"
-  properties: {
-    serviceID: string
-    from?: string
-    to?: string
   }
 }
 
@@ -3563,14 +3324,6 @@ export type EventSessionNextCompactionEnded = {
   }
 }
 
-export type PolicyEffect = "allow" | "deny"
-
-export type ConfigV2ExperimentalPolicy = {
-  action: "provider.use"
-  effect: PolicyEffect
-  resource: string
-}
-
 export type SessionInfo = {
   id: string
   parentID?: string
@@ -3806,73 +3559,6 @@ export type SessionMessage =
   | SessionMessageAssistant
   | SessionMessageCompaction
 
-export type ProviderV2Info = {
-  id: string
-  name: string
-  enabled:
-    | false
-    | {
-        via: "env"
-        name: string
-      }
-    | {
-        via: "account"
-        service: string
-      }
-    | {
-        via: "custom"
-        data: {
-          [key: string]: unknown
-        }
-      }
-  env: Array<string>
-  endpoint:
-    | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
-    | {
-        type: "aisdk"
-        package: string
-        url?: string
-      }
-  options: {
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-  }
-}
-
 export type EventTuiToastShow1 = {
   id: string
   type: "tui.toast.show"
@@ -3890,104 +3576,6 @@ export type EventRuntimeReloaded1 = {
   properties: {
     unit: string
     revision: number | "NaN" | "Infinity" | "-Infinity"
-  }
-}
-
-export type ModelV2Info1 = {
-  id: string
-  apiID: string
-  providerID: string
-  family?: string
-  name: string
-  endpoint:
-    | {
-        type: "unknown"
-      }
-    | {
-        type: "openai/responses"
-        url: string
-        websocket?: boolean
-      }
-    | {
-        type: "openai/completions"
-        url: string
-        reasoning?:
-          | {
-              type: "reasoning_content"
-            }
-          | {
-              type: "reasoning_details"
-            }
-      }
-    | {
-        type: "anthropic/messages"
-        url: string
-      }
-    | {
-        type: "aisdk"
-        package: string
-        url?: string
-      }
-  capabilities: {
-    tools: boolean
-    input: Array<string>
-    output: Array<string>
-  }
-  options: {
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-    variant?: string
-  }
-  variants: Array<{
-    id: string
-    headers: {
-      [key: string]: string
-    }
-    body: {
-      [key: string]: unknown
-    }
-    aisdk: {
-      provider: {
-        [key: string]: unknown
-      }
-      request: {
-        [key: string]: unknown
-      }
-    }
-  }>
-  time: {
-    released: number | "NaN" | "Infinity" | "-Infinity"
-  }
-  cost: Array<{
-    tier?: {
-      type: "context"
-      size: number
-    }
-    input: number
-    output: number
-    cache: {
-      read: number
-      write: number
-    }
-  }>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: {
-    context: number
-    input?: number
-    output: number
   }
 }
 
@@ -4126,8 +3714,8 @@ export type GlobalHealthResponses = {
       tools: "disabled" | "preparing" | "ready" | "degraded"
     }
     dshRuntime?: {
-      closureVersion: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      homeVersion?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      closureVersion: number | "NaN" | "Infinity" | "-Infinity"
+      homeVersion?: number | "NaN" | "Infinity" | "-Infinity"
       reasonCode?: string
     }
     preparation?: CorePreparationResult
@@ -4421,7 +4009,7 @@ export type WopalSpaceOntologyListResponses = {
         ontology: string
       }>
     }>
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number | "NaN" | "Infinity" | "-Infinity"
   }
 }
 
@@ -4561,8 +4149,8 @@ export type WopalSpaceOntologyInspectResponses = {
       toBranch: string
       kind: "merge" | "push" | "contribute"
       historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
-      sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sourceAhead: number | "NaN" | "Infinity" | "-Infinity"
+      targetAhead: number | "NaN" | "Infinity" | "-Infinity"
       contentState: "aligned" | "changes" | "conflict" | "unknown"
       fileDiffs: Array<{
         path: string
@@ -4585,8 +4173,8 @@ export type WopalSpaceOntologyInspectResponses = {
       toBranch: string
       kind: "merge" | "push" | "contribute"
       historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
-      sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      sourceAhead: number | "NaN" | "Infinity" | "-Infinity"
+      targetAhead: number | "NaN" | "Infinity" | "-Infinity"
       contentState: "aligned" | "changes" | "conflict" | "unknown"
       fileDiffs: Array<{
         path: string
@@ -4681,7 +4269,7 @@ export type WopalSpaceOntologyRefreshResponses = {
       localHead?: string
       remoteHead?: string
       pr?: {
-        number: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        number: number | "NaN" | "Infinity" | "-Infinity"
         url: string
         state: "open" | "merged" | "closed"
         headSha?: string
@@ -4732,8 +4320,8 @@ export type WopalSpaceOntologyRefreshResponses = {
         toBranch: string
         kind: "merge" | "push" | "contribute"
         historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
-        sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        sourceAhead: number | "NaN" | "Infinity" | "-Infinity"
+        targetAhead: number | "NaN" | "Infinity" | "-Infinity"
         contentState: "aligned" | "changes" | "conflict" | "unknown"
         fileDiffs: Array<{
           path: string
@@ -4756,8 +4344,8 @@ export type WopalSpaceOntologyRefreshResponses = {
         toBranch: string
         kind: "merge" | "push" | "contribute"
         historyState: "same" | "source-ancestor" | "target-ancestor" | "diverged" | "no-common-base" | "unavailable"
-        sourceAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-        targetAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        sourceAhead: number | "NaN" | "Infinity" | "-Infinity"
+        targetAhead: number | "NaN" | "Infinity" | "-Infinity"
         contentState: "aligned" | "changes" | "conflict" | "unknown"
         fileDiffs: Array<{
           path: string
@@ -4889,7 +4477,7 @@ export type WopalSpaceOntologyCapabilityListResponses = {
       name: string
       description: string
     }>
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number | "NaN" | "Infinity" | "-Infinity"
   }
 }
 
@@ -5005,7 +4593,7 @@ export type WopalSpaceSpaceListResponses = {
         mismatch: Array<string>
       }
     }>
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number | "NaN" | "Infinity" | "-Infinity"
   }
 }
 
@@ -5159,7 +4747,7 @@ export type WopalSpaceSpaceProjectsListResponses = {
         branch?: string
       }>
     }>
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number | "NaN" | "Infinity" | "-Infinity"
   }
 }
 
@@ -5214,7 +4802,7 @@ export type WopalSpaceSpaceFilesListResponses = {
       type: "file" | "directory"
       ignored: boolean
     }>
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number | "NaN" | "Infinity" | "-Infinity"
   }
 }
 
@@ -5321,9 +4909,9 @@ export type WopalSpaceSpaceSearchResponses = {
       path: string
       type: "dir" | "repo" | "file"
     }>
-    total: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    offset: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-    limit: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    total: number | "NaN" | "Infinity" | "-Infinity"
+    offset: number | "NaN" | "Infinity" | "-Infinity"
+    limit: number | "NaN" | "Infinity" | "-Infinity"
     hasMore: boolean
   }
 }
@@ -5464,7 +5052,7 @@ export type WopalSpaceSpaceStatusResponses = {
         sha: string
         subject: string
       }>
-      behindCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      behindCount: number | "NaN" | "Infinity" | "-Infinity"
       behindCommits: Array<{
         sha: string
         subject: string
@@ -5483,7 +5071,7 @@ export type WopalSpaceSpaceStatusResponses = {
       defaults: Array<string>
       legacy?: {
         version: 2
-        privateCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        privateCount: number | "NaN" | "Infinity" | "-Infinity"
         writable: boolean
       }
     }
@@ -5507,10 +5095,10 @@ export type WopalSpaceSpaceStatusResponses = {
       }
     }
     remote?: {
-      ahead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
-      behind: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      ahead: number | "NaN" | "Infinity" | "-Infinity"
+      behind: number | "NaN" | "Infinity" | "-Infinity"
     }
-    dirtyCount: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    dirtyCount: number | "NaN" | "Infinity" | "-Infinity"
     preparation: {
       status: "ready" | "needs-preparation" | "preparing" | "busy" | "degraded" | "unknown"
       diagnostic?: string
@@ -5567,7 +5155,7 @@ export type WopalSpaceSpaceSyncResponses = {
       sha: string
       subject: string
     }>
-    mainAhead: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    mainAhead: number | "NaN" | "Infinity" | "-Infinity"
     mainHead: string
     sparsePatterns: Array<string>
     shadowedPaths: Array<string>
@@ -5997,7 +5585,7 @@ export type WopalSpaceSetupExecuteResponses = {
     actionId: "foundation" | "github" | "ontology" | "space" | "provider"
     goal: "foundation" | "github" | "ontology" | "space" | "provider"
     status: "queued" | "running" | "completed" | "failed" | "cancelled"
-    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sequence: number | "NaN" | "Infinity" | "-Infinity"
     startedAt: string
     updatedAt: string
     result?: {
@@ -6057,7 +5645,7 @@ export type WopalSpaceSetupProgressResponses = {
     actionId: "foundation" | "github" | "ontology" | "space" | "provider"
     goal: "foundation" | "github" | "ontology" | "space" | "provider"
     status: "queued" | "running" | "completed" | "failed" | "cancelled"
-    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sequence: number | "NaN" | "Infinity" | "-Infinity"
     startedAt: string
     updatedAt: string
     result?: {
@@ -6164,7 +5752,7 @@ export type WopalSpaceSetupCancelResponses = {
     actionId: "foundation" | "github" | "ontology" | "space" | "provider"
     goal: "foundation" | "github" | "ontology" | "space" | "provider"
     status: "queued" | "running" | "completed" | "failed" | "cancelled"
-    sequence: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    sequence: number | "NaN" | "Infinity" | "-Infinity"
     startedAt: string
     updatedAt: string
     result?: {
@@ -9744,126 +9332,6 @@ export type V2SessionMessagesResponses = {
 
 export type V2SessionMessagesResponse2 = V2SessionMessagesResponses[keyof V2SessionMessagesResponses]
 
-export type V2ModelListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/model"
-}
-
-export type V2ModelListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableError
-}
-
-export type V2ModelListError = V2ModelListErrors[keyof V2ModelListErrors]
-
-export type V2ModelListResponses = {
-  /**
-   * Success
-   */
-  200: Array<ModelV2Info>
-}
-
-export type V2ModelListResponse = V2ModelListResponses[keyof V2ModelListResponses]
-
-export type V2ProviderListData = {
-  body?: never
-  path?: never
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/provider"
-}
-
-export type V2ProviderListErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableError
-}
-
-export type V2ProviderListError = V2ProviderListErrors[keyof V2ProviderListErrors]
-
-export type V2ProviderListResponses = {
-  /**
-   * Success
-   */
-  200: Array<ProviderV2Info>
-}
-
-export type V2ProviderListResponse = V2ProviderListResponses[keyof V2ProviderListResponses]
-
-export type V2ProviderGetData = {
-  body?: never
-  path: {
-    providerID: string
-  }
-  query?: {
-    location?: {
-      directory?: string
-      workspace?: string
-    }
-  }
-  url: "/api/provider/{providerID}"
-}
-
-export type V2ProviderGetErrors = {
-  /**
-   * InvalidRequestError
-   */
-  400: InvalidRequestError
-  /**
-   * UnauthorizedError
-   */
-  401: UnauthorizedError
-  /**
-   * ProviderNotFoundError
-   */
-  404: ProviderNotFoundError
-  /**
-   * ServiceUnavailableError
-   */
-  503: ServiceUnavailableError
-}
-
-export type V2ProviderGetError = V2ProviderGetErrors[keyof V2ProviderGetErrors]
-
-export type V2ProviderGetResponses = {
-  /**
-   * ProviderV2.Info
-   */
-  200: ProviderV2Info
-}
-
-export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
-
 export type TuiAppendPromptData = {
   body?: {
     text: string
@@ -10317,7 +9785,7 @@ export type ExperimentalWorkspaceCreateData = {
     id?: string
     type: string
     branch?: string | null
-    extra?: unknown | null
+    extra?: unknown
   }
   path?: never
   query?: {

@@ -1,4 +1,4 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
 import { Session } from "@/session/session"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
@@ -55,7 +55,7 @@ const it = testEffect(
       Layer.provide([passthroughAuthorization, passthroughInstanceContext, testWorkspaceRouting, fakeSession]),
     ),
     { disableListenLog: true, disableLogger: true },
-  ).pipe(Layer.provideMerge(NodeHttpServer.layerTest)),
+  ).pipe(Layer.provideMerge(loopbackHttpServer)),
 )
 
 describe("mcp HttpApi OAuth", () => {

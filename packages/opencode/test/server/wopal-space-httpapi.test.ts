@@ -1,4 +1,4 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
 import { afterEach, describe, expect } from "bun:test"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter } from "effect/unstable/http"
@@ -46,7 +46,7 @@ const makeRoutes = (host: Layer.Layer<WopalSpaceHostService.Service>) =>
     ),
     { disableListenLog: true, disableLogger: true },
   ).pipe(
-    Layer.provideMerge(NodeHttpServer.layerTest),
+    Layer.provideMerge(loopbackHttpServer),
     Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Layer.mock(Session.Service)({})),
     Layer.provide(Layer.mock(Auth.Service)({})),

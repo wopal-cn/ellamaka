@@ -1,4 +1,5 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
+import { NodeServices } from "@effect/platform-node"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Config, ConfigProvider, Effect, Layer } from "effect"
@@ -36,7 +37,7 @@ const it = testEffect(
     testStateLayer,
     servedRoutes.pipe(
       Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      Layer.provideMerge(NodeHttpServer.layerTest),
+      Layer.provideMerge(loopbackHttpServer),
       Layer.provideMerge(NodeServices.layer),
     ),
   ),

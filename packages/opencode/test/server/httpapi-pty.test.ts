@@ -1,5 +1,6 @@
+import { loopbackHttpServer } from "../fixture/http-server"
 import { afterEach, describe, expect, test } from "bun:test"
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { NodeServices } from "@effect/platform-node"
 import { PtyID } from "../../src/pty/schema"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
@@ -42,7 +43,7 @@ const effectIt = testEffect(
     Socket.layerWebSocketConstructorGlobal,
     servedRoutes.pipe(
       Layer.provide(Socket.layerWebSocketConstructorGlobal),
-      Layer.provideMerge(NodeHttpServer.layerTest),
+      Layer.provideMerge(loopbackHttpServer),
       Layer.provideMerge(NodeServices.layer),
     ),
   ),

@@ -145,7 +145,6 @@ Commands:
   ellamaka debug skill         list all available skills
   ellamaka debug startup       print startup timing
   ellamaka debug agent <name>  show agent configuration details
-  ellamaka debug v2            debug v2 catalog and built-in plugins
   ellamaka debug release-info  output structured release identity as JSON (machine interface)
   ellamaka debug info          show debug information
   ellamaka debug paths         show global paths (data, config, cache, state)

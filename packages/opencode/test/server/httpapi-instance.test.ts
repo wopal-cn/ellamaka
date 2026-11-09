@@ -1,7 +1,8 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
+import { NodeServices } from "@effect/platform-node"
 import { Flag } from "@wopal/ellamaka-core/flag/flag"
 import { describe, expect } from "bun:test"
-import { Config, Context, Effect, FileSystem, Layer, Path } from "effect"
+import { Config, Context, Effect, FileSystem, Layer, Path, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { WorkspaceID } from "../../src/control-plane/schema"
@@ -46,12 +47,12 @@ const servedRoutes: Layer.Layer<never, Config.ConfigError, HttpServer.HttpServer
 
 const httpApiServerLayer = servedRoutes.pipe(
   Layer.provide(Socket.layerWebSocketConstructorGlobal),
-  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(loopbackHttpServer),
   Layer.provideMerge(NodeServices.layer),
 )
 
 const it = testEffect(Layer.mergeAll(testStateLayer, httpApiServerLayer))
-const handlerContext = Context.empty() as Context.Context<unknown>
+const handlerContext = Context.makeUnsafe<unknown>(new Map())
 
 const directoryHeader = (dir: string) => HttpClientRequest.setHeader("x-opencode-directory", dir)
 
@@ -128,7 +129,11 @@ describe("instance HttpApi", () => {
           HttpApiApp.webHandler().handler(
             new Request(`http://localhost${path}`, {
               ...init,
-              headers: { "x-opencode-directory": dir, "content-type": "application/json", ...init?.headers },
+              headers: {
+                "x-opencode-directory": dir,
+                "content-type": "application/json",
+                ...Object.fromEntries(new Headers(init?.headers)),
+              },
             }),
             handlerContext,
           ),
@@ -162,14 +167,18 @@ describe("instance HttpApi", () => {
           HttpApiApp.webHandler().handler(
             new Request(`http://localhost${path}`, {
               ...init,
-              headers: { "x-opencode-directory": dir, "content-type": "application/json", ...init?.headers },
+              headers: {
+                "x-opencode-directory": dir,
+                "content-type": "application/json",
+                ...Object.fromEntries(new Headers(init?.headers)),
+              },
             }),
             handlerContext,
           ),
         )
-      const permissionID = PermissionID.ascending()
-      const questionReplyID = QuestionID.ascending()
-      const questionRejectID = QuestionID.ascending()
+      const permissionID = Schema.encodeSync(PermissionID)(PermissionID.ascending())
+      const questionReplyID = Schema.encodeSync(QuestionID)(QuestionID.ascending())
+      const questionRejectID = Schema.encodeSync(QuestionID)(QuestionID.ascending())
       const [permission, questionReply, questionReject] = yield* Effect.all(
         [
           request(`/permission/${permissionID}/reply`, {

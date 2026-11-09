@@ -1,4 +1,4 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
 import { afterAll, describe, expect } from "bun:test"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter } from "effect/unstable/http"
@@ -89,7 +89,7 @@ const runtimeLayer = Layer.mergeAll(
 )
 
 const routes = HttpRouter.serve(apiLayer, { disableListenLog: true, disableLogger: true }).pipe(
-  Layer.provideMerge(NodeHttpServer.layerTest),
+  Layer.provideMerge(loopbackHttpServer),
   Layer.provide(runtimeLayer),
 )
 

@@ -1,4 +1,5 @@
-import { NodeHttpServer, NodeServices } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
+import { NodeServices } from "@effect/platform-node"
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
@@ -48,7 +49,7 @@ const workspaceLayer = workspaceLayerWithRuntimeFlags({ experimentalWorkspaces: 
 const it = testEffect(
   Layer.mergeAll(
     testStateLayer,
-    NodeHttpServer.layerTest,
+    loopbackHttpServer,
     NodeServices.layer,
     InstanceLayer.layer,
     Project.defaultLayer,

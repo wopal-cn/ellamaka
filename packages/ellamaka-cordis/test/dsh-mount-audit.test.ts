@@ -137,22 +137,27 @@ describe("Home runtime lease audit", () => {
       {
         relative: "packages/opencode/src/cli/cmd/dsh-mount.ts",
         prepare: "const preparation = await prepareDshProfiles",
-        gate: 'if (preparation.web.status !== "prepared" && preparation.tools.status !== "prepared") return undefined',
+        gate: /if \(preparation\.web\.status !== "prepared" && preparation\.tools\.status !== "prepared"\)\s*(?:return undefined|\{[^{}]*\breturn undefined\s*\})/,
       },
       {
         relative: "packages/opencode/src/cli/cmd/tui/dsh-mount.ts",
         prepare: "const preparation = await prepareDshHost",
-        gate: 'if (preparation.status !== "prepared") return undefined',
+        gate: /if \(preparation\.status !== "prepared"\)\s*(?:return undefined|\{[^{}]*\breturn undefined\s*\})/,
       },
     ]
     for (const entry of entries) {
       const source = readFileSync(join(root, entry.relative), "utf-8")
       const prepare = source.indexOf(entry.prepare)
-      const readyGate = source.indexOf(entry.gate)
+      const readyGate = source.search(entry.gate)
+      const admission = source.indexOf("await acquireDshHomeRuntimeAccess")
+      const denied = source.indexOf("if (!homeAccess.ok)", admission)
       const envWrite = source.indexOf("process.env.DSH_HOME =")
       expect(prepare).toBeGreaterThanOrEqual(0)
       expect(readyGate).toBeGreaterThan(prepare)
-      expect(envWrite).toBeGreaterThan(readyGate)
+      expect(admission).toBeGreaterThan(readyGate)
+      expect(denied).toBeGreaterThan(admission)
+      expect(envWrite).toBeGreaterThan(denied)
+      expect(source.slice(denied, envWrite)).toContain("return undefined")
       expect(source).not.toContain("initializeDshRuntime")
       expect(source).toMatch(/acquireDshHomeRuntimeAccess/)
       expect(source).toMatch(/homeAccess\.lease\.release\(\)/)

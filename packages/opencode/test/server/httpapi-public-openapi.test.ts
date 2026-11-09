@@ -84,21 +84,14 @@ describe("PublicApi OpenAPI v2 errors", () => {
     expect(builtInEndpointErrors).toEqual(allowedV2BuiltInEndpointErrors)
   })
 
-  test("documents v2 provider and model catalog errors", () => {
+  test("excludes retired catalog routes and retains public provider and session routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
-
-    expect(componentName(responseRef(spec.paths["/api/provider"]?.get?.responses?.["503"]) ?? "")).toBe(
-      "ServiceUnavailableError",
-    )
-    expect(componentName(responseRef(spec.paths["/api/model"]?.get?.responses?.["503"]) ?? "")).toBe(
-      "ServiceUnavailableError",
-    )
-    expect(componentName(responseRef(spec.paths["/api/provider/{providerID}"]?.get?.responses?.["404"]) ?? "")).toBe(
-      "ProviderNotFoundError",
-    )
-    expect(componentName(responseRef(spec.paths["/api/provider/{providerID}"]?.get?.responses?.["503"]) ?? "")).toBe(
-      "ServiceUnavailableError",
-    )
+    expect(spec.paths["/api/provider"]).toBeUndefined()
+    expect(spec.paths["/api/provider/{providerID}"]).toBeUndefined()
+    expect(spec.paths["/api/model"]).toBeUndefined()
+    expect(spec.paths["/provider"]?.get).toBeDefined()
+    expect(spec.paths["/provider/auth"]?.get).toBeDefined()
+    expect(spec.paths["/api/session/{sessionID}/message"]?.get).toBeDefined()
   })
 
   test("documents v2 session not-found errors", () => {

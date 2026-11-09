@@ -28,6 +28,8 @@ async function collectRepoFiles(root: string, current: string, files: Map<string
     if (SKIP_DIRS.has(entry.name)) continue
     const absolute = path.join(current, entry.name)
     if (entry.isDirectory()) {
+      const relative = path.relative(root, absolute).split(path.sep).join("/")
+      if (relative === "packages/ellamaka-desktop/out") continue
       await collectRepoFiles(root, absolute, files)
       continue
     }

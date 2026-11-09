@@ -4,7 +4,7 @@ import { SessionEvent } from "./session-event"
 import { EventV2 } from "./event"
 import { ToolOutput } from "./tool-output"
 import { V2Schema } from "./v2-schema"
-import { ModelV2 } from "./model"
+import { ModelV2 } from "./model-ref"
 
 export const ID = EventV2.ID
 export type ID = Schema.Schema.Type<typeof ID>

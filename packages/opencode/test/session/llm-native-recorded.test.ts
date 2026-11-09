@@ -1,7 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { ModelsDev } from "@wopal/ellamaka-core/models-dev"
-import { LocationServiceMap } from "@wopal/ellamaka-core/location-layer"
 import { HttpRecorder, Redactor } from "@wopal/http-recorder"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
@@ -58,6 +57,7 @@ const cloneModel = (model: ModelsDev.Provider["models"][string]) => {
   const { experimental, ...rest } = cloned
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- The config schema accepts the same model shape except object-valued experimental metadata.
   if (typeof experimental === "boolean")
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- known fixture model matches config input
     return cloned as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Dropping non-boolean experimental metadata makes the fixture model match config input.
   return rest as NonNullable<NonNullable<Config.Info["provider"]>[string]["models"]>[string]
@@ -277,7 +277,6 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
-    Layer.provide(LocationServiceMap.layer),
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
   const recordedClient = LLMClient.layer.pipe(

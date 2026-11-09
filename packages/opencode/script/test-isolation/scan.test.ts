@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { runGateCheck } from "./check"
+import { loadRepositoryFiles, runGateCheck } from "./check"
 import { scanRepository, scanSource, validateHomePreloadSource, violationKey } from "./scan"
 
 const options = { root: "/repo", relative: (value: string) => value }
@@ -537,5 +537,31 @@ test("full gate entry (runGateCheck) catches violations in test/fixture/ and tem
     expect(report.freshViolations[0]?.file).toBe("packages/sample/test/fixture/ sneaky.test.ts")
   } finally {
     rmSync(tmpRoot, { recursive: true, force: true })
+  }
+})
+
+test("repository scan excludes Desktop build output while retaining source directories named out", async () => {
+  const repoRoot = path.resolve(import.meta.dir, "../../../..")
+  const workspaceTmp = path.resolve(repoRoot, "../..", ".wopal-space/.tmp")
+  const userTmp = path.join(os.homedir(), "tmp")
+  const tempBase = existsSync(workspaceTmp) ? workspaceTmp : existsSync(userTmp) ? userTmp : os.tmpdir()
+  const root = mkdtempSync(path.join(tempBase, "isolation-gate-"))
+  try {
+    const files = [
+      "packages/ellamaka-desktop/out/main/generated.js",
+      "packages/ellamaka-desktop/src/out/source.ts",
+      "packages/another/out/source.ts",
+    ]
+    for (const file of files) {
+      const target = path.join(root, file)
+      mkdirSync(path.dirname(target), { recursive: true })
+      writeFileSync(target, "export const value = true")
+    }
+    const scanned = await loadRepositoryFiles(root)
+    expect(scanned.files.has(files[0])).toBe(false)
+    expect(scanned.files.has(files[1])).toBe(true)
+    expect(scanned.files.has(files[2])).toBe(true)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })

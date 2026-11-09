@@ -21,13 +21,13 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@/storage/db"
 import { SessionMessageTable, SessionTable } from "@/session/session.sql"
 import { SessionMessage } from "@wopal/ellamaka-core/session-message"
-import { ModelV2 } from "@wopal/ellamaka-core/model"
-import { ProviderV2 } from "@wopal/ellamaka-core/provider"
+import { ModelV2 } from "@wopal/ellamaka-core/model-ref"
+import { ProviderV2 } from "@wopal/ellamaka-core/provider-id"
 import * as DateTime from "effect/DateTime"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 void Log.init({ print: false })
@@ -151,6 +151,7 @@ const insertCorruptV2Message = (sessionID: SessionIDType, time = 1) =>
             session_id: sessionID,
             type: "assistant",
             time_created: time,
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- deliberately corrupt fixture data
             data: {} as NonNullable<(typeof SessionMessageTable.$inferInsert)["data"]>,
           },
         ])
@@ -197,6 +198,7 @@ function request(path: string, init?: RequestInit) {
 function json<T>(response: Response) {
   return Effect.promise(async () => {
     if (response.status !== 200) throw new Error(await response.text())
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- test helper decodes the expected response shape
     return (await response.json()) as T
   })
 }
@@ -310,7 +312,7 @@ describe("session HttpApi", () => {
 
         const listed = yield* requestJson<Session.Info[]>(`${SessionPaths.list}?roots=true`, { headers })
         expect(listed.map((item) => item.id)).toContain(parent.id)
-        expect(Object.hasOwn(listed[0]!, "parentID")).toBe(false)
+        expect(Object.hasOwn(listed[0], "parentID")).toBe(false)
 
         expect(yield* requestJson<Record<string, unknown>>(SessionPaths.status, { headers })).toEqual({})
 
@@ -529,6 +531,7 @@ describe("session HttpApi", () => {
           _tag: "UnknownError",
           message: "Unexpected server error. Check server logs for details.",
         })
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- inspect the error response body
         expect((messagesBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
         expect(JSON.stringify(messagesBody)).not.toContain("assistant")
 
@@ -541,6 +544,7 @@ describe("session HttpApi", () => {
           _tag: "UnknownError",
           message: "Unexpected server error. Check server logs for details.",
         })
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- inspect the error response body
         expect((contextBody as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
         expect(JSON.stringify(contextBody)).not.toContain("assistant")
       }),
@@ -843,6 +847,7 @@ describe("session HttpApi", () => {
           }),
         ).toMatchObject({ id: session.id })
 
+        // oxlint-disable-next-line typescript-eslint/no-base-to-string -- ID is a branded string at runtime
         const permissionID = String(PermissionID.ascending())
         const permission = yield* request(
           pathFor(SessionPaths.permissions, {

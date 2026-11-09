@@ -1,7 +1,7 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
 import { afterAll, describe, expect } from "bun:test"
 import { Context, Effect, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { createSetupHomeBinding, setupStatePath } from "@wopal/wopalspace"
@@ -56,7 +56,7 @@ const makeRoutes = (host: Layer.Layer<WopalSpaceHostService.Service>, setup: Lay
     ),
     { disableListenLog: true, disableLogger: true },
   ).pipe(
-    Layer.provideMerge(NodeHttpServer.layerTest),
+    Layer.provideMerge(loopbackHttpServer),
     Layer.provide(SessionStatus.defaultLayer),
     Layer.provide(Layer.mock(Session.Service)({})),
     Layer.provide(Layer.mock(Auth.Service)({})),
@@ -206,6 +206,16 @@ async function resetSetupHome() {
 }
 
 const statePath = () => setupStatePath(testHome.path)
+
+describe("Public Setup API listener", () => {
+  it.live("binds the same IPv4 loopback address used by the test client", () =>
+    Effect.gen(function* () {
+      const server = yield* HttpServer.HttpServer
+      expect(server.address._tag).toBe("TcpAddress")
+      if (server.address._tag === "TcpAddress") expect(server.address.hostname).toBe("127.0.0.1")
+    }),
+  )
+})
 
 describe("Public Setup API authentication", () => {
   it.live("rejects a request without a credential", () =>

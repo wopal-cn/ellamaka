@@ -10,7 +10,7 @@ Parent package rules in `../../AGENTS.md`, the test-layer/fixture rules in `../A
 Use these patterns for server and HttpApi middleware tests in this directory.
 
 - Prefer focused middleware tests with tiny fake routes over full API route trees when testing routing, context, proxying, or middleware policy.
-- Use `testEffect(...)` with `NodeHttpServer.layerTest` for the primary in-test server and make relative `HttpClient` requests against it.
+- Use `testEffect(...)` with `loopbackHttpServer` from `test/fixture/http-server.ts` for the primary in-test server and make relative `HttpClient` requests against it. The listener and client must use the same IPv4 loopback address so another local service cannot receive the request.
 - Use tiny `HttpApiBuilder` probe groups that declare the typed middleware under test and expose context such as `WorkspaceRouteContext`, `InstanceRef`, or `WorkspaceRef`.
 - Declare middleware in the same order as production when testing interactions, for example `InstanceContextMiddleware` followed by `WorkspaceRoutingMiddleware`.
 - For secondary upstream servers, build Effect `NodeHttpServer.layer(...)` into the current test scope with `Layer.build(...)` so the listener stays alive until the test scope exits.

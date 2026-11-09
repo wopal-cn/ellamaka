@@ -17,7 +17,6 @@ import { AgentCommand } from "./agent"
 import { StartupCommand } from "./startup"
 import { VERSION_PREFIX } from "@wopal/ellamaka-brand/branding"
 import { ReleaseInfoCommand } from "./release-info"
-import { V2Command } from "./v2"
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -32,7 +31,6 @@ export const DebugCommand = cmd({
       .command(SkillCommand)
       .command(StartupCommand)
       .command(AgentCommand)
-      .command(V2Command)
       .command(ReleaseInfoCommand)
       .command(InfoCommand)
       .command(PathsCommand)

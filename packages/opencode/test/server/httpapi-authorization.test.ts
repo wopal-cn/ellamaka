@@ -1,4 +1,4 @@
-import { NodeHttpServer } from "@effect/platform-node"
+import { loopbackHttpServer } from "../fixture/http-server"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter } from "effect/unstable/http"
@@ -49,12 +49,12 @@ const v2Handlers = HttpApiBuilder.group(V2Api, "test.v2", (handlers) =>
 const apiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(Api).pipe(Layer.provide(handlers), Layer.provide(authorizationLayer)),
   { disableListenLog: true, disableLogger: true },
-).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+).pipe(Layer.provideMerge(loopbackHttpServer))
 
 const v2ApiLayer = HttpRouter.serve(
   HttpApiBuilder.layer(V2Api).pipe(Layer.provide(v2Handlers), Layer.provide(v2AuthorizationLayer)),
   { disableListenLog: true, disableLogger: true },
-).pipe(Layer.provideMerge(NodeHttpServer.layerTest))
+).pipe(Layer.provideMerge(loopbackHttpServer))
 
 const noAuthLayer = ServerAuth.Config.layer({ password: Option.none(), username: "opencode" })
 const secretLayer = ServerAuth.Config.layer({ password: Option.some("secret"), username: "opencode" })
