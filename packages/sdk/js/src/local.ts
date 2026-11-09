@@ -127,13 +127,34 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
 
     const abort = () => {
       controller.abort(request.signal.reason)
-      worker.postMessage({ type: "abort", id })
+      if (entry.dispatched) worker.postMessage({ type: "abort", id })
     }
     request.signal.addEventListener("abort", abort, { once: true })
 
+    // Reading a stream body is asynchronous and the signal cannot interrupt it:
+    // a cancelled call whose stream never ends would keep dispose waiting on a
+    // request that was never dispatched. Race the read against the abort.
+    const readBody = async (): Promise<Buffer | undefined> => {
+      if (request.body === null) return undefined
+      const aborted = new Promise<never>((_, fail) => {
+        const onAbort = () => {
+          void request.body?.cancel(request.signal.reason).catch(() => {})
+          fail(abortError(request.signal.reason))
+        }
+        if (request.signal.aborted) onAbort()
+        else request.signal.addEventListener("abort", onAbort, { once: true })
+      })
+      try {
+        return Buffer.from(await Promise.race([request.arrayBuffer(), aborted]))
+      } finally {
+        // The race is settled; keep the losing side from becoming unhandled.
+        aborted.catch(() => {})
+      }
+    }
+
     void (async () => {
       try {
-        const body = request.body === null ? undefined : Buffer.from(await request.arrayBuffer()).toString("base64")
+        const body = (await readBody())?.toString("base64")
         // The body read is asynchronous, so the request can be aborted while it
         // runs. Never dispatch after that point. A request accepted before
         // dispose still runs: dispose drains accepted work instead of dropping it.

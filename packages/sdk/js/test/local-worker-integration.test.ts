@@ -171,6 +171,38 @@ test("dispose drains a request whose body is still being serialized", async () =
   }
 })
 
+test("cancelling a stream body that never finishes releases the request and dispose", async () => {
+  // A stream body cannot be interrupted by the signal, so the transport must
+  // race the read: otherwise a cancelled call keeps dispose waiting on a
+  // request that was never dispatched.
+  const home = mkdtempSync(join(tmpdir(), "ellamaka-local-worker-cancel-body-"))
+  const local = await createEllamakaLocalClient({ wopalHome: home, directory: home })
+  const controller = new AbortController()
+  let started!: () => void
+  const reading = new Promise<void>((resolve) => (started = resolve))
+  // Never enqueues: the only way out is the abort.
+  const body = new ReadableStream({
+    pull() {
+      started()
+    },
+  })
+  try {
+    const request = local.request("/wopal-space/spaces", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      duplex: "half",
+      signal: controller.signal,
+    } as RequestInit)
+    await reading
+    controller.abort()
+    await expect(request).rejects.toMatchObject({ name: "AbortError" })
+    await local.dispose()
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
 test("Worker rejects Setup before entering business handlers", async () => {
   const home = mkdtempSync(join(tmpdir(), "ellamaka-local-worker-setup-"))
   const local = await createEllamakaLocalClient({ wopalHome: home, directory: home })
