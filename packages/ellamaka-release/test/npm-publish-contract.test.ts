@@ -32,16 +32,54 @@ const serverDocument = {
   openapi: "3.1.0",
   paths: {
     "/global/health": { get: operation("global.health") },
-    "/wopal-space/spaces": { get: operation("wopalSpace.space.list") },
+    "/wopal-space/spaces": {
+      get: {
+        ...operation("wopalSpace.space.list"),
+        responses: {
+          "200": {
+            description: "Registered Spaces",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/SpaceList" } } },
+          },
+        },
+      },
+    },
     "/workbench/session-tree": {
       get: {
         operationId: "workbench.sessionTree",
         description: "Official App projection",
         "x-ellamaka-audience": "official-app",
+        responses: {
+          "200": {
+            description: "Session tree",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/SessionTree" } } },
+          },
+        },
         "x-codeSamples": [{ lang: "shell", source: "curl http://127.0.0.1:4096/workbench/session-tree" }],
       },
     },
   },
+  components: {
+    schemas: {
+      SpaceList: {
+        type: "object",
+        required: ["items"],
+        properties: { items: { type: "array", items: { $ref: "#/components/schemas/SpaceSummary" } } },
+      },
+      SpaceSummary: { type: "object", properties: { name: { type: "string" } } },
+      // Referenced only by the Official App BFF operation; must never ship.
+      SessionTree: { type: "object", properties: { id: { type: "string" } } },
+    },
+    securitySchemes: { ServerBasicAuth: { type: "http", scheme: "basic" } },
+  },
+}
+
+/** The public component closure: SessionTree is App-only and must not ship. */
+const sdkComponents = {
+  schemas: {
+    SpaceList: serverDocument.components.schemas.SpaceList,
+    SpaceSummary: serverDocument.components.schemas.SpaceSummary,
+  },
+  securitySchemes: serverDocument.components.securitySchemes,
 }
 
 /** The packed SDK contract the Server publishes today. */
@@ -50,6 +88,7 @@ function packedSdk(overrides: Record<string, unknown> = {}): Uint8Array {
     openapi: "3.1.0",
     info: { title: "ellamaka", version: "2.0.11" },
     paths: publicSubset(serverDocument).paths,
+    components: structuredClone(sdkComponents),
     ...overrides,
   }
   return tarball([file("package/package.json", "{}"), file("package/dist/openapi.json", JSON.stringify(document))])
@@ -107,6 +146,40 @@ describe("packed SDK contract gate", () => {
     }
     expect(() => verifyPackedContract({ entry, tarball: packedSdk({ paths }), serverDocument })).toThrow(
       /differs from the Server document|must not call \/workbench\//,
+    )
+  })
+
+  test("rejects a packed contract whose referenced schema drifted from the Server", () => {
+    // Comparing operation records alone would accept this: the operations are
+    // byte-identical and only the DTO they point at changed.
+    const components = structuredClone(sdkComponents)
+    components.schemas.SpaceSummary = { type: "object", properties: { name: { type: "number" } } }
+    expect(() => verifyPackedContract({ entry, tarball: packedSdk({ components }), serverDocument })).toThrow(
+      /packed SDK schema SpaceSummary differs from the Server document/,
+    )
+  })
+
+  test("rejects a packed contract missing a schema its public operations reference", () => {
+    const components = structuredClone(sdkComponents)
+    delete (components.schemas as Record<string, unknown>).SpaceSummary
+    expect(() => verifyPackedContract({ entry, tarball: packedSdk({ components }), serverDocument })).toThrow(
+      /missing schema SpaceSummary/,
+    )
+  })
+
+  test("rejects an App-BFF-only schema smuggled into the packed contract", () => {
+    const components = structuredClone(sdkComponents)
+    ;(components.schemas as Record<string, unknown>).SessionTree = serverDocument.components.schemas.SessionTree
+    expect(() => verifyPackedContract({ entry, tarball: packedSdk({ components }), serverDocument })).toThrow(
+      /Official App BFF schema SessionTree/,
+    )
+  })
+
+  test("rejects packed security schemes that differ from the Server", () => {
+    const components = structuredClone(sdkComponents)
+    components.securitySchemes = { ServerBasicAuth: { type: "http", scheme: "bearer" } }
+    expect(() => verifyPackedContract({ entry, tarball: packedSdk({ components }), serverDocument })).toThrow(
+      /security schemes differ from the Server document/,
     )
   })
 

@@ -112,6 +112,90 @@ export interface VerifyPackedContractResult {
   paths: number
 }
 
+const SCHEMA_REF_PREFIX = "#/components/schemas/"
+
+/** Names of every component schema reachable from an operation, transitively. */
+export function schemaClosure(document: OpenApiDocument, entries: OperationEntry[]): Set<string> {
+  const schemas = componentSchemas(document)
+  const names = new Set<string>()
+  const pending = entries.flatMap((entry) => refsIn(entry.operation))
+  while (pending.length) {
+    const name = pending.pop()!
+    if (names.has(name)) continue
+    names.add(name)
+    const schema = schemas[name]
+    if (schema === undefined) continue
+    pending.push(...refsIn(schema))
+  }
+  return names
+}
+
+function componentSchemas(document: OpenApiDocument): Record<string, unknown> {
+  const components = document.components
+  if (!isObject(components)) return {}
+  const schemas = components.schemas
+  return isObject(schemas) ? schemas : {}
+}
+
+function componentSecuritySchemes(document: OpenApiDocument): unknown {
+  const components = document.components
+  if (!isObject(components)) return undefined
+  return components.securitySchemes
+}
+
+function refsIn(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(refsIn)
+  if (!isObject(value)) return []
+  const ref = value.$ref
+  const nested = Object.values(value).flatMap(refsIn)
+  return typeof ref === "string" && ref.startsWith(SCHEMA_REF_PREFIX)
+    ? [ref.slice(SCHEMA_REF_PREFIX.length), ...nested]
+    : nested
+}
+
+/**
+ * Compare the schema and security components the public operations actually
+ * reference. Comparing only operation records would let a changed DTO schema
+ * through, which is exactly the drift this gate exists to catch.
+ */
+function verifyComponents(packed: OpenApiDocument, full: OpenApiDocument, publicEntries: OperationEntry[]): void {
+  const packedSchemas = componentSchemas(packed)
+  const serverSchemas = componentSchemas(full)
+  const publicNames = schemaClosure(full, publicEntries)
+  const appOnly = operations(full).filter((entry) => !isPublic(entry))
+  const privateNames = new Set([...schemaClosure(full, appOnly)].filter((name) => !publicNames.has(name)))
+
+  for (const name of publicNames) {
+    const expected = serverSchemas[name]
+    if (expected === undefined)
+      throw new Error("server public contract is missing referenced schema " + name + "; the source contract is broken")
+    const actual = packedSchemas[name]
+    if (actual === undefined)
+      throw new Error(
+        "packed SDK contract is missing schema " +
+          name +
+          " that " +
+          publicNames.size +
+          " public operation(s) reference",
+      )
+    if (canonicalJson(actual) !== canonicalJson(expected))
+      throw new Error(
+        "packed SDK schema " + name + " differs from the Server document - the committed openapi.json is stale",
+      )
+  }
+
+  for (const name of Object.keys(packedSchemas))
+    if (privateNames.has(name))
+      throw new Error("packed SDK contract contains the Official App BFF schema " + name + "; it must stay Server-only")
+
+  if (canonicalJson(componentSecuritySchemes(packed)) !== canonicalJson(componentSecuritySchemes(full)))
+    throw new Error("packed SDK security schemes differ from the Server document")
+}
+
+function isPublic(entry: OperationEntry): boolean {
+  return isObject(entry.operation) && entry.operation[AUDIENCE] === "public-platform"
+}
+
 function label(path: string, method: string): string {
   return method.toUpperCase() + " " + path
 }
@@ -123,7 +207,8 @@ function label(path: string, method: string): string {
  */
 export function verifyPackedContract(options: VerifyPackedContractOptions): VerifyPackedContractResult {
   const packed = sdkOpenApi(options.tarball)
-  const server = publicSubset(requireDocument(options.serverDocument, "server document"))
+  const full = requireDocument(options.serverDocument, "server document")
+  const server = publicSubset(full)
 
   for (const path of Object.keys(packed.paths))
     if (path.startsWith(APP_BFF_PREFIX))
@@ -172,6 +257,8 @@ export function verifyPackedContract(options: VerifyPackedContractOptions): Veri
         throw new Error("packed SDK example for " + label(path, method) + " must not call " + APP_BFF_PREFIX + "*")
     }
   }
+
+  verifyComponents(packed, full, operations(server))
 
   return { operations: packedByKey.size, paths: Object.keys(packed.paths).length }
 }

@@ -61,9 +61,11 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
     number,
     {
       resolve: (value: Response) => void
-      reject: (error: Error) => void
+      reject: (error: unknown) => void
       abort: AbortController
-      promise?: Promise<Response>
+      promise: Promise<Response>
+      /** True once the request body has been read and posted to the Worker. */
+      dispatched: boolean
     }
   >()
 
@@ -96,7 +98,9 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
   })
   worker.on("error", fail)
   worker.on("exit", (code) => {
-    if (!closed) fail(new Error(`local Worker exited unexpectedly with code ${code}`))
+    // Settle survivals even after dispose: an accepted call must never be left
+    // pending just because the client already started shutting down.
+    fail(new Error(closed ? "local client is disposed" : `local Worker exited unexpectedly with code ${code}`))
   })
   await ready
 
@@ -105,32 +109,48 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
     const url = new URL(request.url)
     const rejected = unsupported(url.pathname)
     if (rejected) return rejected
-    if (closed)
-      return Response.json(
-        { name: "LocalClientDisposed", data: { message: "local client is disposed" } },
-        { status: 410 },
-      )
+    if (closed) return disposedResponse()
+    // A signal that is already aborted must cancel before any work: fetch never
+    // dispatches a pre-aborted request, and neither may the trusted-local path.
+    if (request.signal.aborted) throw abortError(request.signal.reason)
 
     const id = nextID++
     const controller = new AbortController()
+    let settle!: (value: Response | PromiseLike<Response>) => void
+    let reject!: (error: unknown) => void
+    const promise = new Promise<Response>((resolve, fail) => {
+      settle = resolve
+      reject = fail
+    })
+    const entry = { resolve: settle, reject, abort: controller, promise, dispatched: false }
+    inFlight.set(id, entry)
+
     const abort = () => {
       controller.abort(request.signal.reason)
       worker.postMessage({ type: "abort", id })
     }
-    if (request.signal.aborted) abort()
-    else request.signal.addEventListener("abort", abort, { once: true })
-    const body = request.body === null ? undefined : Buffer.from(await request.arrayBuffer()).toString("base64")
-    const promise = new Promise<Response>((resolve, reject) => {
-      inFlight.set(id, { resolve, reject, abort: controller })
-      worker.postMessage({
-        type: "request",
-        id,
-        request: { url: url.href, method: request.method, headers: [...request.headers.entries()], body },
-      })
-    }).finally(() => request.signal.removeEventListener("abort", abort))
-    const entry = inFlight.get(id)
-    if (entry) entry.promise = promise
-    return promise
+    request.signal.addEventListener("abort", abort, { once: true })
+
+    void (async () => {
+      try {
+        const body = request.body === null ? undefined : Buffer.from(await request.arrayBuffer()).toString("base64")
+        // The body read is asynchronous, so the request can be aborted while it
+        // runs. Never dispatch after that point. A request accepted before
+        // dispose still runs: dispose drains accepted work instead of dropping it.
+        if (request.signal.aborted) throw abortError(request.signal.reason)
+        entry.dispatched = true
+        worker.postMessage({
+          type: "request",
+          id,
+          request: { url: url.href, method: request.method, headers: [...request.headers.entries()], body },
+        })
+      } catch (error) {
+        // Remove first: a reply that raced the failure must not revive the entry.
+        if (inFlight.delete(id)) reject(error)
+      }
+    })()
+
+    return promise.finally(() => request.signal.removeEventListener("abort", abort))
   }) as typeof fetch
 
   const generated = createOpencodeClient({ baseUrl: "http://local.invalid", fetch: localFetch })
@@ -140,7 +160,10 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
     async dispose() {
       if (closed) return
       closed = true
-      await Promise.allSettled([...inFlight.values()].flatMap((pending) => (pending.promise ? [pending.promise] : [])))
+      // Drain accepted work: a request that started before dispose still reaches
+      // the Worker and finishes its persisted write, and dispose does not return
+      // while any accepted call is unsettled.
+      await Promise.allSettled([...inFlight.values()].map((pending) => pending.promise))
       const id = nextID++
       await new Promise<void>((resolve, reject) => {
         const onMessage = (message: { type: string; id?: number }) => {
@@ -155,4 +178,13 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
       await worker.terminate()
     },
   }
+}
+
+function abortError(reason: unknown): Error {
+  if (reason instanceof Error) return reason
+  return new DOMException("The operation was aborted.", "AbortError")
+}
+
+function disposedResponse(): Response {
+  return Response.json({ name: "LocalClientDisposed", data: { message: "local client is disposed" } }, { status: 410 })
 }
