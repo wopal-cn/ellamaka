@@ -42,7 +42,7 @@ type ToolSchema = { name: string; description: string; parameters: JsonSchema }
 type Result = {
   isError: boolean
   content?: { type: string; text?: string }[]
-  error?: { message?: string }
+  error?: { message?: string; info?: { name?: string; code?: string; reason?: string } }
   value?: unknown
   meta?: unknown
 }
@@ -430,8 +430,15 @@ function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
                     .map((item) => item.text ?? "")
                     .join("\n")
                   if (result.isError) {
-                    container.logger("dsh-adapter").error("tool execution failed", { tool: name })
-                    throw new Error(text || result.error?.message || "DSH tool failed")
+                    const message = text || result.error?.message || "DSH tool failed"
+                    const diagnostic = (result.error?.message || text || "DSH tool failed").slice(0, 1024)
+                    const code = result.error?.info?.code
+                    container.logger("dsh-adapter").error("tool execution failed", {
+                      tool: name,
+                      ...(typeof code === "string" && code ? { code } : {}),
+                      error: diagnostic,
+                    })
+                    throw new Error(message)
                   }
                   return { output: text, title: name, metadata: metadata(name, dispatch, result) }
                 } finally {

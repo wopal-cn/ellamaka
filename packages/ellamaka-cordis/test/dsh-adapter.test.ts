@@ -140,29 +140,56 @@ describe("built-in dsh adapter", () => {
     expect(await projected(incomplete)).toEqual({})
   })
 
-  test("a ready DSH tool failure never retries the native tool", async () => {
+  test("a ready DSH tool failure never retries the native tool and logs structured error details for classification", async () => {
     const pool = container()
-    pool.run(async () => {
-      throw new Error("dsh read failed")
+    const logged: Array<{ message: string; extra: unknown }> = []
+    pool.ctx.logger = () => ({
+      info() {},
+      warn() {},
+      error(message: string, extra?: unknown) {
+        logged.push({ message, extra })
+      },
     })
+    pool.run(async () => ({
+      isError: true,
+      content: [
+        { type: "text", text: 'Error: cannot modify "/project/a": file has not been read — read the file, then retry' },
+      ],
+      error: {
+        message: 'cannot modify "/project/a": file has not been read — read the file, then retry',
+        info: { name: "FsError", code: "FS_NOT_OBSERVED" },
+      },
+    }))
     const hook = await dshAdapter(input())
     let nativeCalls = 0
     const output: { tools: Record<string, ToolDefinition> } = {
       tools: {
-        read: {
-          description: "native read",
+        edit: {
+          description: "native edit",
           args: {},
           execute: async () => {
             nativeCalls += 1
-            return { output: "native", title: "read", metadata: {} }
+            return { output: "native", title: "edit", metadata: {} }
           },
         },
       },
     }
     await hook["tool.provider"]?.({ providerID: "test", modelID: "test" }, output)
-    await expect(output.tools.read.execute({ filePath: "a" }, context())).rejects.toThrow("dsh read failed")
+    await expect(
+      output.tools.edit.execute({ filePath: "a", oldString: "x", newString: "y" }, context()),
+    ).rejects.toThrow("file has not been read")
     expect(nativeCalls).toBe(0)
     expect(pool.calls).toHaveLength(1)
+    expect(logged).toEqual([
+      {
+        message: "tool execution failed",
+        extra: {
+          tool: "edit",
+          code: "FS_NOT_OBSERVED",
+          error: 'cannot modify "/project/a": file has not been read — read the file, then retry',
+        },
+      },
+    ])
     await hook.dispose?.()
   })
 

@@ -60,7 +60,7 @@ function cordisTypeToLevel(type: Message["type"]): EllamakaLogLevel {
 export function classifyCordisPluginLog(input: CordisPluginLogInput): CordisPluginLogOutput {
   const toolFailure = toolFailureDetails(input)
   if (toolFailure) {
-    const reason = expectedToolOutcomeReason(toolFailure.error)
+    const reason = expectedToolOutcomeReason(toolFailure.error, toolFailure.code)
     if (reason) {
       return {
         level: "DEBUG",
@@ -99,19 +99,24 @@ export function classifyCordisPluginLog(input: CordisPluginLogInput): CordisPlug
   return { level: input.level, body: input.body }
 }
 
-function toolFailureDetails(input: CordisPluginLogInput): { tool: string; error: string } | undefined {
-  if (input.name !== "dsh-adapter" || !input.body.startsWith("tool call failed")) return undefined
-  const json = input.body.slice("tool call failed".length).trim()
-  if (!json) return { tool: "unknown", error: "" }
+const TOOL_FAILURE_PREFIXES = ["tool execution failed", "tool call failed"] as const
+
+function toolFailureDetails(input: CordisPluginLogInput): { tool: string; code: string; error: string } | undefined {
+  if (input.name !== "dsh-adapter") return undefined
+  const prefix = TOOL_FAILURE_PREFIXES.find((candidate) => input.body.startsWith(candidate))
+  if (!prefix) return undefined
+  const json = input.body.slice(prefix.length).trim()
+  if (!json) return { tool: "unknown", code: "", error: "" }
   try {
     const value: unknown = JSON.parse(json)
-    if (!isRecord(value)) return { tool: "unknown", error: "" }
+    if (!isRecord(value)) return { tool: "unknown", code: "", error: "" }
     return {
       tool: safeToolName(value.tool),
+      code: typeof value.code === "string" ? value.code : "",
       error: typeof value.error === "string" ? value.error : "",
     }
   } catch {
-    return { tool: "unknown", error: "" }
+    return { tool: "unknown", code: "", error: "" }
   }
 }
 
@@ -124,18 +129,73 @@ function safeToolName(value: unknown): string {
   return /^[a-z0-9_.-]{1,80}$/i.test(value) ? value : "unknown"
 }
 
-function expectedToolOutcomeReason(value: string): string | undefined {
-  if (/requires reading .* first|FS_NOT_OBSERVED/i.test(value)) return "read-required"
-  if (/FS_NOT_FOUND|cannot edit .*not found|target .*not found/i.test(value)) return "target-missing"
-  if (/stale (?:read|observation|version)|changed since (?:it was )?read/i.test(value)) return "stale-observation"
+function expectedToolOutcomeReason(value: string, code = ""): string | undefined {
   if (
-    /\b(?:sandbox|permission|approval)\b.*\b(?:denied|rejected|unavailable)\b|outside (?:the )?workspace|read-only mode/i.test(
+    code === "FS_NOT_OBSERVED" ||
+    /requires reading .* first|has not been read|without reading it first|FS_NOT_OBSERVED/i.test(value)
+  ) {
+    return "read-required"
+  }
+  if (
+    code === "FS_NOT_FOUND" ||
+    /FS_NOT_FOUND|cannot (?:read|edit|write|list|delete|move|patch|view|insert|resolve) .*not found|target .*not found|is out of range for/i.test(
+      value,
+    )
+  ) {
+    return "target-missing"
+  }
+  if (
+    code === "FS_STALE_VERSION" ||
+    /FS_STALE_VERSION|stale (?:read|observation|version)|changed since (?:it was )?read|file no longer exists/i.test(
+      value,
+    )
+  ) {
+    return "stale-observation"
+  }
+  if (
+    code === "FS_EDIT_NOT_FOUND" ||
+    code === "FS_AMBIGUOUS_EDIT" ||
+    code === "FS_PATCH_MISMATCH" ||
+    code === "PATCH_SYNTAX" ||
+    code === "PATCH_SYMLINK_SOURCE" ||
+    code === "FS_SAME_TARGET" ||
+    /FS_EDIT_NOT_FOUND|FS_AMBIGUOUS_EDIT|FS_PATCH_MISMATCH|old_string (?:was not found|matched \d+ times|must be a non-empty string|and new_string must differ)|No occurrences of|found \d+ occurrences of|File already exists at:.*Cannot overwrite/i.test(
+      value,
+    )
+  ) {
+    return "edit-mismatch"
+  }
+  if (
+    code === "FS_NOT_DIRECTORY" ||
+    code === "FS_NOT_TEXT" ||
+    code === "FS_NOT_REGULAR_FILE" ||
+    code === "FS_TOO_LARGE" ||
+    /FS_NOT_DIRECTORY|FS_NOT_TEXT|FS_NOT_REGULAR_FILE|FS_TOO_LARGE|not a (?:regular file|directory)|binary file|invalid UTF-8 text|exceeds the .*-byte limit|Invalid `view_range`|not allowed when `path` points to a directory|is not an absolute path/i.test(
+      value,
+    )
+  ) {
+    return "invalid-target"
+  }
+  if (
+    code === "FS_SANDBOX_DENIED" ||
+    code === "FS_PERMISSION_DENIED" ||
+    /FS_SANDBOX_DENIED|FS_PERMISSION_DENIED|\[sandbox: file access denied|\b(?:sandbox|permission|approval)\b.*\b(?:denied|rejected|unavailable)\b|rejected escalating|outside (?:the )?workspace|read-only mode|workspace-write mode/i.test(
       value,
     )
   ) {
     return "permission-denied"
   }
-  if (/\b(?:tool call|operation)\b.*\b(?:cancelled|canceled|aborted)\b/i.test(value)) return "cancelled"
+  if (
+    code === "ABORTED" ||
+    code === "ABORTED_BEFORE_DISPATCH" ||
+    code === "FS_ABORTED" ||
+    code === "TOOL_TIMEOUT" ||
+    /\b(?:tool call|operation|read|write|edit|delete|move|resolve|stat|lstat|approval)\b.*\b(?:cancelled|canceled|aborted|timed out)\b|TOOL_TIMEOUT|FS_ABORTED/i.test(
+      value,
+    )
+  ) {
+    return "cancelled"
+  }
   return undefined
 }
 

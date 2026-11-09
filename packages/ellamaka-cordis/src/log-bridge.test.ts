@@ -13,6 +13,63 @@ describe("classifyCordisPluginLog", () => {
       level: "DEBUG",
       body: "tool outcome rejected tool=edit reason=read-required",
     })
+
+    expect(
+      classifyCordisPluginLog({
+        name: "dsh-adapter",
+        level: "ERROR",
+        body: 'tool execution failed {"tool":"edit","code":"FS_NOT_OBSERVED","error":"cannot modify \\"/private/project/secret.ts\\": file has not been read — read the file, then retry"}',
+      }),
+    ).toEqual({
+      level: "DEBUG",
+      body: "tool outcome rejected tool=edit reason=read-required",
+    })
+  })
+
+  test("demotes expected built-in dsh-adapter read, edit, sandbox, and cancellation outcomes to debug", () => {
+    expect(
+      classifyCordisPluginLog({
+        name: "dsh-adapter",
+        level: "ERROR",
+        body: 'tool execution failed {"tool":"read","code":"FS_NOT_FOUND","error":"cannot read \\"/private/project/missing.ts\\": not found"}',
+      }),
+    ).toEqual({
+      level: "DEBUG",
+      body: "tool outcome rejected tool=read reason=target-missing",
+    })
+
+    expect(
+      classifyCordisPluginLog({
+        name: "dsh-adapter",
+        level: "ERROR",
+        body: 'tool execution failed {"tool":"edit","code":"FS_EDIT_NOT_FOUND","error":"old_string was not found in \\"/private/project/a.ts\\""}',
+      }),
+    ).toEqual({
+      level: "DEBUG",
+      body: "tool outcome rejected tool=edit reason=edit-mismatch",
+    })
+
+    expect(
+      classifyCordisPluginLog({
+        name: "dsh-adapter",
+        level: "ERROR",
+        body: 'tool execution failed {"tool":"write","code":"FS_SANDBOX_DENIED","error":"[sandbox: file access denied under read-only mode]"}',
+      }),
+    ).toEqual({
+      level: "DEBUG",
+      body: "tool outcome rejected tool=write reason=permission-denied",
+    })
+
+    expect(
+      classifyCordisPluginLog({
+        name: "dsh-adapter",
+        level: "ERROR",
+        body: 'tool execution failed {"tool":"bash","code":"TOOL_TIMEOUT","error":"tool call timed out after 5000ms"}',
+      }),
+    ).toEqual({
+      level: "DEBUG",
+      body: "tool outcome rejected tool=bash reason=cancelled",
+    })
   })
 
   test("demotes other expected policy outcomes without persisting their raw error", () => {
