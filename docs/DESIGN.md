@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-08
+> **Updated**: 2026-11-09
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -415,7 +415,7 @@ Core `Global` 只负责 `WOPAL_HOME` 路径布局，不将 `.env` 文件写入 `
 
 ### Runtime API 与 SDK 契约
 
-Ellamaka Server 同时承载 Public Platform API 与 Official App BFF。Public Platform API 只组合可复用的 Runtime 与 WopalSpace contract，并生成 `@wopal/ellamaka-sdk` 的公开 OpenAPI/client/types；Official App BFF 只服务 `@wopal/ellamaka-app`，拥有独立的私有 schema/client，不进入公开 SDK。
+Ellamaka Server 同时承载 Public Platform API 与 Official App BFF。Public Platform API 组合可复用的 Runtime 与 WopalSpace contract，并生成 `@wopal/ellamaka-sdk` 的公开 OpenAPI/client/types；Official App BFF 拥有独立的 App 专用 schema/client，不进入公开 SDK。Server 的 `GET /doc` 展示两类接口并标明归属、用途和兼容性。
 
 Workbench 的 Session Tree、creation locations、跨 Space 的 Session provision 等是官方 App projection/use case，由 App BFF 组合 Runtime facts 与 WopalSpace facts。可独立复用的 Space registry/projects/search/files 能力归 private `@wopal/wopalspace` 并进入 Public Platform API；可独立复用的 Session/status/metadata 能力归 Runtime public contract。
 

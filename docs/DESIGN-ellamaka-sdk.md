@@ -1,7 +1,7 @@
 # Ellamaka SDK — Unified Public API and Client Transport
 
 > **Status**: Active
-> **Updated**: 2026-10-15
+> **Updated**: 2026-11-09
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Scope**: `@wopal/ellamaka-sdk` 的统一公开 API、OpenAPI 3.1、generated client、HTTP/local transport、契约发现与发布边界
@@ -87,7 +87,7 @@ Ellamaka 品牌 API 是 canonical surface：`EllamakaClient`、`createEllamakaCl
 - authentication metadata；
 - SSE/event stream schema。
 
-Public Platform HttpApi 是公开 operation 的唯一 composition。运行中 Server 的 `GET /doc` 和发布 SDK 自带的 OpenAPI 都从这份 public composition 生成，不包含 Official App BFF route，也不维护第二份手写 YAML/JSON。
+Public Platform HttpApi 是公开 operation 的唯一 composition。SDK 自带的 OpenAPI 从这份 composition 生成。运行中 Server 的 `GET /doc` 从同一组接口定义生成完整的 Server OpenAPI，包含 Public Platform 和 Official App BFF；两类 operation 标明归属与兼容性。SDK 生成只消费公开 contract，不从完整文档无条件生成。
 
 Official App BFF 使用独立的私有 schema/HttpApi composition，并可为 `ellamaka-app` 生成内部 client。它不发布 npm SDK、不进入 public OpenAPI，也不参与 `@wopal/ellamaka-sdk` SemVer。
 
@@ -143,7 +143,7 @@ App BFF 只承载需要跨领域组合或直接服务界面结构的 contract，
 
 可独立复用的领域能力不得只存在于 App BFF。Space 文件读取属于 WopalSpace public contract；Session 状态与 metadata 属于 Runtime public contract。App BFF 优先组合这些 public/domain service，而不是复制业务状态机。
 
-App-private HttpApi 可以拥有生成的内部 client 和 build-time contract 校验。它不导出到 `@wopal/ellamaka-sdk`、不出现在 `GET /doc`、不为第三方提供兼容承诺。
+App-private HttpApi 可以拥有生成的内部 client 和 build-time contract 校验。它出现在 `GET /doc` 中并标为 App 专用，不导出到 `@wopal/ellamaka-sdk`，也不为第三方提供兼容承诺。认证与权限仍由 Server 执行，文档分类不构成访问控制。
 
 ## Public Entrypoints
 
@@ -266,17 +266,17 @@ client、transport 和 host process lifecycle 是三件事：
 
 ## Contract Discovery
 
-同一个完整公开 contract 可以从三个地方取得：
+Server 文档展示当前 Server 挂载的 HTTP API。SDK contract 表达其中的公开平台能力：
 
 | Environment | Source |
 | --- | --- |
-| running Server | `GET /doc` |
-| installed npm package | `@wopal/ellamaka-sdk/openapi.json` |
-| source tree | side-effect-free contract export |
+| running Server | `GET /doc`：完整 Server API，区分公开平台和 App 专用接口 |
+| installed npm package | `@wopal/ellamaka-sdk/openapi.json`：公开平台 contract |
+| source tree | 无启动副作用的公开 contract 导出及 App contract 定义 |
 
-三个来源 canonicalize 后必须表示同一 **Public Platform SDK contract**。Agent 判断公开 API 是否存在时读取 OpenAPI，不从 CLI/Desktop 产品版本或 Server 的内部 route 集合猜测。
+`/doc` 的公开平台子集与 npm 包内公开 OpenAPI canonicalize 后一致；App 专用接口只存在于完整 Server 文档及 App 内部 contract。完整文档与实际挂载路由保持一致，定义冲突在生成或验证时失败，不能静默覆盖 operation。每个 operation 标明稳定的 operation ID、方法和路径、用途及适用场景、接口归属和兼容承诺、认证要求、参数、请求与响应 schema、错误及适用示例。Agent 据此优先选择满足需求的公开接口；需要 App 专用能力时，可识别其兼容性边界。文档不泄露凭据或运行时敏感数据。
 
-Developer Reference 可以按 Runtime、WopalSpace 等 domain 分组展示，但这些分组都来自同一份 public OpenAPI 和同一个 SDK package。Official App BFF 的 contract 只用于 App 自身开发与构建校验。
+Developer Reference 按 Runtime、WopalSpace、Official App 等用途分组，并区分公开与 App 专用接口。文档、SDK 和 App client 均从各自权威接口定义生成，变更时校验内容、分类与实际路由一致。
 
 ## Authentication
 
@@ -345,6 +345,6 @@ Ellamaka source
 6. `/local` 发布物不能要求消费者安装 unpublished private packages。
 7. Wopal CLI 不直接依赖 `@wopal/wopalspace`，也不通过 Ellamaka CLI subprocess 复用业务。
 8. Server composition 内部直接调用 private WopalSpace service，不通过 SDK/HTTP loopback。
-9. Official App BFF 不进入公开 SDK、`GET /doc` 或 SDK SemVer。
+9. `GET /doc` 包含标明归属的 Official App BFF；BFF 不进入公开 SDK 或 SDK SemVer。
 10. Product 安装/update 不进入 WopalSpace SDK surface。
 11. SDK 不拥有 Desktop/Server/Wopal CLI 的产品生命周期。

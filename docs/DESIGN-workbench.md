@@ -1,7 +1,7 @@
 # Ellamaka Workbench 设计规范
 
 > **Status**: Active
-> **Updated**: 2026-11-03
+> **Updated**: 2026-11-09
 > **Parent**: `./DESIGN.md`
 >
 > 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
@@ -71,7 +71,7 @@ Public Platform API
 
 Space registry、projects、files、search、registered-root validation 等可复用事实由 `@wopal/wopalspace` 提供；Session/status/metadata 等可复用事实由 Runtime 提供。这些 contract 进入公开 `@wopal/ellamaka-sdk`。
 
-Session Tree、creation locations、跨 General/Space 的 Session provision 与 DSH iframe entry 带有官方产品结构，归 `@wopal/ellamaka-app` 的 App BFF。BFF 可以和 Public Platform API 挂在同一个 Ellamaka Server/端口，但拥有独立的私有 HttpApi/client，不进入公开 SDK、`GET /doc` 或 SDK SemVer。
+Session Tree、creation locations、跨 General/Space 的 Session provision 与 DSH iframe entry 带有官方产品结构，归 `@wopal/ellamaka-app` 的 App BFF。BFF 与 Public Platform API 可挂在同一个 Ellamaka Server/端口，拥有独立 HttpApi/client。`GET /doc` 展示并标明 App 专用接口；公开 SDK 和 SDK SemVer 只覆盖 Public Platform API。
 
 Server composition 可以直接组合 private WopalSpace service 与 Runtime service。`ellamaka-core`、Session、Agent、PTY、Tool 等底层 Runtime domain 保持对 WopalSpace 和 App BFF 无反向依赖。
 
