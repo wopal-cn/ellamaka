@@ -21,18 +21,21 @@ exports `{"./*": "./src/*.ts"}`).
 
 ## Module Layout
 
-| Module           | Path                      | Responsibility                                                                                                                                                                                                                                              |
-| ---------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| identity         | `src/identity.ts`         | Single source of truth for the release identity model (parse/build/release identity, channels, namespaced tags, legacy versions, upstream lock validation, migration floor, SemVer compare). The ONLY copy — build-time, runtime, and scripts all share it. |
-| build targets    | `src/build-targets.ts`    | Build target matrix (per-OS/arch).                                                                                                                                                                                                                          |
-| build identity   | `src/build-identity.ts`   | Build-time identity injection helper.                                                                                                                                                                                                                       |
-| context          | `src/context.ts`          | Build release context (serialize/parse).                                                                                                                                                                                                                    |
-| manifest         | `src/manifest.ts`         | Release manifest generation (`manifest.json`, checksums, release notes).                                                                                                                                                                                    |
-| gitee            | `src/gitee.ts`            | Gitee release creation.                                                                                                                                                                                                                                     |
-| cleanup core     | `src/cleanup/core.ts`     | Product-agnostic cleanup kernel: reference graph, retention planning, withdrawal planning (protection model, [Cleanup Contract](../../docs/DESIGN-distribution.md#cleanup-contract)).                                                                       |
-| cleanup products | `src/cleanup/products.ts` | Product difference = config (`ellamaka-cli` / `ellamaka-desktop` channels, R2 roots, alias names, restore strategy).                                                                                                                                        |
-| upstream lock    | `src/upstream-lock.ts`    | The ONLY writer of `release/upstreams.lock.json` (operator-run).                                                                                                                                                                                            |
-| inventory        | `src/inventory.ts`        | Read-only legacy inventory capture ([Legacy Migration](../../docs/DESIGN-distribution.md#legacy-migration)).                                                                                                                                                |
+| Module           | Path                                                | Responsibility                                                                                                                                                                                                                                              |
+| ---------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| identity         | `src/identity.ts`                                   | Single source of truth for the release identity model (parse/build/release identity, channels, namespaced tags, legacy versions, upstream lock validation, migration floor, SemVer compare). The ONLY copy — build-time, runtime, and scripts all share it. |
+| build targets    | `src/build-targets.ts`                              | Build target matrix (per-OS/arch).                                                                                                                                                                                                                          |
+| build identity   | `src/build-identity.ts`                             | Build-time identity injection helper.                                                                                                                                                                                                                       |
+| context          | `src/context.ts`                                    | Build release context (serialize/parse).                                                                                                                                                                                                                    |
+| manifest         | `src/manifest.ts`                                   | Release manifest generation (`manifest.json`, checksums, release notes).                                                                                                                                                                                    |
+| gitee            | `src/gitee.ts`                                      | Gitee release creation.                                                                                                                                                                                                                                     |
+| cleanup core     | `src/cleanup/core.ts`                               | Product-agnostic cleanup kernel: reference graph, retention planning, withdrawal planning (protection model, [Cleanup Contract](../../docs/DESIGN-distribution.md#cleanup-contract)).                                                                       |
+| cleanup products | `src/cleanup/products.ts`                           | Product difference = config (`ellamaka-cli` / `ellamaka-desktop` channels, R2 roots, alias names, restore strategy).                                                                                                                                        |
+| upstream lock    | `src/upstream-lock.ts`                              | The ONLY writer of `release/upstreams.lock.json` (operator-run).                                                                                                                                                                                            |
+| inventory        | `src/inventory.ts`                                  | Read-only legacy inventory capture ([Legacy Migration](../../docs/DESIGN-distribution.md#legacy-migration)).                                                                                                                                                |
+| npm plan         | `src/npm/plan.ts`                                   | Selected-package plan: each package uses its own manifest version, SDK before Plugin, immutable versions skipped only when the registry contents match this build.                                                                                          |
+| npm contract     | `src/npm/contract.ts`                               | Packed-artifact gate: the tarball `openapi.json` must equal the public subset of `GET /doc`, App BFF stays Server-only, and no dependency may be unpublished.                                                                                               |
+| npm publish      | `src/npm/{execute,verify,smoke,content,exports}.ts` | Build/pack/publish primitives, skip verification, clean-install smoke, canonical tarball digest and publish-time `exports` rewrite.                                                                                                                         |
 
 ## CLI Entries (`src/cli/`)
 
@@ -40,17 +43,17 @@ Thin entry points: parse argv → call library → exit code. Invoked as
 `bun packages/ellamaka-release/src/cli/<name>.ts ...`. Do not import these
 into other modules (they carry top-level CLI side effects).
 
-| Entry              | Purpose                                                                                                              |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `build.ts`         | Branded CLI build.                                                                                                   |
-| `context.ts`       | Generate `release-context.json`.                                                                                     |
-| `manifest.ts`      | Generate release manifest from archives.                                                                             |
-| `gitee.ts`         | Create Gitee release.                                                                                                |
-| `cleanup.ts`       | Release cleanup (retention / withdraw), `--product ellamaka-cli\|ellamaka-desktop`.                                  |
-| `upstream-lock.ts` | Update upstream lock (`engine --version X.Y.Z [--dry-run]`).                                                         |
-| `inventory.ts`     | Legacy inventory capture (`--dry-run` / `--output`).                                                                 |
-| `publish-npm.ts`   | Publish explicitly selected SDK/Plugin packages at their own manifest versions, with SDK first. |
-| `verify-npm.ts`    | Build/pack selected npm packages and run a source-tree-external clean-install smoke before publishing. |
+| Entry              | Purpose                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `build.ts`         | Branded CLI build.                                                                                                                                |
+| `context.ts`       | Generate `release-context.json`.                                                                                                                  |
+| `manifest.ts`      | Generate release manifest from archives.                                                                                                          |
+| `gitee.ts`         | Create Gitee release.                                                                                                                             |
+| `cleanup.ts`       | Release cleanup (retention / withdraw), `--product ellamaka-cli\|ellamaka-desktop`.                                                               |
+| `upstream-lock.ts` | Update upstream lock (`engine --version X.Y.Z [--dry-run]`).                                                                                      |
+| `inventory.ts`     | Legacy inventory capture (`--dry-run` / `--output`).                                                                                              |
+| `publish-npm.ts`   | Publish explicitly selected SDK/Plugin packages at their own manifest versions, with SDK first.                                                   |
+| `verify-npm.ts`    | Build/pack selected npm packages, verify the packed contract and manifest, then run a source-tree-external clean-install smoke before publishing. |
 
 ## Development Commands
 
