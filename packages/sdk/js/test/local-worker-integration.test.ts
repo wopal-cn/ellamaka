@@ -180,10 +180,14 @@ test("cancelling a stream body that never finishes releases the request and disp
   const controller = new AbortController()
   let started!: () => void
   const reading = new Promise<void>((resolve) => (started = resolve))
+  let cancelled = 0
   // Never enqueues: the only way out is the abort.
   const body = new ReadableStream({
     pull() {
       started()
+    },
+    cancel() {
+      cancelled++
     },
   })
   try {
@@ -198,6 +202,11 @@ test("cancelling a stream body that never finishes releases the request and disp
     controller.abort()
     await expect(request).rejects.toMatchObject({ name: "AbortError" })
     await local.dispose()
+    // Cancelling must reach the caller's source and give the stream back: a
+    // cancel() on the locked stream itself would reject and leave the producer
+    // running behind a reader nobody can release.
+    expect(cancelled).toBe(1)
+    expect(body.locked).toBe(false)
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

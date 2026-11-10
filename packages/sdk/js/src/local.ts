@@ -133,21 +133,40 @@ export async function createEllamakaLocalClient(options: EllamakaLocalOptions = 
 
     // Reading a stream body is asynchronous and the signal cannot interrupt it:
     // a cancelled call whose stream never ends would keep dispose waiting on a
-    // request that was never dispatched. Race the read against the abort.
+    // request that was never dispatched. Read through an explicit reader so the
+    // abort can cancel the source and release the lock instead of leaving the
+    // producer locked behind a dead reader.
     const readBody = async (): Promise<Buffer | undefined> => {
-      if (request.body === null) return undefined
+      const stream = request.body
+      if (stream === null) return undefined
+      const reader = stream.getReader()
+      let cleanup = () => {}
       const aborted = new Promise<never>((_, fail) => {
-        const onAbort = () => {
-          void request.body?.cancel(request.signal.reason).catch(() => {})
-          fail(abortError(request.signal.reason))
-        }
+        const onAbort = () => fail(abortError(request.signal.reason))
         if (request.signal.aborted) onAbort()
         else request.signal.addEventListener("abort", onAbort, { once: true })
+        cleanup = () => request.signal.removeEventListener("abort", onAbort)
       })
+      const chunks: Uint8Array[] = []
       try {
-        return Buffer.from(await Promise.race([request.arrayBuffer(), aborted]))
+        for (;;) {
+          const next = await Promise.race([reader.read(), aborted])
+          if (next.done) break
+          chunks.push(next.value)
+        }
+        reader.releaseLock()
+        return Buffer.concat(chunks)
+      } catch (error) {
+        // Cancel through the reader that holds the lock: cancel() on the locked
+        // stream itself would reject and leave the producer running.
+        await reader.cancel(error).catch(() => {})
+        // Releasing the reader is what actually unlocks the caller's stream.
+        try {
+          reader.releaseLock()
+        } catch {}
+        throw error
       } finally {
-        // The race is settled; keep the losing side from becoming unhandled.
+        cleanup()
         aborted.catch(() => {})
       }
     }
