@@ -2,12 +2,16 @@ name: Clean up Actions history and caches
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Every day at 00:00 UTC (08:00 Beijing time)
+    - cron: "0 0 * * *" # Every day at 00:00 UTC (08:00 Beijing time)
   workflow_dispatch: # Allow manual one-click trigger from the GitHub UI
 
 permissions:
   contents: read
   actions: write # Required to delete runs and caches
+
+concurrency:
+  group: actions-cleanup-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   cleanup:
@@ -22,28 +26,52 @@ jobs:
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
-          CUTOFF="$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          CUTOFF="$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          scanned=0
+          deleted=0
+          failed=0
 
-          # List all runs (newest first) via the official REST API, group by
-          # workflow, keep the latest 3 runs per workflow plus everything
-          # from the last 7 days, delete the rest.
-          gh api --paginate "repos/${REPO}/actions/runs?per_page=100" \
-            --jq '.workflow_runs[] | {id, workflow_id, created_at}' \
-            | jq -s --arg cutoff "$CUTOFF" '
+          report() {
+            result=$?
+            {
+              echo "## Workflow run cleanup"
+              echo "- Policy: latest **2** per workflow, created within **3 days**."
+              echo "- Inspected: ${scanned}; deleted: ${deleted}; failed deletions: ${failed}."
+              echo "- Remaining from scanned snapshot: $((scanned - deleted))."
+              if (( result != 0 )); then echo "- **Status: failed** (see step logs)."; fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap report EXIT
+
+          # Snapshot all pages before deleting to avoid pagination shifting.
+          # An archived/deleted workflow still has an ID and is pruned normally.
+          runs="$(gh api --paginate "repos/${REPO}/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | {id, workflow_id, created_at, status}' | jq -s '.')"
+          scanned="$(jq 'length' <<< "$runs")"
+          candidates="$(jq -r --arg cutoff "$CUTOFF" --arg current "$GITHUB_RUN_ID" '
                 group_by(.workflow_id)
                 | .[]
-                | sort_by(.created_at) | reverse
+                | sort_by(.created_at, .id) | reverse
                 | to_entries[]
-                | select(.key >= 3)
-                | select(.value.created_at < $cutoff)
+                | select(.key >= 2 or .value.created_at < $cutoff)
+                | select(.value.status == "completed")
+                | select((.value.id | tostring) != $current)
                 | .value.id
-              ' \
-            | while read -r run_id; do
-                echo "Deleting run ${run_id}"
-                gh api -X DELETE "repos/${REPO}/actions/runs/${run_id}" || echo "Failed to delete run ${run_id}"
-              done
+              ' <<< "$runs")"
 
-          echo "Run history cleanup done (kept: last 7 days, min 3 runs per workflow)"
+          # Never delete running/queued jobs (including this cleanup run).
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            echo "Deleting run ${run_id}"
+            if gh api -X DELETE "repos/${REPO}/actions/runs/${run_id}"; then
+              ((deleted += 1))
+            else
+              ((failed += 1))
+              echo "::error::Failed to delete run ${run_id}"
+            fi
+          done <<< "$candidates"
+
+          if (( failed > 0 )); then exit 1; fi
 
       - name: Delete Actions caches
         env:
@@ -51,24 +79,33 @@ jobs:
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
+          scanned=0
+          deleted=0
+          failed=0
+
+          report() {
+            result=$?
+            {
+              echo "## Actions cache cleanup"
+              echo "- Inspected: ${scanned}; deleted: ${deleted}; failed deletions: ${failed}."
+              if (( result != 0 )); then echo "- **Status: failed** (see step logs)."; fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+          trap report EXIT
 
           # Delete every cache entry via the official REST API.
-          gh api --paginate "repos/${REPO}/actions/caches?per_page=100" \
-            --jq '.actions_caches[] | .id' \
-            | while read -r cache_id; do
-                echo "Deleting cache ${cache_id}"
-                gh api -X DELETE "repos/${REPO}/actions/caches/${cache_id}" || echo "Failed to delete cache ${cache_id}"
-              done
+          caches="$(gh api --paginate "repos/${REPO}/actions/caches?per_page=100" \
+            --jq '.actions_caches[].id')"
+          while IFS= read -r cache_id; do
+            [[ -n "$cache_id" ]] || continue
+            ((scanned += 1))
+            echo "Deleting cache ${cache_id}"
+            if gh api -X DELETE "repos/${REPO}/actions/caches/${cache_id}"; then
+              ((deleted += 1))
+            else
+              ((failed += 1))
+              echo "::error::Failed to delete cache ${cache_id}"
+            fi
+          done <<< "$caches"
 
-          echo "Cache cleanup done"
-
-      - name: Generate cleanup report
-        if: always()
-        run: |
-          {
-            echo "## Actions cleanup complete"
-            echo ""
-            echo "Cleanup strategy executed:"
-            echo "- **Run history**: keep the last **7 days** of runs, with at least **3 runs** per workflow."
-            echo "- **Caches**: deleted all releasable build caches in this repository."
-          } >> $GITHUB_STEP_SUMMARY
+          if (( failed > 0 )); then exit 1; fi
