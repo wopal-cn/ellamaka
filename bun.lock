@@ -444,7 +444,7 @@
     },
     "packages/plugin": {
       "name": "@wopal/ellamaka-plugin",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "dependencies": {
         "@wopal/ellamaka-sdk": "workspace:*",
         "effect": "catalog:",
@@ -472,7 +472,7 @@
     },
     "packages/sdk/js": {
       "name": "@wopal/ellamaka-sdk",
-      "version": "2.1.0",
+      "version": "2.1.1",
       "dependencies": {
         "cross-spawn": "catalog:",
       },
