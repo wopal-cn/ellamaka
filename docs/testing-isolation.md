@@ -1,7 +1,7 @@
 # 测试隔离规范（Test Isolation）
 
 > **Status**: Active
-> **Updated**: 2026-11-08
+> **Updated**: 2026-11-10
 > **Parent**: `./DESIGN.md`
 > **Scope**: 全仓所有拥有可执行测试文件的 package（含 `test/`、`src/`、`script/` 和嵌套包）的 Home 隔离契约、门禁与验证
 
@@ -81,6 +81,11 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 `.git/worktrees`。删掉临时目录只删文件、删不掉注册，真实仓库从此永久多出一条幽灵 worktree。
 `test/lib/temp-root.ts` 的 `resolveTempRoot()` 会跳过落在仓库内的候选目录；preload 在读取前把
 `TMPDIR` 指向它，并在收尾时对「进程所在仓库」和「原 TMPDIR 所在仓库」都检查孤儿注册并报错。
+
+OpenCode preload 为每个测试进程建立带 PID 和随机后缀的独占 Home，并写入归属标记。正常测试由
+`afterAll` 清理；提前调用 `process.exit()` 时由同步退出钩子清理。遇到无法执行钩子的 `SIGKILL`，
+下一次 preload 启动时只回收**标记匹配且原 PID 已不存在**的测试 Home；无标记或 PID 仍存活的目录保留。
+这一回收机制仅处理 preload 自己创建的目录，不按 `opencode-test-data-*` 名称批量删除。
 
 **关键限制**：**读缓存的库不能靠改环境变量**。Effect 的 `ConfigProvider` 默认层在首次读取时
 快照 `process.env` 并缓存在 module 级 Reference 上——改 `process.env` 对它无效，
@@ -212,6 +217,7 @@ TISO009 补上这个洞：它不要求每个包都安装 preload，而是**要�
 - **环境必须恢复原值。** `opencode`、`ellamaka-core`、`ellamaka-cordis` 都使用各自 `test/fixture/process-env.ts` 的 `scopedEnv`；其他 package 需要修改环境变量时，先补同样的 package-local helper。值不存在和空字符串要分别恢复。禁止并发测试共享这些进程级变更；import 时读取或带缓存的依赖用 DI / 独立进程。
 - **资源先停止再清理。** 在 `finally` / async disposal 中等待容器、watcher、server 和子进程结束，再删除各自的临时目录。断言失败也必须走同一清理路径。
 - **偶发失败不能用一次绿灯关闭。** 先保留原命令、提交、失败信息，区分单文件与组合、冷进程与复用缓存、不同文件顺序。建立能触发原缺陷的回归用例；验证组中任一次失败都判失败，不能挑选成功结果。
+- **macOS 文件监听以实际 FSEvents 启动结果为准。** 某些 Seatbelt 沙箱会让 `@parcel/watcher` 的 `FSEventStreamStart` 失败，而另一些受限执行环境仍可正常监听；仅凭 `sandbox-exec` 嵌套探针失败，不能断言 watcher 一定不可用。遇到 `Error starting FSEvents stream` 时保留测试失败及原始错误，通过可启动 FSEvents 的环境重新验证；本机完整 CI 使用 `bun run ci:local` 的现成沙箱检测和重启入口。不要把受限环境的失败改成 `skip`，也不要据此认定生产代码有缺陷。
 - **分层不减少覆盖。** 调整 unit/integration 执行入口时，要核对改动前后实际执行的文件；移出的用例必须在对应 CI 层执行，不能通过少跑测试获得绿灯。当前 OpenCode `test:ci` 仍保留完整扫描。
 - **失败信息必须够定位。** 工具失败断言附带结构化错误的消息、类型、错误码和内容；需要底层证据时，必须确认探针实际命中了调用链，不能只装一个未被调用的 spy。测试 fixture 不含真实凭证。缓存、权限、子进程和网络等环境前提必须显式验证，不能依赖开发机已有状态。
 - **跨运行时进程边界要验证底层契约。** 不只断言命令成功退出，还验证 stdin/stdout/stderr 的继承语义、超过管道容量的完整输出、取消和退出后的资源回收。Bun bootstrap 的 `execve` 回归直接检查目标 fd 标志，并验证 256 KiB 输出；这样管道背压问题可以确定复现，不依赖 CI 调度碰巧触发。文件名出现在 I/O 错误中也不能直接判定为读文件失败，必须沿真实系统调用路径确认。

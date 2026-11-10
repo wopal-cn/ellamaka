@@ -2,6 +2,7 @@
 // global/index.ts reads WOPAL_HOME at import time, so we must set it first
 import os from "os"
 import path from "path"
+import { rmSync } from "node:fs"
 import fs from "fs/promises"
 import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll, afterEach } from "bun:test"
@@ -22,9 +23,38 @@ const ambientRepository = repositoryOf(os.tmpdir())
 const tempRoot = resolveTempRoot()
 process.env["TMPDIR"] = tempRoot
 
+// SIGKILL cannot run an exit hook. Reclaim only Homes bearing this preload's
+// exact ownership marker and a PID that no longer exists; similarly named
+// directories or Homes belonging to running tests must be left untouched.
+const homePrefix = "opencode-test-data-"
+const homeMarker = ".opencode-test-owner"
+async function reapAbandonedTestHomes() {
+  for (const entry of await fs.readdir(tempRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const match = /^opencode-test-data-([0-9]+)-[A-Za-z0-9]{6}$/.exec(entry.name)
+    if (!match) continue
+    const pid = Number(match[1])
+    if (!Number.isSafeInteger(pid) || pid < 1 || pid === process.pid) continue
+    try {
+      process.kill(pid, 0)
+      continue
+    } catch (error) {
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "ESRCH") continue
+    }
+    const target = path.join(tempRoot, entry.name)
+    if ((await fs.readFile(path.join(target, homeMarker), "utf8").catch(() => undefined)) !== entry.name) continue
+    await fs.rm(target, { recursive: true, force: true })
+  }
+}
+await reapAbandonedTestHomes()
+
 // Set WOPAL_HOME FIRST, before any src/ imports
-const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
-await fs.mkdir(dir, { recursive: true })
+const dir = await fs.mkdtemp(path.join(os.tmpdir(), homePrefix + process.pid + "-"))
+// afterAll is skipped by an explicit process.exit(). Keep a synchronous
+// fallback for the test Home this process owns; after normal teardown the
+// directory is already gone. SIGKILL cannot run any in-process cleanup.
+process.once("exit", () => rmSync(dir, { recursive: true, force: true }))
+await fs.writeFile(path.join(dir, homeMarker), path.basename(dir))
 afterAll(async () => {
   const { Database } = await import("../src/storage/db")
   Database.close()

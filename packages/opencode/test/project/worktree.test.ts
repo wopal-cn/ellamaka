@@ -48,23 +48,27 @@ const removeCreatedWorktree = (directory: string) =>
     yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
     const ok = yield* svc.remove({ directory })
     if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))
+    return undefined
   })
+
+// Own the registration as soon as git worktree add succeeds. Readiness can
+// fail after that point, so it must run inside use, not during acquisition.
+const withOwnedWorktree = <A, E, R, ECreate, RCreate>(
+  create: Effect.Effect<Worktree.Info, ECreate, RCreate>,
+  use: (info: Worktree.Info) => Effect.Effect<A, E, R>,
+) => Effect.acquireUseRelease(create, use, (info) => removeCreatedWorktree(info.directory))
 
 const withCreatedWorktree = <A, E, R>(
   input: Parameters<Worktree.Interface["create"]>[0],
   use: (created: { info: Worktree.Info; ready: { name: string; branch?: string } }) => Effect.Effect<A, E, R>,
 ) =>
-  Effect.acquireUseRelease(
-    Effect.gen(function* () {
-      const svc = yield* Worktree.Service
-      const ready = yield* waitReady().pipe(Effect.forkScoped)
-      const info = yield* svc.create(input)
-      const props = yield* Fiber.join(ready)
-      return { info, ready: props }
-    }),
-    use,
-    ({ info }) => removeCreatedWorktree(info.directory),
-  )
+  Effect.gen(function* () {
+    const svc = yield* Worktree.Service
+    const ready = yield* waitReady().pipe(Effect.forkScoped)
+    return yield* withOwnedWorktree(svc.create(input), (info) =>
+      Fiber.join(ready).pipe(Effect.flatMap((props) => use({ info, ready: props }))),
+    )
+  })
 
 const git = Effect.fn("WorktreeTest.git")(function* (cwd: string, args: string[]) {
   const service = yield* Git.Service
@@ -160,27 +164,52 @@ describe("Worktree", () => {
           const svc = yield* Worktree.Service
           const info = yield* svc.makeWorktreeInfo({ name: "detached-test", detached: true })
           const ready = yield* waitReady().pipe(Effect.forkScoped)
-          yield* svc.createFromInfo(info)
+          yield* withOwnedWorktree(Effect.succeed(info), () =>
+            Effect.gen(function* () {
+              yield* svc.createFromInfo(info)
 
-          const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
-          const normalizedList = normalize(list)
-          const normalizedDir = normalize(info.directory)
-          expect(normalizedList).toContain(normalizedDir)
+              const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+              const normalizedList = normalize(list)
+              const normalizedDir = normalize(info.directory)
+              expect(normalizedList).toContain(normalizedDir)
 
-          const branch = yield* gitResult(info.directory, ["symbolic-ref", "-q", "--short", "HEAD"])
-          expect(branch.exitCode).not.toBe(0)
+              const branch = yield* gitResult(info.directory, ["symbolic-ref", "-q", "--short", "HEAD"])
+              expect(branch.exitCode).not.toBe(0)
 
-          const props = yield* Fiber.join(ready)
-          expect(props.name).toBe(info.name)
-          expect(props.branch).toBeUndefined()
-
-          yield* svc.remove({ directory: info.directory })
+              const props = yield* Fiber.join(ready)
+              expect(props.name).toBe(info.name)
+              expect(props.branch).toBeUndefined()
+            }),
+          )
         }),
       { git: true },
     )
   })
 
   describe("create + remove lifecycle", () => {
+    it.instance(
+      "removes a registered worktree when scoped use fails",
+      () =>
+        Effect.gen(function* () {
+          const test = yield* TestInstance
+          const svc = yield* Worktree.Service
+          let createdDirectory: string | undefined
+          const exit = yield* Effect.exit(
+            withOwnedWorktree(svc.create(), (info) =>
+              Effect.gen(function* () {
+                createdDirectory = info.directory
+                return yield* Effect.fail(new Error("simulated readiness failure"))
+              }),
+            ),
+          )
+          expect(Exit.isFailure(exit)).toBe(true)
+          expect(createdDirectory).toBeDefined()
+          const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+          expect(normalize(list)).not.toContain(normalize(createdDirectory!))
+        }),
+      { git: true },
+    )
+
     it.instance(
       "create returns worktree info and remove cleans up",
       () =>
@@ -252,15 +281,18 @@ describe("Worktree", () => {
           const svc = yield* Worktree.Service
           const info = yield* svc.makeWorktreeInfo({ name: "from-info-test" })
           const ready = yield* waitReady().pipe(Effect.forkScoped)
-          yield* svc.createFromInfo(info)
+          yield* withOwnedWorktree(Effect.succeed(info), () =>
+            Effect.gen(function* () {
+              yield* svc.createFromInfo(info)
 
-          const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
-          const normalizedList = list.replace(/\\/g, "/")
-          const normalizedDir = info.directory.replace(/\\/g, "/")
-          expect(normalizedList).toContain(normalizedDir)
+              const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+              const normalizedList = list.replace(/\\/g, "/")
+              const normalizedDir = info.directory.replace(/\\/g, "/")
+              expect(normalizedList).toContain(normalizedDir)
 
-          yield* Fiber.join(ready)
-          yield* removeCreatedWorktree(info.directory)
+              yield* Fiber.join(ready)
+            }),
+          )
         }),
       { git: true },
     )
@@ -279,18 +311,20 @@ describe("Worktree", () => {
           const branch = `same-basename-list-${Date.now()}`
 
           yield* fs.ensureDir(parent)
-          yield* git(test.directory, ["worktree", "add", "-b", branch, target])
+          yield* withOwnedWorktree(Effect.succeed({ name: path.basename(parent), branch, directory: target }), () =>
+            Effect.gen(function* () {
+              yield* git(test.directory, ["worktree", "add", "-b", branch, target])
 
-          const list = yield* svc.list()
-          const directory = yield* fs.realPath(target).pipe(Effect.catch(() => Effect.succeed(target)))
+              const list = yield* svc.list()
+              const directory = yield* fs.realPath(target).pipe(Effect.catch(() => Effect.succeed(target)))
 
-          expect(list.map((item) => ({ ...item, directory: normalize(item.directory) }))).toContainEqual({
-            name: path.basename(parent),
-            branch,
-            directory: normalize(directory),
-          })
-
-          yield* svc.remove({ directory: target })
+              expect(list.map((item) => ({ ...item, directory: normalize(item.directory) }))).toContainEqual({
+                name: path.basename(parent),
+                branch,
+                directory: normalize(directory),
+              })
+            }),
+          )
         }),
       { git: true },
     )

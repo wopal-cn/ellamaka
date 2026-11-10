@@ -173,7 +173,7 @@ test("the test preload keeps temp directories outside every git checkout", () =>
   // The redirect has to happen before the first fixture reads os.tmpdir(), or a
   // TMPDIR inside the workspace still reaches the fixtures.
   const redirect = preload.indexOf('process.env["TMPDIR"] = tempRoot')
-  const firstDir = preload.indexOf('path.join(os.tmpdir(), "opencode-test-data-"')
+  const firstDir = preload.indexOf("await fs.mkdtemp(path.join(os.tmpdir(), homePrefix")
   expect(redirect).toBeGreaterThan(-1)
   expect(firstDir).toBeGreaterThan(redirect)
 })
