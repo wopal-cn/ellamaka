@@ -10,7 +10,8 @@ import type {
 import { Config } from "@/config/config"
 import { Bus } from "../bus"
 import * as Log from "@wopal/ellamaka-core/util/log"
-import { createOpencodeClient } from "@wopal/ellamaka-sdk"
+import { createOpencodeClient } from "@wopal/ellamaka-sdk/v2"
+import { createPluginClient } from "./client-compat"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
 import { Session } from "@/session/session"
@@ -190,13 +191,13 @@ export const layer = Layer.effect(
           baseUrl: serverUrl?.toString() ?? "http://localhost:4096",
           directory: ctx.directory,
           headers: ServerAuth.headers(),
-          ...(serverUrl ? {} : { fetch: async (...args) => Server.Default().app.fetch(...args) }),
+          ...(serverUrl ? {} : { fetch: ((request: Request) => Server.Default().app.fetch(request)) as typeof fetch }),
         })
         const cfg = yield* config.get()
         const pluginConfig = yield* config.getPluginConfig()
         const wopalSpaceRoot = resolveWopalSpaceRoot(ctx.directory)
         const input: PluginInput = {
-          client,
+          client: createPluginClient(client),
           project: ctx.project,
           worktree: ctx.worktree,
           directory: ctx.directory,

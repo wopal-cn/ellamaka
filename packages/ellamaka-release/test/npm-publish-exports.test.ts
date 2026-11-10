@@ -23,12 +23,19 @@ interface DistTarget {
 
 const PLUGIN_DIST: Record<string, DistTarget> = {
   ".": { import: "./dist/index.js", types: "./dist/index.d.ts" },
+  "./client-compat": { import: "./dist/client-compat.js", types: "./dist/client-compat.d.ts" },
   "./tool": { import: "./dist/tool.js", types: "./dist/tool.d.ts" },
   "./tui": { import: "./dist/tui.js", types: "./dist/tui.d.ts" },
 }
 
 const SDK_DIST: Record<string, DistTarget> = {
   ".": { import: "./dist/index.js", types: "./dist/index.d.ts" },
+  "./http": { import: "./dist/v2/client.js", types: "./dist/v2/client.d.ts" },
+  "./local": { import: "./dist/local.js", types: "./dist/local.d.ts" },
+  "./v2/gen/sdk": { import: "./dist/v2/gen/sdk.gen.js", types: "./dist/v2/gen/sdk.gen.d.ts" },
+  "./v2/gen/types": { import: "./dist/v2/gen/types.gen.js", types: "./dist/v2/gen/types.gen.d.ts" },
+  "./openapi": { import: "./dist/openapi.js", types: "./dist/openapi.d.ts" },
+  "./openapi.json": { import: "./dist/openapi.json", types: "./dist/openapi.json" },
   "./client": { import: "./dist/client.js", types: "./dist/client.d.ts" },
   "./server": { import: "./dist/server.js", types: "./dist/server.d.ts" },
   "./v2": { import: "./dist/v2/index.js", types: "./dist/v2/index.d.ts" },
@@ -47,6 +54,13 @@ describe("dist export rewrite", () => {
     expect(distExportTarget("./src/v2/gen/client/index.ts")).toEqual({
       import: "./dist/v2/gen/client/index.js",
       types: "./dist/v2/gen/client/index.d.ts",
+    })
+  })
+
+  test("maps the public OpenAPI JSON to its shipped JSON file", () => {
+    expect(distExportTarget("./src/openapi.json")).toEqual({
+      import: "./dist/openapi.json",
+      types: "./dist/openapi.json",
     })
   })
 
@@ -94,8 +108,10 @@ describe("real package exports rewrite to the pinned dist map", () => {
   test("every rewritten entry resolves inside dist as a .js + .d.ts pair", () => {
     for (const map of [PLUGIN_DIST, SDK_DIST]) {
       for (const target of Object.values(map)) {
-        expect(target.import).toMatch(/^\.\/dist\/.*\.js$/)
-        expect(target.types).toBe(target.import.replace(/\.js$/, ".d.ts"))
+        expect(target.import).toMatch(/^\.\/dist\/.*\.(js|json)$/)
+        expect(target.types).toBe(
+          target.import.endsWith(".json") ? target.import : target.import.replace(/\.js$/, ".d.ts"),
+        )
       }
     }
   })

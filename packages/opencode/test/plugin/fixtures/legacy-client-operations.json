@@ -1,0 +1,417 @@
+[
+  {
+    "name": "postSessionIdPermissionsPermissionId",
+    "method": "post",
+    "path": "/session/{id}/permissions/{permissionID}"
+  },
+  {
+    "name": "global.event",
+    "method": "get",
+    "path": "/global/event"
+  },
+  {
+    "name": "project.list",
+    "method": "get",
+    "path": "/project"
+  },
+  {
+    "name": "project.current",
+    "method": "get",
+    "path": "/project/current"
+  },
+  {
+    "name": "pty.list",
+    "method": "get",
+    "path": "/pty"
+  },
+  {
+    "name": "pty.create",
+    "method": "post",
+    "path": "/pty"
+  },
+  {
+    "name": "pty.remove",
+    "method": "delete",
+    "path": "/pty/{id}"
+  },
+  {
+    "name": "pty.get",
+    "method": "get",
+    "path": "/pty/{id}"
+  },
+  {
+    "name": "pty.update",
+    "method": "put",
+    "path": "/pty/{id}"
+  },
+  {
+    "name": "pty.connect",
+    "method": "get",
+    "path": "/pty/{id}/connect"
+  },
+  {
+    "name": "config.get",
+    "method": "get",
+    "path": "/config"
+  },
+  {
+    "name": "config.update",
+    "method": "patch",
+    "path": "/config"
+  },
+  {
+    "name": "config.providers",
+    "method": "get",
+    "path": "/config/providers"
+  },
+  {
+    "name": "tool.ids",
+    "method": "get",
+    "path": "/experimental/tool/ids"
+  },
+  {
+    "name": "tool.list",
+    "method": "get",
+    "path": "/experimental/tool"
+  },
+  {
+    "name": "instance.dispose",
+    "method": "post",
+    "path": "/instance/dispose"
+  },
+  {
+    "name": "path.get",
+    "method": "get",
+    "path": "/path"
+  },
+  {
+    "name": "vcs.get",
+    "method": "get",
+    "path": "/vcs"
+  },
+  {
+    "name": "session.list",
+    "method": "get",
+    "path": "/session"
+  },
+  {
+    "name": "session.create",
+    "method": "post",
+    "path": "/session"
+  },
+  {
+    "name": "session.status",
+    "method": "get",
+    "path": "/session/status"
+  },
+  {
+    "name": "session.delete",
+    "method": "delete",
+    "path": "/session/{id}"
+  },
+  {
+    "name": "session.get",
+    "method": "get",
+    "path": "/session/{id}"
+  },
+  {
+    "name": "session.update",
+    "method": "patch",
+    "path": "/session/{id}"
+  },
+  {
+    "name": "session.children",
+    "method": "get",
+    "path": "/session/{id}/children"
+  },
+  {
+    "name": "session.todo",
+    "method": "get",
+    "path": "/session/{id}/todo"
+  },
+  {
+    "name": "session.init",
+    "method": "post",
+    "path": "/session/{id}/init"
+  },
+  {
+    "name": "session.fork",
+    "method": "post",
+    "path": "/session/{id}/fork"
+  },
+  {
+    "name": "session.abort",
+    "method": "post",
+    "path": "/session/{id}/abort"
+  },
+  {
+    "name": "session.unshare",
+    "method": "delete",
+    "path": "/session/{id}/share"
+  },
+  {
+    "name": "session.share",
+    "method": "post",
+    "path": "/session/{id}/share"
+  },
+  {
+    "name": "session.diff",
+    "method": "get",
+    "path": "/session/{id}/diff"
+  },
+  {
+    "name": "session.summarize",
+    "method": "post",
+    "path": "/session/{id}/summarize"
+  },
+  {
+    "name": "session.messages",
+    "method": "get",
+    "path": "/session/{id}/message"
+  },
+  {
+    "name": "session.prompt",
+    "method": "post",
+    "path": "/session/{id}/message"
+  },
+  {
+    "name": "session.message",
+    "method": "get",
+    "path": "/session/{id}/message/{messageID}"
+  },
+  {
+    "name": "session.promptAsync",
+    "method": "post",
+    "path": "/session/{id}/prompt_async"
+  },
+  {
+    "name": "session.command",
+    "method": "post",
+    "path": "/session/{id}/command"
+  },
+  {
+    "name": "session.shell",
+    "method": "post",
+    "path": "/session/{id}/shell"
+  },
+  {
+    "name": "session.revert",
+    "method": "post",
+    "path": "/session/{id}/revert"
+  },
+  {
+    "name": "session.unrevert",
+    "method": "post",
+    "path": "/session/{id}/unrevert"
+  },
+  {
+    "name": "command.list",
+    "method": "get",
+    "path": "/command"
+  },
+  {
+    "name": "provider.list",
+    "method": "get",
+    "path": "/provider"
+  },
+  {
+    "name": "provider.auth",
+    "method": "get",
+    "path": "/provider/auth"
+  },
+  {
+    "name": "provider.oauth.authorize",
+    "method": "post",
+    "path": "/provider/{id}/oauth/authorize"
+  },
+  {
+    "name": "provider.oauth.callback",
+    "method": "post",
+    "path": "/provider/{id}/oauth/callback"
+  },
+  {
+    "name": "find.text",
+    "method": "get",
+    "path": "/find"
+  },
+  {
+    "name": "find.files",
+    "method": "get",
+    "path": "/find/file"
+  },
+  {
+    "name": "find.symbols",
+    "method": "get",
+    "path": "/find/symbol"
+  },
+  {
+    "name": "file.list",
+    "method": "get",
+    "path": "/file"
+  },
+  {
+    "name": "file.read",
+    "method": "get",
+    "path": "/file/content"
+  },
+  {
+    "name": "file.status",
+    "method": "get",
+    "path": "/file/status"
+  },
+  {
+    "name": "app.log",
+    "method": "post",
+    "path": "/log"
+  },
+  {
+    "name": "app.agents",
+    "method": "get",
+    "path": "/agent"
+  },
+  {
+    "name": "mcp.status",
+    "method": "get",
+    "path": "/mcp"
+  },
+  {
+    "name": "mcp.add",
+    "method": "post",
+    "path": "/mcp"
+  },
+  {
+    "name": "mcp.connect",
+    "method": "post",
+    "path": "/mcp/{name}/connect"
+  },
+  {
+    "name": "mcp.disconnect",
+    "method": "post",
+    "path": "/mcp/{name}/disconnect"
+  },
+  {
+    "name": "mcp.auth.remove",
+    "method": "delete",
+    "path": "/mcp/{name}/auth"
+  },
+  {
+    "name": "mcp.auth.start",
+    "method": "post",
+    "path": "/mcp/{name}/auth"
+  },
+  {
+    "name": "mcp.auth.callback",
+    "method": "post",
+    "path": "/mcp/{name}/auth/callback"
+  },
+  {
+    "name": "mcp.auth.authenticate",
+    "method": "post",
+    "path": "/mcp/{name}/auth/authenticate"
+  },
+  {
+    "name": "mcp.auth.set",
+    "method": "put",
+    "path": "/auth/{id}"
+  },
+  {
+    "name": "lsp.status",
+    "method": "get",
+    "path": "/lsp"
+  },
+  {
+    "name": "formatter.status",
+    "method": "get",
+    "path": "/formatter"
+  },
+  {
+    "name": "tui.appendPrompt",
+    "method": "post",
+    "path": "/tui/append-prompt"
+  },
+  {
+    "name": "tui.openHelp",
+    "method": "post",
+    "path": "/tui/open-help"
+  },
+  {
+    "name": "tui.openSessions",
+    "method": "post",
+    "path": "/tui/open-sessions"
+  },
+  {
+    "name": "tui.openThemes",
+    "method": "post",
+    "path": "/tui/open-themes"
+  },
+  {
+    "name": "tui.openModels",
+    "method": "post",
+    "path": "/tui/open-models"
+  },
+  {
+    "name": "tui.submitPrompt",
+    "method": "post",
+    "path": "/tui/submit-prompt"
+  },
+  {
+    "name": "tui.clearPrompt",
+    "method": "post",
+    "path": "/tui/clear-prompt"
+  },
+  {
+    "name": "tui.executeCommand",
+    "method": "post",
+    "path": "/tui/execute-command"
+  },
+  {
+    "name": "tui.showToast",
+    "method": "post",
+    "path": "/tui/show-toast"
+  },
+  {
+    "name": "tui.publish",
+    "method": "post",
+    "path": "/tui/publish"
+  },
+  {
+    "name": "tui.control.next",
+    "method": "get",
+    "path": "/tui/control/next"
+  },
+  {
+    "name": "tui.control.response",
+    "method": "post",
+    "path": "/tui/control/response"
+  },
+  {
+    "name": "auth.remove",
+    "method": "delete",
+    "path": "/mcp/{name}/auth"
+  },
+  {
+    "name": "auth.start",
+    "method": "post",
+    "path": "/mcp/{name}/auth"
+  },
+  {
+    "name": "auth.callback",
+    "method": "post",
+    "path": "/mcp/{name}/auth/callback"
+  },
+  {
+    "name": "auth.authenticate",
+    "method": "post",
+    "path": "/mcp/{name}/auth/authenticate"
+  },
+  {
+    "name": "auth.set",
+    "method": "put",
+    "path": "/auth/{id}"
+  },
+  {
+    "name": "event.subscribe",
+    "method": "get",
+    "path": "/event"
+  }
+]

@@ -95,7 +95,7 @@ beforeAll(async () => {
   }))
 
   mock.module("@wopal/ellamaka-sdk/v2/client", () => ({
-    createOpencodeClient: (input: { directory: string }) => {
+    createEllamakaClient: (input: { directory: string }) => {
       createdClients.push(input.directory)
       return clientFor(input.directory)
     },

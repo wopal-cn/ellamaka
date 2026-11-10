@@ -3,6 +3,8 @@ import { BINARY_NAME } from "../brand.js"
 import { type Config } from "./gen/types.gen.js"
 import { stop, bindAbort } from "../process.js"
 
+export { createOpencodeServer as createEllamakaServer, createOpencodeTui as createEllamakaTui }
+
 export type ServerOptions = {
   hostname?: string
   port?: number

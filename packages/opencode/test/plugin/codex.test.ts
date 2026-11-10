@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { createServer, type IncomingMessage } from "node:http"
 import { type AddressInfo } from "node:net"
 import { WebSocketServer } from "ws"
+import { createOpencodeClient } from "@wopal/ellamaka-sdk/v2"
+import { createPluginClient } from "../../src/plugin/client-compat"
 import {
   CodexAuthPlugin,
   parseJwtClaims,
@@ -412,20 +414,30 @@ describe("plugin.codex", () => {
 
     const hooks = await CodexAuthPlugin(
       {
-        client: {
-          auth: {
-            async set(input: { body: { refresh: string; access: string; expires: number; accountId?: string } }) {
-              authUpdates.push(input)
+        client: createPluginClient(
+          createOpencodeClient({
+            baseUrl: "http://plugin.test",
+            fetch: (async (request: Request) => {
+              expect(request.method).toBe("PUT")
+              expect(new URL(request.url).pathname).toBe("/auth/openai")
+              const body = (await request.json()) as {
+                refresh: string
+                access: string
+                expires: number
+                accountId?: string
+              }
+              authUpdates.push({ body })
               auth = {
                 type: "oauth",
-                refresh: input.body.refresh,
-                access: input.body.access,
-                expires: input.body.expires,
-                ...(input.body.accountId && { accountId: input.body.accountId }),
+                refresh: body.refresh,
+                access: body.access,
+                expires: body.expires,
+                ...(body.accountId && { accountId: body.accountId }),
               }
-            },
-          },
-        } as never,
+              return Response.json(true)
+            }) as typeof fetch,
+          }),
+        ),
         project: {} as never,
         directory: "",
         worktree: "",

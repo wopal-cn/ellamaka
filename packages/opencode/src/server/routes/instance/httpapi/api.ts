@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import "./contract-events"
-import { HttpApi } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { BusEvent } from "@/bus/bus-event"
 import { SyncEvent } from "@/sync"
 import { ConfigApi } from "./groups/config"
@@ -57,8 +57,7 @@ export const InstanceHttpApi = HttpApi.make("opencode-instance")
   .middleware(SchemaErrorMiddleware)
 
 // Official App BFF: private composition served by the same Server with the same
-// auth. It is deliberately absent from OpenCodeHttpApi so it never reaches the
-// public /doc document or the published SDK.
+// auth. It is absent from the public SDK contract and included in Server /doc.
 export const AppBffRootApi = HttpApi.make("ellamaka-app-bff-root")
   .addHttpApi(WorkbenchApi)
   .middleware(SchemaErrorMiddleware)
@@ -68,11 +67,40 @@ export const AppBffInstanceApi = HttpApi.make("ellamaka-app-bff-instance")
   .addHttpApi(WorkbenchInstanceApi)
   .middleware(SchemaErrorMiddleware)
 
+// The raw /doc route serves the full document; declare its public discovery
+// contract here so it is also visible in the SDK's public OpenAPI subset.
+const DiscoveryApi = HttpApi.make("discovery").add(
+  HttpApiGroup.make("discovery").add(
+    HttpApiEndpoint.get("document", "/doc", {
+      success: Schema.Struct({
+        openapi: Schema.Literal("3.1.0"),
+        info: Schema.Struct({
+          title: Schema.String,
+          version: Schema.String,
+          description: Schema.optional(Schema.String),
+        }),
+        paths: Schema.Record(Schema.String, Schema.Unknown),
+        components: Schema.optional(Schema.Unknown),
+        security: Schema.optional(Schema.Unknown),
+        tags: Schema.optional(Schema.Unknown),
+      }),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "discovery.document",
+        summary: "Discover server HTTP APIs",
+        description:
+          "Returns the complete Server OpenAPI document, including public platform and official App endpoints.",
+      }),
+    ),
+  ),
+)
+
 export const OpenCodeHttpApi = HttpApi.make("opencode")
   .addHttpApi(RootHttpApi)
   .addHttpApi(EventApi)
   .addHttpApi(InstanceHttpApi)
   .addHttpApi(PtyConnectApi)
+  .addHttpApi(DiscoveryApi)
   .annotate(HttpApi.AdditionalSchemas, [EventSchema, ...SyncEventSchemas])
 
 export type AppBffRootApiType = typeof AppBffRootApi

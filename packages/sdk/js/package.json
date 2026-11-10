@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@wopal/ellamaka-sdk",
-  "version": "2.0.11",
+  "version": "2.1.1",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -16,11 +16,18 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "tsc",
-    "generate": "bun ./script/build.ts"
+    "build": "tsc && bun ./script/bundle-local-worker.ts",
+    "generate": "bun ./script/build.ts",
+    "verify:local": "bun ./script/verify-local.ts"
   },
   "exports": {
     ".": "./src/index.ts",
+    "./http": "./src/v2/client.ts",
+    "./local": "./src/local.ts",
+    "./v2/gen/sdk": "./src/v2/gen/sdk.gen.ts",
+    "./v2/gen/types": "./src/v2/gen/types.gen.ts",
+    "./openapi": "./src/openapi.ts",
+    "./openapi.json": "./src/openapi.json",
     "./client": "./src/client.ts",
     "./server": "./src/server.ts",
     "./v2": "./src/v2/index.ts",
@@ -29,7 +36,8 @@
     "./v2/server": "./src/v2/server.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "devDependencies": {
     "@hey-api/openapi-ts": "0.90.10",

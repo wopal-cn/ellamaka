@@ -415,13 +415,16 @@ type TuiAttentionConfigView = {
   sounds: Partial<Record<TuiAttentionSoundName, string>>
 }
 
-type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
-  NonNullable<PluginConfig["tui"]> & {
-    leader_timeout: number
-    attention: TuiAttentionConfigView
-    plugin_enabled?: Record<string, boolean>
-    keybinds: TuiBindingLookupView
-  }
+type TuiConfigView = Pick<PluginConfig, "$schema" | "plugin"> & {
+  theme?: string
+  scroll_speed?: number
+  scroll_acceleration?: { enabled: boolean }
+  diff_style?: "auto" | "stacked"
+  leader_timeout: number
+  attention: TuiAttentionConfigView
+  plugin_enabled?: Record<string, boolean>
+  keybinds: TuiBindingLookupView
+}
 
 export type TuiApp = {
   readonly version: string

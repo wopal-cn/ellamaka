@@ -65,12 +65,12 @@ CLI 与 Desktop 各自按已成功发布的 namespaced tag 独立推进版本；
 ### `release-npm.sh` — 独立发布 SDK / Plugin npm 版本
 
 ```bash
-./scripts/release-npm.sh [--patch|--minor|--major] [--dry-run] [--no-push] [--no-watch] [version]
+./scripts/release-npm.sh [--package <name>]... [--patch|--minor|--major] [--dry-run] [--no-push] [--no-watch] [version]
 ```
 
-`@wopal/ellamaka-sdk` 与 `@wopal/ellamaka-plugin` 共用一条独立 npm SemVer 线，当前版本以 SDK package.json 为锚点，两个 package.json 必须精确一致。当前发布入口只开放 stable `X.Y.Z`（尚未定义 npm prerelease/dist-tag 通道）；默认 `--patch`，也可显式给版本；正式执行只允许 clean `main` 且必须与 `origin/main` 对齐。
+`@wopal/ellamaka-sdk` 与 `@wopal/ellamaka-plugin` 各自使用 manifest 版本，默认选中两包，也可重复 `--package` 指定完整包名。当前发布入口只开放 stable `X.Y.Z`；默认 `--patch`，单包可显式给版本。Plugin 依赖的 SDK 版本必须已经发布，或与 Plugin 同次发布；正式执行只允许 clean `main` 且必须与 `origin/main` 对齐。
 
-流程：版本 bump（仅 SDK + Plugin）→ npm publish preflight → commit → `ellamaka-npm-vX.Y.Z` tag → push → `publish-ellamaka-npm.yml`。独立 workflow 在 publish 前运行 publisher 回归测试、真实 pack，并在源码树外执行 clean-install smoke；npm OIDC trusted publisher 需授权该 workflow 文件。
+流程：仅 bump 选中包 → npm publish preflight 与 clean-install → commit → 带包名和各自版本的 `ellamaka-npm-v...` tag → push → `publish-ellamaka-npm.yml`。独立 workflow 在 publish 前运行 publisher 回归测试、真实 pack，并在源码树外执行 clean-install smoke；npm OIDC trusted publisher 需授权该 workflow 文件。
 
 ### `withdraw-release.sh` — 整版撤回已发布版本
 

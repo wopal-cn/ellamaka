@@ -69,6 +69,9 @@ describe("instance HttpApi", () => {
         paths: expect.objectContaining({
           "/global/health": expect.any(Object),
           "/session": expect.any(Object),
+          "/workbench/session-tree": expect.objectContaining({
+            get: expect.objectContaining({ "x-ellamaka-audience": "official-app" }),
+          }),
         }),
       })
     }),

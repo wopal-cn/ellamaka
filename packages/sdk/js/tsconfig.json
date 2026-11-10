@@ -6,9 +6,10 @@
     "module": "nodenext",
     "declaration": true,
     "moduleResolution": "nodenext",
+    "resolveJsonModule": true,
     "lib": ["es2022", "dom", "dom.iterable"],
     "composite": true,
     "rootDir": "src"
   },
-  "include": ["src"]
+  "include": ["src", "src/**/*.json"]
 }

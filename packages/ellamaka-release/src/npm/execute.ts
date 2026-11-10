@@ -175,13 +175,17 @@ export function createBunRuntime(): PublishRuntime {
 }
 
 /** Read-only registry probe: exit code 0 means `<name>@<version>` exists. */
-export function createRegistryProbe(registry: string): (name: string, version: string) => boolean {
+export function createRegistryProbe(
+  registry: string,
+  probe: (command: string[]) => { exitCode: number; stderr: Uint8Array } = (command) =>
+    Bun.spawnSync(command, { stdout: "pipe", stderr: "pipe" }),
+): (name: string, version: string) => boolean {
   return (name, version) => {
-    const proc = Bun.spawnSync(["npm", "view", `${name}@${version}`, "version", "--registry", registry], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    return proc.exitCode === 0
+    const proc = probe(["npm", "view", `${name}@${version}`, "version", "--registry", registry])
+    if (proc.exitCode === 0) return true
+    const error = new TextDecoder().decode(proc.stderr)
+    if (/\bE404\b/.test(error)) return false
+    throw new Error(`registry lookup failed for ${name}@${version}: ${error.trim()}`)
   }
 }
 

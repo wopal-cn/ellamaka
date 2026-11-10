@@ -5,6 +5,8 @@ import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 import { wrapClientError } from "../error-interceptor.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
+export { OpencodeClient as EllamakaClient }
+export type EllamakaClientConfig = Config & { directory?: string; experimental_workspaceID?: string }
 
 function pick(value: string | null, fallback?: string, encode?: (value: string) => string) {
   if (!value) return
@@ -88,3 +90,5 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
   client.interceptors.error.use(wrapClientError)
   return new OpencodeClient({ client })
 }
+
+export const createEllamakaClient = createOpencodeClient

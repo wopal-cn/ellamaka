@@ -11,8 +11,8 @@ describe("publish-ellamaka-npm workflow", () => {
   test("owns an independent npm tag line and retry path", () => {
     expect(workflow).toContain("ellamaka-npm-v*")
     expect(workflow).toContain("workflow_dispatch:")
-    expect(workflow).toContain('EXPECTED_TAG="ellamaka-npm-v${VERSION}"')
-    expect(workflow).toContain('GITHUB_REF_TYPE" != "tag"')
+    expect(workflow).toContain('GITHUB_REF_TYPE" != tag')
+    expect(workflow).toContain('RETRY_TAG" != "$GITHUB_REF_NAME"')
   })
 
   test("validates the exact SDK and Plugin version instead of product versions", () => {
@@ -20,6 +20,17 @@ describe("publish-ellamaka-npm workflow", () => {
     expect(workflow).toContain("packages/plugin/package.json")
     expect(workflow).not.toContain("packages/ellamaka-cli/package.json")
     expect(workflow).not.toContain("packages/ellamaka-desktop/package.json")
+  })
+
+  test("regenerates the SDK contract and fails on drift before packing", () => {
+    // Shipping a stale generated client would publish a contract the Server no
+    // longer serves, so regeneration must be a no-op in the release job.
+    const regenerate = workflow.indexOf("bun run --cwd packages/sdk/js generate")
+    const drift = workflow.indexOf("git diff --exit-code -- packages/sdk/js")
+    const pack = workflow.indexOf("bun packages/ellamaka-release/src/cli/verify-npm.ts")
+    expect(regenerate).toBeGreaterThan(-1)
+    expect(drift).toBeGreaterThan(regenerate)
+    expect(pack).toBeGreaterThan(drift)
   })
 
   test("runs publisher tests and clean-install smoke before publishing", () => {

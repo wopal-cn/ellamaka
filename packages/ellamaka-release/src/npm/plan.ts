@@ -9,9 +9,8 @@
 //    registry is skipped. This lets the release workflow re-run after a failed
 //    attempt: the gap is filled, an already-published version is never
 //    republished.
-// 2. SDK/plugin own an independent npm SemVer line. The release version must
-//    match both package manifests exactly, including any prerelease suffix,
-//    otherwise the plan fails before any registry access.
+// 2. Selected SDK/plugin packages use their own manifest versions. An explicit
+//    version assertion must match its target before any registry access.
 
 import { join } from "path"
 import { valid } from "semver"
@@ -31,6 +30,7 @@ export interface PackageManifest {
   name: string
   version: string
   exports?: unknown
+  private?: boolean
 }
 
 export interface NpmPublishTarget {
@@ -78,7 +78,25 @@ function readPackageManifest(path: string): PackageManifest {
   if (typeof name !== "string" || typeof version !== "string") {
     throw new Error(`${path}: expected string "name" and "version" fields`)
   }
-  return { name, version, exports: value.exports }
+  return { name, version, exports: value.exports, private: value.private === true }
+}
+
+/** Select only the explicitly supported public packages, in dependency order. */
+export function selectPublishTargets(targets: NpmPublishTarget[], names: string[]): NpmPublishTarget[] {
+  const allowed = ["@wopal/ellamaka-sdk", "@wopal/ellamaka-plugin"]
+  if (!names.length) throw new Error("at least one --package is required")
+  if (new Set(names).size !== names.length || names.some((name) => !allowed.includes(name))) {
+    throw new Error("unknown or duplicate --package")
+  }
+  return allowed
+    .filter((name) => names.includes(name))
+    .map((name) => {
+      const matches = targets.filter((target) => target.manifest.name === name)
+      if (matches.length !== 1 || matches[0]!.manifest.private) throw new Error(`public package ${name} not found`)
+      if (!valid(matches[0]!.manifest.version))
+        throw new Error(`invalid version for ${name}: ${matches[0]!.manifest.version}`)
+      return matches[0]!
+    })
 }
 
 /** Load the publish targets from the workspace, in publish order. */

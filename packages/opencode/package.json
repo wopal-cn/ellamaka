@@ -51,8 +51,6 @@
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@octokit/webhooks-types": "7.6.1",
-    "@wopal/ellamaka-core": "workspace:*",
-    "@wopal/http-recorder": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
     "@parcel/watcher-linux-arm64-glibc": "2.5.1",
@@ -73,6 +71,9 @@
     "@types/which": "3.0.4",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
+    "@wopal/ellamaka-core": "workspace:*",
+    "@wopal/http-recorder": "workspace:*",
+    "ajv": "8.18.0",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "prettier": "3.6.2",
