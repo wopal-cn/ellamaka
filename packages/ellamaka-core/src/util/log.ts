@@ -337,7 +337,6 @@ async function ensureFile(): Promise<void> {
   initializing = (async () => {
     const logdir = path.dirname(logpath)
     await fs.mkdir(logdir, { recursive: true })
-    void cleanup(logdir)
     const runID = process.env.OPENCODE_RUN_ID
     const shouldTruncate = !opts.dev || !runID || process.env[initializedRunID] !== runID
     if (shouldTruncate) await fs.truncate(logpath).catch(() => {})
@@ -347,6 +346,11 @@ async function ensureFile(): Promise<void> {
       stream.once("open", () => resolve())
       stream.once("error", reject)
     })
+    // Prune only after the active file exists and protect it from removal.
+    // A concurrent fire-and-forget scan can otherwise count either 12 old
+    // files or 12 old + the new file, and sorting across role prefixes can
+    // even unlink the stream that is currently writing.
+    await cleanup(logdir, path.basename(logpath))
     write = (msg: any) => {
       return new Promise((resolve, reject) => {
         stream.write(msg, (err) => {
@@ -368,7 +372,7 @@ function emit(msg: string) {
   void ensureFile().then(() => write(msg))
 }
 
-async function cleanup(dir: string) {
+async function cleanup(dir: string, activeFile: string) {
   const files = (
     await Glob.scan("*????-??-??T??????.log", {
       cwd: dir,
@@ -380,7 +384,9 @@ async function cleanup(dir: string) {
     .sort()
   if (files.length <= keep) return
 
-  const doomed = files.slice(0, -keep)
+  // The active file counts towards the shared retention limit, but is never
+  // eligible for removal even if its role prefix sorts before older files.
+  const doomed = files.filter((file) => file !== activeFile).slice(0, files.length - keep)
   await Promise.all(doomed.map((file) => fs.unlink(path.join(dir, file)).catch(() => {})))
 }
 

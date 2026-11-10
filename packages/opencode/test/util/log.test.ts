@@ -6,7 +6,7 @@ import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Global } from "@wopal/ellamaka-core/global"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { tmpdirScoped } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 
 const it = testEffect(CrossSpawnSpawner.defaultLayer)
 
@@ -19,7 +19,7 @@ function files(dir: string) {
       const list = yield* Effect.promise(() => fs.readdir(dir).then((files) => files.sort()))
       const next = JSON.stringify(list)
       same = next === last ? same + 1 : 0
-      if (same >= 2 && list.length === 11) return list
+      if (same >= 2 && list.length === 10) return list
       last = next
       yield* Effect.sleep("10 millis")
     }
@@ -45,7 +45,7 @@ it.live("init cleanup keeps the newest timestamped logs", () =>
 
     const next = yield* files(dir)
 
-    expect(next).not.toContain(list[0]!)
+    expect(next).not.toContain(list[0])
     expect(next).toContain(list.at(-1)!)
   }),
 )
@@ -156,7 +156,7 @@ it.live("cleanup matches role-prefixed files", () =>
 
     const next = yield* files(dir)
 
-    expect(next).not.toContain(list[0]!)
+    expect(next).not.toContain(list[0])
     expect(next).toContain(list.at(-1)!)
   }),
 )
@@ -195,9 +195,9 @@ it.live("first log write creates the file and cleanup runs once", () =>
     yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "tui" }))
     Log.Default.info("first line")
 
-    // Cleanup keeps the newest 10 timestamped files, plus the new tui file.
+    // Cleanup keeps at most 10 timestamped files in total, including the tui file.
     expect(yield* files(dir)).toContain(list.at(-1)!)
-    expect(yield* files(dir)).not.toContain(list[0]!)
+    expect(yield* files(dir)).not.toContain(list[0])
 
     // The first record is written asynchronously; wait for the line before
     // counting files so a slow flush cannot race the assertion.
@@ -215,8 +215,41 @@ it.live("first log write creates the file and cleanup runs once", () =>
     expect(logFile).toBeDefined()
     expect(content).toContain("first line")
     const settled = yield* files(dir)
-    expect(settled.length).toBe(11)
-    expect(settled).not.toContain(list[1])
+    expect(settled.length).toBe(10)
+    expect(settled).not.toContain(list[2])
+  }),
+)
+
+it.live("log cleanup preserves the active file even when other role names sort after it", () =>
+  Effect.gen(function* () {
+    const log = Global.Path.log
+    yield* Effect.addFinalizer(() => Effect.sync(() => (Global.Path.log = log)))
+    const dir = yield* tmpdirScoped()
+    Global.Path.log = dir
+
+    const old = Array.from({ length: 11 }, (_, i) => `zzz-2000-01-${String(i + 1).padStart(2, "0")}T000000.log`)
+    yield* Effect.all(old.map((file) => Effect.promise(() => fs.writeFile(path.join(dir, file), file))))
+
+    yield* Effect.promise(() => Log.init({ print: false, dev: false, role: "tui" }))
+    const active = Log.file()
+    // Pre-create the active path so the scanner must see it. A cleanup that
+    // sorts by role prefix alone would otherwise unlink the active log.
+    yield* Effect.promise(() => fs.writeFile(active, ""))
+    Log.Default.info("keep the current file")
+
+    const { remaining, content } = yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const remaining = yield* Effect.promise(() => fs.readdir(dir).then((entries) => entries.sort()))
+        const content = yield* Effect.promise(() => fs.readFile(active, "utf8").catch(() => ""))
+        if (remaining.includes(old[0]) || !content.includes("keep the current file")) return undefined
+        return { remaining, content }
+      }),
+      "log rotation did not finish while preserving the active file",
+    )
+
+    expect(remaining).toHaveLength(10)
+    expect(remaining).toContain(path.basename(active))
+    expect(content).toContain("keep the current file")
   }),
 )
 
