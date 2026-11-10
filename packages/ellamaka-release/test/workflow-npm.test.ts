@@ -33,6 +33,15 @@ describe("publish-ellamaka-npm workflow", () => {
     expect(pack).toBeGreaterThan(drift)
   })
 
+  test("type-checks the shipped examples before packing", () => {
+    // `files` ships `examples/`, so a broken example reaches npm consumers as
+    // broken documentation. Gate it in the same job that packs.
+    const typecheck = workflow.indexOf("bun run --cwd packages/sdk/js typecheck:examples")
+    const pack = workflow.indexOf("bun packages/ellamaka-release/src/cli/verify-npm.ts")
+    expect(typecheck).toBeGreaterThan(-1)
+    expect(pack).toBeGreaterThan(typecheck)
+  })
+
   test("runs publisher tests and clean-install smoke before publishing", () => {
     const testIdx = workflow.indexOf("bun test test/npm-publish-*.test.ts")
     const smokeIdx = workflow.indexOf("bun packages/ellamaka-release/src/cli/verify-npm.ts")

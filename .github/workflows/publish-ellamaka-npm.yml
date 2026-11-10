@@ -84,6 +84,12 @@ jobs:
             exit 1
           fi
 
+      # Examples are the documentation an outside consumer can run. Type-check
+      # them here so a published package never ships an example that no longer
+      # compiles against the contract it was built from.
+      - name: Type-check the published SDK examples
+        run: bun run --cwd packages/sdk/js typecheck:examples
+
       - name: Verify npm publisher
         working-directory: packages/ellamaka-release
         run: bun test test/npm-publish-*.test.ts

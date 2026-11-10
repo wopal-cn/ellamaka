@@ -16,9 +16,10 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "build": "tsc && bun ./script/bundle-local-worker.ts",
+    "build": "tsc && bun ./script/build-examples.ts && bun ./script/bundle-local-worker.ts",
     "generate": "bun ./script/build.ts",
-    "verify:local": "bun ./script/verify-local.ts"
+    "verify:local": "bun ./script/verify-local.ts",
+    "typecheck:examples": "tsgo --noEmit -p tsconfig.examples.json"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -37,7 +38,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "examples"
   ],
   "devDependencies": {
     "@hey-api/openapi-ts": "0.90.10",
