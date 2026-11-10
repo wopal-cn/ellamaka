@@ -7,6 +7,20 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { afterAll, afterEach } from "bun:test"
 import { stripGitLocatorVars } from "./lib/git-env"
 import { assertProcessStateClean, captureProcessState } from "./lib/process-state-guard"
+import { defined, orphanedWorktrees, repositoryOf, resolveTempRoot } from "./lib/temp-root"
+
+// Point TMPDIR at a directory outside every checkout before any fixture can
+// read it. TMPDIR is frequently set to a path inside this workspace (agents are
+// told to write scratch files under <space>/.wopal-space/.tmp), and a temp dir
+// inside a repository makes fixtures resolve that repository instead of their
+// own throwaway one: `git worktree add` then registers the worktree in the real
+// checkout, where no temp-directory cleanup can ever remove it.
+// Remember which checkout the ambient TMPDIR pointed into: that is the repository
+// a leaking fixture would register its worktrees in, and it is not necessarily
+// the checkout this test process runs from.
+const ambientRepository = repositoryOf(os.tmpdir())
+const tempRoot = resolveTempRoot()
+process.env["TMPDIR"] = tempRoot
 
 // Set WOPAL_HOME FIRST, before any src/ imports
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
@@ -29,6 +43,18 @@ afterAll(async () => {
   // Windows can keep SQLite WAL handles alive until GC finalizers run, so we
   // force GC and retry teardown to avoid flaky EBUSY in test cleanup.
   await rm(30)
+
+  // Backstop for the leak this suite is most likely to leave behind: a worktree
+  // registered in a real checkout whose directory is already gone. Deleting the
+  // temp tree removes the files, never the registration in .git/worktrees.
+  const watched = [...new Set(defined([repositoryOf(process.cwd()), ambientRepository]))]
+  const orphaned = watched.flatMap((repository) => orphanedWorktrees(repository))
+  if (orphaned.length > 0)
+    throw new Error(
+      "test run registered git worktrees in a real checkout and left them behind: " +
+        orphaned.join(", ") +
+        " — fixtures must create worktrees inside a temp repository, not the current one",
+    )
 })
 
 process.env["WOPAL_HOME"] = dir

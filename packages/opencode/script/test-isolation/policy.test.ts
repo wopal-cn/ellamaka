@@ -162,3 +162,18 @@ test("no package directory contains a stray temporary directory", () => {
     "test probes belong in .wopal-space/.tmp or the owning package's scoped temp fixture, never in a package directory",
   ).toEqual([])
 })
+
+// A fixture that creates a git worktree inside a checkout registers it in that
+// checkout's .git/worktrees. Deleting the temp directory removes the files but
+// not the registration, so the real repo keeps a phantom entry forever and the
+// leak survives in a place no test cleanup reaches.
+test("the test preload keeps temp directories outside every git checkout", () => {
+  const preload = read("packages/opencode/test/preload.ts")
+  expect(preload).toContain("resolveTempRoot")
+  // The redirect has to happen before the first fixture reads os.tmpdir(), or a
+  // TMPDIR inside the workspace still reaches the fixtures.
+  const redirect = preload.indexOf('process.env["TMPDIR"] = tempRoot')
+  const firstDir = preload.indexOf('path.join(os.tmpdir(), "opencode-test-data-"')
+  expect(redirect).toBeGreaterThan(-1)
+  expect(firstDir).toBeGreaterThan(redirect)
+})

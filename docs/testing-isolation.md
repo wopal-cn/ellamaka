@@ -70,10 +70,17 @@ H 才是**为什么会复发**。本规范与 `check:test-isolation` 针对的�
 - `spyOn(obj, "method")`（Bun 的 `mock.restore()` 对 spy 有效）
 - 少数几个 `process.env` 键，且**读取发生在调用时**而不是 import 时
 - fake timers
-- 每个测试独占 tmpdir 里的文件
+- 每个测试独占 tmpdir 里的文件，且该 tmpdir 必须落在**任何 git 仓库之外**
 - 某个明确拥有的 `globalThis` 测试槽位
 
 **什么时候用**：替身只服务于本文件，且还原是可靠的。
+
+**为什么 tmpdir 必须在仓库之外**：`os.tmpdir()` 读 `TMPDIR`。本工作区要求 agent 把临时文件写在
+`<space>/.wopal-space/.tmp`，那是空间仓库内部；fixture 在该目录建临时仓库后，任何向上执行的
+`git rev-parse` 都会解析到**真实 checkout**，于是 `git worktree add` 把 worktree 注册进真实仓库的
+`.git/worktrees`。删掉临时目录只删文件、删不掉注册，真实仓库从此永久多出一条幽灵 worktree。
+`test/lib/temp-root.ts` 的 `resolveTempRoot()` 会跳过落在仓库内的候选目录；preload 在读取前把
+`TMPDIR` 指向它，并在收尾时对「进程所在仓库」和「原 TMPDIR 所在仓库」都检查孤儿注册并报错。
 
 **关键限制**：**读缓存的库不能靠改环境变量**。Effect 的 `ConfigProvider` 默认层在首次读取时
 快照 `process.env` 并缓存在 module 级 Reference 上——改 `process.env` 对它无效，
@@ -154,6 +161,7 @@ TISO009 负责阻止**可静态识别**的新增风险；实际测试命令、pr
 | 共享路径必须走 ownership-aware fixture   | TISO006 | 扫描直接写 `Global.Path.*`、固定 `/tmp` 路径                                                                   |
 | baseline 不得有 stale 条目               | TISO007 | baseline 里记录的违规在源码中已不存在即失败                                                                    |
 | 普通测试不直接启用 Bun 进程内 concurrent | TISO008 | 识别 bun:test 控制器（含 alias/namespace/chained form）的 `.concurrent`                                        |
+| worktree 不得注册进真实仓库              | TISO102 | preload 重定向 TMPDIR 到仓库外，收尾扫描孤儿 worktree 注册；policy 断言重定向先于首次 fixture                  |
 | OpenCode 测试不得泄漏 env/cwd            | TISO101 | OpenCode preload 记录 env/cwd 基线，测试结束后比对并先恢复再报错                                               |
 | 无 Home 基座的包不得使用全局路径装配     | TISO009 | 枚举实际测试入口及测试 helper，识别 `Global` / `Global.Path` / Home-bound layer；核对有效 preload 与运行时探针 |
 

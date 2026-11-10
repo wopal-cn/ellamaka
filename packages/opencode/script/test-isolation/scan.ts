@@ -1146,8 +1146,12 @@ export function validateHomePreloadSource(
     }
   }
 
-  // Require temp dir construct (tmpdir / mkdtemp) AND per-process/unique token (process.pid / mkdtemp / randomUUID)
-  const hasTmpDir = /(?:tmpdir\s*\(|mkdtemp|mkdtempSync)/.test(rhsText)
+  // Require temp dir construct AND per-process/unique token (process.pid / mkdtemp / randomUUID).
+  // `resolveTempRoot` is the vetted helper that returns a temp directory outside
+  // every git checkout: a plain os.tmpdir() can point inside this workspace, and a
+  // temp dir inside a repository makes worktree fixtures register in the real
+  // checkout.
+  const hasTmpDir = /(?:tmpdir\s*\(|mkdtemp|mkdtempSync|resolveTempRoot\s*\()/.test(rhsText)
   const hasUniqueToken = /(?:process\.pid|mkdtemp|mkdtempSync|randomUUID)/.test(rhsText)
   if (!hasTmpDir || !hasUniqueToken) {
     return {
