@@ -343,7 +343,7 @@ export async function spawnWebChildContainer(options: SpawnWebChildOptions): Pro
   // Drain the child's stderr into a bounded buffer so a failed boot surfaces
   // its profile-boot diagnostics in the parent's error instead of vanishing.
   const stderrTail: string[] = []
-  void (async () => {
+  const stderrDrain = (async () => {
     const reader = child.stderr.getReader()
     const decoder = new TextDecoder()
     while (true) {
@@ -357,9 +357,27 @@ export async function spawnWebChildContainer(options: SpawnWebChildOptions): Pro
   try {
     ready = await readReadyLine(child, options.readyTimeoutMs ?? 120_000)
   } catch (error) {
+    // stdout can reach EOF before the asynchronous stderr reader receives the
+    // final diagnostic. Terminate the failed child, then give its pipe a bounded
+    // opportunity to drain before constructing the host-visible failure.
+    try {
+      child.kill()
+    } catch {
+      // A child that already exited can reject the redundant termination.
+    }
+    let drainTimer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        stderrDrain,
+        new Promise<void>((resolve) => {
+          drainTimer = setTimeout(resolve, 500)
+        }),
+      ])
+    } finally {
+      if (drainTimer !== undefined) clearTimeout(drainTimer)
+    }
     const tail = stderrTail.join("").trim()
     if (tail.length > 0) {
-      child.kill()
       throw new Error(
         `${error instanceof Error ? error.message : String(error)}; child stderr tail: ${tail.slice(-2000)}`,
         {

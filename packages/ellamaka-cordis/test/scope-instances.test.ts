@@ -35,7 +35,10 @@ const dshReq = createRequire(`${dshAnchorDir}/package.json`)
 const toolsModulePath = dshReq.resolve("@deepseek-ai/dsh-tools")
 const toolsReq = createRequire(toolsModulePath)
 const scopeModule = await import(toolsReq.resolve("@deepseek-ai/dsh-scope"))
-const createScope = scopeModule.createScope as (ctx: Context, key: ScopeKey) => {
+const createScope = scopeModule.createScope as (
+  ctx: Context,
+  key: ScopeKey,
+) => {
   ctx: Context
   dispose(): Promise<void>
 }
@@ -43,6 +46,7 @@ type Scope = ReturnType<typeof createScope>
 type ScopeKey = object
 const { default: SystemPrompt } = await import(dshReq.resolve("@deepseek-ai/dsh-system-prompt"))
 const { default: ToolRuntime, defineTool } = await import(toolsModulePath)
+const nativeExecutor = await import(dshReq.resolve("@deepseek-ai/dsh-tool-executor-native"))
 
 type ToolSchema = { name: string }
 
@@ -51,6 +55,7 @@ async function bootContainer() {
   const ctx = new Context()
   await Promise.resolve(ctx.plugin(SystemPrompt as never))
   await Promise.resolve(ctx.plugin(ToolRuntime as never, {}))
+  await Promise.resolve(ctx.plugin(nativeExecutor))
   return ctx
 }
 
@@ -63,9 +68,12 @@ async function mintScope(ctx: Context, key: ScopeKey): Promise<{ scope: Scope; k
   let scope!: Scope
   await Promise.resolve(
     ctx.plugin(
-      Object.assign((inner: Context) => {
-        scope = createScope(inner, key)
-      }, { inject: ["tools", "systemPrompt"] }) as never,
+      Object.assign(
+        (inner: Context) => {
+          scope = createScope(inner, key)
+        },
+        { inject: ["tools", "systemPrompt"] },
+      ) as never,
     ),
   )
   return { scope, key }
@@ -101,19 +109,24 @@ function mountCounterTool(ctx: Context, toolName: string) {
 }
 
 function execFor(name: string, agent?: object, signal?: AbortSignal) {
+  const id = `call-${name}`
   return {
-    callId: `call-${name}`,
-    rootCallId: `call-${name}`,
-    name,
-    arguments: {},
+    calls: [{ type: "tool-call", id, name, arguments: "{}" }],
     signal: signal ?? new AbortController().signal,
     ...(agent ? { agent } : {}),
   }
 }
 
-/** dsh ToolRuntime.execute takes ONE exec object (name/arguments inside). */
-function run(ctx: Context, name: string, agent?: object) {
-  return (ctx.tools as { execute(exec: unknown): Promise<{ isError: boolean }> }).execute(execFor(name, agent))
+/** RC.3 ToolRuntime settles a native-executor batch, preserving Agent identity. */
+async function run(ctx: Context, name: string, agent?: object): Promise<{ isError: boolean }> {
+  const batch = await (
+    ctx.tools as {
+      execute(exec: unknown): Promise<{ results: readonly { callId: string; result: { isError: boolean } }[] }>
+    }
+  ).execute(execFor(name, agent))
+  const result = batch.results.find((item) => item.callId === `call-${name}`)?.result
+  if (!result) throw new Error(`No RC.3 tool batch result: ${name}`)
+  return result
 }
 
 const names = (schemas: ToolSchema[]) => schemas.map((s) => s.name).sort()
@@ -175,7 +188,7 @@ describe("experiment 1: per-directory scope instantiation", () => {
     const ctx = await bootContainer()
     const dirA: ScopeKey = { directory: "/workspace/a" }
     const { scope: scopeA, key: keyA } = await mintScope(ctx, dirA)
-    const toolA = mountCounterTool(scopeA.ctx, "dir_a_tool")
+    mountCounterTool(scopeA.ctx, "dir_a_tool")
     expect(names(ctx.tools.schemas(keyA) as ToolSchema[])).toContain("dir_a_tool")
 
     await scopeA.dispose()
@@ -191,7 +204,7 @@ describe("experiment 1: per-directory scope instantiation", () => {
     const dirA: ScopeKey = { directory: "/workspace/a" }
     const dirB: ScopeKey = { directory: "/workspace/b" }
     const { scope: scopeA, key: keyA } = await mintScope(ctx, dirA)
-    const toolA = mountCounterTool(scopeA.ctx, "dir_a_only")
+    mountCounterTool(scopeA.ctx, "dir_a_only")
 
     const underA = await run(ctx, "dir_a_only", keyA)
     expect(underA.isError).toBe(false)

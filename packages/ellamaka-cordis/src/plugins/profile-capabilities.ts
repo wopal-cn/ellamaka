@@ -23,13 +23,28 @@ function nativePresetPlugins(rows: readonly Row[]): Row[] {
     .map((row) => (row.group && Array.isArray(row.config) ? { ...row, config: nativePresetPlugins(row.config) } : row))
 }
 
-export function profileCapabilityPatches(profile: string, rows: readonly Row[], disablePtc: boolean): PatchOptions[] {
+export function profileCapabilityPatches(
+  profile: string,
+  rows: readonly Row[],
+  disablePtc: boolean,
+  webNodeExecutable?: string,
+): PatchOptions[] {
   const patches: PatchOptions[] = []
   for (const row of rows) {
     if (!row.id) continue
     if (hardDisabledIds.has(row.id)) patches.push({ id: row.id, disabled: true })
     if (process.versions.electron && row.id === "subprocess") patches.push({ id: row.id, disabled: true })
     if (disablePtc && row.id === "ptc-runtime") patches.push({ id: row.id, disabled: true })
+    if (profile === "web" && !disablePtc && row.id === "ptc-runtime" && webNodeExecutable) {
+      const existing = row.config && typeof row.config === "object" && !Array.isArray(row.config) ? row.config : {}
+      patches.push({
+        id: row.id,
+        config: {
+          ...existing,
+          launch: { kind: "node-script", executable: webNodeExecutable },
+        },
+      })
+    }
     if (disablePtc && row.id === "preset-ptc") patches.push({ id: row.id, disabled: true })
     if (profile === "web" && disablePtc && ["preset-standard", "preset-cordis"].includes(row.id)) {
       const config = row.config
@@ -39,13 +54,6 @@ export function profileCapabilityPatches(profile: string, rows: readonly Row[], 
           patches.push({ id: row.id, config: { ...config, plugins: nativePresetPlugins(plugins) } })
       }
     }
-  }
-  const configOf = (id: string) => {
-    const config = rows.find((row) => row.id === id)?.config
-    return !Array.isArray(config) && config ? config : {}
-  }
-  if (disablePtc) {
-    patches.push({ id: "tools", config: { ...configOf("tools"), mode: "native" } })
   }
   return patches
 }

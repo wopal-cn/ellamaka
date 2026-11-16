@@ -1,7 +1,7 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-06
+> **Updated**: 2026-11-13
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -206,7 +206,7 @@ Electron Main 只负责 sidecar 的进程生命周期、随机本地端口、本
 
 Electron Main 以 Host Environment 为基础创建 sidecar env，再叠加 Desktop 自己拥有的本地认证、产品控制值和 Engine 启动参数。Sidecar 因此获得与当前登录用户一致的基础运行环境，同时由 Main 保持 server credential 的最终所有权。
 
-同一份 sidecar env 同时成为 Native Ellamaka Runtime 与 DSH/Cordis 的宿主父环境。Native 与 DSH 不分别接收 Desktop IPC 环境副本，也不各自重新探测 login shell；任何 profile 或工具子进程只在这个共同父环境之上执行自己的既有 overlay / child-env 规则。
+同一份 sidecar env 同时成为 Native Ellamaka Runtime 与 DSH/Cordis 的宿主父环境。只有 DSH Web 官方 PTC `run_code` 使用 Electron 内置 Node 24 Worker，通过受限 `ELECTRON_RUN_AS_NODE` 启动接线调用 DSH 官方 `node-script` 模式；Ellamaka Tools 容器仅提供普通工具，用户无需另装 Node。Native 与 DSH 不分别接收 Desktop IPC 环境副本，也不各自重新探测 login shell；任何 profile 或工具子进程只在这个共同父环境之上执行自己的既有 overlay / child-env 规则。
 
 Sidecar 使用单一 Server Runtime 生命周期。Server listener、基础 Runtime 与 WopalSpace API 就绪后，sidecar 先报告 Server health；Desktop Main 随即创建并显示窗口。Renderer 通过共享 Application Startup Gate 判断 Setup 阶段。Setup 完成时，sidecar 检查自己的 embedded Core Runtime Descriptor，并通过 `CorePreparation` 在后台准备当前 Desktop build 需要的运行资源；Setup 未完成时，Onboarding 在 Space 之后触发可见的 host preparation。DSH Web 与 Tools 是两个独立 profile：Web 是否请求由全局 `wopal.dsh.web.enabled` 决定，Tools 是否请求由 sidecar 进程的 `ELLAMAKA_DSH_TOOLS` 决定。任一 profile 处于 `PREPARING/DEGRADED` 时只影响自身能力，不阻断已经可用的 native Runtime，也不延迟窗口出现。
 

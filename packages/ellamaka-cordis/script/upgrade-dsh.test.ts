@@ -365,6 +365,20 @@ describe("temporary release-age exemptions", () => {
 })
 
 describe("real artifact writers", () => {
+  it("can resume after an interrupted upgrade already pinned the target DSH version", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ellamaka-upgrade-resume-"))
+    try {
+      mkdirSync(join(dir, "packages/ellamaka-cordis"), { recursive: true })
+      copyFileSync(join(repositoryRoot, packageJsonPath), join(dir, packageJsonPath))
+      const original = readFileSync(join(dir, packageJsonPath), "utf8")
+      const pinned = JSON.parse(original).dependencies["@deepseek-ai/dsh"]
+      expect(() => writeEngineVersionFile(dir, pinned)).not.toThrow()
+      expect(readFileSync(join(dir, packageJsonPath), "utf8")).toBe(original)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it("point the engine and the generation at the new values without disturbing anything else", () => {
     const dir = mkdtempSync(join(tmpdir(), "ellamaka-upgrade-"))
     try {

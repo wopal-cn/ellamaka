@@ -52,12 +52,25 @@ function container() {
     },
   }))
   const calls: any[] = []
+  const batches: any[] = []
   let run = async (_call: any): Promise<any> => ({ isError: false, content: [{ type: "text", text: "done" }] })
   const tools = {
     schemas: () => schemas,
     execute: async (call: any) => {
-      calls.push(call)
-      return run(call)
+      batches.push(call)
+      const item = call.calls?.[0]
+      const legacyCall = item
+        ? {
+            callId: item.id,
+            name: item.name,
+            arguments: JSON.parse(item.arguments),
+            signal: call.signal,
+            agent: call.agent,
+          }
+        : call
+      calls.push(legacyCall)
+      const result = await run(legacyCall)
+      return item ? { results: [{ callId: item.id, result }], additionalContexts: [], concluded: false } : result
     },
   }
   const ctx = {
@@ -74,6 +87,7 @@ function container() {
     tools,
     schemas,
     calls,
+    batches,
     handlers,
     run: (fn: typeof run) => {
       run = fn
@@ -94,6 +108,21 @@ async function projected(hook: Awaited<ReturnType<typeof dshAdapter>>) {
 }
 
 describe("built-in dsh adapter", () => {
+  test("uses the RC.3 native batch API for a single ordinary tool call", async () => {
+    const pool = container()
+    const hook = await dshAdapter(input())
+    const result = await (await projected(hook)).read.execute({ filePath: "a" }, context())
+    expect(result).toMatchObject({ output: "done", title: "read" })
+    expect(pool.batches).toHaveLength(1)
+    expect(pool.batches[0]).toMatchObject({
+      calls: [{ type: "tool-call", name: "read", arguments: JSON.stringify({ file_path: "a" }) }],
+    })
+    expect(pool.batches[0].calls[0].id).toBe(pool.calls[0].callId)
+    expect(pool.batches[0].signal).toBeInstanceOf(AbortSignal)
+    expect(pool.batches[0].agent.session).toBeDefined()
+    await hook.dispose?.()
+  })
+
   test("live projection and dispatch use a replaced registry service on the same host", async () => {
     const first = container()
     const hook = await dshAdapter(input())

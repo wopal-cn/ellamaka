@@ -11,6 +11,7 @@ import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances } from "../fixture/fixture"
 import { seedDshClosure } from "../fixture/dsh-closure"
+import { scopedEnv } from "../fixture/process-env"
 import {
   DEFAULT_DSH_RUNTIME_MANIFEST,
   initializeDshRuntime,
@@ -23,18 +24,15 @@ void Log.init({ print: false })
 const original = {
   ELLAMAKA_SERVER_PASSWORD: Flag.ELLAMAKA_SERVER_PASSWORD,
   ELLAMAKA_SERVER_USERNAME: Flag.ELLAMAKA_SERVER_USERNAME,
-  envPassword: process.env.ELLAMAKA_SERVER_PASSWORD,
-  envUsername: process.env.ELLAMAKA_SERVER_USERNAME,
 }
 const auth = { username: "opencode", password: "listen-secret" }
+let authEnvironment: Disposable | undefined
 
 afterEach(async () => {
   Flag.ELLAMAKA_SERVER_PASSWORD = original.ELLAMAKA_SERVER_PASSWORD
   Flag.ELLAMAKA_SERVER_USERNAME = original.ELLAMAKA_SERVER_USERNAME
-  if (original.envPassword === undefined) delete process.env.ELLAMAKA_SERVER_PASSWORD
-  else process.env.ELLAMAKA_SERVER_PASSWORD = original.envPassword
-  if (original.envUsername === undefined) delete process.env.ELLAMAKA_SERVER_USERNAME
-  else process.env.ELLAMAKA_SERVER_USERNAME = original.envUsername
+  authEnvironment?.[Symbol.dispose]()
+  authEnvironment = undefined
   await disposeAllInstances()
   await resetDatabase()
 })
@@ -42,8 +40,7 @@ afterEach(async () => {
 async function startListener() {
   Flag.ELLAMAKA_SERVER_PASSWORD = auth.password
   Flag.ELLAMAKA_SERVER_USERNAME = auth.username
-  process.env.ELLAMAKA_SERVER_PASSWORD = auth.password
-  process.env.ELLAMAKA_SERVER_USERNAME = auth.username
+  authEnvironment = scopedEnv({ ELLAMAKA_SERVER_PASSWORD: auth.password, ELLAMAKA_SERVER_USERNAME: auth.username })
   return Server.listen({ hostname: "127.0.0.1", port: 0 })
 }
 
@@ -123,6 +120,9 @@ async function mountDsh(listener: Awaited<ReturnType<typeof startListener>>) {
     logDir: join(wopalHome, "logs"),
     installAnchor: resolved.path,
     runtime,
+    // This suite verifies the shared HTTP listener, not Worker installation.
+    // The real Web PTC path is verified separately with prepared managed Node.
+    disablePtcRuntime: true,
   })
   const unmount = listener.mountNodeRoute({
     prefix: dsh.mountPath,

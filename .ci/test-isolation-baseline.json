@@ -387,12 +387,6 @@
     },
     {
       "rule": "TISO002",
-      "file": "packages/ellamaka-cordis/test/web-child.test.ts",
-      "detail": "process.env.DSH_WEB_CHILD_READY",
-      "count": 2
-    },
-    {
-      "rule": "TISO002",
       "file": "packages/ellamaka-core/test/effect/logger-trace.test.ts",
       "detail": "process.env.WOPAL_DEBUG_LOG_DIR",
       "count": 3
@@ -756,18 +750,6 @@
       "file": "packages/opencode/test/provider/provider.test.ts",
       "detail": "process.env[...]",
       "count": 5
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
-      "detail": "process.env.ELLAMAKA_SERVER_PASSWORD",
-      "count": 3
-    },
-    {
-      "rule": "TISO002",
-      "file": "packages/opencode/test/server/dsh-single-port.test.ts",
-      "detail": "process.env.ELLAMAKA_SERVER_USERNAME",
-      "count": 3
     },
     {
       "rule": "TISO002",

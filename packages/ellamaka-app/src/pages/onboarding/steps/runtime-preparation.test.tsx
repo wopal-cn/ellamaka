@@ -21,7 +21,7 @@ test("shows the real phase and ignores a late preparation failure after leaving"
           preparation: {
             state: "PREPARING",
             steps: [{ step: "dsh.closure", state: "NEEDS_PREPARATION" }],
-            run: { step: "dsh.closure", phase: "materialize", elapsedMs: 5000 },
+            run: { step: "dsh.closure", phase: "node.download", elapsedMs: 5000 },
           },
         })}
         onProgress={(message) => messages.push(message)}
@@ -32,8 +32,8 @@ test("shows the real phase and ignores a late preparation failure after leaving"
     host,
   )
   await Promise.resolve()
-  expect(host.textContent).toContain("下载并安装依赖")
-  expect(messages.some((message) => message.includes("下载并安装依赖"))).toBe(true)
+  expect(host.textContent).toContain("下载 Node 运行时")
+  expect(messages.some((message) => message.includes("下载 Node 运行时"))).toBe(true)
   dispose()
   const count = messages.length
   rejectPreparation(new Error("late failure"))

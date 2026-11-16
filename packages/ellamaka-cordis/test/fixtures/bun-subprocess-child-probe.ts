@@ -1,7 +1,7 @@
 import { createRequire } from "node:module"
 import { inspect } from "node:util"
 import "../../src/runtime/preload"
-import { runBunPtcChildIfRequested } from "../../src/runtime/bun-ptc-child"
+import { runBunSubprocessChildIfRequested } from "../../src/runtime/bun-subprocess-child"
 
 const gcAnchor = process.env.ELLAMAKA_SUBPROCESS_GC_ANCHOR
 if (gcAnchor) {
@@ -24,7 +24,7 @@ if (gcAnchor) {
 
 const originalArgv = [...process.argv]
 try {
-  const handled = await runBunPtcChildIfRequested()
+  const handled = await runBunSubprocessChildIfRequested()
   console.log(
     "__BOOTSTRAP__" +
       JSON.stringify({
@@ -33,7 +33,6 @@ try {
         argv: process.argv,
         execPath: process.execPath,
         selection: process.env.DSH_SUBPROCESS_RUNNER ?? null,
-        ptcMarker: process.env.DSH_PTC_RUNTIME_NODE ?? null,
       }),
   )
 } catch (error) {

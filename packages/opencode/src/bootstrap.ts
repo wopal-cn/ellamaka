@@ -1,6 +1,4 @@
 import "@wopal/ellamaka-cordis/runtime/preload"
-import { runBunPtcChildIfRequested } from "@wopal/ellamaka-cordis/runtime/bun-ptc-child"
+import { runBunSubprocessChildIfRequested } from "@wopal/ellamaka-cordis/runtime/bun-subprocess-child"
 
-if (!(await runBunPtcChildIfRequested())) {
-  await import("./index")
-}
+if (!(await runBunSubprocessChildIfRequested())) await import("./index")

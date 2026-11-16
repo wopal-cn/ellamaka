@@ -38,12 +38,20 @@ test("actual Web inventory has metadata for every global and shipped preset row 
     expect(errors).toEqual([])
     expect(titles).toBeGreaterThan(50)
     const manager = host.ctx.get("pluginManager") as {
-      listBundles(): Promise<{ name: string; meta?: { title?: unknown; error?: string }; error?: unknown }[]>
+      listBundles(): Promise<
+        { name: string; installed?: boolean; meta?: { title?: unknown; error?: string }; error?: unknown }[]
+      >
     }
     const bundles = await manager.listBundles()
     expect(bundles.length).toBeGreaterThan(4)
     expect(bundles.filter((bundle) => bundle.meta?.error || bundle.error)).toEqual([])
-    expect(bundles.filter((bundle) => bundle.name.startsWith("@deepseek-ai/") && !bundle.meta?.title)).toEqual([])
+    // RC.3 exposes official-but-not-installed market candidates in its inventory.
+    // Metadata is mandatory for actual shipped/installed bundles, not missing items.
+    expect(
+      bundles.filter(
+        (bundle) => bundle.installed !== false && bundle.name.startsWith("@deepseek-ai/") && !bundle.meta?.title,
+      ),
+    ).toEqual([])
     expect(
       inventory.entries.filter(
         (entry: any) => entry.enabled && ["failed", "pending", "loading"].includes(entry.fiberPhase),

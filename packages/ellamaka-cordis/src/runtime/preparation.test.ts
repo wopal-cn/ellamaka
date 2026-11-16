@@ -51,8 +51,33 @@ function context() {
 }
 
 describe("DSH CorePreparation contributors", () => {
-  test("exports the three host preparation steps in stable order", () => {
-    expect(contributors(tmpHome()).map((item) => item.step)).toEqual(["dsh.closure", "dsh.home", "dsh.profiles"])
+  test("reports managed Node through the existing closure progress step, never a new step", async () => {
+    const home = tmpHome()
+    expect(contributors(home).map((item) => item.step)).toEqual(["dsh.closure", "dsh.home", "dsh.profiles"])
+    expect(contributors(home, ["ellamaka-tools"]).map((item) => item.step)).toEqual([
+      "dsh.closure",
+      "dsh.home",
+      "dsh.profiles",
+    ])
+    const closure = contributors(home, ["web"]).find((item) => item.step === "dsh.closure")!
+    expect((await closure.inspect({ kind: "host" })).state).toBe("NEEDS_PREPARATION")
+    expect(existsSync(join(home, "dsh", "runtime", "node"))).toBe(false)
+  })
+
+  test("Electron Web preparation never installs a second Node", async () => {
+    const home = tmpHome()
+    const steps = createDshPreparationContributors({
+      wopalHome: home,
+      logFile: join(home, "dsh.log"),
+      manifest: MANIFEST,
+      closureVersion: MANIFEST.closureVersion,
+      profiles: ["web"],
+      usesElectronNode: true,
+    })
+    expect(steps.map((item) => item.step)).toEqual(["dsh.closure", "dsh.home", "dsh.profiles"])
+    const closure = steps.find((item) => item.step === "dsh.closure")!
+    expect((await closure.inspect({ kind: "host" })).state).toBe("NEEDS_PREPARATION")
+    expect(existsSync(join(home, "dsh"))).toBe(false)
   })
 
   test("prepares only the requested web profile", async () => {

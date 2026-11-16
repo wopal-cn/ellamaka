@@ -5,6 +5,8 @@ export const TOOLS_PROFILE_ROWS = `# Ellamaka session-free tools composition. St
       name: '@deepseek-ai/cordis-plugin-timer'
     - id: session-projection
       name: '@deepseek-ai/dsh-session-projection'
+    - id: working-directory
+      name: '@deepseek-ai/dsh-working-directory'
     - id: storage
       name: '@deepseek-ai/dsh-storage'
     - id: storage-json
@@ -55,8 +57,6 @@ export const TOOLS_PROFILE_ROWS = `# Ellamaka session-free tools composition. St
       name: '@deepseek-ai/dsh-tool-fs-search'
       config:
         sampleOverCapGlobResults: false
-    - id: ptc-runtime
-      name: '@deepseek-ai/dsh-ptc-runtime-node'
     - id: timeout-policy
       name: '@deepseek-ai/dsh-tool-call-timeout-policy'
     - id: spill-local
@@ -65,8 +65,8 @@ export const TOOLS_PROFILE_ROWS = `# Ellamaka session-free tools composition. St
       name: '@deepseek-ai/dsh-spill-policy'
     - id: tools
       name: '@deepseek-ai/dsh-tools'
-      config:
-        mode: native
+    - id: tool-executor-native
+      name: '@deepseek-ai/dsh-tool-executor-native'
     - id: system-prompt
       name: '@deepseek-ai/dsh-system-prompt'
       config:

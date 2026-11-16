@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-09
+> **Updated**: 2026-11-13
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -503,7 +503,7 @@ DSH 容器装配与融合细则见 [DESIGN-dsh-base.md](./DESIGN-dsh-base.md)。
 
 Ellamaka 与 DSH 是两个独立核心。DSH Web profile 拥有自己的界面、会话、账本与 agent-loop；Ellamaka 拥有自己的 Session、Agent、Tool 与 Workbench。两者可以由同一个 Runtime host 承载并共用公开监听端口，但生命周期、启用意图和运行状态分别表达。
 
-`ellamaka-tools` 是两核之间的特例集成面：它是 DSH 提供的 session-free 工具 profile，但由 Ellamaka 进程加载，并通过内置 `dsh-adapter` 投影到 Ellamaka ToolRegistry。DSH Web 不依赖这个投影；Ellamaka Native Tools 也不依赖 DSH Web。
+`ellamaka-tools` 是两核之间的特例集成面：它是 DSH 提供的 session-free 工具 profile，由 Ellamaka 进程加载，并通过内置 `dsh-adapter` 将 `read`、`write`、`edit`、`bash` 等普通工具投影到 Ellamaka ToolRegistry。工具执行采用 Ellamaka 现有的 Session、权限和沙箱契约。DSH Web 不依赖这个投影；Ellamaka Native Tools 也不依赖 DSH Web。
 
 DSH v0.2 由 Bridge 接入。$WOPAL_HOME/dsh/home 是唯一 Active Home。CLI/Desktop 使用同一 closureVersion；同版本可并发持有 shared Home lock。切换到较新版本前必须取得 exclusive Home lock 并完成 backup；旧版本面对更新 Home 时 fail closed。DSH closure 与 Home safety 由当前产品的 CorePreparation 统一执行，随后只准备和激活本次实际启用的 profile。基本 Home 版本保护见 [基础设计](./DESIGN-dsh-base.md)。
 
@@ -514,7 +514,7 @@ Runtime host 管理两个相互独立容器，共用 ellamaka 的唯一公开监
 | 容器         | Profile          | 职责                                                         | 会话 |
 | ------------ | ---------------- | ------------------------------------------------------------ | ---- |
 | **Web 容器** | `web`            | 承载 dsh 完整 Web 界面（会话、账本、检查点、Agent 配置体系） | 有   |
-| **工具容器** | `ellamaka-tools` | 提供纯工具执行后端，供 ellamaka 工具管道调用                 | 无   |
+| **工具容器** | `ellamaka-tools` | 提供普通文件、搜索和 Shell 工具，供 Ellamaka Agent 调用                 | 无   |
 
 ```text
 ellamaka Runtime host（唯一公开监听端口）
@@ -551,11 +551,11 @@ ellamaka Runtime host（唯一公开监听端口）
 
 Ellamaka Agent 的工具采用路径复用 DSH 工具执行能力，持久 Session 与消息语义归 Ellamaka。独立的 Web profile 承载完整 DSH 引擎，其会话、账本和 agent-loop 归 DSH；两种会话域通过独立容器隔离。
 
-工具容器中的调用外观只提供执行所需的浅层上下文。依赖 DSH 会话、账本、调度或子代理语义的 provider 属于 Web 执行面；Ellamaka 自身的相应能力按其数据模型提供。API 定义或类型依赖存在于闭包，不代表这些 provider 在工具容器激活。
+工具容器只提供普通工具执行所需的浅层上下文，不加载 PTC Runtime 或 `run_code`。DSH Web 独立使用官方 PTC Executor、SDK 提示词和 Node Worker。依赖 DSH 会话、账本、调度或子代理语义的 provider 属于 Web 执行面；Ellamaka 自身的相应能力按其数据模型提供。
 
 工具插件不在这个范围内。它们是叶子工具，只消费会话的浅层形状，不依赖 agent-loop 语义。
 
-工具容器与 adapter 投影路径不创建、不持有任何会话，只提供执行能力。
+工具容器与 adapter 投影路径不创建 DSH 持久会话；Ellamaka Session 继续拥有 Agent 身份、权限、工具日志和当前目录。DSH Web 的 `run_code` 由其独立 Agent/Session 生命周期管理。
 
 ### 组件清单
 

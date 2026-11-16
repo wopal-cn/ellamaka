@@ -33,8 +33,9 @@ import { installProfileModuleRouting, projectRuntimePackages } from "./plugins/p
 import { profileCapabilityPatches } from "./plugins/profile-capabilities.js"
 import { createProfilePackages, createProfilePluginManager } from "./plugins/plugin-metadata.js"
 import { installElectronSubprocess } from "./runtime/electron-subprocess.js"
-import { installBunPtcCompatibility } from "./runtime/bun-ptc.js"
+import { installBunNodeModuleCompatibility } from "./runtime/bun-node-module.js"
 import { installBunSubprocessCompatibility } from "./runtime/bun-subprocess.js"
+import { managedNodePaths } from "./runtime/managed-node.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
 import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
@@ -308,8 +309,13 @@ type PtcReadinessRuntime = {
     program: string
     bindings: Array<{ global: string; functions: Record<string, (args: unknown) => Promise<unknown>> }>
     timeoutMs?: number | null
+    signal?: AbortSignal
   }): unknown
-  run(spec: unknown): Promise<{ value?: unknown; error?: { kind: string; message: string } }>
+  run(spec: unknown): Promise<{
+    value?: unknown
+    error?: { kind: string; message: string }
+    sandbox?: { mode: string; denied: boolean; enforcement?: string }
+  }>
 }
 
 function isPtcReadinessRuntime(value: unknown): value is PtcReadinessRuntime {
@@ -323,12 +329,32 @@ function isPtcReadinessRuntime(value: unknown): value is PtcReadinessRuntime {
   )
 }
 
-/** Execute a real lossless-JSON binding before a profile can publish ready. */
+/** Reject a PTC worker that silently escaped confinement before publishing ready. */
+function assertPtcReadinessSandbox(result: Awaited<ReturnType<PtcReadinessRuntime["run"]>>): void {
+  const sandbox = result.sandbox
+  if (!sandbox || sandbox.denied || (sandbox.enforcement !== "full" && sandbox.enforcement !== "partial")) {
+    throw new Error("DSH PTC sandbox enforcement unavailable during readiness")
+  }
+}
+
+/** Exercise binding, enforcement, and active cancellation before publishing Web PTC ready. */
 export async function verifyDshPtcBinding(ctx: Context): Promise<void> {
   const candidate: unknown = ctx.get("ptcRuntime", false)
   if (!isPtcReadinessRuntime(candidate)) throw new Error("DSH PTC runtime unavailable")
   const ptc = candidate
   const request = { kind: "ellamaka-readiness", nonce: 7 }
+  const validateInput = (input: unknown) => {
+    if (
+      typeof input !== "object" ||
+      input === null ||
+      !("kind" in input) ||
+      input.kind !== request.kind ||
+      !("nonce" in input) ||
+      input.nonce !== request.nonce
+    ) {
+      throw new Error("invalid readiness probe input")
+    }
+  }
   const spec = ptc.resolve({
     program: "return await ellamakaReadiness.probe({ kind: 'ellamaka-readiness', nonce: 7 })",
     bindings: [
@@ -336,16 +362,7 @@ export async function verifyDshPtcBinding(ctx: Context): Promise<void> {
         global: "ellamakaReadiness",
         functions: {
           probe: async (input: unknown) => {
-            if (
-              typeof input !== "object" ||
-              input === null ||
-              !("kind" in input) ||
-              input.kind !== request.kind ||
-              !("nonce" in input) ||
-              input.nonce !== request.nonce
-            ) {
-              throw new Error("invalid readiness probe input")
-            }
+            validateInput(input)
             return { ok: true, nonce: request.nonce }
           },
         },
@@ -355,6 +372,7 @@ export async function verifyDshPtcBinding(ctx: Context): Promise<void> {
   })
   const result = await ptc.run(spec)
   if (result.error) throw new Error(`DSH PTC readiness failed (${result.error.kind}): ${result.error.message}`)
+  assertPtcReadinessSandbox(result)
   const value = result.value
   if (
     typeof value !== "object" ||
@@ -366,6 +384,51 @@ export async function verifyDshPtcBinding(ctx: Context): Promise<void> {
   ) {
     throw new Error("DSH PTC readiness returned an invalid JSON value")
   }
+
+  // The second program acknowledges entry from inside the confined Worker,
+  // then waits for the host to cancel it. A pre-aborted spec would not prove
+  // the subprocess can stop an already-running evaluation.
+  const controller = new AbortController()
+  let started!: () => void
+  const admitted = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const cancelSpec = ptc.resolve({
+    program: "await ellamakaReadiness.ready({ kind: 'ellamaka-readiness', nonce: 7 }); await new Promise(() => {})",
+    bindings: [
+      {
+        global: "ellamakaReadiness",
+        functions: {
+          ready: async (input: unknown) => {
+            validateInput(input)
+            started()
+            return { ok: true }
+          },
+        },
+      },
+    ],
+    signal: controller.signal,
+    timeoutMs: 5_000,
+  })
+  const running = ptc.run(cancelSpec)
+  let cancelled: Awaited<ReturnType<PtcReadinessRuntime["run"]>>
+  try {
+    await Promise.race([
+      admitted,
+      running.then((early) => {
+        throw new Error(`DSH PTC cancellation readiness ended before admission (${early.error?.kind ?? "success"})`)
+      }),
+    ])
+    controller.abort(new Error("readiness cancellation"))
+    cancelled = await running
+  } finally {
+    controller.abort()
+    await running.catch(() => undefined)
+  }
+  if (cancelled.error?.kind !== "abort") {
+    throw new Error(`DSH PTC cancellation readiness failed (${cancelled.error?.kind ?? "success"})`)
+  }
+  assertPtcReadinessSandbox(cancelled)
 }
 
 /**
@@ -442,8 +505,14 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // installed closure even when the anchor path is a symlink (pnpm layout,
   // test fixtures); for a real materialised closure it is a no-op.
   const installAnchor = realpathSync(opts.installAnchor ?? require.resolve("@deepseek-ai/dsh/package.json"))
-  installBunPtcCompatibility()
+  if (profileName === WEB_PROFILE_NAME && opts.disablePtcRuntime !== true) installBunNodeModuleCompatibility()
   installBunSubprocessCompatibility()
+  const webNodeExecutable =
+    profileName === WEB_PROFILE_NAME
+      ? process.versions.electron
+        ? process.execPath
+        : managedNodePaths({ wopalHome: dirname(dshRoot) }).executable
+      : undefined
 
   const { createRuntimeResolution } = runtime.appBoot
   const coreBundles = profileName === WEB_PROFILE_NAME ? ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] : []
@@ -550,6 +619,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
       profileName,
       runtime.appBoot.composeEntries([input as PatchOptions[]]),
       opts.disablePtcRuntime === true,
+      webNodeExecutable,
     )
   const patches = composeFullPatchStack(stackContext)
   const rootConfig = join(profile.dir, "cordis.yml")
@@ -704,16 +774,26 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     } else {
       await auditStartupEntries(runtime, ctx)
     }
-    if (opts.disablePtcRuntime !== true) await verifyDshPtcBinding(ctx)
+    // Native tools use the RC.3 native executor, not the Web-only PTC worker.
+    if (profileName === WEB_PROFILE_NAME && opts.disablePtcRuntime !== true) await verifyDshPtcBinding(ctx)
     if (profileName === TOOLS_PROFILE_NAME) {
       verifyDshToolsRegistered((name) => ctx.get(name, false) as { schemas(): { name: string }[] } | undefined)
       if (ctx.get("sessions", false) || ctx.get("agents", false))
         throw new Error("DSH tool profile activated Session lifecycle")
     } else {
-      const registry = ctx.get("agentPresets") as { acquireScope(): Promise<AsyncDisposable> } | undefined
-      if (!ctx.get("configEditor", false) || !registry)
+      const registry: unknown = ctx.get("agentPresets", false)
+      if (
+        !ctx.get("configEditor", false) ||
+        typeof registry !== "object" ||
+        registry === null ||
+        !("acquireScope" in registry) ||
+        typeof registry.acquireScope !== "function"
+      )
         throw new Error("DSH web profile configuration services unavailable")
-      const lease = await registry.acquireScope()
+      // Readiness is about the shipped Web surface, not the user's persisted
+      // default. A removed/incompatible optional preset must remain visible
+      // as a broken choice in the Web UI instead of taking down that UI.
+      const lease = await registry.acquireScope("standard")
       await lease[Symbol.asyncDispose]()
     }
   }

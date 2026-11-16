@@ -1,7 +1,7 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-11-03
+> **Updated**: 2026-11-14
 > **Parent Architecture**:
 >
 > - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
@@ -63,6 +63,22 @@ Contract：
 3. `checksums.txt` 与 `release-notes.md` 作为元数据文件与 artifacts 一同发布到 R2。
 4. 归档格式与 wopal-cli 对齐：macOS / Linux 使用 `.tar.gz`，Windows 使用 `.zip`。
 5. release build 的 build channel 为 `stable`（`@wopal/ellamaka-brand` 的 `branding.ts:CHANNEL_RELEASE`）；本地开发 build channel 为 `main`（`CHANNEL_DEV`，build.sh 默认）与 `local`（dev.sh）。`latest` 只是 R2 feed 别名（`ellamaka/latest/`），不是通道值。
+
+### DSH Web PTC Node Preparation
+
+CLI 的主程序仍由 Bun 编译，发布归档保留现有 `ellamaka` / `ellamaka.exe` 单一入口。CLI 二进制、归档与八平台构建均不内置 Node 运行时。Ellamaka Native Agent 使用现有普通工具；只有 DSH Web 官方 PTC 需要受管理 Node 24（满足目标 DSH 版本的最低运行要求）。
+
+当 CLI 实际启用 DSH Web 时，`CorePreparation.prepare(host)` 在 Onboarding 的 host preparation 阶段下载、校验并安置匹配 OS/架构的固定 Node；已完成 Setup 的安装也通过同一准备入口按需补齐。DSH `0.2.2-rc.3` 对齐官方运行时锁定的 Node `24.21.0`，后续 DSH 升级按当次正式锁定版本调整。Node 按版本/校验和原子安装、验证后复用；安装失败时 DSH Web PTC 提供明确诊断。Onboarding 负责触发与展示进度，下载和资源所有权由 CorePreparation 拥有。用户无需自行安装 Node 或 DSH 命令，也不修改全局 PATH。
+
+受管理 Node 属于 DSH 运行资源，安装在 `$WOPAL_HOME/dsh/runtime/node/<version>/<platform>-<arch>/bin/node`（Windows 为 `node.exe`），下载缓存归 `$WOPAL_HOME/dsh/cache/node/`，临时物化目录位于 Node 运行时根目录内。Node 与 `$WOPAL_HOME/dsh/closures/<fingerprint>/` 的依赖闭包同级管理，不进入闭包的不可变内容，也不写入官方 `$WOPAL_HOME/dsh/home/`。安装使用目标平台的受信任制品和校验和；启动与恢复时重新验证当前固定位置，不扫描系统 Node 或用户版本管理器。Web 通过已物化的官方 DSH 闭包直接装配 PTC，在内嵌 Web 实际执行 `run_code` 验收，不依赖系统中的 `dsh` 可执行文件。
+
+### Managed Runtime Cleanup
+
+Node 运行时目录及其下载缓存由 Ellamaka 的 DSH Runtime 管理，目录身份和安装来源随当前产品已有的安装记录、Runtime manifest 记录；清理依据实际文件和版本引用核验，不仅凭状态缓存推断。Wopal CLI Product/产品卸载器负责卸载：先停止使用该资源的 PTC Worker，在确认没有其他已安装的 Ellamaka 版本仍需要该资源后，精确删除已登记的 `dsh/runtime/node/` 版本目录及 `dsh/cache/node/` 缓存；不能递归删除共享的 `$WOPAL_HOME` 根、`dsh/home`、`bin` 或其他 Wopal 产品目录。Desktop 使用自身 Electron Node，卸载 CLI 时也需核对仍在运行的实例。
+
+DSH 闭包属于可重新准备的运行资源；当最后一个使用它的 Ellamaka 组件卸载且进程停止后，可清除不再引用的 `$WOPAL_HOME/dsh/closures` 物化内容。DSH Home、会话、用户配置、备份和其他持久数据在普通卸载时保留，仅在用户显式选择完整清除产品数据后才按已确认的产品归属删除。实际卸载命令由产品卸载生命周期单独实现，本节提供其资源位置与安全清理契约。
+
+Node 下载源、精确版本、完整性校验与操作系统最低要求由产品准备契约固定；运行时只使用准备完成的绝对路径，Windows 使用 `node.exe`，macOS/Linux 使用 `node`。Node 资产不参与 CLI 可执行文件大小和签名。首次准备需要可用的受信任下载源，已有资源在离线时可复用；CLI 启动普通工具不依赖网络或 Node。发布前对目标平台验证首次准备、校验失败、离线复用、Node Worker、沙箱和取消。
 
 ### 构建接口
 
@@ -464,7 +480,7 @@ cleanup 输出待删除对象与保护原因的审计清单后才执行。任何
 | Electron 壳子 | 窗口、菜单、系统集成、electron-updater | `electron-builder` 打包                                           |
 | Sidecar 引擎  | Ellamaka HTTP/WS/PTY 后端              | `packages/opencode/script/build-node.ts` → Node.js runtime bundle |
 
-Sidecar 是 Node.js runtime（`build-node.ts` 产 `dist/node/`），**不是** Bun compile 的 CLI binary，因此不存在 CLI 的 native vs baseline（AVX2）二分——Node.js 代码由 V8 JIT 在运行时自适应 CPU 指令集。
+Sidecar 是 Node.js runtime（`build-node.ts` 产 `dist/node/`），**不是** Bun compile 的 CLI binary，因此不存在 CLI 的 native vs baseline（AVX2）二分——Node.js 代码由 V8 JIT 在运行时自适应 CPU 指令集。DSH Web 的 PTC Worker 在 Electron 自带 Node 24 模式下执行，由 sidecar 管理生命周期；Desktop 不额外分发 Node 资产。
 
 构建链路：`bun packages/opencode/script/build-node.ts`（sidecar）→ `cd packages/ellamaka-desktop && bun run build`（electron-vite 编译 main/preload/renderer）→ `bun run package:mac|win|linux`（electron-builder 打包）。本地快捷方式：`./scripts/build.sh desktop [--channel main|beta|stable] [--platform mac|linux|win] [--install]`——mac 平台本地打包，linux/win 平台自动走 GitHub Actions 构建并下载产物（CI 仅接受 beta|stable 通道，`--install` 仅本地构建生效）。
 
@@ -553,7 +569,7 @@ Wopal CLI Product 消费本文定义的 manifest、ReleaseIdentity、channel 与
 
 ### DSH Runtime Binding
 
-Ellamaka 制品捆绑固定的 DSH manifest/lock、Bridge 和内部 adapter。依赖求解或用户配置不能为同一制品选择另一版 DSH。所有正式本地入口共享固定 Home $WOPAL_HOME/dsh/home，并携带 closureVersion。
+Ellamaka 制品携带固定的 DSH manifest/lock、Bridge 与内部 adapter；CLI 不携带 Node 资产。Web PTC 所需 Node 在启动前由 CorePreparation 受管理地准备，Desktop 使用 Electron 自带 Node。依赖求解或用户配置不能为同一制品选择另一版 DSH。所有正式本地入口共享固定 Home $WOPAL_HOME/dsh/home，并携带 closureVersion。
 
 Product service 不处理 DSH 私有数据格式，也不通过 CLI/Desktop SemVer 判断 Home 是否可用。Home 版本、备份和旧版本拒绝规则由 DESIGN-dsh-base.md 拥有；不实现通用数据转换或自动恢复。
 

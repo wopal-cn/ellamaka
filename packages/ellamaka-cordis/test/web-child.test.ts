@@ -23,14 +23,6 @@ import { DEFAULT_DSH_RUNTIME_MANIFEST } from "../src/runtime/manager"
  * target that answers real requests and upgrades.
  */
 
-beforeEach(() => {
-  delete process.env.DSH_WEB_CHILD_READY
-})
-
-afterEach(() => {
-  delete process.env.DSH_WEB_CHILD_READY
-})
-
 function childArgv(home: string): string[] {
   return [
     process.execPath,
@@ -40,6 +32,7 @@ function childArgv(home: string): string[] {
     home,
     "--port",
     "0",
+    "--disable-ptc-runtime",
   ]
 }
 
@@ -74,6 +67,7 @@ describe("dsh:web child process boundary", () => {
     // The launcher is a multi-part command; each part is one flag occurrence,
     // so a launcher with prefix args (`bun <entry>`) survives the hop.
     expect(options?.ellamakaCommand).toEqual(["bun", "/repo/src/index.ts"])
+    expect(options?.disablePtcRuntime).toBe(false)
   })
 
   test("child boots the web profile on a real port and serves HTTP until shutdown", async () => {
@@ -88,7 +82,7 @@ describe("dsh:web child process boundary", () => {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
+      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1", DSH_WEB_CHILD_READY: undefined },
     })
 
     let exited = false
@@ -163,7 +157,7 @@ describe("dsh:web child process boundary", () => {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
+      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1", DSH_WEB_CHILD_READY: undefined },
     })
     const reader = child.stdout.getReader()
     let buffer = ""
@@ -211,7 +205,7 @@ describe("dsh:web child process boundary", () => {
       stdout: "pipe",
       stderr: "pipe",
       stdin: "pipe",
-      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1" },
+      env: { ...process.env, ELLAMAKA_DSH_TOOLS: "1", DSH_WEB_CHILD_READY: undefined },
     })
     // Wait for the ready line, then close the parent's write end WITHOUT the
     // shutdown line: the only real-world way stdin hits EOF is the parent

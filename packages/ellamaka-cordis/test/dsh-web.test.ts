@@ -17,7 +17,7 @@ import { createServer, type Server } from "node:http"
 import { once } from "node:events"
 import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
-import { bootDshWeb, mountDshWeb, mountDshTools } from "../src/dsh-web"
+import { bootDshWeb, mountDshWeb, mountDshTools, verifyDshPtcBinding } from "../src/dsh-web"
 import { createDshRuntimeApi, createPackageDshRuntimeApi, type DshRuntimeApi } from "../src/runtime/loader"
 import { appendBundle, readProfileManifest, withProfileManifestWrite } from "../src/plugins/profile-manifest"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
@@ -41,11 +41,7 @@ function readToolNames(ctx: Context): string[] {
 type MountedServices = {
   tools: {
     schemas(): { name: string; parameters: { properties: Record<string, unknown> } }[]
-    execute(exec: unknown): Promise<{
-      isError: boolean
-      content?: { type: string; text?: string }[]
-      error?: { info?: { code?: string } }
-    }>
+    execute(exec: unknown): Promise<{ results: { callId: string; result: NativeToolResult }[] }>
   }
   sessions: { list(): unknown[] }
   fs: { sandboxMode?: string }
@@ -56,6 +52,30 @@ type MountedServices = {
   desktopPnpm: { runPlugin?: unknown }
   ptcRuntime: { language?: string; isolation?: string }
   agentPresets: { list(): Promise<{ id: string; broken?: unknown }[]> }
+}
+
+type NativeToolResult = {
+  isError: boolean
+  content?: { type: string; text?: string }[]
+  error?: { info?: { code?: string } }
+}
+
+/** The actual RC.3 executor accepts a batch, while the test inspects one result. */
+async function executeNativeTool(
+  ctx: Context,
+  callId: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+  agent: { session: unknown },
+): Promise<NativeToolResult> {
+  const batch = await service(ctx, "tools")!.execute({
+    calls: [{ type: "tool-call", id: callId, name, arguments: JSON.stringify(arguments_) }],
+    signal: new AbortController().signal,
+    agent: { ...agent, ctx: { fiber: { assertActive: () => {} } } },
+  })
+  const result = batch.results.find((entry) => entry.callId === callId)?.result
+  if (!result) throw new Error(`Native tool result missing: ${callId}`)
+  return result
 }
 
 /**
@@ -209,6 +229,35 @@ function runtimeWithSkippedBundle(
  * the user's ~/.dsh.
  */
 describe("dsh web engine", () => {
+  test("an unavailable saved default preset does not prevent the DSH Web shell from starting", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dsh-host-stale-preset-"))
+    prepareDshProfiles(home)
+    writeFileSync(
+      join(home, "home", "profiles", "web", "cordis.patch.yml"),
+      "- id: agent-preset-registry\n  config:\n    default: standard\n    selectedDefault: wopal\n",
+    )
+    const ctx = new Context()
+    const host = await mountDshWeb(ctx, { home, port: 4097, disablePtcRuntime: true })
+    try {
+      expect(ctx.agentPresets.defaultId).toBe("wopal")
+      expect((await ctx.agentPresets.list()).map((preset) => preset.id)).toContain("standard")
+      await expect(ctx.agentPresets.acquireScope("wopal")).rejects.toThrow("Unknown agent preset: wopal")
+
+      const { server, baseUrl } = await attachAndListen(host.webServer)
+      try {
+        const cookie = await loginCookie(baseUrl, host.authenticatedPath)
+        const response = await fetch(`${baseUrl}/`, { headers: { cookie } })
+        expect(response.status).toBe(200)
+        expect(await response.text()).toContain("__DSH_BOOT__")
+      } finally {
+        server.close()
+      }
+    } finally {
+      await host.dispose()
+      await ctx.fiber.dispose()
+    }
+  }, 30_000)
+
   test("mountDshWeb activates the web profile without creating a listening socket", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-"))
     const ctx = new Context()
@@ -268,6 +317,18 @@ describe("dsh web engine", () => {
       const presets = await ctx.agentPresets.list()
       expect(presets.map((p) => p.id)).toContain("standard")
 
+      // Model input assembly must work through the official Web profile.
+      // The DSH dev-context section reads webServer.getOrigin() while
+      // composing the prompt; route-only HTTP tests cannot catch that seam.
+      const presetScope = await ctx.agentPresets.acquireScope("standard")
+      try {
+        const assembled = await ctx.systemPrompt.assemble({ scope: presetScope.key })
+        expect(assembled.tools.map((tool) => tool.name)).toContain("read")
+        expect(assembled.tools.map((tool) => tool.name)).not.toContain("run_code")
+      } finally {
+        await presetScope[Symbol.asyncDispose]()
+      }
+
       // A3: the install-worker contract services are provided on the web
       // container before the Loader mounts plugin rows, so dshmarket's
       // `apply()` probe sees desktopProfiles and takes its Desktop path
@@ -293,7 +354,7 @@ describe("dsh web engine", () => {
     }
   }, 30_000)
 
-  test("mountDshWeb exposes the PTC runtime by default under Bun", async () => {
+  test("unprepared CLI Web fails closed rather than falling back to system Node or a Bun PTC child", async () => {
     if (!process.versions.bun) return
 
     const home = mkdtempSync(join(tmpdir(), "dsh-host-ptc-"))
@@ -302,20 +363,64 @@ describe("dsh web engine", () => {
     const runtime = createDshRuntimeApi(anchor)
     const ctx = new runtime.cordis.Context()
     prepareDshProfiles(home)
-    const host = await mountDshWeb(ctx, { home, port: 0, installAnchor: anchor, runtime })
-
     try {
-      const ptcRuntime = service(ctx, "ptcRuntime")
-      expect(ptcRuntime).toBeDefined()
-      expect(ptcRuntime?.language).toBe("typescript")
-      expect(ptcRuntime?.isolation).toBe("process")
-      const presets = await service(ctx, "agentPresets")!.list()
-      expect(presets.find((preset) => preset.id === "ptc")?.broken).toBeUndefined()
+      await expect(mountDshWeb(ctx, { home, port: 0, installAnchor: anchor, runtime })).rejects.toThrow(
+        "DSH PTC readiness failed",
+      )
     } finally {
-      await host.dispose()
       await ctx.fiber.dispose()
     }
   }, 30_000)
+
+  test("PTC readiness rejects a successful binding when the worker is not sandbox-enforced", async () => {
+    const runtime = {
+      resolve: (request: unknown) => request,
+      run: async () => ({ value: { ok: true, nonce: 7 } }),
+    }
+    const ctx = new Context()
+    ctx.provide("ptcRuntime", runtime)
+    try {
+      await expect(verifyDshPtcBinding(ctx)).rejects.toThrow(/sandbox enforcement/)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  test("PTC readiness must actively cancel an admitted worker before publishing ready", async () => {
+    let runs = 0
+    let aborted = false
+    const sandbox = { mode: "workspace-write", enforcement: "full", denied: false }
+    const runtime = {
+      resolve: (request: unknown) => request,
+      run: async (request: {
+        bindings: { functions: Record<string, (args: unknown) => Promise<unknown>> }[]
+        signal?: AbortSignal
+      }) => {
+        runs++
+        if (runs === 1) return { value: { ok: true, nonce: 7 }, sandbox }
+        const ready = Object.values(request.bindings[0].functions)[0]
+        if (!ready || !request.signal) throw new Error("cancellation readiness probe missing a binding or signal")
+        await ready({ kind: "ellamaka-readiness", nonce: 7 })
+        return await new Promise<{ error: { kind: "abort"; message: string }; sandbox: typeof sandbox }>((resolve) => {
+          const onAbort = () => {
+            aborted = true
+            resolve({ error: { kind: "abort", message: "cancelled" }, sandbox })
+          }
+          if (request.signal!.aborted) onAbort()
+          else request.signal!.addEventListener("abort", onAbort, { once: true })
+        })
+      },
+    }
+    const ctx = new Context()
+    ctx.provide("ptcRuntime", runtime)
+    try {
+      await verifyDshPtcBinding(ctx)
+      expect(runs).toBe(2)
+      expect(aborted).toBe(true)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
 
   test("a skipped extension bundle keeps web ready and emits a WARN diagnostic", async () => {
     const home = mkdtempSync(join(tmpdir(), "dsh-host-bundle-skip-"))
@@ -842,15 +947,8 @@ describe("dsh tools profile", () => {
         writeFileSync(join(ws, `f${i}.txt`), `needle line ${i}\n`)
       }
 
-      const tools = service(ctx, "tools")!
-      const facade = { session: { header: { id: `tools-${Date.now()}`, cwd: ws } } }
-      const result = await tools.execute({
-        callId: "tools-profile-call",
-        name: "grep",
-        arguments: { pattern: "needle", path: ws },
-        signal: new AbortController().signal,
-        agent: facade,
-      })
+      const facade = { session: makeSessionFake(`tools-${Date.now()}`, ws) }
+      const result = await executeNativeTool(ctx, "tools-profile-call", "grep", { pattern: "needle", path: ws }, facade)
       const text = (result.content ?? []).map((b) => b.text ?? "").join("\n")
       expect(result.isError).toBe(false)
       expect(text).toContain("250 of 400")
@@ -875,13 +973,7 @@ describe("dsh tools profile", () => {
       const tools = service(ctx, "tools")!
       const session = makeSessionFake("tools-fs-session", workspace)
       const execute = (name: string, arguments_: Record<string, unknown>) =>
-        tools.execute({
-          callId: `tools-fs-${name}`,
-          name,
-          arguments: arguments_,
-          signal: new AbortController().signal,
-          agent: { session },
-        })
+        executeNativeTool(ctx, `tools-fs-${name}`, name, arguments_, { session })
 
       expect(service(ctx, "fs")!.sandboxMode).toBe("workspace-write")
       expect(tools.schemas().map((tool) => tool.name)).toEqual(expect.arrayContaining(["read", "write", "edit"]))
@@ -921,17 +1013,16 @@ describe("dsh tools profile", () => {
     const host = await mountDshTools(ctx, { home, port: 0 })
 
     try {
-      const tools = service(ctx, "tools")!
       const session = makeSessionFake("tools-readonly-session", workspace, [
         { type: "sandbox/mode", data: { mode: "read-only" } },
       ])
-      const result = await tools.execute({
-        callId: "tools-readonly-write",
-        name: "write",
-        arguments: { file_path: target, content: "must not exist" },
-        signal: new AbortController().signal,
-        agent: { session },
-      })
+      const result = await executeNativeTool(
+        ctx,
+        "tools-readonly-write",
+        "write",
+        { file_path: target, content: "must not exist" },
+        { session },
+      )
 
       expect(result.isError).toBe(true)
       expect(result.error?.info?.code).toBe("FS_SANDBOX_DENIED")
@@ -954,13 +1045,7 @@ describe("dsh tools profile", () => {
       const session = makeSessionFake("tools-editor-session", workspace)
       let call = 0
       const execute = (arguments_: Record<string, unknown>) =>
-        tools.execute({
-          callId: `tools-editor-${++call}`,
-          name: "str_replace_editor",
-          arguments: arguments_,
-          signal: new AbortController().signal,
-          agent: { session },
-        })
+        executeNativeTool(ctx, `tools-editor-${++call}`, "str_replace_editor", arguments_, { session })
       const editorPath = join(workspace, "editor.txt")
 
       expect(tools.schemas().map((tool) => tool.name)).toContain("str_replace_editor")
@@ -1027,13 +1112,7 @@ describe("dsh tools profile", () => {
       const session = makeSessionFake("tools-bash-session", workspace, [{ type: "sandbox/mode", data: { mode } }])
       let call = 0
       const execute = (arguments_: Record<string, unknown>) =>
-        tools.execute({
-          callId: `tools-bash-${++call}`,
-          name: "bash",
-          arguments: arguments_,
-          signal: new AbortController().signal,
-          agent: { session },
-        })
+        executeNativeTool(ctx, `tools-bash-${++call}`, "bash", arguments_, { session })
       const allowed = join(workspace, "allowed.txt")
       const bash = tools.schemas().find((tool) => tool.name === "bash")
 

@@ -316,6 +316,40 @@ describe("dsh:web child host builder", () => {
     expect(message).toContain("before ready")
   })
 
+  test("spawnWebChildContainer drains the boot error even when stderr arrives after stdout EOF", async () => {
+    let stderrController!: ReadableStreamDefaultController<Uint8Array>
+    const stderr = new ReadableStream<Uint8Array>({
+      start(controller) {
+        stderrController = controller
+      },
+    })
+    let killed = false
+    const child: WebChildProcess = {
+      pid: 0,
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close()
+        },
+      }),
+      stderr,
+      kill: () => {
+        killed = true
+        stderrController.enqueue(new TextEncoder().encode("dsh web child boot failed (startup-error)\n"))
+        stderrController.close()
+      },
+      exited: Promise.resolve(1),
+    }
+    let message = ""
+    try {
+      await spawnWebChildContainer({ spawn: () => child, port: 0, home: "/unused" })
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(killed).toBe(true)
+    expect(message).toContain("before ready")
+    expect(message).toContain("dsh web child boot failed (startup-error)")
+  })
+
   test("controller + builder end-to-end: rebuild swaps the live proxy without touching the mount", async () => {
     const bodies: string[] = []
     const buildChild = (marker: string) => {

@@ -29,6 +29,8 @@ export {
   withDshHomeExclusiveAccess,
 } from "./home-guard.js"
 export { createDshPreparationContributors, createDshPreparationService } from "./preparation.js"
+export { MANAGED_NODE_VERSION, managedNodePaths, inspectManagedNode, mayDeleteManagedNode } from "./managed-node.js"
+export type { ManagedNodeOwner, ManagedNodeRecord } from "./managed-node.js"
 export type { DshHomeFailureReason, DshHomeRuntimeAccessResult, DshHomeRuntimeLease } from "./home-guard.js"
 export { resolveInstallAnchor } from "./status.js"
 export { pickFastestRegistry, CANDIDATE_REGISTRIES, DEFAULT_REGISTRY } from "./registry.js"

@@ -20,13 +20,15 @@ function getLocaleText(isOnboarding = false) {
     const raw = getStore("opencode.global.dat").get("language")
     if (typeof raw === "string") {
       try {
-        const parsed = JSON.parse(raw) as { locale?: string }
-        if (typeof parsed?.locale === "string") lang = parsed.locale
+        const parsed: unknown = JSON.parse(raw)
+        if (parsed && typeof parsed === "object" && "locale" in parsed && typeof parsed.locale === "string") {
+          lang = parsed.locale
+        }
       } catch {
         lang = raw
       }
     } else if (raw && typeof raw === "object" && "locale" in raw) {
-      const val = (raw as { locale?: string }).locale
+      const val = raw.locale
       if (typeof val === "string") lang = val
     }
   } catch {}
@@ -59,10 +61,22 @@ function getLocaleText(isOnboarding = false) {
   }
 }
 
+/** macOS hides the main window instead of closing it. A confirmation sheet
+ * attached to that hidden window would otherwise be invisible and block quit. */
+export function ensureQuitConfirmationWindowVisible(
+  win: Pick<BrowserWindow, "isDestroyed" | "isVisible" | "show" | "focus"> | null,
+): boolean {
+  if (!win || win.isDestroyed() || win.isVisible()) return false
+  win.show()
+  win.focus()
+  return true
+}
+
 export async function confirmQuit(win: BrowserWindow | null, isOnboarding = false): Promise<boolean> {
   if (confirmShowing) return false
   confirmShowing = true
   try {
+    ensureQuitConfirmationWindowVisible(win)
     const text = getLocaleText(isOnboarding)
     const options = {
       type: "warning" as const,
@@ -73,9 +87,7 @@ export async function confirmQuit(win: BrowserWindow | null, isOnboarding = fals
       message: text.message,
       detail: text.detail,
     }
-    const result = win
-      ? await dialog.showMessageBox(win, options)
-      : await dialog.showMessageBox(options)
+    const result = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
     return result.response === 0
   } finally {
     confirmShowing = false
@@ -84,10 +96,7 @@ export async function confirmQuit(win: BrowserWindow | null, isOnboarding = fals
 
 export async function stopSidecarThenQuit(stopSidecar: () => Promise<void>, quit: () => void) {
   try {
-    await Promise.race([
-      stopSidecar(),
-      new Promise((resolve) => setTimeout(resolve, 1500)),
-    ])
+    await Promise.race([stopSidecar(), new Promise((resolve) => setTimeout(resolve, 1500))])
   } catch {
     // Ignore sidecar cleanup errors on exit
   } finally {
@@ -127,7 +136,7 @@ export function enableQuitGuard(deps: {
       try {
         const state = getSidecarState() as QuitStateInput
         if (shouldConfirmQuit(state)) {
-          const isOnboarding = state ? ("onboarding" in state && Boolean(state.onboarding)) : false
+          const isOnboarding = state ? "onboarding" in state && Boolean(state.onboarding) : false
           const confirmed = await confirmQuit(getMainWindow(), isOnboarding)
           if (!confirmed) {
             shutdownInProgress = false
@@ -138,10 +147,7 @@ export function enableQuitGuard(deps: {
         forceQuit = true
 
         try {
-          await Promise.race([
-            stopSidecar(),
-            new Promise((resolve) => setTimeout(resolve, 1500)),
-          ])
+          await Promise.race([stopSidecar(), new Promise((resolve) => setTimeout(resolve, 1500))])
         } catch {
           // ignore
         }
@@ -188,7 +194,7 @@ export function interceptWindowClose(win: BrowserWindow, deps?: WindowCloseDeps)
         const state = deps?.getSidecarState?.() as QuitStateInput
         if (shouldConfirmQuit(state)) {
           const targetWin = win.isDestroyed() ? null : win
-          const isOnboarding = state ? ("onboarding" in state && Boolean(state.onboarding)) : false
+          const isOnboarding = state ? "onboarding" in state && Boolean(state.onboarding) : false
           const confirmed = await confirmQuit(targetWin, isOnboarding)
           if (!confirmed) {
             shutdownInProgress = false

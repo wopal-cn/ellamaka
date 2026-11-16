@@ -13,7 +13,12 @@ const CONTAINER_KEY = "__ellamakaDshContainer"
 
 type ToolContainer = {
   get(name: "tools"): {
-    execute(exec: unknown): Promise<{ isError: boolean; error?: unknown; content?: { type: string; text?: string }[] }>
+    execute(batch: unknown): Promise<{
+      results: {
+        callId: string
+        result: { isError: boolean; error?: unknown; content?: { type: string; text?: string }[] }
+      }[]
+    }>
   }
   get(name: "sessions"): { list(): unknown[] } | undefined
 }
@@ -101,14 +106,34 @@ describe("tui dsh mount", () => {
       }
 
       const tools = container.get("tools")
-      const facade = { session: { header: { id: `tui-${Date.now()}`, cwd: ws } } }
-      const result = await tools.execute({
-        callId: "tui-mount-call",
-        name: "grep",
-        arguments: { pattern: "needle", path: ws },
+      const events: { type: string; seq: number; time: number; data: Record<string, unknown> }[] = []
+      const session = {
+        header: { id: `tui-${Date.now()}`, cwd: ws },
+        get seq() {
+          return events.length
+        },
+        eventAt: (seq: number) => events[seq],
+        snapshotEvents: (from = 0, to = events.length) => events.slice(from, to),
+        append: (type: string, data: Record<string, unknown>) => {
+          const event = { type, seq: events.length, time: events.length, data }
+          events.push(event)
+          return event
+        },
+      }
+      const batch = await tools.execute({
+        calls: [
+          {
+            type: "tool-call",
+            id: "tui-mount-call",
+            name: "grep",
+            arguments: JSON.stringify({ pattern: "needle", path: ws }),
+          },
+        ],
         signal: new AbortController().signal,
-        agent: facade,
+        agent: { session, ctx: { fiber: { assertActive: () => {} } } },
       })
+      const result = batch.results.find((item) => item.callId === "tui-mount-call")?.result
+      if (!result) throw new Error("Missing RC.3 grep tool batch result")
       const text = (result.content ?? []).map((b) => b.text ?? "").join("\n")
       expect(result.isError, inspect({ error: result.error, text }, { depth: 5 })).toBe(false)
       expect(text).toContain("250 of 400")

@@ -46,8 +46,9 @@ type Result = {
   value?: unknown
   meta?: unknown
 }
+type ToolBatchResult = { results: readonly { callId: string; result: Result }[] }
 type Container = {
-  get(name: "tools"): { schemas(): ToolSchema[]; execute(call: unknown): Promise<Result> } | undefined
+  get(name: "tools"): { schemas(): ToolSchema[]; execute(batch: unknown): Promise<ToolBatchResult> } | undefined
   logger(name: string): { error(message: string, extra?: unknown): void }
   on(event: "approval/request", handler: (request: Approval, next: () => unknown) => unknown): () => void
 }
@@ -418,13 +419,28 @@ function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
               return calls.run(call, async () => {
                 if (active.turnDepth++ === 0) active.append("turn/start", {})
                 try {
-                  const result = await tools.execute({
-                    callId: (ctx as ToolContext & { callID?: string }).callID ?? `dsh-${crypto.randomUUID()}`,
-                    name: dispatch,
-                    arguments: converted,
+                  const callId = (ctx as ToolContext & { callID?: string }).callID ?? `dsh-${crypto.randomUUID()}`
+                  const batch = await tools.execute({
+                    calls: [{ type: "tool-call", id: callId, name: dispatch, arguments: JSON.stringify(converted) }],
                     signal: ctx.abort,
-                    agent: { session: active },
+                    agent: {
+                      session: active,
+                      // RC.3 working-directory validates the active caller's
+                      // lifetime. This is the existing per-call facade, not
+                      // a DSH Session/Agent lifecycle or PTC bridge.
+                      ctx: {
+                        fiber: {
+                          assertActive: () => {
+                            ctx.abort.throwIfAborted()
+                            if (disposed) throw new DshAdapterError("tool adapter disposed")
+                          },
+                        },
+                      },
+                    },
                   })
+                  const settled = batch.results.find((item) => item.callId === callId)
+                  if (!settled) throw new DshAdapterError("native executor returned no matching tool result")
+                  const result = settled.result
                   const text = (result.content ?? [])
                     .filter((item) => item.type === "text")
                     .map((item) => item.text ?? "")

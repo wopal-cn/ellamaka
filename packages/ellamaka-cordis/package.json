@@ -9,9 +9,9 @@
     "test": "bun test",
     "test:contracts": "bun test src/runtime/home-generation.test.ts src/runtime/home-guard.test.ts script/check-dsh-home-generation.test.ts script/upgrade-dsh.test.ts test/bun-subprocess.test.ts test/bun-subprocess-child.test.ts test/bun-subprocess-stdio-integration.test.ts",
     "test:ci": "mkdir -p test-results/unit && bun test src/runtime/home-generation.test.ts src/runtime/home-guard.test.ts script/check-dsh-home-generation.test.ts script/upgrade-dsh.test.ts test/bun-subprocess.test.ts test/bun-subprocess-child.test.ts test/bun-subprocess-stdio-integration.test.ts --reporter=junit --reporter-outfile=test-results/unit/junit.xml",
-    "test:tools": "bun test src/runtime/preparation.test.ts test/tools-activation-gate.test.ts test/dsh-web.test.ts test/dsh-adapter-runtime.test.ts test/bun-ptc-runtime.test.ts test/upgrade-profiles.test.ts",
-    "test:unit": "bun test --path-ignore-patterns '**/{plugins-runtime,dsh-web,bun-ptc-runtime,dsh-adapter-runtime,*-integration}.test.ts'",
-    "test:integration": "bun test test/plugins-runtime.test.ts test/dsh-web.test.ts test/bun-ptc-runtime.test.ts test/dsh-adapter-runtime.test.ts test/bun-subprocess-stdio-integration.test.ts"
+    "test:tools": "bun test src/runtime/preparation.test.ts test/tools-activation-gate.test.ts test/dsh-web.test.ts test/dsh-adapter-runtime.test.ts test/upgrade-profiles.test.ts",
+    "test:unit": "bun test --path-ignore-patterns '**/{plugins-runtime,dsh-web,dsh-adapter-runtime,*-integration}.test.ts'",
+    "test:integration": "bun test test/plugins-runtime.test.ts test/dsh-web.test.ts test/dsh-virtual-webserver-integration.test.ts test/web-child-failure-integration.test.ts test/dsh-adapter-runtime.test.ts test/bun-subprocess-stdio-integration.test.ts"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -35,13 +35,13 @@
     "./plugins/migrate-store": "./src/plugins/migrate-store.ts",
     "./plugins/patch-layer": "./src/plugins/patch-layer.ts",
     "./runtime/preload": "./src/runtime/preload.ts",
-    "./runtime/bun-ptc-child": "./src/runtime/bun-ptc-child.ts"
+    "./runtime/bun-subprocess-child": "./src/runtime/bun-subprocess-child.ts"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
-    "@deepseek-ai/dsh": "0.2.0-rc.2",
+    "@deepseek-ai/dsh": "0.2.2-rc.3",
     "@npmcli/arborist": "9.4.0",
     "@wopal/ellamaka-core": "workspace:*",
     "@wopal/ellamaka-plugin": "workspace:*",

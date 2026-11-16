@@ -19,7 +19,7 @@ export function createDshProxy(fetch: DshFetch) {
 
   async function handle(request: Request): Promise<Response | undefined> {
     const url = new URL(request.url)
-    if (!isDshPath(url.pathname) || !target) return
+    if (!isDshPath(url.pathname) || !target) return undefined
 
     const headers = new Headers(request.headers)
     headers.delete("connection")
@@ -116,14 +116,27 @@ export function createDshHttpProxy() {
         headers,
       },
       (proxyRes) => {
+        // A sidecar restart can reset an in-flight response after headers were
+        // forwarded. IncomingMessage emits `error` independently of the
+        // ClientRequest, so handle it here rather than crashing Electron Main.
+        proxyRes.on("error", () => res.destroy())
+        proxyRes.on("aborted", () => res.destroy())
         const setCookies = nodeHeaderSetCookies(proxyRes.headers)
         storeCookiesFromStrings(cookies, setCookies)
         delete proxyRes.headers["set-cookie"]
-        res.writeHead(proxyRes.statusCode ?? 502, proxyRes.statusMessage ?? "", proxyRes.headers as never)
+        res.writeHead(proxyRes.statusCode ?? 502, proxyRes.statusMessage ?? "", proxyRes.headers)
         proxyRes.pipe(res)
       },
     )
+    req.on("error", () => proxyReq.destroy())
+    res.on("error", () => proxyReq.destroy())
+    res.on("close", () => proxyReq.destroy())
     proxyReq.on("error", () => {
+      if (res.destroyed) return
+      if (res.headersSent) {
+        res.destroy()
+        return
+      }
       res.writeHead(502)
       res.end()
     })
@@ -131,9 +144,17 @@ export function createDshHttpProxy() {
   })
 
   // Forward DSH WebSocket upgrades to the sidecar's upgrade route.
-  server.on("upgrade", (req, socket: Duplex, _head) => {
-    if (!target || !isDshPath(req.url ?? "/")) {
+  server.on("upgrade", (req, socket: Duplex, head) => {
+    // Either peer may reset a WebSocket at any time (including a sidecar
+    // restart). Duplex error events are independent from proxyReq errors.
+    let upstream: Duplex | undefined
+    const disconnect = () => {
       socket.destroy()
+      upstream?.destroy()
+    }
+    socket.on("error", disconnect)
+    if (!target || !isDshPath(req.url ?? "/")) {
+      disconnect()
       return
     }
     const url = new URL(req.url ?? "/", target)
@@ -150,19 +171,44 @@ export function createDshHttpProxy() {
       path: url.pathname + url.search,
       headers: { ...headers, connection: "Upgrade", upgrade: "websocket" },
     })
+    socket.on("close", () => {
+      upstream?.destroy()
+      proxyReq.destroy()
+    })
     proxyReq.on("upgrade", (proxyRes, proxySocket: Duplex, proxyHead) => {
-      socket.write(
-        "HTTP/1.1 101 Switching Protocols\r\n" +
-          "Upgrade: websocket\r\n" +
-          "Connection: Upgrade\r\n" +
-          `Sec-WebSocket-Accept: ${proxyRes.headers["sec-websocket-accept"] ?? ""}\r\n` +
-          "\r\n",
-      )
+      upstream = proxySocket
+      proxySocket.on("error", disconnect)
+      proxySocket.on("close", () => socket.destroy())
+      const accept = proxyRes.headers["sec-websocket-accept"]
+      if (typeof accept !== "string") {
+        disconnect()
+        return
+      }
+      const handshake = [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        `Sec-WebSocket-Accept: ${accept}`,
+      ]
+      // DSH's Remote Mux negotiates permessage-deflate by default. The
+      // upstream then sends RSV1-compressed frames. Dropping the extension
+      // from the proxy's 101 response makes the browser reject those frames
+      // and repeatedly reconnect. Preserve only the negotiated WS headers.
+      for (const name of ["sec-websocket-extensions", "sec-websocket-protocol"] as const) {
+        const value = proxyRes.headers[name]
+        if (typeof value === "string") handshake.push(`${name}: ${value}`)
+      }
+      socket.write(`${handshake.join("\r\n")}\r\n\r\n`)
       if (proxyHead?.length) socket.write(proxyHead)
+      if (head.length) proxySocket.write(head)
       proxySocket.pipe(socket)
       socket.pipe(proxySocket)
     })
-    proxyReq.on("error", () => socket.destroy())
+    proxyReq.on("response", (response) => {
+      response.resume()
+      disconnect()
+    })
+    proxyReq.on("error", disconnect)
     proxyReq.end()
   })
 

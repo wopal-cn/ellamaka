@@ -1,1 +1,1 @@
-{"bridgeAbi":2,"closureVersion":3,"dependencies":{"@deepseek-ai/dsh":"0.2.0-rc.2"},"fingerprint":"sha256:6e89a185309267bdd6cc7996f040b9ee8ce39480ebb1987187ef2fa315c0bec4","schema":"ellamaka.dsh-runtime/v1"}
+{"bridgeAbi":2,"closureVersion":4,"dependencies":{"@deepseek-ai/dsh":"0.2.2-rc.3"},"fingerprint":"sha256:1775267cdf25d3fcf9da8a128b06f5ba59ddf53e15920824e896c413a91440da","schema":"ellamaka.dsh-runtime/v1"}

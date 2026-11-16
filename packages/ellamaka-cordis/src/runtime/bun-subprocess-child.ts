@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path"
 import { pathToFileURL } from "node:url"
-import { isCompiledBunMain } from "./bun-ptc.js"
+import { isCompiledBunMain } from "./bun-binary.js"
 import { installBunSubprocessCompatibility } from "./bun-subprocess.js"
 
 const RUNNER_ENV = "DSH_SUBPROCESS_RUNNER"

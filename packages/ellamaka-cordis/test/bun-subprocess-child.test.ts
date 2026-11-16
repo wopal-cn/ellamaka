@@ -15,7 +15,6 @@ let runner: string
 function run(args: string[], selection?: string, env: Record<string, string> = {}, source = false) {
   const childEnv = { ...process.env }
   Reflect.deleteProperty(childEnv, "DSH_SUBPROCESS_RUNNER")
-  Reflect.deleteProperty(childEnv, "DSH_PTC_RUNTIME_NODE")
   return spawnSync(source ? process.execPath : executable, source ? [fixture, ...args] : args, {
     env: { ...childEnv, ...env, ...(selection === undefined ? {} : { DSH_SUBPROCESS_RUNNER: selection }) },
     encoding: "utf8",
@@ -102,12 +101,12 @@ describe("compiled Bun subprocess child bootstrap", () => {
     })
   })
 
-  test("dispatches the runner before interpreting PTC markers in target arguments", () => {
-    const target = ["target", "--ellamaka-dsh-ptc-child", "invalid-ptc-path", "bad-cap"]
-    const result = run([runner, "--", ...target], "windows", { DSH_PTC_RUNTIME_NODE: "1" })
+  test("passes unknown target arguments to the official subprocess runner without reinterpretation", () => {
+    const target = ["target", "--unrecognized-argument", "example-path", "example-cap"]
+    const result = run([runner, "--", ...target], "windows")
     expect(result.stderr).toBe("")
     expect(result.status).toBe(23)
-    expect(evidence(result.stdout, "__BOOTSTRAP__")).toMatchObject({ handled: true, ptcMarker: "1" })
+    expect(evidence(result.stdout, "__BOOTSTRAP__")).toMatchObject({ handled: true })
     expect(evidence(result.stdout, "__RUNNER__").argv.slice(2)).toEqual(["--", ...target])
   })
 

@@ -1,7 +1,7 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-06
+> **Updated**: 2026-11-15
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -76,7 +76,7 @@ plugin 的 profile 选项归子命令；根级选项出现在 plugin 之前时�
 启动与重放时，`loadProfile` 与 `prepareProfilePatches` 按 `includePrerelease: true` 校验每个 bundle 与插件行的 `peerDependencies`（同时读取 `web/compatibility.json` 中的精确版本风险豁免）：
 
 - **核心内置 bundle 门禁**：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 是 `web` 容器成立的必需内置 bundle，缺失或跳过时挂载直接失败。
-- **外部扩展与第三方插件兼容**：声明兼容版本范围（如 `^0.2.0-rc.2`）的外部插件在 DSH 升级后自动在新闭包下继续运行；因锁死旧版本且未配置豁免而进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）的第三方插件保留磁盘实体和声明，宿主输出包名、版本要求与当前 runtime 版本的告警诊断并跳过该插件，保持 `web` 容器与其余兼容插件正常启动。
+- **外部扩展与第三方插件兼容**：声明兼容版本范围（如 `^0.2.2-rc.3`）的外部插件在 DSH 升级后自动在新闭包下继续运行；因锁死旧版本且未配置豁免而进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）的第三方插件保留磁盘实体和声明，宿主输出包名、版本要求与当前 runtime 版本的告警诊断并跳过该插件，保持 `web` 容器与其余兼容插件正常启动。
 
 新 bundle、配置修改和启停可以重放。同名包重装或版本替换返回 `restart-required`；配置重放不清除原生模块缓存。文件监听与原生管理操作共用宿主 ProfileRuntime 的 mutation queue 和失败恢复。
 
@@ -92,17 +92,17 @@ Web 的 preset 目录由 agent-preset 声明与 agent-preset-registry 服务组�
 
 用户 preset 与 shipped preset 的覆盖通过声明 id 表达。用户默认值保存在 agent-preset-registry.selectedDefault，preset 查看、选择与新任务默认值设置由 DSH Web 原生界面和管理接口负责。
 
-声明更新产生新的 revision，已有 Agent 保留使用中的 revision，新绑定使用当前定义。无法导入、等待不可用服务或泄漏全局服务的定义按原生 broken-definition 语义提供诊断。默认定义通过可绑定验收后，宿主发布 Web 挂载成功。
+声明更新产生新的 revision，已有 Agent 保留使用中的 revision，新绑定使用当前定义。无法导入、等待不可用服务或泄漏全局服务的定义按原生 broken-definition 语义提供诊断。宿主以官方 `standard` preset 和核心 Web 服务完成启动验收；用户保存的 `selectedDefault` 不可用时，Web 仍可进入插件管理并查看诊断。进入具体会话时由官方服务按实际 preset 可用性决定能否执行。
 
 已有用户 preset/配置的适配遵循对应 DSH release guide，保留原始数据；Ellamaka 不建设通用格式转换事务。插件和 ontology 的分发产物使用标准声明 bundle。
 
 ### Runtime Capability Policy
 
-Web 的能力组合与执行后端一致。Bun 与 Node Desktop 都装配标准 `ptcRuntime`，标准、PTC、Cordis 以及依赖 `workflow-ptc` 的用户配置单不再因 Bun 宿主而裁掉 PTC 行。Bun 复用当前闭包中的官方 `@deepseek-ai/dsh-ptc-runtime-node` provider；Bridge 只适配两个宿主差异：用 Amaro 的 strip-only 结果补齐缺失的 `node:module.stripTypeScriptTypes`，以及把 Bun 不稳定的额外 fd 控制 pipe 映射为标准 stdin/stdout Duplex。stderr 仍承载 bootstrap/进程诊断，DSH 的 JsonChannel framing、binding、期限、取消、沙箱、输出限制和清理逻辑保持上游实现。
+Web 采用 DSH 当前闭包的官方 Agent preset、Tool Executor 和 PTC Runtime。`ptc` preset 的 `@deepseek-ai/dsh-tool-executor-ptc` 只在其作用域提供 `run_code`，Native preset 保留直接调用普通工具的能力。`workflow-ptc` 等用户声明遵循自身官方启停配置。`tool-fs` 的 `applyPatch` 默认明确为 `false`；Ellamaka 不替用户开启 `apply_patch`。
 
-源码 Bun 执行 Bridge 的极小 child entry 后进入官方 `process.js`；编译后的 CLI 复用同一个 Ellamaka 可执行文件，通过 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 私有角色在正常 CLI 初始化之前进入 child bootstrap。Node Desktop 继续直接使用原生 Node provider，不经过 Bun 兼容层。两种 Bun 形态都必须验证真实程序执行、连续多次进程启动、取消与平台沙箱拒绝；在 macOS 上 `workspace-write` 的验收要求 provider 报告 full enforcement，`read-only` 必须拒绝临时目录写入。Bun 的 heap 参数不声明为 Node/V8 等价的硬内存上限；资源边界以已验证的沙箱、deadline、取消和输出上限为准。
+CLI 的 Web profile 使用 `CorePreparation` 在 Onboarding 或已完成 Setup 后的 host preparation 中准备的私有 Node 24；CLI Bun 可执行文件不携带 Node 资产。Desktop 直接使用 Electron 内置 Node 24。两种入口都通过官方 `node-script` 运行 PTC，保留 fd7/RPC 官方协议，不改写 `process.js`。在 Bun 宿主装配 DSH Web 时，只为目标版本确实缺失的 Node 模块导出提供最小宿主加载适配，不在 Bun 中模拟 PTC Worker。Web 的 PTC Ready 检查执行真实受限程序、binding、取消和沙箱验证；失败标记 Web PTC 不可用，独立的 Ellamaka Tools 不受影响。
 
-宿主能力补丁在每次完整配置生成中应用，原生管理操作也消费该补丁。用户自建声明引用不可用服务时保留具体诊断。Ellamaka 主 Session 的外部能力装配属于独立的 Session 设计。
+宿主能力补丁在每次完整配置生成中应用，原生管理操作也消费该补丁。用户自建声明引用不可用服务时保留具体诊断；官方 PTC 的工具 SDK 说明、Agent 提示词与执行生命周期均由 DSH Web 自己管理。
 
 ### Browser Terminal Environment
 
@@ -116,9 +116,9 @@ Web profile 中名为 `shell-env` 的 DSH 插件管理受信任的 `DSH_*` per-e
 
 ## Web Surface
 
-Web 插件向 VirtualWebServer 注册 HTTP、动态模块和 upgrade 通道，主监听器在 /dsh 前缀分发。令牌、cookie、Host/Origin fence、iframe 入口和资源 URL 的适配见父设计。
+Web 插件通过 VirtualWebServer 的官方 handler 与 `resource(Request, peer)` 路由注册 HTTP、动态模块、静态 fallback 和 upgrade 通道。Bridge 提供 `registerFallback({ resource })`、`readResource`、`protocol`、`getOrigin` 和带 peer 的 `renderIndex/collectIndexInjections`；全部请求继续由 Ellamaka 的单个 Server 监听器在 `/dsh` 前缀分发。宿主按目标版本的官方命令行 `--trusted-host` 接口设置 Host 信任白名单，保持原有 Cookie/Origin 与 iframe 认证边界，不使用已移除的 `trustedHosts` runtime 配置。
 
-原生 pluginManager 的客户端和服务端位于同一 profile，数据、进度和结果经官方连接通道传输。Workbench 消费同源的认证入口与挂载状态，运行时挂载失败显示不可用状态。
+原生 pluginManager 的客户端和服务端位于同一 profile，数据、进度和结果经官方连接通道传输。Workbench 消费同源的认证入口与挂载状态，运行时挂载失败显示不可用状态。Web 子进程只在核心服务成功挂载后发布 Ready；Ready 前发生启动失败时返回非零退出码，宿主有界收集子进程 stderr 后记录故障并标记降级，不能把异常退出当作正常关闭。
 
 ## Wopal Preset Bundle
 
@@ -127,19 +127,18 @@ Wopal 的角色 preset 由 ontology 的 `dsh/agents-presets/` 提供，包名为
 ```text
 dsh/agents-presets/
 ├── package.json              # @wopal/dsh-presets；dsh.bundle.patch 数组与兼容 peerDependencies 范围
-├── generate-presets.mjs      # 使用目标 DSH 闭包的 YAML 方言生成/检查
 ├── wopal/
-│   ├── preset.yml            # 展示元数据源
-│   ├── agent.cordis.yml      # preset 插件声明源
-│   ├── preset.patch.yml      # 运行时加载的声明补丁
+│   ├── preset.patch.yml      # 手工维护的声明唯一真相源
 │   └── skills/               # 随包技能
-├── fae/                      # 同样的三份声明文件
-└── rook/                     # 同样的三份声明文件
+├── fae/preset.patch.yml      # 执行者声明
+└── rook/preset.patch.yml     # 审查者声明
 ```
 
-`dsh.bundle.patch` 有序加载三个角色的 `preset.patch.yml`。每个补丁插入官方 `agent-preset` 声明，包含稳定 id、展示元数据与 plugins；注册、绑定和 revision 由 DSH 原生 preset 服务管理。工具、技能与 persona 使用对应 preset 中的官方插件行配置。`@wopal/dsh-presets` 及本体仓库的 DSH 插件（`dsh/plugins/*`）在 `package.json` 的 `peerDependencies` 中统一声明兼容的 SemVer 范围（如 `^0.2.0-rc.2`），不绑定单一精确 RC 版本号，使宿主升级 DSH 兼容版本时无需重新安装本体插件。
+`dsh.bundle.patch` 依次加载 fae、rook、wopal 三个角色的 `preset.patch.yml`。每个补丁插入官方 `agent-preset` 声明，包含稳定 id、展示元数据与 plugins；注册、绑定和 revision 由 DSH 原生 preset 服务管理。工具、技能与 persona 使用对应 preset 中的官方插件行配置。`@wopal/dsh-presets` 及本体仓库的 DSH 插件（`dsh/plugins/*`）在 `package.json` 中同时声明兼容的 `engines.dsh` 与 `peerDependencies` 范围，由当前 DSH 版本判定兼容性。
 
-安装通过标准插件供应链将包快照放入 `web` profile 的 `node_modules`，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，生成与兼容检查使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 自身版本，不参与 Ellamaka Home `closureVersion` 判断，也不作为配置编辑目标。
+安装通过标准插件供应链将包快照放入 `web` profile 的 `node_modules`，并记录依赖与 bundle 声明。源码中的包为私有本地 bundle，三个 `preset.patch.yml` 由本体维护。安装的是独立快照，因此源码变更或运行时版本升级后，由插件管理流程重新安装兼容版本；兼容检查与加载使用目标产品固定的 DSH 闭包。用户覆盖固定保存在核心 Active Home 的 profile 补丁中，包更新不覆盖该用户层；DSH 原生 preset revision 只表达 preset 自身版本，不参与 Ellamaka Home `closureVersion` 判断，也不作为配置编辑目标。
+
+DSH 版本升级的兼容性验收必须同时覆盖目标版本的官方 breaking changes、既有 Home 中已安装 bundle 的 `engines.dsh`/`peerDependencies`、本地 `file:` 源包与实际安装快照的版本及声明差异、用户 `selectedDefault` 指向缺失/损坏 preset，以及扩展插件被兼容性策略跳过的情形。不能仅以全新 Home 的 Web Ready 推断升级对已有用户无破坏。可选扩展不兼容时保留原始数据和诊断、拒绝不安全的版本豁免而允许核心 Web 启动；核心服务或安全执行条件不成立时仍明确降级。插件管理器的安装成功、bundle 启用登记、实际 preset 注册/绑定、Web 可视界面和失败时诊断必须分别验证。安装源与快照不一致时通过标准插件管理流程处理，不静默覆写用户 `node_modules` 或 profile 补丁。
 
 自定义 DSH tools 与 MCP 按各自标准 DSH 插件/bundle 挂载；此 preset bundle 不承担所有动态能力的总包职责。Ellamaka 通过工具容器消费外部能力，其内部 adapter 契约归 [工具容器设计](./DESIGN-ellamaka-tools.md)。
 

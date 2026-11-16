@@ -1,7 +1,7 @@
 # DSH 集成基础设计
 
 > **Status**: Active
-> **Updated**: 2026-11-06
+> **Updated**: 2026-11-15
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -10,7 +10,7 @@
 >
 > **Scope**: DSH v0.2 的运行资源、固定 Home 基本防护、切代前备份与 profile 生命周期。
 
-Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 DSH、准备共享 closure/Home、按入口需要独立挂载 `web` 与 `ellamaka-tools` profile、适配 Bun/Electron 执行差异，以及把 Tools profile 接到 Ellamaka。实际工具注册、PTC 程序执行和沙箱实现由 DSH 提供。
+Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 DSH、准备共享 closure/Home、按入口需要独立挂载 `web` 与 `ellamaka-tools` profile、适配 Bun/Electron 执行差异，以及把 Tools profile 接到 Ellamaka。普通工具、Web PTC 程序执行和沙箱的底层能力由 DSH 提供；Ellamaka 只向 Native Agent 投影普通工具。
 
 内部 dsh-adapter 也在这个包中；opencode 只注册插件和提供引擎回调，不保存另一份 DSH 适配代码。CLI 用 Bun，Desktop 用产品自带的 Electron utilityProcess，二者编译同一份 Bridge 源码。
 
@@ -49,7 +49,7 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 
 升级 DSH 由一条命令完成：`bun run dsh:upgrade <version>` 更新版本入口、重新生成 `bun.lock` 与两个运行时清单、提升 `closureVersion`，并运行工具容器的固定行为回归。命令可以重复执行：中途在某一步失败后重跑，得到同一个目标代数。目标版本低于当前钉住的版本时命令拒绝执行；`--dry-run` 只报告将要发生的改动。
 
-升级的验收标准是工具容器的固定行为回归通过，它表示该版本满足已覆盖的工具契约。`web` 使用所选版本的官方 profile 配置，并以实际启动与运行检查确认可用。官方配置和数据格式的升级行为由 DSH 拥有；出现真实不兼容时，依据对应发布说明和失败诊断做具体修正。Ellamaka 保留必要的宿主接线，不建设预测未来破坏性变更的装配转换层。
+升级的验收标准分别是 `ellamaka-tools` 普通工具回归通过，以及 `web` 使用官方 `ptc` preset 实际执行 `run_code` 并通过 Web 行为检查。官方配置和数据格式的升级行为由 DSH 拥有；出现真实不兼容时，依据对应发布说明和失败诊断做具体修正。Ellamaka 保留必要的宿主接线，不建设预测未来破坏性变更的装配转换层。
 
 Ellamaka 源码维护一个递增的 `closureVersion`，CLI 与 Desktop 构建共用。当锁定的 DSH 闭包或产品自有 DSH 文件发生可能影响 Home 数据的变化时提升它。Home 兼容性仅由 `closureVersion` 判定，与 CLI/Desktop 的产品 SemVer 及发布通道解耦。
 
@@ -100,7 +100,7 @@ profile 的 `package.json` 声明有序 `dsh.profile.bundles` 与外部插件 `d
 
 ProfileRuntime 拥有 profile facts、完整补丁生成、包解析、root Include、mutation queue、验收与释放。启动、配置转储和重放共用同一生成过程，后续重放重新读取实际声明文件。
 
-宿主复用官方 profile 文件格式与初始化原语：缺失的 Web profile 使用官方模板，缺失的 tools profile 使用产品最小装配声明。已有声明文件保持用户内容不变（若 `$DSH_HOME/cordis.patch.yml` 被意外清空为空白文本，准备阶段将其恢复为官方空数组模板 `[]`）。因为运行期 Cordis `Include.write()` 会将展开后的合成树写回 `cordis.yml`，宿主在准备阶段和每次 `mountProfile` 启动前都无条件将 `profile/cordis.yml` 重置为 `[]\n`，避免上一次运行写回的合成树在下次启动时重复叠加。
+宿主复用官方 profile 文件格式与初始化原语：缺失的 Web profile 使用官方模板，缺失的 tools profile 使用产品最小装配声明。已有声明文件保持用户内容不变（若 `$DSH_HOME/cordis.patch.yml` 被意外清空为空白文本，准备阶段将其恢复为官方空数组模板 `[]`）。运行期 Include/EntryTree 通过当前公开的 `commit(change)` 与刷新机制维护已装配声明。宿主仍将 `profile/cordis.yml` 视为非用户持有的合成根，在准备阶段和每次 `mountProfile` 启动前重置为 `[]\n`，避免旧的装配根参与下一次合成。
 
 ### Boot Contract
 
@@ -110,7 +110,7 @@ DSH v0.2 使用 `createRuntimeResolution` 提供不可变的包映射，`auditSt
 
 `loadProfile` 与 `prepareProfilePatches` 按 `includePrerelease: true` 校验每个 bundle 与插件行的 `peerDependencies`（同时支持 `profile/compatibility.json` 的精确版本豁免）。Web 当前模板的核心 bundle（`@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`）缺失或跳过时 Web 挂载直接失败；tools 的必需性由自身声明的服务与工具契约判定。用户或第三方扩展 bundle 因版本不兼容进入 `skippedBundles`（或补丁行进入 `skippedIncompatible`）时，宿主保留官方告警诊断；所需能力仍满足各 profile 的验收契约后才可发布 ready。
 
-App Boot 审计后，宿主检查采用的必需服务和工具：`web` 检查核心 Web 服务与默认 preset（`standard`）可解析、可绑定；`ellamaka-tools` 检查本平台全部采用工具均已实际注册到 `tools` 服务（详见 `./DESIGN-ellamaka-tools.md`）。插件等待服务的警告不能等同于完整挂载成功。
+App Boot 审计后，宿主检查采用的必需服务和工具：`web` 检查核心 Web 服务与官方 `standard` preset 可解析、可绑定；用户保存的 `selectedDefault` 属于可选会话选择，不作为 Web 启动条件。用户 preset 缺失、版本不兼容或定义损坏时保留相应诊断，让 Web 界面继续提供插件管理和修复入口。`ellamaka-tools` 检查本平台全部采用工具均已实际注册到 `tools` 服务（详见 `./DESIGN-ellamaka-tools.md`）。插件等待服务的警告不能等同于完整挂载成功。
 
 ## Host Compatibility
 
@@ -140,11 +140,15 @@ Loader 的 internal 值保持真实。宿主不使用 Node 私有加载器模拟
 
 ### Standard APIs
 
-Bun 缺少官方 provider 消费的标准诊断 API 时，由 Bridge 在加载前初始化小型兼容入口。`getSystemErrorMessage` 缺失时，以 `getSystemErrorName` 提供错误码诊断并同步 builtin ESM exports。原生实现存在时直接使用原生实现。
+Bridge 按固定 DSH 闭包检查 Bun 与 Node 的公开宿主 API。Bun 已提供的接口直接使用；Web profile 在 Bun 宿主加载官方 PTC provider 时，若缺失 `node:module.stripTypeScriptTypes`，只在模块加载侧提供经过目标发布包验证的最小 strip-only 适配。该适配只属于 Web 的宿主模块兼容，普通 Tools profile 不加载 PTC provider。官方 Node Worker 的模块加载器、fd7 控制通道和 RPC 协议均保持原样。
 
-Bun 中 `node:util` 的 ESM 命名空间在首次被静态 import 时就已绑定，之后再声明新导出不会出现在该命名空间里，因此上一条的运行时补丁无法覆盖已经 import 过它的模块图。官方 subprocess provider 以命名导入方式消费 `getSystemErrorMessage`，Bun 下会直接 import 失败，进而使 `bash-sandbox`、`tool-bash`、`tool-fs-search`、`ptc-runtime` 等入口保持 pending。Bridge 在 Bun 下用加载插件把这一行导入改写成"保留 `getSystemErrorName` 与 `inspect`，本地以同义函数补 `getSystemErrorMessage`"；改写锚点必须精确且唯一，上游形状变化时显式失败，不静默降级为无 subprocess 后端。Node 与 Desktop 使用原生实现，不启用该改写。
+模块和沙箱错误分类使用结构化 code/errno。Web PTC 宿主模块不兼容、Node 缺失或 Worker 失败时报告明确的 `dsh.web` 诊断；普通 Tools profile 的失败仍遵循既有 Native fallback 与已采用后 fail-closed 的区别。
 
-兼容入口只处理已确定的 API 差异。进程和沙箱错误分类依赖结构化 code/errno，避免依赖某个运行时的错误文案。
+### DSH Web PTC Node Worker
+
+DSH Web 的 PTC 子进程使用符合所选 DSH 版本要求的 Node 24。CLI 不在 Bun 可执行文件中内置 Node；当 Web profile 启用时，现有 `CorePreparation.prepare(host)` 在 Onboarding 的可见准备阶段下载、校验并安置受管理 Node，已有安装则验证后复用。Setup 已完成的机器在启动 Web 的 host preparation 中执行同一检查。Desktop 使用 Electron 已携带的 Node 24，不另行下载。Bridge 通过官方 `launch: { kind: 'node-script', executable, bootstrapPath? }` 指向经验证的绝对路径与官方 bootstrap；不使用系统 PATH 或用户全局 Node 版本。
+
+DSH subprocess 负责 fd7 控制通道、`createProcessRpc`、沙箱、超时、取消、输出预算与子进程清理。Bridge 只提供可信 Node 路径、运行时验证和 Electron 启动接线。此前 Bun 对 PTC `process.js` 的源码改写、fd7→stdin/stdout 替代通信以及 CLI 自身充当 PTC 子进程的入口均不属于目标态，按本 Plan 从代码及对应测试中移除；通用 Bun subprocess 能力继续保留。Node 缺失或运行校验失败时仅标记 Web PTC 不可用，普通 Native Agent 和 Tools profile 保持独立。
 
 ## Configuration Lifecycle
 
@@ -168,7 +172,7 @@ Electron 使用产品内置 Node。宿主以官方 LocalSubprocessRuntime 的子
 
 Bun 在引擎和界面 preload 之前安装 Node diagnostic 兼容层，解决 `getSystemErrorMessage` 的命名导出初始化时序；Node 原生实现保持。该处理仅涉及公开 builtin 函数，不伪造 Loader internal 或私有 Node 接口。
 
-Bun 的 PTC 兼容同样限制在确定的宿主差异上。主进程通过 Bun loader 对官方 `@deepseek-ai/dsh-ptc-runtime-node` provider 的单一 `stripTypeScriptTypes` import 做精确替换，实际 strip-only 转换由随 Bridge 发布的 Amaro 执行。上游默认把 JsonChannel 放在 `child_process` 的额外 fd 7 双向 pipe 上，而 Bun 连续创建额外 pipe 会出现可复现的 `ENOENT` / `EPIPE`；因此 Bun 路径只把该私有控制通道改走标准 stdin/stdout，stderr 保留为 bootstrap/进程诊断，官方 JsonChannel framing、binding、沙箱、取消、超时、输出预算与进程回收仍原样复用。源码态由 Bun 执行极小 child entry，编译态由同一产品二进制在 DSH 官方 `DSH_PTC_RUNTIME_NODE=1` 标记下进入私有 child 角色。provider 的 strip、stdio/control、child bootstrap 任一适配锚点变化时，兼容层必须显式失败，禁止静默降级到无 PTC。
+Bun 的 Web PTC 宿主适配只处理公开模块加载接口的差异，程序执行交给 CorePreparation 准备的 Node 24 Worker；源码 CLI 与正式编译 CLI 使用相同官方 `node-script` 启动协议。Web 的真实 PTC 程序、fd7 通道、长输出、连续调用、取消、超时和回收必须在 macOS、Linux、Windows 的制品上验证；Node Worker 未通过验证时不得发布 Web PTC Ready。
 
 ## Closure and Startup Lifecycle
 
@@ -210,7 +214,7 @@ DSH 激活失败只降级 DSH。若新版本可能已经写入 Home，保留其�
 
 ### Preparation Progress Semantics
 
-DSH 步骤发送 `@wopal/ellamaka-core` 的统一 `CorePreparationEvent`，不定义第二套 event type。`step` 分别为 `dsh.closure`、`dsh.home`、`dsh.profiles`；内部 `phase` 可以表达 materialize、integrity、home-version-check、backup、profile-seed、resolution/preflight 等细分。
+DSH 步骤发送 `@wopal/ellamaka-core` 的统一 `CorePreparationEvent`，不定义第二套 event type。`step` 分别为 `dsh.closure`、`dsh.home`、`dsh.profiles`；当 CLI 的 Web PTC 需要 Node 时，`dsh.closure` 的内部 `phase` 表达 node-download、node-integrity、node-ready 等准备进度，其他阶段仍可表达 materialize、integrity、home-version-check、backup、profile-seed、resolution/preflight 等细分。不新增独立的 Onboarding 安装器。
 
 只有底层存在真实度量时才报告 current/total/unit。准备事件标明 Home version check、backup 和 profile 步骤，不暴露 Home 内容或 secret。各实际产品入口消费同一底层事件来源。
 
@@ -218,8 +222,8 @@ DSH 步骤发送 `@wopal/ellamaka-core` 的统一 `CorePreparationEvent`，不�
 
 | 入口 | Preparation | Runtime Activation |
 | --- | --- | --- |
-| `ellamaka serve` / `web` | Setup 未完成时不挂载 DSH，由 Onboarding 触发 host preparation；Setup 已完成时读取当前 CLI build descriptor，按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个 |
-| Desktop | 首次启动（Setup 未完成）不预挂 DSH，由 Onboarding 触发；已完成后读取当前 embedded sidecar descriptor，按 Web setting 与 Tools env 准备实际请求的 profile | Web/Tools 独立激活、独立状态；窗口不等待任一 profile |
+| `ellamaka serve` / `web` | Setup 未完成时由 Onboarding 触发 host preparation（Web 启用时同时准备受管理 Node）；Setup 已完成时按当前 CLI build descriptor 和实际启用 profile 检查/补齐 Node 与 DSH | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个 |
+| Desktop | Setup 未完成时由 Onboarding 触发 host preparation；已完成后读取当前 embedded sidecar descriptor，按实际启用的 profile 准备 DSH。Web PTC 直接使用 Electron Node | Web/Tools 独立激活、独立状态；窗口不等待任一 profile |
 | 默认 TUI | 无 Setup presentation，启动时兜底：读取当前 build descriptor，仅在 `ELLAMAKA_DSH_TOOLS` 允许时准备 Tools（不准备 Web） | Tools 加载成功后由 Space adapter 采用；加载失败时 Native Tools 保持可用 |
 | `wopal setup` | 自身不执行 DSH Preparation；它启动/reuse 的 `ellamaka serve` 按 `serve` 行处理当前 build | 打开 Web Onboarding |
 | `ellamaka run` | 永久跳过 DSH 分支 | 纯 Ellamaka Core；不探测、复用或挂载 DSH |

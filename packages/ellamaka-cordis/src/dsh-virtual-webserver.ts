@@ -28,6 +28,7 @@
  */
 import type { Context } from "@deepseek-ai/cordis"
 import type { IndexInjection } from "@deepseek-ai/dsh-host-webserver"
+import type { PeerScope } from "@deepseek-ai/dsh-typert-protocol"
 import type { IncomingMessage, Server, ServerResponse } from "node:http"
 import type { Duplex } from "node:stream"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "./runtime/loader.js"
@@ -46,6 +47,14 @@ export interface WebRoute {
   /** Owns the full response lifecycle. */
   handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
 }
+
+export interface WebResourceRoute {
+  kind: WebRouteKind
+  path: string
+  resource: (request: Request, peer?: PeerScope) => Promise<Response>
+}
+
+type WebResponder = WebRoute | WebResourceRoute
 
 /** One exact-path HTTP upgrade registration. */
 export interface WebUpgradeRoute {
@@ -82,14 +91,15 @@ function pathnameOf(url: string | undefined): string {
  * upgrade sockets instead of binding a real socket.
  */
 export class VirtualWebServer {
-  private readonly exact = new Map<string, WebRoute>()
-  private readonly prefixes = new Map<string, WebRoute>()
+  private readonly exact = new Map<string, WebResponder>()
+  private readonly prefixes = new Map<string, WebResponder>()
   private readonly upgrades = new Map<string, WebUpgradeRoute>()
   private readonly upgradedSockets = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
-  private fallback: WebRoute["handler"] | undefined
+  private fallback: WebRoute["handler"] | Pick<WebResourceRoute, "resource"> | undefined
   private server: Server | undefined
   private readonly config: VirtualWebServerOptions
+  private boundPort: number | undefined
   private readonly unregister: () => void
   private disposed = false
   /** The cordis context this service is registered on. */
@@ -106,7 +116,15 @@ export class VirtualWebServer {
 
   /** The reported port (the Ellamaka public port). */
   get port(): number {
-    return this.config.port
+    return this.boundPort ?? this.config.port
+  }
+
+  /** Called by the child host after its ephemeral loopback socket is listening. */
+  bindPort(port: number): void {
+    if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error("webserver: invalid bound port")
+    if (this.boundPort !== undefined) throw new Error("webserver: listener already bound")
+    if (this.config.port !== 0 && this.config.port !== port) throw new Error("webserver: listener port mismatch")
+    this.boundPort = port
   }
 
   /** The reported bind host. */
@@ -114,11 +132,22 @@ export class VirtualWebServer {
     return this.config.host
   }
 
+  /** The protocol of the Ellamaka listener that owns this virtual mount. */
+  get protocol(): "http:" {
+    return "http:"
+  }
+
+  /** Mirror DSH WebServer's origin contract without consulting request Host headers. */
+  getOrigin(): string {
+    if (this.port === 0) throw new Error("webserver: origin read before the listener bound a port")
+    return `${this.protocol}//${this.config.host}:${this.port}`
+  }
+
   /**
    * Register a named route. Duplicate (kind, path) throws — route patterns are
    * a composition-level contract, so a collision is a misconfiguration.
    */
-  register(route: WebRoute): () => void {
+  register(route: WebResponder): () => void {
     const table = route.kind === "exact" ? this.exact : this.prefixes
     if (table.has(route.path)) throw new Error(`webserver: duplicate ${route.kind} route "${route.path}"`)
     table.set(route.path, route)
@@ -142,7 +171,7 @@ export class VirtualWebServer {
   /**
    * Claim the fallback seat. One owner only — a second registration throws.
    */
-  registerFallback(handler: WebRoute["handler"]): () => void {
+  registerFallback(handler: WebRoute["handler"] | Pick<WebResourceRoute, "resource">): () => void {
     if (this.fallback !== undefined) throw new Error("webserver: fallback already registered")
     this.fallback = handler
     return () => {
@@ -163,15 +192,35 @@ export class VirtualWebServer {
   }
 
   /** Longest-prefix-wins over the prefix table after an exact-table miss. */
-  private match(pathname: string): WebRoute | undefined {
+  private match(pathname: string): WebResponder | undefined {
     const exact = this.exact.get(pathname)
     if (exact !== undefined) return exact
-    let best: WebRoute | undefined
+    let best: WebResponder | undefined
     for (const [prefix, route] of this.prefixes) {
       if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) continue
       if (best === undefined || prefix.length > best.path.length) best = route
     }
     return best
+  }
+
+  /** Exact → longest prefix → fallback, identical for socket and peer reads. */
+  private responderFor(
+    pathname: string,
+  ): WebResponder | WebRoute["handler"] | Pick<WebResourceRoute, "resource"> | undefined {
+    return this.match(pathname) ?? this.fallback
+  }
+
+  /** Peer admission belongs to the caller; never manufacture an owner Peer. */
+  async readResource(request: Request, peer: PeerScope): Promise<Response> {
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } })
+    const responder = this.responderFor(new URL(request.url).pathname)
+    if (!responder || typeof responder === "function" || !("resource" in responder))
+      return new Response(null, { status: 404 })
+    const response = await responder.resource(request, peer)
+    if (request.method === "GET") return response
+    await response.body?.cancel()
+    return new Response(null, { status: response.status, statusText: response.statusText, headers: response.headers })
   }
 
   /**
@@ -187,9 +236,9 @@ export class VirtualWebServer {
    * Gather the structured injection table: one `webserver/index-inject` emit,
    * every subscriber pushes its current rows.
    */
-  collectIndexInjections(): IndexInjection[] {
+  collectIndexInjections(peer: PeerScope): IndexInjection[] {
     const table: IndexInjection[] = []
-    this.ctx.emit("webserver/index-inject", table)
+    this.ctx.emit("webserver/index-inject", table, peer)
     return table
   }
 
@@ -197,10 +246,10 @@ export class VirtualWebServer {
    * Render one index.html body: the structured injection table first, then the
    * raw `tapIndex` transforms over the result.
    */
-  renderIndex(html: string): string {
+  renderIndex(html: string, peer: PeerScope): string {
     const runtime = this.config.runtime ?? createPackageDshRuntimeApi()
     const { renderIndexInjections } = runtime.hostWebserver
-    return this.applyIndexTaps(renderIndexInjections(html, this.collectIndexInjections()))
+    return this.applyIndexTaps(renderIndexInjections(html, this.collectIndexInjections(peer)))
   }
 
   /**
@@ -364,18 +413,82 @@ export class VirtualWebServer {
   request(req: IncomingMessage, res: ServerResponse): void {
     this.adaptResponse(res)
     const path = pathnameOf(req.url)
-    const route = this.match(path)
-    if (route !== undefined) {
-      this.run(route.handler(req, res), req, res)
-      return
-    }
-    const fallback = this.fallback
-    if (fallback === undefined) {
+    const responder = this.responderFor(path)
+    if (!responder) {
       res.writeHead(404)
       res.end()
       return
     }
-    this.run(fallback(req, res), req, res)
+    if (typeof responder === "function") this.run(responder(req, res), req, res)
+    else if ("handler" in responder) this.run(responder.handler(req, res), req, res)
+    else this.run(this.serveResource(req, res, responder.resource), req, res)
+  }
+
+  private async serveResource(
+    req: IncomingMessage,
+    res: ServerResponse,
+    resource: WebResourceRoute["resource"],
+  ): Promise<void> {
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      res.writeHead(405, { allow: "GET, HEAD" })
+      res.end()
+      return
+    }
+    // A fixed placeholder authority prevents an untrusted Host header from
+    // becoming the origin of the in-process Fetch URL.
+    const target = new URL(req.url ?? "/", "http://x")
+    const headers = new Headers()
+    for (const [name, value] of Object.entries(req.headers)) {
+      for (const part of typeof value === "string" ? [value] : (value ?? [])) headers.append(name, part)
+    }
+    const abort = new AbortController()
+    let completed = false
+    const onClose = () => {
+      if (!completed) abort.abort()
+    }
+    res.on("close", onClose)
+    try {
+      const response = await resource(new Request(target, { method: req.method, headers, signal: abort.signal }))
+      const outHeaders: Record<string, string | string[]> = {}
+      for (const [name, value] of response.headers) {
+        if (name.toLowerCase() === "set-cookie") continue
+        outHeaders[name] = value
+      }
+      const cookies = response.headers.getSetCookie()
+      if (cookies.length) outHeaders["set-cookie"] = cookies
+      res.writeHead(response.status, outHeaders)
+      if (req.method === "HEAD" || !response.body) {
+        await response.body?.cancel()
+      } else {
+        const reader = response.body.getReader()
+        try {
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (done || abort.signal.aborted) break
+            if (!res.write(value)) {
+              await new Promise<void>((resolve) => {
+                const resume = () => {
+                  res.off("drain", resume)
+                  res.off("close", resume)
+                  resolve()
+                }
+                res.once("drain", resume)
+                res.once("close", resume)
+              })
+            }
+          }
+        } finally {
+          if (abort.signal.aborted) await reader.cancel().catch(() => undefined)
+          reader.releaseLock()
+        }
+      }
+      if (!abort.signal.aborted) {
+        completed = true
+        res.end()
+      }
+    } finally {
+      res.off("close", onClose)
+    }
   }
 
   /**

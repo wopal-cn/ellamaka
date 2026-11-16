@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { resolve } from "node:path"
+import { InstallationVersion, InstallationChannel } from "@wopal/ellamaka-core/installation/version"
 import type {
   CorePreparationEvent,
   CorePreparationResult,
@@ -26,6 +27,8 @@ export type DshHostPreparationOptions = {
   legacyAdoptionConfirmed?: boolean
   onProgress?: (event: CorePreparationEvent) => void
   profiles?: readonly ("web" | "ellamaka-tools")[]
+  /** Explicit source selector for tests; production detects Electron. */
+  usesElectronNode?: boolean
 }
 
 export type DshRuntimeHealth = {
@@ -56,7 +59,7 @@ function hostKey(options: DshHostPreparationOptions): string {
   const profiles = [...requestedProfiles(options)].sort().join(",") || "none"
   // A confirmed legacy adoption is a distinct preparation attempt; it must not
   // reuse the service created for the unconfirmed (degraded) inspection.
-  return `${resolve(options.wopalHome)}::${identity}::${profiles}::${options.legacyAdoptionConfirmed ? "adopted" : "default"}`
+  return `${resolve(options.wopalHome)}::${identity}::${profiles}::${options.legacyAdoptionConfirmed ? "adopted" : "default"}::${options.usesElectronNode ?? !!process.versions.electron}`
 }
 
 function publish(
@@ -93,6 +96,8 @@ function getRuntime(options: DshHostPreparationOptions): HostRuntime {
       manifest: DEFAULT_DSH_RUNTIME_MANIFEST,
       closureVersion: DEFAULT_DSH_RUNTIME_MANIFEST.closureVersion,
       profiles: requestedProfiles(options),
+      nodeOwner: { product: "ellamaka-cli", version: InstallationVersion, channel: InstallationChannel },
+      usesElectronNode: options.usesElectronNode ?? !!process.versions.electron,
       ...(options.legacyAdoptionConfirmed ? { legacyAdoptionConfirmed: true } : {}),
     }),
   }

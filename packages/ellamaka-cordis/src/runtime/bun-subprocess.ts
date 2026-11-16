@@ -1,4 +1,4 @@
-import { isCompiledBunMain } from "./bun-ptc.js"
+import { isCompiledBunMain } from "./bun-binary.js"
 
 const UTIL_IMPORT = 'import { getSystemErrorMessage, getSystemErrorName, inspect } from "node:util";'
 const SCOPE_FILTER = /[\\/]@deepseek-ai[\\/]dsh-subprocess-local[\\/]lib[\\/]index\.js$/

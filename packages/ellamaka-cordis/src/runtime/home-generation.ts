@@ -79,6 +79,8 @@ export const DSH_FS_MUTATION_EXEMPTIONS: Readonly<Record<string, string>> = {
     "writes immutable closure directories under dsh/closures and staging, not the DSH home",
   "packages/ellamaka-cordis/src/runtime/log.ts": "writes rotated runtime log files, not DSH home content",
   "packages/ellamaka-cordis/src/runtime/web-child.ts": "writes a best-effort /tmp trace log for the web child process",
+  "packages/ellamaka-cordis/src/runtime/managed-node.ts":
+    "installs a versioned managed Node executable under dsh/runtime/node and caches official download bytes under dsh/cache/node; never writes persisted dsh/home data",
 }
 
 /** `fs` APIs that never mutate the filesystem. */

@@ -23,6 +23,9 @@ describe("product CorePreparation host wiring", () => {
       wopalHome,
       runtimeLogFile: join(wopalHome, "logs", "dsh-runtime.log"),
       profiles: ["web"],
+      // This test owns profile forwarding, not Node download. Managed CLI Node
+      // is covered by isolated runtime tests and the actual CLI E2E gate.
+      usesElectronNode: true,
     })
 
     expect(outcome.status).toBe("prepared")
@@ -42,6 +45,7 @@ describe("product CorePreparation host wiring", () => {
         wopalHome,
         runtimeLogFile: join(wopalHome, "logs", "dsh-runtime.log"),
         profiles: ["web", "ellamaka-tools"],
+        usesElectronNode: true,
       })
 
       expect(outcome.web.status).toBe("prepared")

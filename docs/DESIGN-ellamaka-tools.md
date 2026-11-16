@@ -1,7 +1,7 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-02
+> **Updated**: 2026-11-13
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
@@ -24,7 +24,7 @@ Tools profile 是 Ellamaka 与 DSH 的内部集成能力，不属于 DSH Web 的
 | 字符串编辑 | str_replace_editor          | 明确的 tool-str-replace-editor 行与 fs-sandbox |
 | Shell      | bash；Windows 实际源为 pwsh | 平台 shell executor 与 sandbox                 |
 
-本文覆盖当前工具采用表、内部 adapter、权限消费与宿主 PTC provider/preflight。Session 外部工具授权、SDK 注入和 `run_code` 的装配归独立的 Session Assembly 契约。
+Ellamaka Session 继续拥有普通工具的执行授权、消息和工具调用记录；DSH Tools profile 只负责提供普通工具的沙箱执行后端。
 
 ## Container Composition
 
@@ -32,7 +32,7 @@ ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [DSH 基�
 
 `ellamaka-tools` 是从空 Cordis 根独立装配的无会话工具 profile。它使用官方 profile、bundle 与 YAML `insert` 格式，直接声明所需工具和基础服务；`dsh.profile.bundles` 的初始选择不包含 `@deepseek-ai/dsh-base`。产品维护最小工具装配声明，用户在标准 profile 补丁中配置插件，并通过官方插件安装流程添加外部包与 bundle。
 
-装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端；`tools.mode` 为 `native`，shell 后台执行关闭。`session-projection` 提供策略折叠，`approval` 承接沙箱单次提权，缺失询问闭包时返回原生 `unavailable`。容器保持无持久 DSH Session 的边界。
+装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端，后台 shell 执行关闭。DSH `@deepseek-ai/dsh-tools` 提供工具注册表，`@deepseek-ai/dsh-tool-executor-native` 负责普通工具调用。Tools profile 不加载 PTC Runtime 或 PTC Executor。`session-projection` 提供策略折叠，`approval` 承接单次提权。`tool-fs` 显式配置 `applyPatch: false`，并且 adapter 不投影 `apply_patch`。容器保持无持久 DSH Session 的边界。
 
 插件包与服务的选择由标准配置表达。宿主按官方声明加载、解析并报告激活结果；不增加 `adopt` 字段、整棵 `dsh-base` 的禁用表，或通过扫描上游源码推导并改写装配的机制。必要的 Bun/Electron 宿主接线归基础设计。
 
@@ -59,9 +59,9 @@ tools profile 的补丁层按固定顺序合成：bundle 层的 patch → 产品
 
 ### Tool Availability Contract
 
-Loader settlement 后，macOS/Linux 必须实际注册 `bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；Windows 使用 `pwsh` 后端与相同文件/搜索能力。缺少必需工具或必需插件等待服务、激活失败时，容器报告具体原因并拒绝发布 ready。首次挂载与配置重放共用验收。
+Loader settlement 后，macOS/Linux 必须实际注册 `bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；Windows 使用 `pwsh` 后端与相同文件/搜索能力。Tools Ready 检查覆盖必需的 Native 工具、沙箱和取消，不检查 PTC Runtime。缺少必需工具或必需插件等待服务、激活失败时，容器报告具体原因并拒绝发布 ready。首次挂载与配置重放共用验收。
 
-升级兼容性由真实工具调用验证：读写和编辑结果、文件搜索、shell 工作目录与输出、字符串替换、沙箱拒绝、审批、取消和必要的 PTC 执行均有回归保护。工具注册与 schema 检查是启动条件，实际执行结果是兼容验收依据。测试固定对外行为，允许上游内部插件组织变化。
+升级兼容性由真实工具调用验证：读写和编辑结果、文件搜索、Shell 工作目录与输出、字符串替换、沙箱拒绝、审批、取消和超时均有回归保护。工具注册与 schema 检查是启动条件，实际执行结果是兼容验收依据。测试固定对外行为，允许上游内部插件组织变化。
 
 升级使用基础设计的单一 DSH 版本入口。依赖安装及生成物刷新后运行同一组工具回归；通过即接受该版本在已覆盖工具契约上的兼容性。失败时依据模块解析、激活或执行诊断定位实际变化，再修正受影响的标准配置或 adapter。官方真实破坏性变更由具体修复承接，不通过预设别名、源码模式猜测或多版本分支预测。
 
@@ -73,11 +73,11 @@ adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、
 
 | 代码边界        | 归属与变化原因                                                                                                         |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| DSH 侧适配      | 同包内的 DSH 调用代码：registry 执行、调用外观、sandbox/approval 事件、PTC binding、provider 差异；随固定 DSH 版本适配 |
-| Ellamaka 侧接入 | 同包内的 plugin 导出：读取有效配置、tool.provider/run_code 接入、Permission 询问、工具结果与 UI 元数据；随引擎契约维护 |
+| DSH 侧适配      | 同包内的 DSH 调用代码：registry 执行、调用外观、sandbox/approval 事件、provider 差异；随固定 DSH 版本适配 |
+| Ellamaka 侧接入 | 同包内的 plugin 导出：读取有效配置、tool.provider 的普通工具投影、Permission 询问、工具结果与 UI 元数据；随引擎契约维护 |
 | 用户行为参数    | settings.jsonc：沿用 dsh-adapter 参数键；General 消费产品默认与用户全局层，Space 再叠加空间覆盖，不随代码位置调整       |
 
-两类代码都归 `ellamaka-cordis`，按实际职责分文件，使用直接的类型化调用。Session 外部工具授权与 SDK 注入由 Session Assembly 契约拥有。
+两类代码都归 `ellamaka-cordis`，按实际职责分文件，使用直接的类型化调用。Ellamaka 当前 Session 的授权事实仍由现有 Runtime 传入。
 
 内部插件注册在配置要求采用 DSH 后端时生效。它读取当前进程的 Tools profile 加载结果：profile 已 `ready` 时绑定工具池；profile 被环境变量禁用或本次加载失败时不接管工具，Ellamaka 保持 Native Tools。内部身份固定为 `dsh-adapter`；若配置中存在同名外部插件条目，在依赖安装、模块 import 和工厂执行之前直接由内部实现接管，只读识别包元数据身份，不加载外部副本，也不改写原配置文件与 ontology 源码。无法判明的身份冲突返回明确错误。
 
@@ -121,9 +121,9 @@ Bun 的标准 API 兼容、模块路由与激活状态由宿主基座保证。
 
 ## Session Facade
 
-Bridge 按 Ellamaka session 复用最小内存外观，内部 adapter 提供调用身份与权限回调：header.cwd、header.id、seq、eventAt、snapshotEvents、append。事件序号连续，快照范围冻结，审计事件与策略覆盖保存在外观的内存日志中。
+Bridge 按 Ellamaka Session 维护供普通工具消费的最小事件外观：`header.cwd`、`header.id`、`seq`、`eventAt`、`snapshotEvents`、`append`。事件序号连续，快照范围冻结。目标 DSH 的 `tools.execute` 接受原始工具调用批次 `calls`（参数保留 JSON 字符串）并返回逐项结果；普通工具适配必须执行新批量 API，准确传播 `content`、`value`、`meta` 与结构化错误。
 
-每次 registry 执行包裹引用计数的 turn/start 与 turn/end。并发和嵌套共享最外层活动 turn，finally 保证闭合。容器持久会话与检查点由 Web profile 的独立执行面拥有。
+普通工具批次共享当前 Ellamaka 调用的权限事实与取消信号，`finally` 负责事件闭合和资源释放。
 
 ## Sandbox and Approval
 
@@ -141,7 +141,7 @@ Bridge 按 Ellamaka session 复用最小内存外观，内部 adapter 提供调�
 | 缺失 answerer | 下游 unavailable，提权关闭                         |
 | 中止          | 原生取消                                           |
 
-escalation=never 为外观写入 approval/policy，审批服务在询问前拒绝。一次提权仅影响该调用，程序或工具副作用不自动重放。
+escalation=never 为外观写入 approval/policy，审批服务在询问前拒绝。一次提权仅影响该调用，程序或工具副作用不自动重放。提权答复按当前 Ellamaka Session 绑定，跨 Space、跨会话、跨调用不得复用。
 
 ## Configuration and UI
 
@@ -163,4 +163,4 @@ Workbench 的 Plugins 状态页始终用当前 General / Space Instance 的真�
 
 enforcing backend 不可用时返回 sandbox-unavailable，不能把受限请求转为无沙箱执行。运行结果区分执行结果、拒绝与实际 enforcement。
 
-web 与 ellamaka-tools 均保留原生 PTC provider，启动预检在 read-only 沙箱调用无业务副作用的 JSON binding。native presentation 服务文件与 shell 采用面；Session Assembly 使用同一池的 scope、`tools.restrict()` 和 `presentAs("ptc")` 消费 run_code，SDK 注入与 Session grant 由独立装配契约拥有。
+`ellamaka-tools` 只装配 DSH Native Executor 和普通工具，不装配 Node PTC Runtime、`run_code` 或 PTC SDK；现有 Ellamaka Agent 工具的名称、权限与调用方式保持不变。DSH Web 的官方 `run_code` 由独立 Web profile 拥有。

@@ -19,7 +19,7 @@
  * The parent-side spawn + proxy lives in the opencode host assembly
  * (`dsh-mount.ts` builder); this module holds the child role and the argv
  * contract so both sides stay in one file. The marker-argv interception
- * mirrors the PTC child pattern (`runBunPtcChildIfRequested`).
+ * mirrors the generic subprocess entrypoint pattern (`runBunSubprocessChildIfRequested`).
  */
 import { appendFileSync } from "node:fs"
 import { createServer, type RequestListener, type Server, type ServerResponse, type IncomingMessage } from "node:http"
@@ -51,6 +51,8 @@ export interface WebChildOptions {
    * spawning the official `dsh` CLI and its pnpm installer.
    */
   ellamakaCommand?: readonly string[]
+  /** Internal child smoke coverage can exercise the HTTP lifecycle without PTC. */
+  disablePtcRuntime?: boolean
 }
 
 /** Collect every repeated flag value after the child marker. */
@@ -80,6 +82,7 @@ export function parseWebChildArgs(argv: readonly string[]): WebChildOptions | un
     logDir: value("--log-dir"),
     trustedHosts: trustedHosts.length > 0 ? trustedHosts : undefined,
     ellamakaCommand: ellamakaCommand.length > 0 ? ellamakaCommand : undefined,
+    disablePtcRuntime: argv.slice(marker + 1).includes("--disable-ptc-runtime"),
   }
 }
 
@@ -130,6 +133,7 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
 
   let host: Awaited<ReturnType<typeof bootDshWeb>> | undefined
   let server: Server | undefined
+  let exitCode = 0
   try {
     const runtime = options.installAnchor ? createDshRuntimeApi(options.installAnchor) : undefined
     trace("runtime resolved")
@@ -144,6 +148,7 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
       // the host CLI, not the official `dsh` pnpm path (DESIGN-dsh-web.md
       // 「Bun 安装器流水线」). The host passes its own resolved launcher.
       ellamakaCommand: options.ellamakaCommand,
+      disablePtcRuntime: options.disablePtcRuntime,
     })
     trace("booted")
     // The VirtualWebServer answers (req, res) directly — the child binds it to
@@ -156,6 +161,7 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
     await new Promise<void>((resolve) => server!.listen(options.port, "127.0.0.1", resolve))
     const address = server.address()
     const boundPort = typeof address === "object" && address !== null ? address.port : options.port
+    host.webServer.bindPort(boundPort)
     // The browser-auth entry the parent must hand the Workbench iframe: the
     // official fence only mints a cookie for a FIRST visit carrying the launch
     // token (`?token=…`); a bare visit 401s forever. The child owns the
@@ -202,7 +208,18 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
     })
     trace("shutdown received")
   } catch (error) {
+    exitCode = 1
     trace(`serve loop threw: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`)
+    // The parent records bounded stderr diagnostics, not the unbounded DSH
+    // error text (which may contain user configuration or sensitive paths).
+    const code =
+      error instanceof Error &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      /^[a-z0-9/_-]{1,64}$/.test(error.code)
+        ? error.code
+        : "startup-error"
+    process.stderr.write(`dsh web child boot failed (${code})\n`)
     throw error
   } finally {
     try {
@@ -212,7 +229,7 @@ export async function serveWebChild(options: WebChildOptions): Promise<void> {
       // Best-effort teardown; the child exits regardless.
     }
     await homeAccess.lease.release()
-    process.exit(0)
+    process.exit(exitCode)
   }
 }
 

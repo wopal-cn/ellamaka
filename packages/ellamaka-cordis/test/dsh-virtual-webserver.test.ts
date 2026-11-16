@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Context } from "@deepseek-ai/cordis"
+import { Peer } from "@deepseek-ai/dsh-client-connection"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { once } from "node:events"
 import { connect } from "node:net"
@@ -54,6 +55,32 @@ function runInIsolatedVm(script: string, calls: { fetch: unknown[]; ws: unknown[
 }
 
 describe("VirtualWebServer route matching", () => {
+  test("publishes the actual child listener origin after an ephemeral port is assigned", async () => {
+    const ctx = makeCtx()
+    const webServer = new VirtualWebServer(ctx, { host: "127.0.0.1", port: 0 })
+    try {
+      expect(() => webServer.getOrigin()).toThrow(/before the listener bound a port/)
+      webServer.bindPort(53742)
+      expect(webServer.port).toBe(53742)
+      expect(webServer.getOrigin()).toBe("http://127.0.0.1:53742")
+      expect(() => webServer.bindPort(53743)).toThrow(/already bound/)
+    } finally {
+      webServer.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+  test("publishes the official WebServer origin and protocol from trusted listener configuration", async () => {
+    const ctx = makeCtx()
+    const webServer = new VirtualWebServer(ctx, { host: "127.0.0.1", port: 4097 })
+    try {
+      expect(webServer.protocol).toBe("http:")
+      expect(webServer.getOrigin()).toBe("http://127.0.0.1:4097")
+    } finally {
+      webServer.dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   test("exact wins over prefix; longest prefix wins among prefixes", async () => {
     const ctx = makeCtx()
     const vws = new VirtualWebServer(ctx, { host: "127.0.0.1", port: 0 })
@@ -140,17 +167,20 @@ describe("VirtualWebServer index taps", () => {
 
   test("renderIndex renders index-inject rows first, then raw taps; __DSH_BOOT__ preserved", () => {
     const ctx = makeCtx()
-    ctx.on("webserver/index-inject", (table: unknown[]) => {
+    const peer = new Peer(ctx, { principal: { kind: "owner" } })
+    ctx.on("webserver/index-inject", (table: unknown[], pagePeer) => {
+      expect(pagePeer).toBe(peer)
       table.push({ kind: "script", placement: "head", text: "window.__DSH_BOOT__ = {x:1}" })
     })
     const vws = new VirtualWebServer(ctx, { host: "127.0.0.1", port: 0 })
     vws.tapIndex((html) => html + "<!--tap-->")
     const html = "<html><head></head><body></body></html>"
-    const out = vws.renderIndex(html)
+    const out = vws.renderIndex(html, peer)
     expect(out).toContain("window.__DSH_BOOT__")
     expect(out).toContain("<!--tap-->")
     // injection lands before the tap
     expect(out.indexOf("__DSH_BOOT__")).toBeLessThan(out.indexOf("<!--tap-->"))
+    void peer.dispose()
   })
 })
 

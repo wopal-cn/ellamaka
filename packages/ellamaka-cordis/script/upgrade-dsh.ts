@@ -336,8 +336,10 @@ function runBun(repoRoot: string, args: string[]): void {
 export function writeEngineVersionFile(repoRoot: string, version: string): void {
   const path = join(repoRoot, PACKAGE_JSON)
   const text = readFileSync(path, "utf8")
+  const current = /"@deepseek-ai\/dsh"\s*:\s*"([^"]*)"/.exec(text)
+  if (!current) throw new Error(`${PACKAGE_JSON} 里找不到 @deepseek-ai/dsh 依赖`)
+  if (current[1] === version) return
   const updated = text.replace(/("@deepseek-ai\/dsh"\s*:\s*")[^"]*(")/, `$1${version}$2`)
-  if (updated === text) throw new Error(`${PACKAGE_JSON} 里找不到 @deepseek-ai/dsh 依赖`)
   JSON.parse(updated)
   writeFileSync(path, updated)
 }
@@ -345,8 +347,10 @@ export function writeEngineVersionFile(repoRoot: string, version: string): void 
 export function writeGenerationFile(repoRoot: string, generation: number): void {
   const path = join(repoRoot, CLOSURE_VERSION_FILE)
   const text = readFileSync(path, "utf8")
+  const current = /DSH_CLOSURE_VERSION\s*=\s*(\d+)/.exec(text)
+  if (!current) throw new Error(`${CLOSURE_VERSION_FILE} 里找不到 DSH_CLOSURE_VERSION`)
+  if (Number(current[1]) === generation) return
   const updated = text.replace(/(DSH_CLOSURE_VERSION\s*=\s*)\d+/, `$1${generation}`)
-  if (updated === text) throw new Error(`${CLOSURE_VERSION_FILE} 里找不到 DSH_CLOSURE_VERSION`)
   writeFileSync(path, updated)
 }
 
@@ -387,7 +391,8 @@ function installWithExemptions(repoRoot: string, exemptions: readonly string[]):
   try {
     const configPath = join(dir, "bunfig.toml")
     writeFileSync(configPath, merged)
-    runBun(repoRoot, ["install", "--config", configPath])
+    // Bun 1.4.4 treats a space-separated --config path as an install target.
+    runBun(repoRoot, ["install", `--config=${configPath}`])
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
