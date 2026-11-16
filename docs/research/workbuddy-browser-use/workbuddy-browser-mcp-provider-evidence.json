@@ -1,0 +1,2017 @@
+{
+  "description": "WorkBuddy Browser MCP research evidence. Interface schemas and native cross-reference metadata only; no third-party source or decompiled function bodies.",
+  "research_date": "2026-11-14",
+  "artifact": {
+    "desktop_version": "5.11.3",
+    "plugin_version": "1.2.2",
+    "mcp_binary_version": "0.2.1",
+    "architecture": "darwin/arm64",
+    "sha256": "4979d59bae493dc1c95d50c800d34c5bfdb6b25426d444600f9eb9646531e022",
+    "source_relative_to_user_home": ".workbuddy/plugins/cache/workbuddy-browser-use/browser-use/1.2.2/bin/browser-mcp"
+  },
+  "mcp": {
+    "server_info": {
+      "name": "browser-mcp",
+      "version": "0.2.1"
+    },
+    "tool_count": 32,
+    "tools": [
+      {
+        "name": "browsers_list",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {},
+          "required": [],
+          "type": "object"
+        }
+      },
+      {
+        "name": "browser_info",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_list",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_selected",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_get",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_new",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "url": {
+              "format": "uri",
+              "pattern": "^https?://",
+              "type": "string"
+            }
+          },
+          "required": [
+            "browser_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_claim",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_close",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tabs_finalize",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "keep": {
+              "default": [],
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "deliverable",
+                      "handoff"
+                    ],
+                    "type": "string"
+                  },
+                  "tab_id": {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "tab_id",
+                  "status"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "browser_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "user_open_tabs",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_url",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_title",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_goto",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "url": {
+              "format": "uri",
+              "pattern": "^https?://",
+              "type": "string"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "url"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_back",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_forward",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_reload",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_focus",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "tab_screenshot",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "clip": {
+              "additionalProperties": false,
+              "properties": {
+                "height": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "width": {
+                  "exclusiveMinimum": 0,
+                  "type": "number"
+                },
+                "x": {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "y": {
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "x",
+                "y",
+                "width",
+                "height"
+              ],
+              "type": "object"
+            },
+            "format": {
+              "default": "jpeg",
+              "enum": [
+                "png",
+                "jpeg"
+              ],
+              "type": "string"
+            },
+            "full_page": {
+              "default": false,
+              "type": "boolean"
+            },
+            "quality": {
+              "default": 80,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_click",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "button": {
+              "default": "left",
+              "oneOf": [
+                {
+                  "enum": [
+                    "left",
+                    "middle",
+                    "right"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ],
+                  "type": "integer"
+                }
+              ]
+            },
+            "keypress": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "y": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_double_click",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "button": {
+              "default": "left",
+              "oneOf": [
+                {
+                  "enum": [
+                    "left",
+                    "middle",
+                    "right"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "enum": [
+                    1,
+                    2,
+                    3
+                  ],
+                  "type": "integer"
+                }
+              ]
+            },
+            "keypress": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "y": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_move",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "keys": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "y": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_drag",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "keys": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "path": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "x": {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "y": {
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y"
+                ],
+                "type": "object"
+              },
+              "maxItems": 256,
+              "minItems": 2,
+              "type": "array"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "path"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_scroll",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "keypress": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "scroll_x": {
+              "type": "number"
+            },
+            "scroll_y": {
+              "type": "number"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "y": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "x",
+            "y",
+            "scroll_x",
+            "scroll_y"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_keypress",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "keys": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "keys"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_type",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "text": {
+              "maxLength": 1000000,
+              "type": "string"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "text"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "cua_execute",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "actions": {
+              "items": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "button": {
+                        "default": "left",
+                        "oneOf": [
+                          {
+                            "enum": [
+                              "left",
+                              "middle",
+                              "right"
+                            ],
+                            "type": "string"
+                          },
+                          {
+                            "enum": [
+                              1,
+                              2,
+                              3
+                            ],
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      "keypress": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "const": "click"
+                      },
+                      "x": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "y": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "x",
+                      "y"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "button": {
+                        "default": "left",
+                        "oneOf": [
+                          {
+                            "enum": [
+                              "left",
+                              "middle",
+                              "right"
+                            ],
+                            "type": "string"
+                          },
+                          {
+                            "enum": [
+                              1,
+                              2,
+                              3
+                            ],
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      "keypress": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "const": "double_click"
+                      },
+                      "x": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "y": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "x",
+                      "y"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "keys": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "const": "move"
+                      },
+                      "x": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "y": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "x",
+                      "y"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "keys": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        ]
+                      },
+                      "path": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "x": {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            "y": {
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 256,
+                        "minItems": 2,
+                        "type": "array"
+                      },
+                      "type": {
+                        "const": "drag"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "path"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "keypress": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        ]
+                      },
+                      "scroll_x": {
+                        "type": "number"
+                      },
+                      "scroll_y": {
+                        "type": "number"
+                      },
+                      "type": {
+                        "const": "scroll"
+                      },
+                      "x": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "y": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "x",
+                      "y",
+                      "scroll_x",
+                      "scroll_y"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "keys": {
+                        "oneOf": [
+                          {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          {
+                            "items": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "maxItems": 8,
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        ]
+                      },
+                      "type": {
+                        "const": "keypress"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "keys"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "text": {
+                        "maxLength": 1000000,
+                        "type": "string"
+                      },
+                      "type": {
+                        "const": "type"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "clip": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "height": {
+                            "exclusiveMinimum": 0,
+                            "type": "number"
+                          },
+                          "width": {
+                            "exclusiveMinimum": 0,
+                            "type": "number"
+                          },
+                          "x": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "y": {
+                            "minimum": 0,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "x",
+                          "y",
+                          "width",
+                          "height"
+                        ],
+                        "type": "object"
+                      },
+                      "format": {
+                        "default": "jpeg",
+                        "enum": [
+                          "png",
+                          "jpeg"
+                        ],
+                        "type": "string"
+                      },
+                      "full_page": {
+                        "default": false,
+                        "type": "boolean"
+                      },
+                      "quality": {
+                        "default": 80,
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "type": {
+                        "const": "screenshot"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "type": "array"
+            },
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "actions"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "dom_cua_get_visible_dom",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "dom_cua_click",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "node_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "node_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "dom_cua_double_click",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "node_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "node_id"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "dom_cua_scroll",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "node_id": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "dom_cua_keypress",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "keys": {
+              "oneOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "minItems": 1,
+                  "type": "array"
+                }
+              ]
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "keys"
+          ],
+          "type": "object"
+        }
+      },
+      {
+        "name": "dom_cua_type",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "browser_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "tab_id": {
+              "maximum": 9007199254740991,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "text": {
+              "maxLength": 1000000,
+              "type": "string"
+            }
+          },
+          "required": [
+            "browser_id",
+            "tab_id",
+            "text"
+          ],
+          "type": "object"
+        }
+      }
+    ]
+  },
+  "ghidra": {
+    "version": "12.1.4",
+    "analysis_scope": "Static analysis of the installed Mach-O. Native decompilation is reconstructed pseudocode, not original Rust source. Reference counts are limited by probe search bounds.",
+    "summary": {
+      "TARGET": "browser-mcp",
+      "LANG": "AARCH64:LE:64:AppleSilicon",
+      "FUNCTION_COUNT": 1780,
+      "NAMED_FUNCTION_COUNT": 508,
+      "TOTAL_STRING_MATCHES": 29,
+      "TOTAL_REFS": 62,
+      "TOTAL_CANDIDATES": 13,
+      "DECOMPILED_COUNT": 13
+    },
+    "tokens": {
+      "provider_invoke": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "provider_cancel": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "session_hello": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "providers_list": {
+        "matches": 3,
+        "references_in_probe": 3
+      },
+      "BROWSER_MCP_SESSION_ID": {
+        "matches": 2,
+        "references_in_probe": 2
+      },
+      "BROWSER_MCP_PROVIDER_ENDPOINT": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "capability.negotiate": {
+        "matches": 1,
+        "references_in_probe": 3
+      },
+      "tabs.new": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "tabs.list": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "tabs.get": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "tabs.claim": {
+        "matches": 1,
+        "references_in_probe": 2
+      },
+      "tab.goto": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "dom_cua.click": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "dom_cua.get_visible_dom": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "cua.execute": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "browsers_list": {
+        "matches": 2,
+        "references_in_probe": 30
+      },
+      "browser_info": {
+        "matches": 1,
+        "references_in_probe": 3
+      },
+      "tabs_new": {
+        "matches": 1,
+        "references_in_probe": 0
+      },
+      "dom_cua_click": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "host_restarted": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "protocol_mismatch": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "resource_exhausted": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "browser_not_found": {
+        "matches": 1,
+        "references_in_probe": 1
+      },
+      "stale_tab": {
+        "matches": 1,
+        "references_in_probe": 2
+      },
+      "extension_disconnected": {
+        "matches": 1,
+        "references_in_probe": 1
+      }
+    },
+    "string_references": [
+      {
+        "token": "provider_invoke",
+        "string_address": "1000e554c",
+        "reference_address": "10002f9a8",
+        "function": "FUN_10002f014 10002f014"
+      },
+      {
+        "token": "provider_cancel",
+        "string_address": "1000e56d1",
+        "reference_address": "1000284cc",
+        "function": "FUN_100028444 100028444"
+      },
+      {
+        "token": "session_hello",
+        "string_address": "1000e5600",
+        "reference_address": "100025778",
+        "function": "FUN_100024e68 100024e68"
+      },
+      {
+        "token": "providers_list",
+        "string_address": "1000e52e9",
+        "reference_address": "100027010",
+        "function": "FUN_100026a1c 100026a1c"
+      },
+      {
+        "token": "providers_list",
+        "string_address": "1000e54d8",
+        "reference_address": "100026c34",
+        "function": "FUN_100026a1c 100026a1c"
+      },
+      {
+        "token": "providers_list",
+        "string_address": "1000e54fe",
+        "reference_address": "100026efc",
+        "function": "FUN_100026a1c 100026a1c"
+      },
+      {
+        "token": "BROWSER_MCP_SESSION_ID",
+        "string_address": "1000e559b",
+        "reference_address": "1000251ac",
+        "function": "FUN_100024e68 100024e68"
+      },
+      {
+        "token": "BROWSER_MCP_SESSION_ID",
+        "string_address": "1000e5f5b",
+        "reference_address": "100023c54",
+        "function": "FUN_100023ab8 100023ab8"
+      },
+      {
+        "token": "BROWSER_MCP_PROVIDER_ENDPOINT",
+        "string_address": "1000e5f71",
+        "reference_address": "100023c68",
+        "function": "FUN_100023ab8 100023ab8"
+      },
+      {
+        "token": "capability.negotiate",
+        "string_address": "1000e58db",
+        "reference_address": "100031cd4",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "capability.negotiate",
+        "string_address": "1000e58db",
+        "reference_address": "100031ef0",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "capability.negotiate",
+        "string_address": "1000e58db",
+        "reference_address": "100035038",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "tabs.new",
+        "string_address": "1000e4d80",
+        "reference_address": "100033b58",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "tabs.list",
+        "string_address": "1000e5bd4",
+        "reference_address": "100033b58",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "tabs.get",
+        "string_address": "1000e4d88",
+        "reference_address": "100033b58",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "tabs.claim",
+        "string_address": "1000e5bbd",
+        "reference_address": "1000336d8",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "tabs.claim",
+        "string_address": "1000e5bbd",
+        "reference_address": "1000336f4",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "tab.goto",
+        "string_address": "1000e4d78",
+        "reference_address": "100033b58",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "dom_cua.click",
+        "string_address": "1000e5b0f",
+        "reference_address": "100033600",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "dom_cua.get_visible_dom",
+        "string_address": "1000e5b1c",
+        "reference_address": "100033b58",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "cua.execute",
+        "string_address": "1000e5b33",
+        "reference_address": "100033b58",
+        "function": "FUN_100031310 100031310"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "10003f00c",
+        "function": "FUN_10003ecc0 10003ecc0"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100021bbc",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100021cb4",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000223d8",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022474",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022574",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022814",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000225a8",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000226d4",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022658",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "10002275c",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022794",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000225fc",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022704",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022730",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022538",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000226a8",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022254",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000222b8",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000222ec",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022198",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000221cc",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022200",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000220a8",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "1000220dc",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022110",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100022144",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100021da8",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100021dd4",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browsers_list",
+        "string_address": "1000e588c",
+        "reference_address": "100021e00",
+        "function": "FUN_1000211f4 1000211f4"
+      },
+      {
+        "token": "browser_info",
+        "string_address": "1000e5899",
+        "reference_address": "10003f00c",
+        "function": "FUN_10003ecc0 10003ecc0"
+      },
+      {
+        "token": "browser_info",
+        "string_address": "1000e5899",
+        "reference_address": "10005f780",
+        "function": "FUN_10005f72c 10005f72c"
+      },
+      {
+        "token": "browser_info",
+        "string_address": "1000e5899",
+        "reference_address": "100110ec0",
+        "function": "NO_FN"
+      },
+      {
+        "token": "dom_cua_click",
+        "string_address": "1000e5a8e",
+        "reference_address": "100050da0",
+        "function": "FUN_1000500b0 1000500b0"
+      },
+      {
+        "token": "host_restarted",
+        "string_address": "1000e7028",
+        "reference_address": "100063104",
+        "function": "FUN_1000621ec 1000621ec"
+      },
+      {
+        "token": "protocol_mismatch",
+        "string_address": "1000e6f60",
+        "reference_address": "100062d44",
+        "function": "FUN_1000621ec 1000621ec"
+      },
+      {
+        "token": "resource_exhausted",
+        "string_address": "1000e707c",
+        "reference_address": "1000631dc",
+        "function": "FUN_1000621ec 1000621ec"
+      },
+      {
+        "token": "browser_not_found",
+        "string_address": "1000e6fb6",
+        "reference_address": "100062e94",
+        "function": "FUN_1000621ec 1000621ec"
+      },
+      {
+        "token": "stale_tab",
+        "string_address": "1000e5d0e",
+        "reference_address": "100062f04",
+        "function": "FUN_1000621ec 1000621ec"
+      },
+      {
+        "token": "stale_tab",
+        "string_address": "1000e5d0e",
+        "reference_address": "100043590",
+        "function": "FUN_10004336c 10004336c"
+      },
+      {
+        "token": "extension_disconnected",
+        "string_address": "1000e7036",
+        "reference_address": "100063138",
+        "function": "FUN_1000621ec 1000621ec"
+      }
+    ],
+    "decompile_attempts": [
+      {
+        "function_address": "10006a97c",
+        "name": "provider_directory_in_root",
+        "completed": true,
+        "pseudocode_characters": 2730,
+        "error": null
+      },
+      {
+        "function_address": "10002f014",
+        "name": "FUN_10002f014",
+        "completed": true,
+        "pseudocode_characters": 53358,
+        "error": null
+      },
+      {
+        "function_address": "100028444",
+        "name": "FUN_100028444",
+        "completed": true,
+        "pseudocode_characters": 9186,
+        "error": null
+      },
+      {
+        "function_address": "100024e68",
+        "name": "FUN_100024e68",
+        "completed": true,
+        "pseudocode_characters": 60956,
+        "error": null
+      },
+      {
+        "function_address": "100026a1c",
+        "name": "FUN_100026a1c",
+        "completed": true,
+        "pseudocode_characters": 24621,
+        "error": null
+      },
+      {
+        "function_address": "100023ab8",
+        "name": "FUN_100023ab8",
+        "completed": true,
+        "pseudocode_characters": 32012,
+        "error": null
+      },
+      {
+        "function_address": "100031310",
+        "name": "FUN_100031310",
+        "completed": false,
+        "pseudocode_characters": 0,
+        "error": "Exception while decompiling 100031310: process: timeout\\n"
+      },
+      {
+        "function_address": "10003ecc0",
+        "name": "FUN_10003ecc0",
+        "completed": true,
+        "pseudocode_characters": 103907,
+        "error": null
+      },
+      {
+        "function_address": "1000211f4",
+        "name": "FUN_1000211f4",
+        "completed": true,
+        "pseudocode_characters": 98497,
+        "error": null
+      },
+      {
+        "function_address": "10005f72c",
+        "name": "FUN_10005f72c",
+        "completed": true,
+        "pseudocode_characters": 870,
+        "error": null
+      },
+      {
+        "function_address": "1000500b0",
+        "name": "FUN_1000500b0",
+        "completed": true,
+        "pseudocode_characters": 17427,
+        "error": null
+      },
+      {
+        "function_address": "1000621ec",
+        "name": "FUN_1000621ec",
+        "completed": true,
+        "pseudocode_characters": 94806,
+        "error": null
+      },
+      {
+        "function_address": "10004336c",
+        "name": "FUN_10004336c",
+        "completed": true,
+        "pseudocode_characters": 12245,
+        "error": null
+      }
+    ]
+  }
+}

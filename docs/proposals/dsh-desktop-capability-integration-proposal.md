@@ -1,10 +1,10 @@
 # DSH Desktop 能力选择性吸收提案
 
 > **Status**: Draft / Research Proposal
-> **Updated**: 2026-10-30
+> **Updated**: 2026-11-16
 > **Authority**: 本文是候选方案池，不是 Active DESIGN，也不是实施 Plan。
 > **Research Source**: `../research/dsh-desktop-architecture-and-ellamaka-analysis.md`
-> **Design Sources**: `../DESIGN-desktop.md`、`../DESIGN-distribution.md`、`../DESIGN-logging.md`
+> **Design Sources**: `../DESIGN-desktop.md`、`../DESIGN-distribution.md`、`../DESIGN-logging.md`、`../DESIGN-dsh-base.md`、`../DESIGN-dsh-web.md`
 
 本文提出 Ellamaka Desktop 选择性吸收 DeepSeek Harness Desktop 成熟机制的候选方案。后续由产品/架构决策者从本文挑选条目；被选中的内容先进入对应正式 DESIGN，设计确认后再进入 Issue/Plan 与实施流程。
 
@@ -459,6 +459,105 @@ desktop-update-core
 
 ---
 
+## Research Track — DSH Profile 能力跟踪与 Desktop 原生能力适配
+
+### Scope and Evidence
+
+本专题分两层。第一层研究 DSH 官方 Web 能力、可选 bundle 和版本升级时的能力变化；第二层研究官方 Electron 宿主能力与 Ellamaka 现有 Desktop 之间的适配。两层均为待选择的候选研究，本文不授权安装插件、修改运行中的 profile、替换 Desktop Host 或修改 Active DESIGN。
+
+**当前对照基线为 DSH `0.2.2-rc.3`**：
+
+- 官方发行配置以**安装的精确 RC.3 闭包**中 `@deepseek-ai/dsh-official-bundles/lib/index.js`、`@deepseek-ai/dsh-web-app/cordis.patch.yml` 为当前版本依据；源码仓的 `packages/util/official-bundles/src/bundles.ts` 和各插件实现用来解释其行为。用户机器上的 `~/.dsh/profiles/desktop` 只代表该用户已配置的 Desktop 实例，不等于官方出厂默认值。
+- Ellamaka 内嵌闭包中的 `@deepseek-ai/dsh`、`@deepseek-ai/dsh-web-app` 和 Web profile 使用同一 RC.3 基线。Web profile 的 `dsh.profile.bundles` 为 `@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app`、`@wopal/dsh-web-fetch-http-fakeip`、`@wopal/dsh-sandbox-roots`、`@wopal/dsh-presets`。
+- 当前用户的官方 Desktop profile 在两项核心 bundle 之外选入 Voice Input、Auto Review、Inspector 和 `@wopal/dsh-presets`；官方 Web profile 另外装有 `dsh-plugin-shop`、`dshmarket`。这些是实例级选项，不能直接认作每次升级的标准增量。
+- 当前 Ellamaka Web 依赖中还存在 `dsh-codex-connect`，该扩展已有 RC.3 兼容性拒绝记录。升级审计必须分别报告“声明已安装”“bundle 已启用”“运行时已加载”和“实际功能可用”，不以存在于 `node_modules` 作为成功依据。
+
+**基础判断**：`dsh-base` 与 `dsh-web-app` 属于官方发行内置层。Web profile 保持这两项的当前闭包解析时，新版本在它们内部新增的普通插件行会随闭包演进；没有必要把所有官方行复制进用户 `cordis.patch.yml`。持续治理的重点是官方对默认启停、entry ID、服务依赖、配置 schema、权限和宿主条件的调整，以及用户或 Ellamaka 覆盖层是否仍成立。
+
+### Candidate J — Establish a DSH Capability Upgrade Gate (Stage One)
+
+#### Problem
+
+升级只检查 DSH 包版本、核心 Web Ready 和少量 preset，不足以反映升级后完整的产品能力。旧 Home 的本地 `file:` 插件快照、历史用户补丁、默认 preset、版本锁定和新的官方可选功能可能与新闭包不一致。反过来，复制新的官方 Desktop profile 也会覆盖用户设置，并把该用户安装的扩展误认成官方基线。
+
+#### Proposed Capability
+
+为每一次 DSH 版本升级产生一份**可复核的能力差异清单**，按以下真相源依次检查：
+
+1. **发行内置层**：两个核心 bundle、官方 profile 模板、默认 entry ID、`disabled` 条件、所需服务和配置 schema；用升级前后锁定的安装制品比较，而不只依赖参考仓库 `main` 的文件。
+2. **官方可选层**：`OPTIONAL_BUNDLES`、`ON_DEMAND_BUNDLES`、Plugin Manager 官方目录，以及这些 bundle 的运行平台、额外资源、凭据和实验性权限要求。
+3. **实际 profile 层**：`package.json` 的依赖及有序 bundle、`cordis.patch.yml` 的覆盖 ID 和用户启停、实际安装快照的版本/内容、peer/engine 范围、跳过及损坏诊断、`selectedDefault` 指向的 preset。
+4. **宿主能力层**：区分普通 Web 插件、依赖 Node/系统服务的 Host 插件，以及要求 Electron Main、preload、IPC 或原生窗口的 Desktop 插件。Web 可安装不等于 Ellamaka Desktop 已具备对应宿主能力。
+5. **运行验收层**：在隔离的既有 Home 副本里检查有效完整组合、插件列表、注册/绑定、关键 UI、Workspace、认证与 WebSocket、主动取消和冷重载；针对原生能力再验证真正的 Desktop 打包制品。
+
+差异报告至少包含：`runtimeVersion`、能力/包/entry 标识、旧版与新版状态、来源（官方默认/官方可选/用户覆盖/本体插件）、新建/移除/重命名/默认值或 schema 变化、实际兼容状态、用户影响、必要宿主能力、建议动作和验证证据。配置输出中隐藏密钥、Cookie 和用户私有参数值。
+
+能力变化分成三类处理：
+
+- **自动继承**：官方核心 bundle 内仍兼容的常规功能，沿用新闭包及用户覆盖；经有效组合和回归验证后记录。
+- **需要产品选择**：新的可选功能、默认启停变更、危险权限和原生宿主适配；先向用户提供取舍和风险，再进入 DESIGN/Plan。
+- **需要兼容修复**：已安装 bundle 与新 DSH 冲突、旧 entry ID/schema 失效、缺失 preset、旧 `file:` 快照；保留用户数据，按官方安装/兼容流程修复并复测，不通过全局版本豁免或覆盖 Home 掩盖问题。
+
+**约束**：检查与兼容试运行使用隔离 Home/临时 profile。正式 Home 由产品升级流程和用户授权控制，不能在正在运行的 profile 上直接重装、同步官方 Desktop patch 或重写用户声明。升级是否完成以用户实际场景验证为准。
+
+#### Recommended Decision
+
+**第一阶段优先候选。** 先建立版本能力目录和差异审计，再决定启用哪些官方增强能力。是否作为每次 DSH 升级的强制门禁、何时阻断发布，由正式设计确定。
+
+### Candidate K — Select Official Web Capabilities (Stage One)
+
+以下是 RC.3 的**候选能力盘点**，不是已批准的启用清单。对于已由官方 `dsh-web-app` 装配的能力，首先检查有效配置和 UI，不应重复安装相同插件。
+
+| 能力 | RC.3 依据与当前判断 | Web profile 可承载性 | 初步建议 |
+| ---- | ------------------ | ------------------- | -------- |
+| 右侧 Browser | `ui-sidebar-browser` 已由官方 Web bundle 声明，但 `profileContext.name !== 'desktop'` 时默认禁用；Ellamaka 当前无启用覆盖 | **可以**，Web 版本使用 sandboxed `iframe`，支持网页标签和地址栏；部分站点会拒绝嵌入 | 优先评估显式 opt-in，先验证内外网 URL、隔离、导航和关闭行为 |
+| 右侧文档预览、文件树、终端 | `ui-sidebar-documentpreview`、`ui-sidebar-files`、`ui-sidebar-terminal` 已在官方 Web bundle 中 | **已有基础插件**；须实际验证文件读取、Workspace 范围、终端会话 | 先做能力冒烟测试，不重复装包 |
+| Workspace 目录选择、插件管理 | `directory-picker-auto` 和 Web Plugin Manager 已在官方组合中；内嵌闭包含原生/浏览目录选择器 | **已有**，Host 可以独立选择目录选择后端；官方 Electron 对话框属于另一层 | 先测试真实点击路径、重连与运行时服务；故障不以复制 Desktop profile 处理 |
+| Voice Input | 官方可选 `@deepseek-ai/dsh-experimental-voice-input-bundle`；当前官方 Desktop 实例已选入 | **有 Web 插件路径**，但涉及麦克风授权、本地识别模型下载和原生依赖 | 可选专题，先确认跨浏览器和 Ellamaka Desktop 的录音权限 |
+| Auto Review | 官方可选 `@deepseek-ai/dsh-experimental-auto-review`；明确支持 Web/headless | **可以**，但审核结果允许 Full access 执行，增加模型调用成本与安全风险 | 默认不启用；先单独审查权限/审批政策 |
+| Inspector / 统计 | 官方可选 `@deepseek-ai/dsh-experimental-inspector-profile`，提供 Session Inspector、统计和 NodeJS 调试 | **Web 可承载**，但可能启用未脱敏抓包和本地代码执行 | 仅开发诊断场景候选，不作为普通用户默认能力 |
+| 会话与操作体验 | 官方可选 Session Search、Session Titles、Badge Skill、CoT Translation、Ralph、Persistent Terminal 等 bundle | 主要是 Web/Host 组合，逐项核验插件的注入服务和实际平台条件 | 按用户收益、安全与运行资源分组评估，避免把实验性能力一键全开 |
+| 协作与工作流扩展 | 官方可选 LiveShare、Worktree、Forge、Plugin Market、Personalized Recommendations | **待逐项验证**；部分会与 WopalSpace 的协作、工作树、插件分发或隐私模型重叠 | 先明确 owner、数据隔离和重复功能；无需求不默认启用 |
+| Computer Use / CUA | 官方 `@deepseek-ai/dsh-cua-bundle` 是可选能力 | **宿主依赖与权限待审计**；不能因包可见就推断 Desktop 能执行 | 单独做能力和安全边界研究，必要部分归第二阶段 |
+| 外部编码 Agent | 官方按需安装 `@deepseek-ai/dsh-subagent-codex`、`@deepseek-ai/dsh-subagent-claude-code` | **有正式按需 bundle**，需依赖相应 CLI、原生认证及运行环境 | 可作为 Coding/Agent 增强候选，与现有 Wopal/Fae/Rook 委派分清职责 |
+| DeepSeek 对话导入 | 精确 RC.3 发行清单另有可选 `@deepseek-ai/dsh-deepseek-chat-import`；当前参考仓旧快照清单不含它 | **待核验完整导入契约**、数据来源、隐私和目标 Session 归属 | 属于版本新增能力审计的代表案例；先研究再选择 |
+| 第三方市场插件 | 当前官方 Web 实例装有 `dsh-plugin-shop`、`dshmarket`；Ellamaka 已有官方 Plugin Manager | 属于外部安装选项，**不是官方核心模板的缺失项** | 先检查现有插件管理的功能缺口，再选择接入来源 |
+
+RC.3 实际发行版的 `OPTIONAL_BUNDLES` 包含 **16 个** bundle，`ON_DEMAND_BUNDLES` 包含 **2 个**外部子代理 bundle。表格不替代完整官方目录；Candidate J 的清单必须覆盖全部候选，并跟随被升级的发行制品更新。特别是 `dsh-deepseek-chat-import` 在已安装 RC.3 中出现、但不在当前参考仓的旧版源清单中，说明升级审计不能用参考仓 `main` 代替精确发布制品。
+
+**第一阶段的建议顺序**：先验证/选择 Sidebar Browser 的 Web 版本；同步审计当前已装配的 Workspace、文档预览和终端；随后按需求评估 Session Search、Titles、外部子代理等生产收益较直接的能力；Voice、Auto Review、Inspector、CUA 及协作型实验插件按风险分别审批。此顺序仅供产品选择，不改变现有已批准任务。
+
+### Candidate L — Adapt Native DSH Desktop Capabilities (Stage Two)
+
+官方 Desktop 的 `desktop` profile 不只是额外 bundle 列表。它由自己的 Electron Main、`dsh-app://app` 页面、preload `dshDesktop`/`__DSH_DIRECTORY_PICKER__` 等受控桥接、打包运行时、独占 profile 和原生窗口生命周期共同支撑。
+
+Ellamaka 的产品结构不同：Ellamaka Workbench 是自己的 Renderer，DSH Web 通过 `/dsh` 加载在嵌套 iframe 中，Electron Main 与 sidecar 均由 Ellamaka 拥有。Ellamaka 的 `window.api` 已有文件/目录选择等能力，但它不是官方 `dshDesktop` 协议；当前 DSH iframe 也没有获得官方的 Browser guest lease / `<webview>` 桥接。
+
+| 官方 Desktop 原生能力 | 当前 Ellamaka 对应面 | 第二阶段需要研究的适配 |
+| -------------------- | ------------------- | ---------------------- |
+| Browser `<webview>` | 主窗口 + DSH iframe；没有官方 `dshDesktop.browser` lease API，也未启用对应受控 guest 附着 | Electron Main 的 Browser guest ownership、存储分区、导航/权限检查、快捷键转发及 DSH iframe 到宿主的可信消息通道；不能仅设置 `webviewTag: true` |
+| 原生目录与文件操作 | Ellamaka 已有自有目录/文件对话框 IPC；DSH Web 有 `directory-picker-auto` | 决定复用 Host 目录选择器，还是为 DSH 映射受控原生对话框；要处理取消、窗口焦点及来源鉴权 |
+| 文件拖放、路径引用和保存 | Ellamaka Renderer 有自己的 preload 能力；官方 DSH 提供独立的 `fileDrag`、`fileActions` 和 `__DSH_HOST_PATHS__` | 明确 Session/Workspace 授权与资源归属，提供最小可验证的跨 iframe 桥接 |
+| 原生快捷键与浏览器焦点 | Ellamaka 已有菜单/窗口/快捷键；官方 Browser 可给受控 guest 转发快捷键 | 协调 Workbench、DSH UI、浏览器 guest 与终端的焦点和按键所有权 |
+| 麦克风及平台权限 | Ellamaka 有自有 Electron 窗口和权限流程 | 按页面 origin、用户授权和签名权限支持需要的 DSH 语音功能 |
+| Platform/更新/恢复/CLI 打包运行时 | 由 Ellamaka 已有产品身份、sidecar、更新和发布体系负责 | 只吸收有明确用户需求的原生机制；保留 Ellamaka 的版本、渠道、账户与产品责任 |
+
+**关键设计选择**：官方 Desktop 的主页面是有自身 preload 的 `dsh-app://app`；Ellamaka 将 DSH 放入子 iframe。需要研究 DSH Browser 是继续在 Web 中使用 iframe，还是由 Ellamaka Main 在受控位置承载原生 guest，并通过限定来源、会话和能力的消息协议与 DSH UI 连接。安全边界由 Electron Main/可信 preload 拥有，不能把裸 Electron IPC、Node API、任意网址访问或 Host Cookie 暴露给嵌入页。
+
+第二阶段还需决定 profile 身份是否保持 `web`，以及哪些能力依据真实宿主能力检测而非仅靠 `profileContext.name === 'desktop'` 启用。**将 profile 改名为 `desktop` 或复制官方 `desktop/cordis.patch.yml` 都不足以获得原生功能**，还可能破坏当前 Home/实例及升级所有权。
+
+#### Recommended Decision
+
+**列入下一阶段候选，当前不实施。** 由用户决定是追求 Web 功能覆盖还是官方 Desktop 等级的原生体验；正式设计须逐一确定安全接口、Renderer 嵌入方式和打包验收，不引入第二个 DSH Host，也不替换 Ellamaka Workbench。
+
+### Proposed Validation and Delivery Boundary
+
+- 第一阶段成果应是一次完整的发行能力矩阵、差异报告和经过用户选择的 Web 功能清单。每项注明官方支持程度、实际启用状态、权限风险、验证方式及是否进入 `DESIGN-dsh-web.md` / `DESIGN-dsh-base.md`。
+- 第二阶段成果应是原生宿主接口与最小安全边界的设计方案，按功能分别进入 `DESIGN-desktop.md`、`DESIGN-workbench.md` 与对应发布设计；通过真正的 macOS/Windows Desktop 制品和用户交互验证后才能认定完成。
+- 两阶段均不复制官方用户配置或默认开启全部实验功能。现有 DSH WebSocket 代理的连接问题按独立缺陷和真实打包回归验收，不将 profile 能力扩充当作其修复手段。
+
+---
+
 ## Explicit Non-Candidates
 
 以下方向不建议进入当前整合路线。
@@ -522,6 +621,8 @@ Ellamaka distribution design 已拥有独立产品版本和 stable/beta/main/loc
 | 8    | H — packaging hardening        | 提升发布可信度                       | 平台发布工程复杂              | 中长期           |
 | 9    | I — shared package             | 减少未来双份维护                     | 过早抽象风险                  | 暂不实施         |
 
+**新的 DSH 能力整合专题独立于上述 #263 环境修复排序**：建议先选 J（升级能力差异门禁），再从 K（Web 功能候选）逐项选择，L（原生宿主能力）留到下一阶段。选项不等于批准；批准后分别转入正式 DESIGN 与实施 Plan。
+
 ---
 
 ## Suggested First Design Slice
@@ -565,6 +666,9 @@ D  不缓存完整 shell env
 | G crash/quit/recovery     | `DESIGN-desktop.md`                                           |
 | H packaging/signing       | `DESIGN-distribution.md`                                      |
 | I shared package          | 单独架构提案，确定 owner 后再入 DESIGN                        |
+| J profile capability gate | `DESIGN-dsh-base.md` + `DESIGN-dsh-web.md`（版本与能力验收） |
+| K official Web capabilities | `DESIGN-dsh-web.md` + `DESIGN-workbench.md`（UI 选择与承载） |
+| L native Desktop adapters | `DESIGN-desktop.md` + `DESIGN-workbench.md`（必要时 `DESIGN-distribution.md`） |
 
 进入正式设计后，再由 Issue/Plan 承载实施进度和任务拆分。
 
@@ -577,6 +681,8 @@ D  不缓存完整 shell env
 - `../research/dsh-desktop-architecture-and-ellamaka-analysis.md`
 - `../DESIGN-desktop.md`
 - `../DESIGN-distribution.md`
+- `../DESIGN-dsh-base.md`
+- `../DESIGN-dsh-web.md`
 - `packages/ellamaka-desktop/src/main/shell-env.ts`
 - `packages/ellamaka-desktop/src/main/server.ts`
 - `packages/ellamaka-desktop/src/main/sidecar.ts`
@@ -590,6 +696,14 @@ D  不缓存完整 shell env
 - workspace reference: `labs/ref-repos/deepseek-harness/packages/subprocess/subprocess/src/index.ts`
 - workspace reference: `labs/ref-repos/deepseek-harness/packages/shell/bash-local/src/index.ts`
 - workspace reference: `labs/ref-repos/deepseek-harness/packages/shell/bash-sandbox/src/index.ts`
+- workspace reference: `labs/ref-repos/deepseek-harness/packages/util/official-bundles/src/bundles.ts`
+- installed RC.3 reference: `@deepseek-ai/dsh-official-bundles/lib/index.js` in the pinned DSH closure
+- workspace reference: `labs/ref-repos/deepseek-harness/packages/util/official-bundles/src/catalog.generated.ts`
+- workspace reference: `labs/ref-repos/deepseek-harness/packages/bundle/web-app/cordis.patch.yml`
+- workspace reference: `labs/ref-repos/deepseek-harness/packages/client/ui-sidebar-browser/README.md`
+- workspace reference: `labs/ref-repos/deepseek-harness/packages/client/ui-sidebar-browser/src/client/index.ts`
+- workspace reference: `labs/ref-repos/deepseek-harness/apps/desktop/src/browser-guests.ts`
+- workspace reference: `labs/ref-repos/deepseek-harness/apps/desktop/src/preload-app.ts`
 
 ---
 
@@ -600,3 +714,5 @@ D  不缓存完整 shell env
 > **Ellamaka 保留产品层和 Server ownership；对 DSH Desktop 已成熟解决的通用宿主问题，优先理解并移植机制，而不是独立重复造轮子。**
 
 当前最值得进入下一轮正式设计选择的是 login-shell environment、启动诊断和环境持久化安全边界。Updater、crash/recovery、packaging 等能力可以作为独立专题逐步审计，不应借 #263 一次性扩大范围。
+
+DSH 能力整合另按 **J → K → L** 分阶段选择：升级先获得官方能力差异和兼容性证据，再确定 Web profile 应提供的选配能力；原生 Desktop 宿主适配由下一阶段承担。这条路线保留 Ellamaka 的 Workbench、sidecar、Home 与发布所有权。
