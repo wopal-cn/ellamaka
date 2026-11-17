@@ -90,8 +90,6 @@ export const Script = {
     return team
   },
 }
-console.log(`opencode script`, JSON.stringify(Script, null, 2))
-
 // Re-exported so build-env remains the single resolution entry point for
 // Bun-side callers; pure-Node build contexts import channel-resolve directly.
 export { resolveBuildChannel }

@@ -1,6 +1,4 @@
-/** @jsx h */
 import { Show, createEffect, createResource, createSignal, type JSX } from "solid-js"
-import h from "solid-js/h"
 import { useServer } from "@/context/server"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"

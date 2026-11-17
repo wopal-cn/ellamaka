@@ -2,7 +2,6 @@ import { createEffect, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createSimpleContext } from "../context/helper"
-import oc2ThemeJson from "./themes/oc-2.json"
 import { resolveThemeVariant, themeToCss } from "./resolve"
 import type { DesktopTheme } from "./types"
 
@@ -16,19 +15,19 @@ const STORAGE_KEYS = {
 } as const
 
 const THEME_STYLE_ID = "oc-theme"
-let files: Record<string, () => Promise<{ default: DesktopTheme }>> | undefined
+let modules: Record<string, { default: DesktopTheme }> | undefined
 let ids: string[] | undefined
 let known: Set<string> | undefined
 
-function getFiles() {
-  if (files) return files
-  files = import.meta.glob<{ default: DesktopTheme }>("./themes/*.json")
-  return files
+function getModules() {
+  if (modules) return modules
+  modules = import.meta.glob<{ default: DesktopTheme }>("./themes/*.json", { eager: true })
+  return modules
 }
 
 function themeIDs() {
   if (ids) return ids
-  ids = Object.keys(getFiles())
+  ids = Object.keys(getModules())
     .map((path) => path.slice("./themes/".length, -".json".length))
     .sort()
   return ids
@@ -79,7 +78,7 @@ const names: Record<string, string> = {
   vesper: "Vesper",
   zenburn: "Zenburn",
 }
-const oc2Theme = oc2ThemeJson as DesktopTheme
+const oc2Theme = getModules()["./themes/oc-2.json"]?.default
 
 function normalize(id: string | null | undefined) {
   return id === "oc-1" ? "oc-2" : id
@@ -181,28 +180,16 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       previewScheme: null as ColorScheme | null,
     })
 
-    const loads = new Map<string, Promise<DesktopTheme | undefined>>()
-
     const load = (id: string) => {
       const next = normalize(id)
       if (!next) return Promise.resolve(undefined)
       const hit = store.themes[next]
       if (hit) return Promise.resolve(hit)
-      const pending = loads.get(next)
-      if (pending) return pending
-      const file = getFiles()[`./themes/${next}.json`]
-      if (!file) return Promise.resolve(undefined)
-      const task = file()
-        .then((mod) => {
-          const theme = mod.default
-          setStore("themes", next, theme)
-          return theme
-        })
-        .finally(() => {
-          loads.delete(next)
-        })
-      loads.set(next, task)
-      return task
+      const mod = getModules()[`./themes/${next}.json`]
+      if (!mod) return Promise.resolve(undefined)
+      const theme = mod.default
+      setStore("themes", next, theme)
+      return Promise.resolve(theme)
     }
 
     const applyTheme = (theme: DesktopTheme, themeId: string, mode: "light" | "dark") => {

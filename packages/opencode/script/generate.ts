@@ -18,4 +18,3 @@ const catalog = await loadModelCatalog({
 })
 
 export const modelsData = catalog.data
-console.log(`Loaded provider catalog from ${catalog.source}`)

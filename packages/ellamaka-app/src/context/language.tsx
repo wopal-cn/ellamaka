@@ -4,6 +4,7 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@wopal/ui/context"
 import { Persist, persisted } from "@/utils/persist"
 import { dict as en } from "@/i18n/en"
+import { dict as zhAppDict } from "@/i18n/zh"
 import { dict as uiEn } from "@wopal/ui/i18n/en"
 
 export type Locale =
@@ -104,7 +105,7 @@ const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...i18n.flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
-  zh: () => merge(import("@/i18n/zh"), import("@wopal/ui/i18n/zh")),
+  zh: () => merge(Promise.resolve({ dict: zhAppDict }), import("@wopal/ui/i18n/zh")),
   zht: () => merge(import("@/i18n/zht"), import("@wopal/ui/i18n/zht")),
   ko: () => merge(import("@/i18n/ko"), import("@wopal/ui/i18n/ko")),
   de: () => merge(import("@/i18n/de"), import("@wopal/ui/i18n/de")),
@@ -222,9 +223,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const t = (key: keyof Dictionary, params?: Record<string, string | number | boolean>) => {
       const res = rawT(key, params)
       if (typeof res === "string") {
-        return res
-          .replace(/OpenCode/g, "Ellamaka")
-          .replace(/opencode/g, "ellamaka")
+        return res.replace(/OpenCode/g, "Ellamaka").replace(/opencode/g, "ellamaka")
       }
       return res
     }

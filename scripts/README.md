@@ -43,8 +43,11 @@ CLI 常用选项：
 | `--arch <arm64\|x64>`          | 目标架构（逗号分隔）                                                                                                           |
 | `--web-ui <value>`             | 内嵌 Web UI：`ellamaka-app`（默认）、`app`、`none`                                                                             |
 | `--install`                    | 安装二进制（软链到 `~/.wopal/bin`）                                                                                            |
+| `--verbose`                    | 显示完整子进程输出（vite 警告、生成器日志等）                                                                                  |
 
 Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建；`--platform linux\|win` → dispatch GitHub Actions CI 并下载产物。CI 构建仅接受 `--channel beta\|stable`（`main` 仅本地）。
+
+**输出契约**：构建进度全部走 stderr，stdout 保持干净。vite 警告默认折叠为计数，`--verbose` 展开完整输出。DSH 生成器通过 `--quiet` 静默成功消息，失败时仍打印错误到 stderr。
 
 ### `release-cli.sh` / `release-desktop.sh` — 一步发布 CLI / Desktop 版本
 

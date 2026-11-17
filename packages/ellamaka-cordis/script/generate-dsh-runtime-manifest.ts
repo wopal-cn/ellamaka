@@ -32,6 +32,7 @@ const outputDir = dirname(manifestPath)
 
 const args = process.argv.slice(2)
 const checkOnly = args.includes("--check")
+const quiet = args.includes("--quiet")
 
 function fatal(message: string): never {
   process.stderr.write(`error: ${message}\n`)
@@ -87,7 +88,7 @@ if (checkOnly) {
   if (!manifestsTextEqual(existing, output)) {
     fatal(`--check: generated manifest at ${manifestPath} is out of date; re-run the generator`)
   }
-  process.stdout.write(`ok: ${manifestPath} is up to date (fingerprint ${manifest.fingerprint})\n`)
+  if (!quiet) process.stdout.write(`ok: manifest up to date (fingerprint ${manifest.fingerprint})\n`)
   process.exit(0)
 }
 
@@ -97,4 +98,4 @@ if (!existsSync(outputDir)) {
   mkdirSync(outputDir, { recursive: true })
 }
 writeFileSync(manifestPath, output)
-process.stdout.write(`wrote ${manifestPath} (fingerprint ${manifest.fingerprint})\n`)
+if (!quiet) process.stdout.write(`wrote manifest (fingerprint ${manifest.fingerprint})\n`)

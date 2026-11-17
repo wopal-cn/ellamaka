@@ -43,6 +43,7 @@ const lockPath = join(pkgRoot, "generated", "dsh-runtime-lock.json")
 
 const args = process.argv.slice(2)
 const checkOnly = args.includes("--check")
+const quiet = args.includes("--quiet")
 
 function fatal(message: string): never {
   process.stderr.write(`error: ${message}\n`)
@@ -94,7 +95,8 @@ function readExistingLock(): DshRuntimeLockV1 | null {
 /** Resolve the full transitive tree with Arborist in a throwaway staging dir. */
 async function resolveLock(): Promise<Record<string, { version: string; optional?: boolean }>> {
   const staging = mkdtempSync(join(tmpdir(), "dsh-lock-"))
-  process.stdout.write(`resolving the full dependency tree (~several minutes, one-off per version bump)...\n`)
+  if (!quiet)
+    process.stdout.write(`resolving the full dependency tree (~several minutes, one-off per version bump)...\n`)
   try {
     writeFileSync(
       join(staging, "package.json"),
@@ -162,9 +164,8 @@ if (checkOnly) {
       `--check: generated lock at ${lockPath} binds ${existing.manifestFingerprint} but the manifest is ${manifest.fingerprint}; re-run the generator`,
     )
   }
-  process.stdout.write(
-    `ok: ${lockPath} is up to date (${Object.keys(existing.packages).length} packages, fingerprint match)\n`,
-  )
+  if (!quiet)
+    process.stdout.write(`ok: lock up to date (${Object.keys(existing.packages).length} packages, fingerprint match)\n`)
   process.exit(0)
 }
 
@@ -172,9 +173,10 @@ if (checkOnly) {
 // reused as-is — no re-resolution, the run finishes in milliseconds.
 const existing = readExistingLock()
 if (existing && existing.manifestFingerprint === manifest.fingerprint) {
-  process.stdout.write(
-    `ok: ${lockPath} already binds the current manifest (${Object.keys(existing.packages).length} packages) — nothing to do\n`,
-  )
+  if (!quiet)
+    process.stdout.write(
+      `ok: lock already binds current manifest (${Object.keys(existing.packages).length} packages)\n`,
+    )
   process.exit(0)
 }
 
@@ -190,4 +192,4 @@ const output = `${JSON.stringify(
 )}\n`
 
 writeFileSync(lockPath, output)
-process.stdout.write(`wrote ${lockPath} (${Object.keys(packages).length} packages)\n`)
+if (!quiet) process.stdout.write(`wrote lock (${Object.keys(packages).length} packages)\n`)

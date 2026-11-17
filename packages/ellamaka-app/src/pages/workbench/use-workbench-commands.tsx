@@ -8,6 +8,8 @@ import { scopeName, scopePath } from "@/pages/workbench/workbench-scope"
 import { usePlatform } from "@/context/platform"
 import { createEffect, createMemo, on } from "solid-js"
 import { isWorkbenchTabCloseProtected } from "./workbench-keyboard"
+import { DialogClosePanel } from "./parts/session-tree-dialogs"
+import { DialogCloseTab } from "./parts/workspace"
 
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
@@ -35,7 +37,9 @@ export const useWorkbenchCommands = () => {
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const proxyAction = (id: string) => ({
-    get disabled() { return !actions.canExecuteActivePanelAction(id) },
+    get disabled() {
+      return !actions.canExecuteActivePanelAction(id)
+    },
     onSelect: () => actions.executeActivePanelAction(id),
   })
 
@@ -122,7 +126,9 @@ export const useWorkbenchCommands = () => {
         // not pass through WorkbenchShell's keydown guard.
         if (dialog.active) return
         if (isWorkbenchTabCloseProtected(wb.activeTab())) {
-          wb.setStatusMessage(language.t("workbench.status.tabPinnedProtected", { default: "Pinned tab protected from closing" }))
+          wb.setStatusMessage(
+            language.t("workbench.status.tabPinnedProtected", { default: "Pinned tab protected from closing" }),
+          )
           return
         }
         if (actions.canExecuteActivePanelAction("tab.close")) {
@@ -145,16 +151,14 @@ export const useWorkbenchCommands = () => {
           if (panel?.slotState === "bound") {
             const session = sessionStore.getSession(panel.boundSessionId ?? "")
             const sessionTitle = session?.title ?? language.t("workbench.panelClose.title")
-            void import("./parts/session-tree-dialogs").then((m) => {
-              dialog.show(() => (
-                <m.DialogClosePanel
-                  sessionTitle={sessionTitle}
-                  onClose={async () => {
-                    await actions.closePanel({ scope: active.scope, panelID: active.panelID })
-                  }}
-                />
-              ))
-            })
+            dialog.show(() => (
+              <DialogClosePanel
+                sessionTitle={sessionTitle}
+                onClose={async () => {
+                  await actions.closePanel({ scope: active.scope, panelID: active.panelID })
+                }}
+              />
+            ))
           } else {
             void actions.closePanel({ scope: active.scope, panelID: active.panelID })
           }
@@ -164,11 +168,7 @@ export const useWorkbenchCommands = () => {
         if (active.scope.kind === "space") {
           const name = scopeName(active.scope)
           const spacePathVal = path
-          void import("./parts/workspace").then((m) => {
-            dialog.show(() => (
-              <m.DialogCloseTab name={name} path={spacePathVal} />
-            ))
-          })
+          dialog.show(() => <DialogCloseTab name={name} path={spacePathVal} />)
           return
         }
 
@@ -200,9 +200,7 @@ export const useWorkbenchCommands = () => {
       title: language.t("command.settings.open"),
       keybind: "ctrl+comma",
       onSelect: () => {
-        void import("@/components/dialog-settings").then((x) => (
-          dialog.show(() => <x.DialogSettings />)
-        ))
+        void import("@/components/dialog-settings").then((x) => dialog.show(() => <x.DialogSettings />))
       },
     }),
     viewCommand({
@@ -312,7 +310,9 @@ export const useWorkbenchCommands = () => {
     ...permissionsCmds(),
   ])
 
-  createEffect(on(commands, (cmds) => {
-    command.register("workbench.session", () => cmds)
-  }))
+  createEffect(
+    on(commands, (cmds) => {
+      command.register("workbench.session", () => cmds)
+    }),
+  )
 }

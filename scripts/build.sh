@@ -33,6 +33,7 @@ CLI options:
   --arch <arm64|x64>      Target architecture (comma-separated)
   --web-ui <value>        Embedded web UI: "ellamaka-app" (default), "app", "none"
   --install               Install binary (symlink to ~/.wopal/bin)
+  --verbose               Show full subprocess output (vite, generators)
 
 Desktop options:
   --channel <main|beta|stable>
@@ -67,15 +68,13 @@ source "$PROJECT_ROOT/scripts/lib/version.sh"
 ensure_dsh_manifest() {
   local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts"
   if [ -n "${ELLAMAKA_RELEASE:-}" ]; then
-    echo "🔒 Verifying DSH runtime manifest (--check)"
-    bun "$generator" --check
+    bun "$generator" --check --quiet
     return 0
   fi
-  if bun "$generator" --check >/dev/null 2>&1; then
-    echo "✓ DSH runtime manifest up to date"
+  if bun "$generator" --check --quiet 2>/dev/null; then
+    return 0
   else
-    echo "⚠️  DSH runtime manifest out of date — regenerating for dev build"
-    bun "$generator"
+    bun "$generator" --quiet
   fi
 }
 
@@ -87,11 +86,10 @@ ensure_dsh_manifest() {
 ensure_dsh_lock() {
   local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts"
   if [ -n "${ELLAMAKA_RELEASE:-}" ]; then
-    echo "🔒 Verifying DSH runtime lock (--check)"
-    bun "$generator" --check
+    bun "$generator" --check --quiet
     return 0
   fi
-  bun "$generator"
+  bun "$generator" --quiet
 }
 
 # ── CLI build ──────────────────────────────────────────────
@@ -99,6 +97,7 @@ ensure_dsh_lock() {
 function build_cli() {
   MODE="single"
   INSTALL=false
+  VERBOSE=false
   CUSTOM_VERSION=""
   CHANNEL="main"
   BUILD_ARGS=()
@@ -152,6 +151,10 @@ function build_cli() {
         INSTALL=true
         shift
         ;;
+      --verbose)
+        VERBOSE=true
+        shift
+        ;;
       --single|--skip-deps|--skip-install)
         shift
         ;;
@@ -162,22 +165,7 @@ function build_cli() {
     esac
   done
 
-  # Run from repo root (generator path is root-relative) before the build.
-  ensure_dsh_manifest
-  ensure_dsh_lock
-
-  cd "$PROJECT_ROOT/packages/opencode"
-
-  case "$MODE" in
-    single)
-      echo "🔨 Building CLI for current platform..."
-      BUILD_ARGS+=("--single")
-      ;;
-    arch)
-      echo "🔨 Building CLI with --arch filter..."
-      ;;
-  esac
-
+  # Resolve version + channel first so the header precedes all steps.
   if [[ -n "${CUSTOM_VERSION:-}" ]]; then
     export ELLAMAKA_VERSION="$CUSTOM_VERSION"
   elif [[ -z "${ELLAMAKA_VERSION:-}" ]]; then
@@ -193,8 +181,38 @@ function build_cli() {
     export ELLAMAKA_CHANNEL="$CHANNEL"
   fi
 
+  local total=4
+  $INSTALL && total=5
+
+  echo "" >&2
+  echo "ellamaka cli · $CHANNEL · $ELLAMAKA_VERSION" >&2
+  echo "" >&2
+
+  # Step 1: DSH closure check
+  if [ -t 2 ]; then printf "  1/%d  dsh closure   checking..." "$total" >&2; fi
+  ensure_dsh_manifest
+  ensure_dsh_lock
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  printf "  1/%d  dsh closure   ✓ manifest + lock ready\n" "$total" >&2
+
+  cd "$PROJECT_ROOT/packages/opencode"
+
+  case "$MODE" in
+    single)
+      BUILD_ARGS+=("--single")
+      ;;
+    arch)
+      ;;
+  esac
+
+  if $VERBOSE; then
+    export ELLAMAKA_BUILD_VERBOSE=1
+  fi
+  export ELLAMAKA_BUILD_STEPS_TOTAL="$total"
+
   BINARY_NAME="$BINARY_NAME" bun "$PROJECT_ROOT/packages/ellamaka-release/src/cli/build.ts" "${BUILD_ARGS[@]}"
 
+  # Final step: Install (if requested)
   if $INSTALL; then
     PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
     ARCH="$(uname -m)"
@@ -204,19 +222,20 @@ function build_cli() {
     SRC="$DIST_DIR/$BINARY_NAME"
 
     if [[ ! -f "$SRC" ]]; then
-      echo "❌ Binary not found: $SRC"
+      printf "  %d/%d  install       ✗ binary not found\n" "$total" "$total" >&2
       exit 1
     fi
 
+    if [ -t 2 ]; then printf "  %d/%d  install       linking..." "$total" "$total" >&2; fi
     mkdir -p "$HOME/.wopal/bin"
     SYMLINK="$HOME/.wopal/bin/${BINARY_NAME}-main"
 
     NEW_VER=$("$SRC" --version 2>/dev/null || echo "unknown")
     OLD_VER=$([[ -L "$SYMLINK" ]] && "$SYMLINK" --version 2>/dev/null || echo "none")
-    echo "📦 $OLD_VER → $NEW_VER"
 
     rm -f "$SYMLINK" && ln -s "$SRC" "$SYMLINK"
-    echo "✅ Symlinked: $SYMLINK → $SRC"
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  %d/%d  install       ✓ %s → %s\n" "$total" "$total" "$OLD_VER" "$NEW_VER" >&2
   fi
 }
 
@@ -339,43 +358,90 @@ function build_desktop() {
 
   if $INSTALL && [[ "$(uname -s)" == "Darwin" ]]; then
     if pgrep -f "${APP_NAME}.app/Contents/MacOS" >/dev/null 2>&1; then
-      echo "❌ ${APP_NAME} is running. Quit it first, then retry."
+      printf "  ✗ %s is running. Quit it first.\n" "$APP_NAME" >&2
       exit 1
     fi
   fi
 
-  local build_label="${ELLAMAKA_BUILD_ID:+${ELLAMAKA_BUILD_ID:0:12}}"
-  echo ""
-  echo "🖥  Building Desktop (channel: $CHANNEL, app: $APP_NAME, build: ${build_label:-none})..."
+  local total=2
+  $INSTALL && total=3
+
+  echo "" >&2
+  echo "ellamaka desktop · $CHANNEL · $ELLAMAKA_VERSION" >&2
+  echo "" >&2
 
   cd "$DESKTOP_DIR"
-  bun run build
-  bun run package:mac
 
-  APP_PATH=$(find "$DESKTOP_DIR/dist" -name "${APP_NAME}.app" -type d -maxdepth 3 2>/dev/null | head -1)
-
-  if [[ -z "$APP_PATH" ]]; then
-    echo "❌ .app not found in dist/"
+  # Step 1: Build
+  if [ -t 2 ]; then printf "  1/%d  build         building...\r" "$total" >&2; fi
+  local build_out
+  build_out=$(bun run build 2>&1) || {
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  1/%d  build         ✗ failed\n" "$total" >&2
+    echo "$build_out" | tail -30 >&2
     exit 1
+  }
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  printf "  1/%d  build         ✓ done\n" "$total" >&2
+  # Show warnings from build output (non-empty, non-command-echo lines)
+  local build_warn
+  build_warn=$(echo "$build_out" | grep -v '^$' | grep -v '^$ ' | head -10)
+  if [ -n "$build_warn" ]; then
+    printf "    ⚠ warnings:\n" >&2
+    echo "$build_warn" | sed 's/^/      /' >&2
   fi
 
-  echo "✅ Desktop packaged: $APP_PATH"
+  # Step 2: Package
+  if [ -t 2 ]; then printf "  2/%d  package       packaging...\r" "$total" >&2; fi
+  local pkg_out
+  pkg_out=$(bun run package:mac 2>&1) || {
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  2/%d  package       ✗ failed\n" "$total" >&2
+    echo "$pkg_out" | tail -30 >&2
+    exit 1
+  }
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  local pkg_warn
+  pkg_warn=$(echo "$pkg_out" | grep -v '^$' | grep -v '^$ ' | head -10)
+  if [ -n "$pkg_warn" ]; then
+    printf "    ⚠ warnings:\n" >&2
+    echo "$pkg_warn" | sed 's/^/      /' >&2
+  fi
+  APP_PATH=$(find "$DESKTOP_DIR/dist" -name "${APP_NAME}.app" -type d -maxdepth 3 2>/dev/null | head -1)
+  if [[ -z "$APP_PATH" ]]; then
+    printf "  2/%d  package       ✗ .app not found\n" "$total" >&2
+    exit 1
+  fi
+  printf "  2/%d  package       ✓ %s\n" "$total" "${APP_PATH##*/}" >&2
 
   if $INSTALL; then
-    echo ""
-    echo "📦 Installing to /Applications/${APP_NAME}.app..."
+    if [ -t 2 ]; then printf "  3/%d  install       copying...\r" "$total" >&2; fi
     rm -rf "/Applications/${APP_NAME}.app"
     cp -R "$APP_PATH" "/Applications/"
-    echo "✅ Installed: /Applications/${APP_NAME}.app"
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  3/%d  install       ✓ /Applications/%s\n" "$total" "${APP_NAME}.app" >&2
   fi
 }
 
 # ── Desktop CI build（GitHub Actions，非本机平台）──────────
 
 function build_desktop_ci() {
-  # CI 构建的 --install 不进行实际安装（产物在远端/下载目录，非本机平台）。
+  local version
+  if [[ -n "$CUSTOM_VERSION" ]]; then
+    version="$CUSTOM_VERSION"
+  else
+    version="$(resolve_build_version "ellamaka-desktop" "$CHANNEL" "$PROJECT_ROOT")"
+  fi
+
+  local total=4
+  $CI_NO_WAIT && total=3
+
+  echo "" >&2
+  echo "ellamaka desktop · $CHANNEL · $version" >&2
+  echo "" >&2
+
   if $INSTALL; then
-    echo "ℹ️  --install 仅本地构建生效；CI 构建产物不自动安装（下载到 $CI_OUT_DIR）"
+    printf "  1/%d  pre-flight    ℹ --install skipped (CI downloads to %s)\n" "$total" "$CI_OUT_DIR" >&2
   fi
 
   case "$CHANNEL" in
@@ -451,21 +517,16 @@ function build_desktop_ci() {
     fi
   fi
 
-  local version
-  if [[ -n "$CUSTOM_VERSION" ]]; then
-    version="$CUSTOM_VERSION"
-  else
-    version="$(resolve_build_version "ellamaka-desktop" "$CHANNEL" "$PROJECT_ROOT")"
-  fi
-
   local workflow="publish-ellamaka-desktop.yml"
   local artifact_name="desktop-$RUNNER"
-  echo "Building $OS_LABEL Desktop via CI (arch: $CI_ARCH, channel: $CHANNEL, version: $version, branch: $branch)"
+  printf "  1/%d  pre-flight    ✓ %s/%s on branch %s\n" "$total" "$OS_LABEL" "$CI_ARCH" "$branch" >&2
 
-  echo "Dispatching $workflow (ref=$branch, os=$PLATFORM, version=$version, publish=false)"
+  # Step 2: Dispatch
+  if [ -t 2 ]; then printf "  2/%d  dispatch      dispatching...\r" "$total" >&2; fi
   if ! gh workflow run "$workflow" -R "$REPO" --ref "$branch" \
       -f "channel=$CHANNEL" -f "os=$PLATFORM" -f "version=$version" -f "publish=false"; then
-    echo "❌ Failed to dispatch workflow"
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  2/%d  dispatch      ✗ failed\n" "$total" >&2
     exit 1
   fi
 
@@ -475,32 +536,39 @@ function build_desktop_ci() {
   local run_id
   run_id="$(gh run list --workflow "$workflow" -R "$REPO" --branch "$branch" --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || true)"
   if [[ -z "$run_id" ]]; then
-    echo "❌ Could not determine the workflow run id. Check https://github.com/$REPO/actions"
+    printf "  2/%d  dispatch      ✗ could not find run id\n" "$total" >&2
+    echo "    https://github.com/$REPO/actions" >&2
     exit 1
   fi
   local run_url="https://github.com/$REPO/actions/runs/$run_id"
-  echo "Workflow run: $run_url"
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  printf "  2/%d  dispatch      ✓ dispatched\n" "$total" >&2
+  echo "    $run_url" >&2
 
   if $CI_NO_WAIT; then
-    echo "--no-wait: run triggered, not waiting. Download later with:"
-    echo "  gh run download $run_id -R $REPO --name $artifact_name --dir $CI_OUT_DIR"
-    echo "Download links:"
-    echo "  Run: $run_url"
-    echo "  Artifacts: $run_url/artifacts"
+    printf "  3/%d  ci wait       ℹ triggered (--no-wait)\n" "$total" >&2
+    echo "    $run_url" >&2
     return 0
   fi
 
+  # Step 3: Wait for CI
+  if [ -t 2 ]; then printf "  3/%d  ci wait       watching...\r" "$total" >&2; fi
   if ! gh run watch "$run_id" -R "$REPO" --exit-status >/dev/null 2>&1; then
-    echo "❌ Workflow run $run_id failed. Failed step logs:"
-    gh run view "$run_id" -R "$REPO" --log-failed 2>/dev/null | tail -50 || true
-    echo "Full logs: gh run view $run_id -R $REPO --log"
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  3/%d  ci wait       ✗ run failed\n" "$total" >&2
+    gh run view "$run_id" -R "$REPO" --log-failed 2>/dev/null | tail -50 >&2 || true
     exit 1
   fi
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  printf "  3/%d  ci wait       ✓ completed\n" "$total" >&2
+  echo "    $run_url" >&2
 
+  # Step 4: Download
   mkdir -p "$CI_OUT_DIR"
-  echo "Downloading $artifact_name to $CI_OUT_DIR"
+  if [ -t 2 ]; then printf "  4/%d  download      fetching...\r" "$total" >&2; fi
   if ! gh run download "$run_id" -R "$REPO" --name "$artifact_name" --dir "$CI_OUT_DIR"; then
-    echo "❌ Artifact download failed"
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  4/%d  download      ✗ failed\n" "$total" >&2
     exit 1
   fi
 
@@ -530,7 +598,8 @@ function build_desktop_ci() {
   local app
   app="$(flatten_artifact "$primary" || true)"
   if [[ -z "$app" ]]; then
-    echo "❌ $primary not found in downloaded artifact"
+    if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+    printf "  4/%d  download      ✗ %s not found\n" "$total" "$primary" >&2
     find "$CI_OUT_DIR" -type f | head -20
     exit 1
   fi
@@ -546,14 +615,12 @@ function build_desktop_ci() {
 
   local size
   size="$(du -h "$app" | cut -f1)"
-  echo "$OS_LABEL Desktop build ready:"
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  printf "  4/%d  download      ✓ %s (%s)\n" "$total" "${app##*/}" "$size" >&2
   for package in "${packages[@]}"; do
-    echo "  $package"
+    echo "    $package" >&2
   done
-  echo "  size: $size"
-  echo "Download links:"
-  echo "  Run: $run_url"
-  echo "  Artifacts: $run_url/artifacts"
+  echo "    $run_url" >&2
 }
 
 # ── Dispatch ───────────────────────────────────────────────

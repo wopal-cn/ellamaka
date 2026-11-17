@@ -20,6 +20,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { isDraftSessionId } from "@/utils/draft-session"
 import { UserMessage } from "@wopal/ellamaka-sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { DialogSelectModel } from "@/components/dialog-select-model"
 
 export type LocalPanelActionContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -265,9 +266,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
   }
 
   const chooseModel = () => {
-    void import("@/components/dialog-select-model").then((x) => {
-      dialog.show(() => <x.DialogSelectModel model={local.model} />)
-    })
+    dialog.show(() => <DialogSelectModel model={local.model} />)
   }
 
   const chooseMcp = () => {

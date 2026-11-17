@@ -72,5 +72,28 @@ export default defineConfig({
   build: {
     target: "esnext",
     sourcemap: true,
+    // Large third-party chunks (ghostty-web terminal, shiki language
+    // grammars, mermaid diagrams) are already code-split by Vite. The main
+    // app bundle includes SolidJS + app code and sits near 1.5 MB.
+    chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      output: {
+        // The oniguruma wasm binary (vscode-oniguruma, used by shiki) and
+        // the "wasm" language grammar (a shiki bundled TextMate grammar)
+        // both land in chunks Rollup names "wasm", colliding their
+        // sourcemap filenames. Give the binary its own chunk name.
+        manualChunks(id) {
+          if (id.includes("oniguruma")) return "onig-wasm"
+          if (
+            id.includes("node_modules/solid-js") ||
+            id.includes("node_modules/@solidjs") ||
+            id.includes("node_modules/@solid-primitives") ||
+            id.includes("node_modules/@kobalte")
+          )
+            return "solid-vendor"
+          return undefined
+        },
+      },
+    },
   },
 })
