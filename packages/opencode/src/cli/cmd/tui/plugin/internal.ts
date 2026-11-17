@@ -3,6 +3,7 @@ import HomeTips from "../feature-plugins/home/tips"
 import SidebarContext from "../feature-plugins/sidebar/context"
 import SidebarMcp from "../feature-plugins/sidebar/mcp"
 import SidebarLsp from "../feature-plugins/sidebar/lsp"
+import SidebarPlugins from "../feature-plugins/sidebar/plugins"
 import SidebarTodo from "../feature-plugins/sidebar/todo"
 import SidebarFooter from "../feature-plugins/sidebar/footer"
 import PluginManager from "../feature-plugins/system/plugins"
@@ -28,6 +29,7 @@ export function internalTuiPlugins(flags: Pick<RuntimeFlags.Info, "experimentalE
     SidebarContext,
     SidebarMcp,
     SidebarLsp,
+    SidebarPlugins,
     SidebarTodo,
     SidebarFooter,
     Notifications,
