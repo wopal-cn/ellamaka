@@ -3,6 +3,7 @@ import { FetchHttpClient } from "effect/unstable/http"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Latch, Layer } from "effect"
 import path from "path"
+import { chmodSync } from "node:fs"
 import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -91,19 +92,32 @@ function toolPart(parts: MessageV2.Part[]) {
   return parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
 }
 
+// Request payloads arrive as `Record<string, unknown>`; narrow them by inspecting the
+// value instead of asserting a shape the mock server never guaranteed.
+const isRecordArray = (value: unknown): value is Record<string, unknown>[] =>
+  Array.isArray(value) && value.every((item) => typeof item === "object" && item !== null)
+
 type CompletedToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateCompleted }
 type ErrorToolPart = MessageV2.ToolPart & { state: MessageV2.ToolStateError }
 
-function completedTool(parts: MessageV2.Part[]) {
-  const part = toolPart(parts)
-  expect(part?.state.status).toBe("completed")
-  return part?.state.status === "completed" ? (part as CompletedToolPart) : undefined
+function isCompletedTrip(part: MessageV2.ToolPart | undefined): part is CompletedToolPart {
+  return part?.state.status === "completed"
 }
 
-function errorTool(parts: MessageV2.Part[]) {
+function completedTool(parts: MessageV2.Part[]): CompletedToolPart | undefined {
+  const part = toolPart(parts)
+  expect(part?.state.status).toBe("completed")
+  return isCompletedTrip(part) ? part : undefined
+}
+
+function isErrorTrip(part: MessageV2.ToolPart | undefined): part is ErrorToolPart {
+  return part?.state.status === "error"
+}
+
+function errorTool(parts: MessageV2.Part[]): ErrorToolPart | undefined {
   const part = toolPart(parts)
   expect(part?.state.status).toBe("error")
-  return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
+  return isErrorTrip(part) ? part : undefined
 }
 
 const mcp = Layer.succeed(
@@ -333,6 +347,7 @@ const waitForBusy = (sessionID: SessionID, duration: Duration.Input = "2 seconds
 const hasBash = Effect.sync(() => Bun.which("bash") !== null)
 
 const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> => ({
+  // eslint-disable-next-line unicorn/no-thenable -- mirrors the Deferred as a thenable for existing callers
   then: (onfulfilled, onrejected) => {
     Effect.runFork(
       Deferred.await(deferred).pipe(
@@ -346,6 +361,7 @@ const deferredAsPromise = <A>(deferred: Deferred.Deferred<A>): PromiseLike<A> =>
         }),
       ),
     )
+    // eslint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- PromiseLike.then narrows the result type to never when chaining the same Deferred
     return deferredAsPromise(deferred) as PromiseLike<never>
   },
 })
@@ -984,6 +1000,7 @@ it.instance(
           const taskMsg = msgs.find((item) => item.info.role === "assistant" && item.info.agent === "general")
           const tool = taskMsg?.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
+          return undefined
         }),
         "timed out waiting for running subtask metadata",
       )
@@ -1028,6 +1045,7 @@ it.instance(
             (part): part is MessageV2.ToolPart => part.type === "tool" && part.tool === "task",
           )
           if (tool?.state.status === "running" && tool.state.metadata?.sessionId) return tool
+          return undefined
         }),
         "timed out waiting for running task metadata",
       )
@@ -1218,7 +1236,7 @@ noLLMServer.instance(
       const aborted = yield* Deferred.make<void>()
       const registry = yield* ToolRegistry.Service
       const { task } = yield* registry.named()
-      const original = task.execute
+      const original = task.execute.bind(task)
       task.execute = (_args, ctx) =>
         Effect.callback<never>((_resume) => {
           ctx.abort.addEventListener("abort", () => succeedVoid(aborted), { once: true })
@@ -1656,6 +1674,7 @@ unixNoLLMServer(
             const taskMsg = msgs.find((item) => item.info.role === "assistant")
             const tool = taskMsg ? toolPart(taskMsg.parts) : undefined
             if (tool?.state.status === "running" && tool.state.metadata?.output.includes("first")) return true
+            return undefined
           }),
           "timed out waiting for running shell metadata",
         )
@@ -1894,6 +1913,7 @@ unix(
           const assistant = msgs.findLast((item) => item.info.role === "assistant")
           const tool = assistant ? toolPart(assistant.parts) : undefined
           if (tool?.state.status === "running" && tool.state.metadata?.output.includes("truncation-ready")) return true
+          return undefined
         }),
         "timed out waiting for truncated shell output",
       )
@@ -2135,6 +2155,292 @@ noLLMServer.instance(
       expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
       expect(text[1]?.includes("Read tool failed to read")).toBe(true)
       expect(text[2]).toBe("after-file")
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "attaches directory instructions to a text/plain attachment",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* ensureDir(path.join(dir, "sub"))
+      yield* writeText(path.join(dir, "sub", "AGENTS.md"), "# Sub Rule")
+      const target = path.join(dir, "sub", "file.ts")
+      yield* writeText(target, "export const x = 1")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "text/plain", url: pathToFileURL(target).href, filename: "file.ts" }],
+      })
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: msg.info.id })
+      const rule = path.join(dir, "sub", "AGENTS.md")
+      const instructionPart = stored.parts.find(
+        (part): part is MessageV2.TextPart => part.type === "text" && part.text.includes(`Instructions from: ${rule}`),
+      )
+      expect(instructionPart?.text).toContain("# Sub Rule")
+      expect(instructionPart?.text).toContain("<system-reminder>")
+      expect(instructionPart?.metadata?.loaded).toEqual([rule])
+      expect(stored.parts.some((part) => part.type === "text" && part.text.includes("export const x = 1"))).toBe(true)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "attaches directory instructions to a media attachment and keeps the file part",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* ensureDir(path.join(dir, "assets"))
+      yield* writeText(path.join(dir, "assets", "AGENTS.md"), "# Asset Rule")
+      const target = path.join(dir, "assets", "doc.pdf")
+      yield* Effect.promise(() => Bun.write(target, Buffer.from("%PDF-1.4\n%%EOF", "utf8")))
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "application/pdf", url: pathToFileURL(target).href, filename: "doc.pdf" }],
+      })
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: msg.info.id })
+      const rule = path.join(dir, "assets", "AGENTS.md")
+      const instructionPart = stored.parts.find(
+        (part): part is MessageV2.TextPart => part.type === "text" && part.text.includes(`Instructions from: ${rule}`),
+      )
+      expect(instructionPart?.text).toContain("# Asset Rule")
+      expect(instructionPart?.metadata?.loaded).toEqual([rule])
+      expect(stored.parts.some((part) => part.type === "file" && part.filename === "doc.pdf")).toBe(true)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "keeps the attachment usable when a nearby rule cannot be read",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* ensureDir(path.join(dir, "broken"))
+      const rule = path.join(dir, "broken", "AGENTS.md")
+      yield* writeText(rule, "# Broken Rule")
+      const target = path.join(dir, "broken", "file.ts")
+      yield* writeText(target, "export const broken = true")
+      yield* Effect.sync(() => chmodSync(rule, 0))
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "text/plain", url: pathToFileURL(target).href, filename: "file.ts" }],
+      })
+      yield* Effect.sync(() => chmodSync(rule, 0o644))
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: msg.info.id })
+      const text = stored.parts.filter((part) => part.type === "text").map((part) => part.text)
+      expect(text.some((value) => value.includes("export const broken = true"))).toBe(true)
+      expect(text.some((value) => value.includes("Read tool failed to read"))).toBe(false)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "does not repeat an attachment rule that is still visible from an earlier message",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* ensureDir(path.join(dir, "sub"))
+      const rule = path.join(dir, "sub", "AGENTS.md")
+      yield* writeText(rule, "# Sub Rule")
+      const first = path.join(dir, "sub", "a.ts")
+      const second = path.join(dir, "sub", "b.ts")
+      yield* writeText(first, "export const a = 1")
+      yield* writeText(second, "export const b = 2")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const one = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "text/plain", url: pathToFileURL(first).href, filename: "a.ts" }],
+      })
+      if (one.info.role !== "user") throw new Error("expected user message")
+      const firstStored = yield* MessageV2.get({ sessionID: session.id, messageID: one.info.id })
+      expect(
+        firstStored.parts.some((part) => part.type === "text" && part.text.includes(`Instructions from: ${rule}`)),
+      ).toBe(true)
+
+      const two = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "text/plain", url: pathToFileURL(second).href, filename: "b.ts" }],
+      })
+      if (two.info.role !== "user") throw new Error("expected user message")
+      const secondStored = yield* MessageV2.get({ sessionID: session.id, messageID: two.info.id })
+      const copies = secondStored.parts.filter(
+        (part) => part.type === "text" && part.text.includes(`Instructions from: ${rule}`),
+      )
+      // The rule is still visible from the earlier message, so this attachment must
+      // not carry a second copy of it.
+      expect(copies).toHaveLength(0)
+      expect(secondStored.parts.some((part) => part.type === "text" && part.text.includes("export const b = 2"))).toBe(
+        true,
+      )
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "reloads an attachment rule after compaction drops the message that carried it",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* ensureDir(path.join(dir, "sub"))
+      const rule = path.join(dir, "sub", "AGENTS.md")
+      yield* writeText(rule, "# Sub Rule")
+      const target = path.join(dir, "sub", "c.ts")
+      yield* writeText(target, "export const c = 3")
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      const first = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "text/plain", url: pathToFileURL(target).href, filename: "c.ts" }],
+      })
+      if (first.info.role !== "user") throw new Error("expected user message")
+
+      const tail = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "retained tail" }],
+      })
+      if (tail.info.role !== "user") throw new Error("expected user message")
+
+      const compacted = MessageID.ascending()
+      yield* sessions.updateMessage({
+        id: compacted,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: { providerID: ref.providerID, modelID: ref.modelID },
+      } as MessageV2.User)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: session.id,
+        messageID: compacted,
+        type: "compaction",
+        auto: true,
+        tail_start_id: tail.info.id,
+      } as MessageV2.CompactionPart)
+      const summaryID = MessageID.ascending()
+      const summaryInfo: MessageV2.Assistant = {
+        id: summaryID,
+        sessionID: session.id,
+        role: "assistant",
+        parentID: compacted,
+        time: { created: Date.now() },
+        mode: "build",
+        agent: "build",
+        path: { cwd: dir, root: dir },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        summary: true,
+        finish: "end_turn",
+      }
+      yield* sessions.updateMessage(summaryInfo)
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: session.id,
+        messageID: summaryID,
+        type: "text",
+        text: "compacted summary",
+      } as MessageV2.TextPart)
+
+      const visible = MessageV2.filterCompacted(MessageV2.stream(session.id))
+      expect(visible.some((message) => message.info.id === first.info.id)).toBe(false)
+
+      const after = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "text/plain", url: pathToFileURL(target).href, filename: "c.ts" }],
+      })
+      if (after.info.role !== "user") throw new Error("expected user message")
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: after.info.id })
+      expect(
+        stored.parts.some((part) => part.type === "text" && part.text.includes(`Instructions from: ${rule}`)),
+      ).toBe(true)
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "keeps a media attachment when its directory rule cannot be read",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      yield* ensureDir(path.join(dir, "assets"))
+      const rule = path.join(dir, "assets", "AGENTS.md")
+      yield* writeText(rule, "# Asset Rule")
+      const target = path.join(dir, "assets", "doc.pdf")
+      yield* Effect.promise(() => Bun.write(target, Buffer.from("%PDF-1.4\\n%%EOF", "utf8")))
+      yield* Effect.sync(() => chmodSync(rule, 0))
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "file", mime: "application/pdf", url: pathToFileURL(target).href, filename: "doc.pdf" }],
+      })
+      yield* Effect.sync(() => chmodSync(rule, 0o644))
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: msg.info.id })
+      expect(stored.parts.some((part) => part.type === "file" && part.filename === "doc.pdf")).toBe(true)
+      expect(
+        stored.parts.some((part) => part.type === "text" && part.text.includes(`Instructions from: ${rule}`)),
+      ).toBe(false)
 
       yield* sessions.remove(session.id)
     }),
@@ -2657,11 +2963,11 @@ for (const { synthetic, lastStep } of [
           JSON.stringify(input.messages).includes("transient-context-"),
         )
         expect(requests).toHaveLength(2)
-        expect(JSON.stringify(requests[0]!.messages)).toContain("transient-context-1")
-        expect(JSON.stringify(requests[1]!.messages)).toContain("transient-context-2")
-        expect(JSON.stringify(requests[1]!.messages)).not.toContain("transient-context-1")
+        expect(JSON.stringify(requests[0].messages)).toContain("transient-context-1")
+        expect(JSON.stringify(requests[1].messages)).toContain("transient-context-2")
+        expect(JSON.stringify(requests[1].messages)).not.toContain("transient-context-1")
         for (const request of requests) {
-          const messages = request.messages as { role: string; content: unknown }[]
+          const messages = isRecordArray(request.messages) ? request.messages : []
           if (lastStep) {
             expect(messages.at(-1)?.role).toBe("assistant")
             expect(JSON.stringify(messages.at(-1)?.content)).toContain("MAXIMUM STEPS REACHED")

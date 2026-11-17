@@ -1929,12 +1929,6 @@
     },
     {
       "rule": "TISO005",
-      "file": "packages/opencode/test/session/instruction.test.ts",
-      "detail": "test.todo(\"fetches remote instructions from config URLs via ",
-      "count": 1
-    },
-    {
-      "rule": "TISO005",
       "file": "packages/opencode/test/session/llm-native-recorded.test.ts",
       "detail": "test.skip(`${scenario.name}: drives a tool loop to a final t",
       "count": 1

@@ -392,6 +392,7 @@ export const layer: Layer.Layer<
           input.modelID.includes("gpt-") &&
           !input.modelID.includes("oss") &&
           !input.modelID.includes("gpt-4")
+        // TODO(#268): Before expanding native/DSH apply_patch availability, cover all patch targets with AGENTS.md preflight.
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
 

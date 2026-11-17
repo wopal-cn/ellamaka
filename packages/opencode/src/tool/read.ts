@@ -6,7 +6,6 @@ import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import DESCRIPTION from "./read.txt"
 import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
 import { Reference } from "@/reference/reference"
 
@@ -39,7 +38,6 @@ export const ReadTool = Tool.define(
   "read",
   Effect.gen(function* () {
     const fs = yield* AppFileSystem.Service
-    const instruction = yield* Instruction.Service
     const reference = yield* Reference.Service
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -116,11 +114,11 @@ export const ReadTool = Tool.define(
           Effect.gen(function* () {
             if (flags.done) return yield* new ReadStop()
             flags.count += 1
-            if (flags.count <= start) return
+            if (flags.count <= start) return undefined
 
             if (raw.length >= opts.limit) {
               flags.more = true
-              return
+              return undefined
             }
 
             const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
@@ -128,7 +126,7 @@ export const ReadTool = Tool.define(
             if (flags.bytes + size <= MAX_BYTES) {
               raw.push(line)
               flags.bytes += size
-              return
+              return undefined
             }
 
             flags.cut = true
@@ -254,7 +252,6 @@ export const ReadTool = Tool.define(
         }
       }
 
-      const loaded = yield* instruction.resolve(ctx.messages, filepath, ctx.messageID)
       const sample = yield* readSample(filepath, Number(stat.size), SAMPLE_BYTES)
 
       const mime = sniffAttachmentMime(sample, AppFileSystem.mimeType(filepath))
@@ -269,7 +266,7 @@ export const ReadTool = Tool.define(
           metadata: {
             preview: msg,
             truncated: false,
-            loaded: loaded.map((item) => item.filepath),
+            loaded: [] as string[],
           },
           attachments: [
             {
@@ -307,17 +304,13 @@ export const ReadTool = Tool.define(
       }
       output += "\n</content>"
 
-      if (loaded.length > 0) {
-        output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
-      }
-
       return {
         title,
         output,
         metadata: {
           preview: file.raw.slice(0, 20).join("\n"),
           truncated,
-          loaded: loaded.map((item) => item.filepath),
+          loaded: [] as string[],
         },
       }
     })

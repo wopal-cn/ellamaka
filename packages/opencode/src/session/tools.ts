@@ -19,6 +19,8 @@ import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { EffectBridge } from "@/effect/bridge"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
+import { Instruction } from "./instruction"
 import { isRecord } from "@/util/record"
 
 const log = Log.create({ service: "session.tools" })
@@ -74,6 +76,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // Per-message dsh sandbox mode from the latest user message (composer
   // selector). Undefined falls back to the space-level default in the adapter.
   sandboxMode?: "read-only" | "workspace-write" | "full-access"
+  // Snapshot of the text the model actually received for this step. The caller
+  // owns it because this resolve runs before the messages transform hook; the
+  // getter is read when a tool executes, after that hook produced the request.
+  // Returning undefined means nothing is known to be visible yet.
+  instructionVisibility?: () => Instruction.Visibility | undefined
 }) {
   const resolveStart = Date.now()
   const tools: Record<string, AITool> = {}
@@ -84,6 +91,141 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const internalHook = yield* InternalHook.Service
+  const instruction = yield* Instruction.Service
+  const filesystem = yield* AppFileSystem.Service
+
+  // Freeze the caller-supplied snapshot on the first tool execution of this
+  // batch. Tools resolve before the message transform hook runs, so the value
+  // cannot be read here; every call in the batch then reuses one baseline.
+  let batchVisibility: Instruction.Visibility | undefined
+  let batchVisibilityRead = false
+  const visibilityForBatch = () => {
+    if (!batchVisibilityRead) {
+      batchVisibilityRead = true
+      batchVisibility = input.instructionVisibility?.()
+    }
+    return batchVisibility
+  }
+
+  const argumentPath = (args: Record<string, unknown>, key: string) => {
+    const value = args[key]
+    return typeof value === "string" && value.length > 0 ? value : undefined
+  }
+
+  // Reads attach rules after the fact; modifications must prove them first.
+  const readTarget = (toolId: string, args: Record<string, unknown>) =>
+    toolId === "read"
+      ? argumentPath(args, "filePath")
+      : toolId === "str_replace_editor" && args["command"] === "view"
+        ? argumentPath(args, "path")
+        : undefined
+
+  const modificationTarget = (toolId: string, args: Record<string, unknown>) => {
+    if (toolId === "write" || toolId === "edit") return argumentPath(args, "filePath")
+    // str_replace_editor view is a read; every other command writes.
+    if (toolId === "str_replace_editor" && args["command"] !== "view") return argumentPath(args, "path")
+    return undefined
+  }
+
+  // Directory rules are a session-layer concern: the native read and the
+  // DSH-projected read/view both get them here, so no tool backend owns it.
+  const withDirectoryInstructions = Effect.fnUntraced(function* (
+    toolId: string,
+    args: Record<string, unknown>,
+    result: Tool.ExecuteResult,
+  ) {
+    const target = readTarget(toolId, args)
+    if (!target) return result
+    // Nothing is known to be visible only when the caller supplied a getter that
+    // produced no snapshot; mounting the rules again is the safe direction.
+    const visibility = input.instructionVisibility
+      ? (visibilityForBatch() ?? { text: [] })
+      : instruction.snapshot(input.messages)
+    // A read that already succeeded stays successful. Rule discovery is a
+    // side channel here, so a lookup failure only means the rules are missing
+    // from this result for now.
+    // Only typed lookup failures are absorbed; defects still surface so real
+    // bugs are not hidden behind a silently successful read.
+    const resolution = yield* instruction.inspect({ filepath: target, visibility }).pipe(
+      Effect.catch(() => {
+        log.warn("directory instructions lookup failed", { tool: toolId })
+        return Effect.succeed(undefined)
+      }),
+    )
+    if (!resolution) return result
+    if (resolution.errors.length > 0) {
+      // Count only: rule paths and contents never belong in logs.
+      log.warn("directory instructions unavailable", { tool: toolId, unreadable: resolution.errors.length })
+    }
+    // A directory listing reports entries only; it has no file to scope rules to.
+    const directory = yield* filesystem.isDir(resolution.target).pipe(Effect.orElseSucceed(() => false))
+    if (directory) return { ...result, metadata: { ...result.metadata, loaded: [] } }
+
+    // Transitional: the native read still attaches rules itself before the
+    // wrapper took over attachment. Append only what this result lacks.
+    const missing = resolution.attach.filter((item) => !Instruction.containsInstruction(result.output, item.filepath))
+    const current = result.metadata?.["loaded"]
+    const existing = Array.isArray(current) ? current.filter((item): item is string => typeof item === "string") : []
+    const loaded = [...new Set([...existing, ...missing.map((item) => item.filepath)])]
+    const output =
+      missing.length === 0
+        ? result.output
+        : result.output +
+          "\n\n<system-reminder>\n" +
+          missing.map((item) => item.formatted).join("\n\n") +
+          "\n</system-reminder>"
+    return { ...result, output, metadata: { ...result.metadata, loaded } }
+  })
+
+  // A suspended modification is not an executed file operation: it returns the
+  // rules and a retry instruction, and the pipeline must not treat it as a write
+  // (no FileOpEvent, no diagnostics backfill, no underlying tool call).
+  const suspended = (result: Tool.ExecuteResult, resolution: Instruction.Resolution): Tool.ExecuteResult => ({
+    ...result,
+    title: result.title || "Instructions required",
+    metadata: { ...result.metadata, loaded: resolution.attach.map((item) => item.filepath) },
+    output:
+      "File not modified. The following instructions apply to this file; read them and repeat the same tool call to apply the change.\n\n" +
+      resolution.attach.map((item) => item.reminder).join("\n\n"),
+  })
+
+  const preflightModification = Effect.fnUntraced(function* (
+    toolId: string,
+    args: Record<string, unknown>,
+  ): Effect.fn.Return<Tool.ExecuteResult | undefined> {
+    const target = modificationTarget(toolId, args)
+    if (!target) return undefined
+    const visibility = input.instructionVisibility
+      ? (visibilityForBatch() ?? { text: [] })
+      : instruction.snapshot(input.messages)
+    const resolution = yield* instruction.inspect({ filepath: target, visibility, operation: "modify" }).pipe(
+      Effect.catch(() => {
+        log.warn("directory instructions lookup failed", { tool: toolId })
+        return Effect.succeed(undefined)
+      }),
+    )
+    // Fail closed: an unreadable applicable rule must stop the write, and a
+    // lookup we could not complete gives us no reason to believe it is safe.
+    if (!resolution) {
+      return {
+        title: "Instructions unavailable",
+        metadata: { loaded: [] as string[] },
+        output:
+          "File not modified. Instructions for this location could not be loaded, so the change was not applied. Retry once that succeeds.",
+      }
+    }
+    if (resolution.errors.length > 0) {
+      log.warn("directory instructions unavailable", { tool: toolId, unreadable: resolution.errors.length })
+      return {
+        title: "Instructions unavailable",
+        metadata: { loaded: [] as string[] },
+        output:
+          "File not modified. Instructions for this location exist but could not be read, so the change was not applied. Resolve that and retry.",
+      }
+    }
+    if (resolution.attach.length === 0) return undefined
+    return suspended({ title: "", metadata: {}, output: "" }, resolution)
+  })
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -153,18 +295,23 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
               { args },
             )
-            const result = yield* item.execute(args, ctx)
+            const blocked = yield* preflightModification(item.id, args)
+            const raw = blocked ?? (yield* item.execute(args, ctx))
+            const result = yield* withDirectoryInstructions(item.id, args, raw)
             // Publish the file operation before building the final output:
             // observers (write class) may augment `result`, and the
             // augmentation flows into `output` below. Also before
             // `tool.execute.after`, so external plugins see the final result.
-            yield* internalHook.emit({
-              toolId: item.id,
-              args,
-              filePaths: extractFilePaths(item.id, args, result),
-              result,
-              sessionID: ctx.sessionID,
-            })
+            // A suspended modification touched nothing, so publishing a file
+            // operation for it would tell observers a write happened.
+            if (!blocked)
+              yield* internalHook.emit({
+                toolId: item.id,
+                args,
+                filePaths: extractFilePaths(item.id, args, result),
+                result,
+                sessionID: ctx.sessionID,
+              })
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({

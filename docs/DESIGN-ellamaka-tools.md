@@ -1,11 +1,12 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-13
+> **Updated**: 2026-11-16
 > **Parent**: `./DESIGN.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-dsh-base.md` — DSH 集成基础、依赖闭包与 Profile 生命周期
+> - `./DESIGN-instruction-loading.md` — 会话指令加载：AGENTS.md 基线、目录级挂载与归属
 >
 > **Scope**: DSH v0.2 的工具采用、内置 adapter、容器装配、审批与沙箱兼容。
 
@@ -32,7 +33,7 @@ ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [DSH 基�
 
 `ellamaka-tools` 是从空 Cordis 根独立装配的无会话工具 profile。它使用官方 profile、bundle 与 YAML `insert` 格式，直接声明所需工具和基础服务；`dsh.profile.bundles` 的初始选择不包含 `@deepseek-ai/dsh-base`。产品维护最小工具装配声明，用户在标准 profile 补丁中配置插件，并通过官方插件安装流程添加外部包与 bundle。
 
-装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端，后台 shell 执行关闭。DSH `@deepseek-ai/dsh-tools` 提供工具注册表，`@deepseek-ai/dsh-tool-executor-native` 负责普通工具调用。Tools profile 不加载 PTC Runtime 或 PTC Executor。`session-projection` 提供策略折叠，`approval` 承接单次提权。`tool-fs` 显式配置 `applyPatch: false`，并且 adapter 不投影 `apply_patch`。容器保持无持久 DSH Session 的边界。
+装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端，后台 shell 执行关闭。DSH `@deepseek-ai/dsh-tools` 提供工具注册表，`@deepseek-ai/dsh-tool-executor-native` 负责普通工具调用。Tools profile 不加载 PTC Runtime 或 PTC Executor。`session-projection` 提供策略折叠，`approval` 承接单次提权。`tool-fs` 沿用默认的 `applyPatch: false`，并且 adapter 不投影 `apply_patch`。容器保持无持久 DSH Session 的边界。
 
 插件包与服务的选择由标准配置表达。宿主按官方声明加载、解析并报告激活结果；不增加 `adopt` 字段、整棵 `dsh-base` 的禁用表，或通过扫描上游源码推导并改写装配的机制。必要的 Bun/Electron 宿主接线归基础设计。
 
@@ -62,6 +63,8 @@ tools profile 的补丁层按固定顺序合成：bundle 层的 patch → 产品
 Loader settlement 后，macOS/Linux 必须实际注册 `bash`、`read`、`write`、`edit`、`glob`、`grep`、`str_replace_editor`；Windows 使用 `pwsh` 后端与相同文件/搜索能力。Tools Ready 检查覆盖必需的 Native 工具、沙箱和取消，不检查 PTC Runtime。缺少必需工具或必需插件等待服务、激活失败时，容器报告具体原因并拒绝发布 ready。首次挂载与配置重放共用验收。
 
 升级兼容性由真实工具调用验证：读写和编辑结果、文件搜索、Shell 工作目录与输出、字符串替换、沙箱拒绝、审批、取消和超时均有回归保护。工具注册与 schema 检查是启动条件，实际执行结果是兼容验收依据。测试固定对外行为，允许上游内部插件组织变化。
+
+工具后端只负责实际文件操作。会话层在原生和 DSH 投影的 `read` 读取后，以及用户附加本地文件时，向模型提供适用目录的 AGENTS.md；在 `write`、`edit`、`str_replace_editor` 修改前，确认模型已经得到相关规范，尚未得到时先提供规则并暂停修改。上下文压缩后，根据模型仍能看到的消息决定是否需要重新加载。该契约见 [项目规范加载设计](./DESIGN-instruction-loading.md)。
 
 升级使用基础设计的单一 DSH 版本入口。依赖安装及生成物刷新后运行同一组工具回归；通过即接受该版本在已覆盖工具契约上的兼容性。失败时依据模块解析、激活或执行诊断定位实际变化，再修正受影响的标准配置或 adapter。官方真实破坏性变更由具体修复承接，不通过预设别名、源码模式猜测或多版本分支预测。
 

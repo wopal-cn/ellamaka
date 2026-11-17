@@ -10,12 +10,17 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
-import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped, withGithubBase as githubBase } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstance,
+  TestInstance,
+  tmpdirScoped,
+  withGithubBase as githubBase,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Reference } from "@/reference/reference"
 import { RepositoryCache } from "@/reference/repository-cache"
@@ -49,7 +54,6 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Agent.defaultLayer,
     AppFileSystem.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
-    Instruction.defaultLayer,
     LSP.defaultLayer,
     referenceLayer(flags),
     Truncate.defaultLayer,
@@ -573,8 +577,8 @@ root_type Monster;`
   )
 })
 
-describe("tool.read loaded instructions", () => {
-  it.live("loads AGENTS.md from parent directory and includes in metadata", () =>
+describe("tool.read directory instructions", () => {
+  it.live("leaves instruction loading to the session tool wrapper", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
       yield* put(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
@@ -582,10 +586,9 @@ describe("tool.read loaded instructions", () => {
 
       const result = yield* exec(dir, { filePath: path.join(dir, "subdir", "nested", "test.txt") })
       expect(result.output).toContain("test content")
-      expect(result.output).toContain("system-reminder")
-      expect(result.output).toContain("Test Instructions")
-      expect(result.metadata.loaded).toBeDefined()
-      expect(result.metadata.loaded).toContain(path.join(dir, "subdir", "AGENTS.md"))
+      expect(result.output).not.toContain("system-reminder")
+      expect(result.output).not.toContain("Test Instructions")
+      expect(result.metadata.loaded).toEqual([])
     }),
   )
 })

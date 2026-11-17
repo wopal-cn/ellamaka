@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Schema } from "effect"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
+import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { InternalHook } from "@/hook/internal-hook"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { MessageID, SessionID } from "@/session/schema"
+import { Instruction } from "@/session/instruction"
 import { SessionTools } from "@/session/tools"
 import { Tool } from "@/tool/tool"
 import { ToolRegistry } from "@/tool/registry"
@@ -72,6 +74,8 @@ const it = testEffect(
     Permission.defaultLayer,
     pluginLayer,
     truncateLayer,
+    Instruction.defaultLayer,
+    AppFileSystem.defaultLayer,
   ),
 )
 

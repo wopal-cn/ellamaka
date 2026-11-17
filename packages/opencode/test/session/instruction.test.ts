@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -38,9 +38,7 @@ const provideInstruction =
 const provideInstructionWopalSpace =
   (global: Partial<Global.Interface>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(
-      Effect.provide(instructionLayer(global, { wopalSpace: true, disableClaudeCodePrompt: true })),
-    )
+    self.pipe(Effect.provide(instructionLayer(global, { wopalSpace: true, disableClaudeCodePrompt: true })))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -70,45 +68,6 @@ const tmpWithFiles = (files: Record<string, string>) =>
     return dir
   })
 
-function loaded(filepath: string): MessageV2.WithParts[] {
-  const sessionID = SessionID.make("session-loaded-1")
-  const messageID = MessageID.make("msg_message-loaded-1")
-
-  return [
-    {
-      info: {
-        id: messageID,
-        sessionID,
-        role: "user",
-        time: { created: 0 },
-        agent: "build",
-        model: {
-          providerID: ProviderID.make("anthropic"),
-          modelID: ModelID.make("claude-sonnet-4-20250514"),
-        },
-      },
-      parts: [
-        {
-          id: PartID.make("prt_part-loaded-1"),
-          messageID,
-          sessionID,
-          type: "tool",
-          callID: "call-loaded-1",
-          tool: "read",
-          state: {
-            status: "completed",
-            input: {},
-            output: "done",
-            title: "Read",
-            metadata: { loaded: [filepath] },
-            time: { start: 0, end: 1 },
-          },
-        },
-      ],
-    },
-  ]
-}
-
 describe("Instruction.layer", () => {
   it.live("builds without WOPAL_SPACE or InstanceRef", () =>
     Effect.scoped(
@@ -129,102 +88,366 @@ describe("Instruction.layer", () => {
   )
 })
 
-describe("Instruction.resolve", () => {
-  it.live("returns empty when AGENTS.md is at project root (already in systemPaths)", () =>
+const visibilityModel = {
+  providerID: ProviderID.make("anthropic"),
+  modelID: ModelID.make("claude-sonnet-4-20250514"),
+}
+
+function userText(text: string, id = "msg_user-text", loaded: string[] = []): MessageV2.WithParts {
+  const messageID = MessageID.make(id)
+  const sessionID = SessionID.make("session-instruction-visibility")
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "user",
+      time: { created: 0 },
+      agent: "build",
+      model: visibilityModel,
+    },
+    parts: [
+      {
+        id: PartID.make(`prt_${id}-text`),
+        messageID,
+        sessionID,
+        type: "text",
+        text,
+        synthetic: true,
+        ...(loaded.length > 0 ? { metadata: { loaded } } : {}),
+      },
+    ],
+  }
+}
+
+function assistantTool(
+  output: string,
+  opts: { id?: string; metadata?: Record<string, unknown>; compacted?: boolean } = {},
+): MessageV2.WithParts {
+  const id = opts.id ?? "msg_tool-output"
+  const messageID = MessageID.make(id)
+  const sessionID = SessionID.make("session-instruction-visibility")
+  return {
+    info: {
+      id: messageID,
+      sessionID,
+      role: "assistant",
+      parentID: MessageID.make("msg_parent"),
+      mode: "build",
+      agent: "build",
+      cost: 0,
+      path: { cwd: "/tmp", root: "/tmp" },
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: visibilityModel.modelID,
+      providerID: visibilityModel.providerID,
+      time: { created: 0 },
+    },
+    parts: [
+      {
+        id: PartID.make(`prt_${id}-tool`),
+        messageID,
+        sessionID,
+        type: "tool",
+        callID: `${id}-call`,
+        tool: "read",
+        state: {
+          status: "completed",
+          input: {},
+          output,
+          title: "Read",
+          metadata: opts.metadata ?? {},
+          time: { start: 0, end: 1, ...(opts.compacted ? { compacted: 1 } : {}) },
+        },
+      },
+    ],
+  }
+}
+
+function reminder(filepath: string, content: string) {
+  return `<system-reminder>\nInstructions from: ${filepath}\n${content}\n</system-reminder>`
+}
+
+describe("Instruction.inspect", () => {
+  it.live("resolves relative targets from the session directory and honors real directory boundaries", () =>
+    Effect.gen(function* () {
+      const base = yield* tmpdirScoped()
+      const root = path.join(base, "project")
+      const other = path.join(base, "project-other")
+      yield* writeFiles(root, {
+        "sub/AGENTS.md": "# Sub Instructions",
+        "sub/file.ts": "const x = 1",
+        "sub/nested/file.ts": "const x = 2",
+      })
+      yield* writeFiles(other, {
+        "sub/AGENTS.md": "# Other Instructions",
+        "sub/file.ts": "const x = 3",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const inside = yield* svc.inspect({ filepath: "sub/file.ts" })
+        expect(inside.files.map((item) => item.filepath)).toEqual([path.join(root, "sub", "AGENTS.md")])
+        expect(inside.attach.map((item) => item.content)).toEqual(["# Sub Instructions"])
+
+        const outside = yield* svc.inspect({ filepath: "../project-other/sub/file.ts" })
+        expect(outside.files).toEqual([])
+        expect(outside.attach).toEqual([])
+      }).pipe(provideInstance(root), provideInstruction({ home: root, config: root }))
+    }),
+  )
+
+  it.live("uses the real target directory for in-project symlinks and does not cross an out-of-project link", () =>
+    Effect.gen(function* () {
+      const base = yield* tmpdirScoped()
+      const root = path.join(base, "project")
+      const outside = path.join(base, "outside")
+      const fs = yield* FileSystem.FileSystem
+      yield* writeFiles(root, {
+        "sub/AGENTS.md": "# Parent Rule",
+        "sub/nested/AGENTS.md": "# Nested Rule",
+        "sub/nested/file.ts": "const x = 1",
+      })
+      yield* writeFiles(outside, {
+        "AGENTS.md": "# Outside Rule",
+        "file.ts": "const x = 2",
+      })
+      yield* fs.symlink(path.join(root, "sub", "nested"), path.join(root, "linked"))
+      yield* fs.symlink(outside, path.join(root, "outside-link"))
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const linked = yield* svc.inspect({ filepath: "linked/file.ts" })
+        expect(linked.files.map((item) => item.filepath)).toEqual([
+          path.join(root, "sub", "nested", "AGENTS.md"),
+          path.join(root, "sub", "AGENTS.md"),
+        ])
+
+        const outsideLink = yield* svc.inspect({ filepath: "outside-link/file.ts" })
+        expect(outsideLink.files).toEqual([])
+        expect(outsideLink.attach).toEqual([])
+      }).pipe(provideInstance(root), provideInstruction({ home: root, config: root }))
+    }),
+  )
+
+  it.live("resolves a new file through an in-project symlinked parent", () =>
+    Effect.gen(function* () {
+      const base = yield* tmpdirScoped()
+      const root = path.join(base, "project")
+      const fs = yield* FileSystem.FileSystem
+      yield* writeFiles(root, {
+        "sub/AGENTS.md": "# Parent Rule",
+        "sub/nested/AGENTS.md": "# Nested Rule",
+      })
+      yield* fs.symlink(path.join(root, "sub", "nested"), path.join(root, "linked"))
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const result = yield* svc.inspect({ filepath: "linked/new/deep/file.ts" })
+        expect(result.target).toBe(path.join(root, "sub", "nested", "new", "deep", "file.ts"))
+        expect(result.attach.map((item) => item.content)).toEqual(["# Nested Rule", "# Parent Rule"])
+      }).pipe(provideInstance(root), provideInstruction({ home: root, config: root }))
+    }),
+  )
+
+  it.live("requires bound metadata and reloads unbound, incomplete, or truncated text", () =>
+    withFiles({ "sub/AGENTS.md": "# Sub Instructions", "sub/file.ts": "const x = 1" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rule = path.join(dir, "sub", "AGENTS.md")
+        const filepath = path.join(dir, "sub", "file.ts")
+
+        const metadataOnly = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool("done", { metadata: { loaded: [rule] } })],
+        })
+        expect(metadataOnly.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const unboundBody = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, "# Sub Instructions"))],
+        })
+        expect(unboundBody.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const summarySpoof = yield* svc.inspect({
+          filepath,
+          messages: [userText(reminder(rule, "# Fake Summary"))],
+        })
+        expect(summarySpoof.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const unboundVisibility = yield* svc.inspect({
+          filepath,
+          visibility: { text: [reminder(rule, "# Sub Instructions")] },
+        })
+        expect(unboundVisibility.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const metadata = { loaded: [rule] }
+        const wrongPath = yield* svc.inspect({
+          filepath,
+          messages: [
+            assistantTool(reminder(rule, "# Sub Instructions"), {
+              metadata: { loaded: [path.join(dir, "other", "AGENTS.md")] },
+            }),
+          ],
+        })
+        expect(wrongPath.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const visible = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, "# Sub Instructions"), { metadata })],
+        })
+        expect(visible.attach).toEqual([])
+        expect(visible.visible).toEqual([rule])
+        expect(visible.status).toBe("visible")
+
+        const compacted = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, "# Sub Instructions"), { metadata, compacted: true })],
+        })
+        expect(compacted.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const missingBody = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, ""), { metadata })],
+        })
+        expect(missingBody.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const truncated = yield* svc.inspect({
+          filepath,
+          messages: [
+            assistantTool(reminder(rule, "# Sub Instructions").replace("\n</system-reminder>", ""), { metadata }),
+          ],
+        })
+        expect(truncated.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const clipped = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, "# Sub Instructions"), { metadata })],
+          toolOutputMaxChars: 20,
+        })
+        expect(clipped.attach.map((item) => item.filepath)).toEqual([rule])
+      }),
+    ),
+  )
+
+  it.live("keeps a complete visible rule without detecting later disk changes", () =>
+    withFiles({ "sub/AGENTS.md": "# Version 1", "sub/file.ts": "const x = 1" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rule = path.join(dir, "sub", "AGENTS.md")
+        const filepath = path.join(dir, "sub", "file.ts")
+        yield* write(rule, "# Version 2")
+
+        const result = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, "# Version 1"), { metadata: { loaded: [rule] } })],
+        })
+        expect(result.attach).toEqual([])
+        expect(result.visible).toEqual([rule])
+      }),
+    ),
+  )
+
+  it.live("observes rule text in synthetic user text and preserves a batch-start visibility snapshot", () =>
+    withFiles({ "sub/AGENTS.md": "# Sub Instructions", "sub/file.ts": "const x = 1" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rule = path.join(dir, "sub", "AGENTS.md")
+        const filepath = path.join(dir, "sub", "file.ts")
+        const empty = svc.snapshot([])
+
+        const synthetic = yield* svc.inspect({
+          filepath,
+          messages: [userText(reminder(rule, "# Sub Instructions"), "msg_user-rule", [rule])],
+        })
+        expect(synthetic.visible).toEqual([rule])
+
+        const afterParallelRead = yield* svc.inspect({
+          filepath,
+          messages: [assistantTool(reminder(rule, "# Sub Instructions"))],
+          visibility: empty,
+        })
+        expect(afterParallelRead.attach.map((item) => item.filepath)).toEqual([rule])
+      }),
+    ),
+  )
+
+  it.live("reports no additional rules and separates unreadable rule files", () =>
+    withFiles(
+      { "plain/file.ts": "const x = 1", "broken/AGENTS.md": "# Broken", "broken/file.ts": "const x = 2" },
+      (dir) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem
+          const svc = yield* Instruction.Service
+          const none = yield* svc.inspect({ filepath: "plain/file.ts" })
+          expect(none.files).toEqual([])
+          expect(none.errors).toEqual([])
+          expect(none.status).toBe("none")
+
+          const broken = path.join(dir, "broken", "AGENTS.md")
+          yield* fs.chmod(broken, 0)
+          const unreadable = yield* svc.inspect({ filepath: "broken/file.ts" })
+          yield* fs.chmod(broken, 0o644)
+          expect(unreadable.attach).toEqual([])
+          expect(unreadable.errors.map((item) => item.filepath)).toEqual([broken])
+          expect(unreadable.status).toBe("error")
+        }),
+    ),
+  )
+
+  it.live("excludes its own rule from reads but checks it before modification", () =>
+    withFiles({ "sub/AGENTS.md": "# Sub Instructions", "sub/file.ts": "const x = 1" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rule = path.join(dir, "sub", "AGENTS.md")
+
+        const read = yield* svc.inspect({ filepath: "sub/AGENTS.md" })
+        expect(read.files).toEqual([])
+
+        const modify = yield* svc.inspect({ filepath: "sub/AGENTS.md", operation: "modify" })
+        expect(modify.files.map((item) => item.filepath)).toEqual([rule])
+        expect(modify.attach.map((item) => item.filepath)).toEqual([rule])
+
+        const seen = yield* svc.inspect({
+          filepath: "sub/AGENTS.md",
+          operation: "modify",
+          messages: [assistantTool(reminder(rule, "# Sub Instructions"), { metadata: { loaded: [rule] } })],
+        })
+        expect(seen.attach).toEqual([])
+        expect(seen.visible).toEqual([rule])
+      }),
+    ),
+  )
+
+  it.live("fails modification closed for an unreadable baseline without changing baseline rendering", () =>
     withFiles({ "AGENTS.md": "# Root Instructions", "src/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
         const svc = yield* Instruction.Service
-        const system = yield* svc.systemPaths()
-        expect(system.has(path.join(dir, "AGENTS.md"))).toBe(true)
+        const rule = path.join(dir, "AGENTS.md")
 
-        const results = yield* svc.resolve([], path.join(dir, "src", "file.ts"), MessageID.make("msg_message-test-1"))
-        expect(results).toEqual([])
+        const readable = yield* svc.inspect({ filepath: "src/file.ts", operation: "modify" })
+        expect(readable.errors).toEqual([])
+        expect(readable.files).toEqual([])
+
+        yield* fs.chmod(rule, 0)
+        const read = yield* svc.inspect({ filepath: "src/file.ts" })
+        const modify = yield* svc.inspect({ filepath: "src/file.ts", operation: "modify" })
+        const baseline = yield* svc.systemResult()
+        yield* fs.chmod(rule, 0o644)
+
+        expect(read.errors).toEqual([])
+        expect(modify.errors.map((item) => item.filepath)).toEqual([rule])
+        expect(baseline.text).toEqual([])
+        expect(baseline.baseline.errors.map((item) => item.filepath)).toEqual([rule])
+
+        const recovered = yield* svc.inspect({
+          filepath: "src/file.ts",
+          operation: "modify",
+          visibility: { text: [], baseline: baseline.baseline },
+        })
+        expect(recovered.errors.map((item) => item.filepath)).toEqual([rule])
       }),
     ),
   )
-
-  it.live("returns AGENTS.md from subdirectory (not in systemPaths)", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
-      Effect.gen(function* () {
-        const svc = yield* Instruction.Service
-        const system = yield* svc.systemPaths()
-        expect(system.has(path.join(dir, "subdir", "AGENTS.md"))).toBe(false)
-
-        const results = yield* svc.resolve(
-          [],
-          path.join(dir, "subdir", "nested", "file.ts"),
-          MessageID.make("msg_message-test-2"),
-        )
-        expect(results.length).toBe(1)
-        expect(results[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
-      }),
-    ),
-  )
-
-  it.live("doesn't reload AGENTS.md when reading it directly", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
-      Effect.gen(function* () {
-        const svc = yield* Instruction.Service
-        const filepath = path.join(dir, "subdir", "AGENTS.md")
-        const system = yield* svc.systemPaths()
-        expect(system.has(filepath)).toBe(false)
-
-        const results = yield* svc.resolve([], filepath, MessageID.make("msg_message-test-3"))
-        expect(results).toEqual([])
-      }),
-    ),
-  )
-
-  it.live("does not reattach the same nearby instructions twice for one message", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
-      Effect.gen(function* () {
-        const svc = yield* Instruction.Service
-        const filepath = path.join(dir, "subdir", "nested", "file.ts")
-        const id = MessageID.make("msg_message-claim-1")
-
-        const first = yield* svc.resolve([], filepath, id)
-        const second = yield* svc.resolve([], filepath, id)
-
-        expect(first).toHaveLength(1)
-        expect(first[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
-        expect(second).toEqual([])
-      }),
-    ),
-  )
-
-  it.live("clear allows nearby instructions to be attached again for the same message", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
-      Effect.gen(function* () {
-        const svc = yield* Instruction.Service
-        const filepath = path.join(dir, "subdir", "nested", "file.ts")
-        const id = MessageID.make("msg_message-claim-2")
-
-        const first = yield* svc.resolve([], filepath, id)
-        yield* svc.clear(id)
-        const second = yield* svc.resolve([], filepath, id)
-
-        expect(first).toHaveLength(1)
-        expect(second).toHaveLength(1)
-        expect(second[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
-      }),
-    ),
-  )
-
-  it.live("skips instructions already reported by prior read metadata", () =>
-    withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
-      Effect.gen(function* () {
-        const svc = yield* Instruction.Service
-        const agents = path.join(dir, "subdir", "AGENTS.md")
-        const filepath = path.join(dir, "subdir", "nested", "file.ts")
-        const id = MessageID.make("msg_message-claim-3")
-
-        const results = yield* svc.resolve(loaded(agents), filepath, id)
-        expect(results).toEqual([])
-      }),
-    ),
-  )
-
-  test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
 })
 
 describe("Instruction.system", () => {

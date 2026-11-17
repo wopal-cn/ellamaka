@@ -42,7 +42,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Effect, Exit, Latch, Layer, Option, Ref, Scope, Context, Schema, Types } from "effect"
 import * as EffectLogger from "@wopal/ellamaka-core/effect/logger"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
@@ -763,8 +763,6 @@ export const layer = Layer.effect(
         })
       }
 
-      yield* Effect.addFinalizer(() => instruction.clear(info.id))
-
       type Draft<T> = T extends MessageV2.Part ? Omit<T, "id"> & { id?: string } : never
       const assign = (part: Draft<MessageV2.Part>): MessageV2.Part => ({
         ...part,
@@ -793,6 +791,59 @@ export const layer = Layer.effect(
           target,
           targetPath: filepath,
         })
+      })
+
+      const instructionClaims = yield* Ref.make(new Set<string>())
+      const instructionVisibility = yield* Effect.suspend(() => {
+        const attached = input.parts.some((part) => part.type === "file" && part.url.startsWith("file:"))
+        if (!attached) return Effect.succeed(undefined)
+        return MessageV2.filterCompactedEffect(input.sessionID).pipe(
+          Effect.map((messages) => Instruction.snapshot(messages)),
+          Effect.catch(() => Effect.succeed(undefined)),
+        )
+      })
+
+      const claimInstructions = (paths: string[]) =>
+        paths.length === 0
+          ? Effect.void
+          : Ref.update(instructionClaims, (claimed) => {
+              const next = new Set(claimed)
+              for (const item of paths) next.add(item)
+              return next
+            })
+
+      const attachDirectoryInstructions = Effect.fnUntraced(function* (filepath: string, visible: string[]) {
+        if (!instructionVisibility) return { text: "", loaded: [] as string[] }
+        const resolution = yield* instruction
+          .inspect({ filepath, visibility: { text: [...instructionVisibility.text, ...visible] } })
+          .pipe(
+            Effect.catch((error) =>
+              Effect.sync(() => {
+                // Aggregate only: rule paths, contents and the attachment path stay out of logs.
+                log.warn("directory instructions lookup failed", {
+                  reason: error instanceof Error ? error.name : "unknown",
+                })
+                return undefined
+              }),
+            ),
+          )
+        if (!resolution) return { text: "", loaded: [] as string[] }
+        if (resolution.errors.length > 0) {
+          log.warn("directory instructions unavailable", {
+            unreadable: resolution.errors.length,
+            reason: resolution.errors.some((item) => item.message.length > 0) ? "unreadable" : "unknown",
+          })
+        }
+        const fresh = yield* Ref.modify(instructionClaims, (claimed) => {
+          const picked = resolution.attach.filter((item) => !claimed.has(item.filepath))
+          const next = new Set(claimed)
+          for (const item of picked) next.add(item.filepath)
+          return [picked, next] as [typeof picked, Set<string>]
+        })
+        return {
+          text: fresh.map((item) => item.reminder).join("\n\n"),
+          loaded: fresh.map((item) => item.filepath),
+        }
       })
 
       const resolvePart: (part: PromptInput["parts"][number]) => Effect.Effect<Draft<MessageV2.Part>[]> = Effect.fn(
@@ -938,13 +989,32 @@ export const layer = Layer.effect(
                 )
                 if (Exit.isSuccess(exit)) {
                   const result = exit.value
+                  const loaded = Array.isArray(result.metadata?.loaded)
+                    ? result.metadata.loaded.filter(
+                        (item): item is string =>
+                          typeof item === "string" && Instruction.containsInstruction(result.output, item),
+                      )
+                    : []
+                  const instructions = yield* attachDirectoryInstructions(filepath, [result.output])
+                  yield* claimInstructions(loaded)
                   pieces.push({
                     messageID: info.id,
                     sessionID: input.sessionID,
                     type: "text",
                     synthetic: true,
                     text: result.output,
+                    ...(loaded.length > 0 ? { metadata: { loaded } } : {}),
                   })
+                  if (instructions.text) {
+                    pieces.push({
+                      messageID: info.id,
+                      sessionID: input.sessionID,
+                      type: "text",
+                      synthetic: true,
+                      text: instructions.text,
+                      metadata: { loaded: instructions.loaded },
+                    })
+                  }
                   if (result.attachments?.length) {
                     pieces.push(
                       ...result.attachments.map((a) => ({
@@ -1023,6 +1093,7 @@ export const layer = Layer.effect(
                 ]
               }
 
+              const instructions = yield* attachDirectoryInstructions(filepath, [])
               return [
                 ...(referenceContext ? [{ ...referenceContext, messageID: info.id, sessionID: input.sessionID }] : []),
                 {
@@ -1032,6 +1103,18 @@ export const layer = Layer.effect(
                   synthetic: true,
                   text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
                 },
+                ...(instructions.text
+                  ? [
+                      {
+                        messageID: info.id,
+                        sessionID: input.sessionID,
+                        type: "text" as const,
+                        synthetic: true,
+                        text: instructions.text,
+                        metadata: { loaded: instructions.loaded },
+                      },
+                    ]
+                  : []),
                 {
                   id: part.id,
                   messageID: info.id,
@@ -1420,6 +1503,10 @@ export const layer = Layer.effect(
             const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
             const promptOps = yield* ops()
 
+            // Locked once this step's messages transform has run and the request is
+            // about to be sent; tools read it only after that, when they execute.
+            let visibleForBatch: Instruction.Visibility | undefined
+
             const tools = yield* SessionTools.resolve({
               agent,
               session,
@@ -1429,6 +1516,7 @@ export const layer = Layer.effect(
               messages: msgs,
               promptOps,
               sandboxMode: lastUser.sandboxMode,
+              instructionVisibility: () => visibleForBatch,
             }).pipe(
               Effect.provideService(Plugin.Service, plugin),
               Effect.provideService(Permission.Service, permission),
@@ -1436,6 +1524,8 @@ export const layer = Layer.effect(
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
               Effect.provideService(InternalHook.Service, internalHook),
+              Effect.provideService(Instruction.Service, instruction),
+              Effect.provideService(AppFileSystem.Service, fsys),
             )
 
             if (lastUser.format?.type === "json_schema") {
@@ -1470,12 +1560,14 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+            const [skills, env, systemInstructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent, session.permission),
               sys.environment(model),
-              instruction.system().pipe(Effect.orDie),
+              instruction.systemResult().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
+            const instructions = systemInstructions.text
+            visibleForBatch = Instruction.snapshot(msgs, { baseline: systemInstructions.baseline })
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
@@ -1544,10 +1636,7 @@ export const layer = Layer.effect(
               })
             }
             return "continue" as const
-          }).pipe(
-            Effect.ensuring(instruction.clear(handle.message.id)),
-            Effect.onInterrupt(() => finalizeInterruptedAssistant),
-          )
+          }).pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
           if (outcome === "break") break
           continue
         }

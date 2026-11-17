@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-13
+> **Updated**: 2026-11-16
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Sub-DESIGNs**:
 >
@@ -16,6 +16,7 @@
 > - `./DESIGN-dsh-custumize.md` — Proposed，空间皮肤/独立 DSH 标签/实验 profile，后续细化，不属本轮实施
 > - `./DESIGN-ellamaka-sdk.md` — 统一公开 SDK、OpenAPI 3.1、HTTP 与本机 Worker transport
 > - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
+> - `./DESIGN-instruction-loading.md` — 会话指令加载：AGENTS.md 基线、目录级挂载与归属
 > - `./DESIGN-logging.md` — 日志架构：角色分域路由、文件生命周期、Trace 与脱敏策略
 > - `./DESIGN-onboarding.md` — WopalSpace Setup/Onboarding 在 Ellamaka Server host 上的集成
 > - `./DESIGN-workbench.md` — Workbench 工作台设计
@@ -324,6 +325,10 @@ runtime rules 的边界必须保持窄而清楚：
 - Plugin 是受信任的运行时扩展，因而可以追加 allow/ask/deny；具体插件应按自身领域收窄使用范围。Wopal 当前只用它解决动态 Skill grant，不在本阶段用它实现 Tool/Rule 动态权限。
 
 原有 Session permission 一致性仍成立：Tool 的 schema visibility / execution gate，以及 Skill 的原生 available/catalog / execution gate，继续消费 `agent.permission + session.permission`。Plugin runtime rules 不自动改变这些静态/持久清单；需要向模型表达运行时新增能力时，由插件通过 Runtime Context Contribution 追加对应的临时 catalog。这样引擎保持通用权限内核，插件负责自己的动态能力事实。
+
+## Instruction Loading Contract
+
+每次模型请求都加载全局和当前会话目录的项目规范。Agent 通过原生或 DSH 的 `read` 读取更深目录的文件，以及用户附加本地文件时，会话层把该目录适用的 AGENTS.md 交给模型。Agent 使用 `write`、`edit`、`str_replace_editor` 修改文件前，先检查模型是否已经看到对应目录的规范；如果没有，就先提供规范并暂停本次修改。上下文压缩后，只要旧规范已不在模型可见的消息里，再次访问该目录时就重新加载。已加载的子目录规范不做文件变更监听。工具后端只负责读写文件，完整行为见 [项目规范加载设计](./DESIGN-instruction-loading.md)。
 
 ## Runtime Context Contribution
 
