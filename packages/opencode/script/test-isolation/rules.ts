@@ -145,6 +145,7 @@ export const INTEGRATION_FILES = [
   "packages/ellamaka-cordis/test/plugins-runtime.test.ts",
   "packages/ellamaka-cordis/test/dsh-web.test.ts",
   "packages/ellamaka-cordis/test/dsh-virtual-webserver-integration.test.ts",
+  "packages/ellamaka-cordis/test/web-child-failure-integration.test.ts",
   "packages/ellamaka-cordis/test/dsh-adapter-runtime.test.ts",
   "packages/ellamaka-cordis/test/bun-subprocess-stdio-integration.test.ts",
 ]

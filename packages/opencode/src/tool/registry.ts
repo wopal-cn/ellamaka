@@ -14,7 +14,7 @@ import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
-import { type ToolContext as PluginToolContext, type ToolDefinition } from "@wopal/ellamaka-plugin"
+import { type ToolContext as PluginToolContext, type ToolDefinition, type ToolResult } from "@wopal/ellamaka-plugin"
 import type { JSONSchema7, JSONSchema7Definition } from "@ai-sdk/provider"
 import { Schema } from "effect"
 import z from "zod"
@@ -179,7 +179,10 @@ export const layer: Layer.Layer<
               directory: opts.directory,
               worktree: opts.worktree,
             }
-            const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+            const result = yield* Effect.promise<unknown>(() =>
+              Reflect.apply(def.execute.bind(def), def, [args, pluginCtx]),
+            )
+            if (!isPluginToolResult(result)) throw new Error(`plugin tool ${id} returned an invalid result`)
             const output = typeof result === "string" ? result : result.output
             const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
             const attachments = typeof result === "string" ? undefined : result.attachments
@@ -408,6 +411,7 @@ export const layer: Layer.Layer<
             output.parameters === tool.parameters || output.jsonSchema !== tool.jsonSchema
               ? output.jsonSchema
               : undefined
+          const formatValidationError = tool.formatValidationError?.bind(tool)
           return {
             id: tool.id,
             description: [
@@ -419,8 +423,10 @@ export const layer: Layer.Layer<
               .join("\n"),
             parameters: output.parameters,
             jsonSchema,
-            execute: tool.execute,
-            formatValidationError: tool.formatValidationError,
+            execute: (...params: Parameters<Tool.Def["execute"]>) => tool.execute(...params),
+            ...(formatValidationError
+              ? { formatValidationError: (error: unknown) => formatValidationError(error) }
+              : {}),
           }
         }),
         { concurrency: "unbounded" },
@@ -471,6 +477,12 @@ function isPluginTool(value: unknown): value is ToolDefinition {
   return typeof value === "object" && value !== null && "args" in value && "description" in value && "execute" in value
 }
 
+function isPluginToolResult(value: unknown): value is ToolResult {
+  if (typeof value === "string") return true
+  if (typeof value !== "object" || value === null) return false
+  return "output" in value && typeof value.output === "string"
+}
+
 function isJsonSchemaDefinition(value: unknown): value is JSONSchema7Definition {
   return typeof value === "boolean" || (typeof value === "object" && value !== null && !Array.isArray(value))
 }
@@ -490,9 +502,8 @@ function zodJsonSchema(schema: z.ZodType): JSONSchema7 {
   const result = normalizeZodJsonSchema(z.toJSONSchema(schema, { io: "input", metadata: zodMetadataRegistry(schema) }))
   if (!isJsonSchemaObject(result)) throw new Error("plugin tool Zod schema produced a non-object JSON Schema")
   const { $defs, ...rest } = result
-  return (
-    $defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs as JSONSchema7["definitions"] } : rest
-  ) as JSONSchema7
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- z.toJSONSchema emits JSON Schema 7 for plugin tool Zod input.
+  return ($defs && isJsonSchemaObject($defs) ? { ...rest, definitions: $defs } : rest) as JSONSchema7
 }
 
 function zodMetadataRegistry(schema: z.ZodType) {
