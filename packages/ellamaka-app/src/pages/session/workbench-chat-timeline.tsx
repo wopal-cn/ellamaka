@@ -20,6 +20,7 @@ import {
   ChatTurnFrame,
   CompactionDivider,
   ContextInjectionBlock,
+  InstructionLoadBlock,
   InteractionBlock,
   NarrativeBlock,
   ReasoningBlock,
@@ -39,7 +40,7 @@ import {
   SubagentActivityBlock,
   type OpenCodeEditRendererProps,
 } from "./chat-tool-blocks"
-import { classifyPart, isInjectionPart } from "./chat-render.utils"
+import { classifyPart, instructionSourcePaths, isInjectionPart } from "./chat-render.utils"
 import { PromptNavigator } from "./prompt-navigator"
 
 /**
@@ -62,6 +63,8 @@ export type WorkbenchChatTimelineProps = {
   userMessages: UserMessage[]
   /** Session working directory, used to relativize displayed file paths. */
   directory?: string
+  /** Registered Space root, used only for displaying loaded instruction paths. */
+  spaceRoot?: string
   historyShift: boolean
   historyMore: boolean
   historyLoading: boolean
@@ -112,6 +115,7 @@ function latestAssistant(messages: Array<UserMessage | AssistantMessage>) {
     const message = messages[index]
     if (message?.role === "assistant") return message
   }
+  return undefined
 }
 
 /**
@@ -124,7 +128,7 @@ function deriveLiveActivity(
   currentMessages: Array<UserMessage | AssistantMessage>,
   getParts: (messageID: string) => Part[],
 ): LiveActivity | undefined {
-  if (currentStatus.type === "idle") return
+  if (currentStatus.type === "idle") return undefined
   if (currentStatus.type === "retry") {
     return { label: `正在重试（第 ${currentStatus.attempt} 次）` }
   }
@@ -177,81 +181,91 @@ function ToolPartBlock(props: {
   shellToolPartsExpanded: boolean
   editToolPartsExpanded: boolean
   directory?: string
+  spaceRoot?: string
   editRenderer?: Component<OpenCodeEditRendererProps>
   onSyncChild?: (childID: string) => void
 }) {
   const kind = createMemo(() => classifyPart(props.part, props.message).kind)
+  const loaded = () =>
+    props.part.state.status === "completed" && !props.part.state.time.compacted
+      ? props.part.state.metadata?.loaded
+      : undefined
+  const suspended = () => props.part.state.status === "completed" && props.part.state.title === "Instructions required"
   return (
-    <Show
-      when={kind() === "context"}
-      fallback={
-        <Show
-          when={kind() === "shell"}
-          fallback={
-            <Show
-              when={kind() === "file-change"}
-              fallback={
+    <>
+      <Show
+        when={kind() === "context"}
+        fallback={
+          <Show
+            when={kind() === "shell"}
+            fallback={
+              <Show
+                when={kind() === "file-change"}
+                fallback={
+                  <Show
+                    when={kind() === "subagent"}
+                    fallback={
+                      <Show
+                        when={kind() === "interaction"}
+                        fallback={
+                          <GenericToolBlock
+                            part={props.part}
+                            message={props.message}
+                            defaultOpen={props.shellToolPartsExpanded}
+                          />
+                        }
+                      >
+                        <InteractionBlock part={props.part} message={props.message} />
+                      </Show>
+                    }
+                  >
+                    <SubagentActivityBlock part={props.part} message={props.message} onSyncChild={props.onSyncChild} />
+                  </Show>
+                }
+              >
                 <Show
-                  when={kind() === "subagent"}
+                  when={props.part.tool === "str_replace_editor"}
                   fallback={
-                    <Show
-                      when={kind() === "interaction"}
-                      fallback={
-                        <GenericToolBlock
-                          part={props.part}
-                          message={props.message}
-                          defaultOpen={props.shellToolPartsExpanded}
-                        />
-                      }
-                    >
-                      <InteractionBlock part={props.part} message={props.message} />
-                    </Show>
+                    <FileChangeBlock
+                      part={props.part}
+                      message={props.message}
+                      defaultOpen={props.editToolPartsExpanded}
+                      directory={props.directory}
+                      editRenderer={props.editRenderer}
+                    />
                   }
                 >
-                  <SubagentActivityBlock part={props.part} message={props.message} onSyncChild={props.onSyncChild} />
-                </Show>
-              }
-            >
-              <Show
-                when={props.part.tool === "str_replace_editor"}
-                fallback={
-                  <FileChangeBlock
+                  <StrReplaceEditorBlock
                     part={props.part}
                     message={props.message}
                     defaultOpen={props.editToolPartsExpanded}
                     directory={props.directory}
                     editRenderer={props.editRenderer}
                   />
-                }
-              >
-                <StrReplaceEditorBlock
-                  part={props.part}
-                  message={props.message}
-                  defaultOpen={props.editToolPartsExpanded}
-                  directory={props.directory}
-                  editRenderer={props.editRenderer}
-                />
+                </Show>
               </Show>
-            </Show>
-          }
-        >
-          <ShellActivityBlock part={props.part} message={props.message} defaultOpen={props.shellToolPartsExpanded} />
-        </Show>
-      }
-    >
-      <ContextToolBlock
-        part={props.part}
-        message={props.message}
-        defaultOpen={props.shellToolPartsExpanded}
-        directory={props.directory}
-      />
-    </Show>
+            }
+          >
+            <ShellActivityBlock part={props.part} message={props.message} defaultOpen={props.shellToolPartsExpanded} />
+          </Show>
+        }
+      >
+        <ContextToolBlock
+          part={props.part}
+          message={props.message}
+          defaultOpen={props.shellToolPartsExpanded}
+          directory={props.directory}
+        />
+      </Show>
+      <InstructionLoadBlock paths={loaded()} spaceRoot={props.spaceRoot} suspended={suspended()} />
+    </>
   )
 }
 
 function AssistantPartBlock(props: {
   part: Part
   message: AssistantMessage
+  spaceRoot?: string
   showMeta?: boolean
   showReasoningSummaries?: boolean
   modelName?: (providerID: string, modelID: string) => string | undefined
@@ -290,7 +304,9 @@ function AssistantPartBlock(props: {
             </Show>
           }
         >
-          <ContextInjectionBlock part={props.part} />
+          <Show when={instructionSourcePaths(props.part)} fallback={<ContextInjectionBlock part={props.part} />}>
+            {(paths) => <InstructionLoadBlock paths={paths()} spaceRoot={props.spaceRoot} />}
+          </Show>
         </Show>
       }
     >
@@ -312,6 +328,7 @@ function AssistantPartBlock(props: {
  */
 function UserRowContent(props: {
   row: Extract<TranscriptRow, { type: "user" }>
+  spaceRoot?: string
   actions?: ChatUserActions
   actionLabels?: ChatUserActionLabels
 }) {
@@ -340,7 +357,9 @@ function UserRowContent(props: {
           <For each={injections()}>
             {(part) => (
               <Show when={part.id} keyed>
-                <ContextInjectionBlock part={part} />
+                <Show when={instructionSourcePaths(part)} fallback={<ContextInjectionBlock part={part} />}>
+                  {(paths) => <InstructionLoadBlock paths={paths()} spaceRoot={props.spaceRoot} />}
+                </Show>
               </Show>
             )}
           </For>
@@ -362,6 +381,7 @@ function TranscriptRowView(props: {
   shellToolPartsExpanded: boolean
   editToolPartsExpanded: boolean
   directory?: string
+  spaceRoot?: string
   editRenderer?: Component<OpenCodeEditRendererProps>
   actions?: ChatUserActions
   actionLabels?: ChatUserActionLabels
@@ -414,7 +434,14 @@ function TranscriptRowView(props: {
           )}
         </Show>
         <Show when={userRow()}>
-          {(current) => <UserRowContent row={current()} actions={props.actions} actionLabels={props.actionLabels} />}
+          {(current) => (
+            <UserRowContent
+              row={current()}
+              spaceRoot={props.spaceRoot}
+              actions={props.actions}
+              actionLabels={props.actionLabels}
+            />
+          )}
         </Show>
         <Show when={assistantRow()}>
           {(current) => (
@@ -432,6 +459,7 @@ function TranscriptRowView(props: {
                         <AssistantPartBlock
                           part={part()}
                           message={current().message}
+                          spaceRoot={props.spaceRoot}
                           showMeta={part().id === metaPartID()}
                           showReasoningSummaries={props.showReasoningSummaries}
                           modelName={props.modelName}
@@ -445,6 +473,7 @@ function TranscriptRowView(props: {
                           shellToolPartsExpanded={props.shellToolPartsExpanded}
                           editToolPartsExpanded={props.editToolPartsExpanded}
                           directory={props.directory}
+                          spaceRoot={props.spaceRoot}
                           editRenderer={props.editRenderer}
                           onSyncChild={props.onSyncChild}
                         />
@@ -478,6 +507,7 @@ function VirtualHistory(props: {
   shellToolPartsExpanded: boolean
   editToolPartsExpanded: boolean
   directory?: string
+  spaceRoot?: string
   editRenderer?: Component<OpenCodeEditRendererProps>
   actions?: ChatUserActions
   actionLabels?: ChatUserActionLabels
@@ -501,6 +531,7 @@ function VirtualHistory(props: {
               shellToolPartsExpanded={props.shellToolPartsExpanded}
               editToolPartsExpanded={props.editToolPartsExpanded}
               directory={props.directory}
+              spaceRoot={props.spaceRoot}
               editRenderer={props.editRenderer}
               actions={props.actions}
               actionLabels={props.actionLabels}
@@ -530,6 +561,7 @@ function VirtualHistory(props: {
             shellToolPartsExpanded={props.shellToolPartsExpanded}
             editToolPartsExpanded={props.editToolPartsExpanded}
             directory={props.directory}
+            spaceRoot={props.spaceRoot}
             editRenderer={props.editRenderer}
             actions={props.actions}
             actionLabels={props.actionLabels}
@@ -555,6 +587,7 @@ function LiveTranscriptTail(props: {
   shellToolPartsExpanded: boolean
   editToolPartsExpanded: boolean
   directory?: string
+  spaceRoot?: string
   editRenderer?: Component<OpenCodeEditRendererProps>
   actions?: ChatUserActions
   actionLabels?: ChatUserActionLabels
@@ -574,6 +607,7 @@ function LiveTranscriptTail(props: {
               shellToolPartsExpanded={props.shellToolPartsExpanded}
               editToolPartsExpanded={props.editToolPartsExpanded}
               directory={props.directory}
+              spaceRoot={props.spaceRoot}
               editRenderer={props.editRenderer}
               actions={props.actions}
               actionLabels={props.actionLabels}
@@ -980,6 +1014,7 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
               shellToolPartsExpanded={props.shellToolPartsExpanded}
               editToolPartsExpanded={props.editToolPartsExpanded}
               directory={props.directory}
+              spaceRoot={props.spaceRoot}
               editRenderer={props.editRenderer}
               actions={props.actions}
               actionLabels={props.actionLabels}
@@ -1000,6 +1035,7 @@ export function WorkbenchChatTimeline(props: WorkbenchChatTimelineProps) {
               shellToolPartsExpanded={props.shellToolPartsExpanded}
               editToolPartsExpanded={props.editToolPartsExpanded}
               directory={props.directory}
+              spaceRoot={props.spaceRoot}
               editRenderer={props.editRenderer}
               actions={props.actions}
               actionLabels={props.actionLabels}

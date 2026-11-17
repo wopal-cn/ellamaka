@@ -7,7 +7,13 @@ import { useDialog } from "@wopal/ui/context/dialog"
 import { getFilename } from "@wopal/ellamaka-core/util/path"
 import { useLanguage } from "@/context/language"
 import { agentColor } from "@/utils/agent"
-import { agentDisplayName, formatTurnDuration, isInjectionPart, parseSyntheticInjection } from "./chat-render.utils"
+import {
+  agentDisplayName,
+  formatTurnDuration,
+  isInjectionPart,
+  parseSyntheticInjection,
+  spaceRelativeInstructionPaths,
+} from "./chat-render.utils"
 import { chatExpansionState } from "./chat-expansion-state"
 import { WorkbenchMarkdown } from "./workbench-markdown-renderer"
 import { ChatImagePreview } from "./chat-image-preview"
@@ -89,16 +95,20 @@ export function UserMessageBlock(props: {
   const run = (action: (() => Promise<void> | void) | undefined) => {
     if (!action || busy()) return
     setBusy(true)
-    void Promise.resolve().then(action).finally(() => setBusy(false))
+    void Promise.resolve()
+      .then(action)
+      .finally(() => setBusy(false))
   }
 
   const fork = (target: "current" | "split") => {
     setForkOpen(false)
-    run(() => props.actions?.fork?.({
-      sessionID: props.message.sessionID,
-      messageID: props.message.id,
-      target,
-    }))
+    run(() =>
+      props.actions?.fork?.({
+        sessionID: props.message.sessionID,
+        messageID: props.message.id,
+        target,
+      }),
+    )
   }
 
   const copy = () => {
@@ -213,10 +223,14 @@ export function UserMessageBlock(props: {
               aria-label={labels().revert}
               title={labels().revert}
               disabled={busy()}
-              on:click={() => run(() => props.actions?.revert?.({
-                sessionID: props.message.sessionID,
-                messageID: props.message.id,
-              }))}
+              on:click={() =>
+                run(() =>
+                  props.actions?.revert?.({
+                    sessionID: props.message.sessionID,
+                    messageID: props.message.id,
+                  }),
+                )
+              }
             >
               <Icon name="reset" size="small" />
             </button>
@@ -314,9 +328,7 @@ export function NarrativeBlock(props: {
 export function ContextInjectionBlock(props: { part: Part }) {
   const language = useLanguage()
   if (!isInjectionPart(props.part)) return null
-  const injection = createMemo(() =>
-    parseSyntheticInjection(props.part.type === "text" ? props.part.text : ""),
-  )
+  const injection = createMemo(() => parseSyntheticInjection(props.part.type === "text" ? props.part.text : ""))
   const stored = () => chatExpansionState.get(props.part.sessionID, "injection", props.part.id)
   const [selected, setSelected] = createSignal(stored())
   const open = () => selected() ?? false
@@ -326,11 +338,7 @@ export function ContextInjectionBlock(props: { part: Part }) {
   }
 
   return (
-    <div
-      data-component="chat-injection"
-      data-part-id={props.part.id}
-      data-injection-tag={injection().tag}
-    >
+    <div data-component="chat-injection" data-part-id={props.part.id} data-injection-tag={injection().tag}>
       <Collapsible open={open()} onOpenChange={setOpen}>
         <Collapsible.Trigger data-slot="chat-injection-trigger" aria-expanded={open()}>
           <div data-slot="chat-injection-header-left">
@@ -344,6 +352,38 @@ export function ContextInjectionBlock(props: { part: Part }) {
         </Collapsible.Content>
       </Collapsible>
     </div>
+  )
+}
+
+/** Compact, non-expandable record of instructions actually attached to a model input. */
+export function InstructionLoadBlock(props: { paths: unknown; spaceRoot?: string; suspended?: boolean }) {
+  const language = useLanguage()
+  const paths = createMemo(() => spaceRelativeInstructionPaths(props.paths, props.spaceRoot))
+  return (
+    <Show when={paths().length > 0}>
+      <div data-component="chat-injection" data-injection-tag="rules" data-instruction-load="">
+        <div data-slot="chat-injection-trigger" data-instruction-static="">
+          <div data-slot="chat-injection-header-left">
+            <Icon name="archive" size="small" />
+            <span data-slot="chat-injection-label">{language.t("workbench.chat.injection")}</span>
+          </div>
+          <span data-slot="chat-injection-tag">rules</span>
+          <Show when={props.suspended}>
+            <span data-slot="chat-instruction-suspended">{language.t("workbench.chat.instructionNotModified")}</span>
+          </Show>
+        </div>
+        <div data-slot="chat-instruction-paths">
+          <For each={paths()}>
+            {(path) => (
+              <div data-slot="chat-instruction-row">
+                <span aria-hidden="true">↳</span>
+                <span data-slot="chat-instruction-path">{path}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
   )
 }
 
@@ -364,7 +404,7 @@ export function ReasoningBlock(props: { part: Part; message: AssistantMessage; d
   const stored = () => chatExpansionState.get(props.part.sessionID, "reasoning", props.part.id)
   const [selected, setSelected] = createSignal(stored())
   const [followStream, setFollowStream] = createSignal(true)
-  const open = () => selected() ?? (props.defaultOpen ?? running())
+  const open = () => selected() ?? props.defaultOpen ?? running()
   const reasoningText = () => (props.part.type === "reasoning" ? props.part.text : "")
   let content: HTMLDivElement | undefined
   let frame: number | undefined
@@ -406,17 +446,19 @@ export function ReasoningBlock(props: { part: Part; message: AssistantMessage; d
   // Always a bounded trailing window of the latest reasoning text: the newest
   // tokens are what the user wants to see, and they stay pinned at the tail.
   const previewText = createMemo(() => {
-    const raw = props.part.type === "reasoning" ? props.part.text.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim() : ""
+    const raw =
+      props.part.type === "reasoning"
+        ? props.part.text
+            .replace(/[\r\n\t]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+        : ""
     if (raw.length <= REASONING_PREVIEW_MAX) return raw
     return `…${raw.slice(-REASONING_PREVIEW_MAX + 1)}`
   })
 
   return (
-    <div
-      data-component="chat-reasoning"
-      data-part-id={props.part.id}
-      data-streaming={running() ? "" : undefined}
-    >
+    <div data-component="chat-reasoning" data-part-id={props.part.id} data-streaming={running() ? "" : undefined}>
       <Collapsible open={open()} onOpenChange={setOpen}>
         <Collapsible.Trigger data-slot="chat-reasoning-trigger" aria-expanded={open()}>
           <div data-slot="chat-reasoning-header-left">

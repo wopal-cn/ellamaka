@@ -350,6 +350,73 @@ describe("WorkbenchChatTimeline", () => {
     host.remove()
   })
 
+  test("shows only space-relative rule paths for baseline and tool result attachments", () => {
+    const u = userMessage("u-rules")
+    const a = assistantMessage("a-rules", u.id)
+    withSync(
+      [u, a],
+      [
+        textPart("p-ask", u.id, "change a file"),
+        {
+          id: "p-baseline",
+          sessionID: "ses_1",
+          messageID: u.id,
+          type: "text",
+          text: '<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n["/repo/AGENTS.md"]\n</rules-context>',
+          synthetic: true,
+          ignored: true,
+        },
+        toolPart(
+          "p-read-rules",
+          a.id,
+          {
+            status: "completed",
+            input: { filePath: "/repo/projects/example/src/file.ts" },
+            output: "file contents\n<system-reminder>private rules body</system-reminder>",
+            metadata: {
+              loaded: ["/repo/projects/example/AGENTS.md", "/outside/private/AGENTS.md"],
+            },
+            title: "file.ts",
+            time: { start: 1, end: 2 },
+          },
+          "read",
+        ),
+        toolPart(
+          "p-edit-rules",
+          a.id,
+          {
+            status: "completed",
+            input: { filePath: "/repo/projects/example/src/file.ts" },
+            output: "File not modified. Read the instructions and retry.",
+            metadata: { loaded: ["/repo/projects/example/src/AGENTS.md"] },
+            title: "Instructions required",
+            time: { start: 2, end: 3 },
+          },
+          "edit",
+        ),
+      ],
+      { type: "idle" },
+    )
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: [u],
+          directory: "/repo/projects/example",
+          spaceRoot: "/repo",
+          virtualize: false,
+        })}
+      />
+    ))
+    const paths = [...host.querySelectorAll("[data-slot='chat-instruction-path']")].map((node) => node.textContent)
+    expect(paths).toEqual(["AGENTS.md", "projects/example/AGENTS.md", "projects/example/src/AGENTS.md"])
+    expect(host.querySelector("[data-slot='chat-instruction-suspended']")?.textContent).toContain(
+      "workbench.chat.instructionNotModified",
+    )
+    expect(host.textContent).not.toContain("/outside/private")
+    expect(host.textContent).not.toContain("private rules body")
+    host.remove()
+  })
+
   test("renders a shell-wrapped user part without the synthetic flag as an injection outside the bubble", () => {
     const u1 = userMessage("u-flagless")
     const a1 = assistantMessage("a-flagless", "u-flagless")

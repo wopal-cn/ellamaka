@@ -660,6 +660,7 @@ export const dict = {
   "workbench.chat.compaction": "Context compacted",
   "workbench.chat.retry": "Retry #{{attempt}}",
   "workbench.chat.injection": "Context injection",
+  "workbench.chat.instructionNotModified": "File not modified; retry required",
   "terminal.connectionLost.abnormalClose": "WebSocket closed abnormally: {{code}}",
   "terminal.connectionLost.description":
     "The terminal connection was interrupted. This can happen when the server restarts.",

@@ -45,6 +45,46 @@ const HIDDEN_TOOLS = new Set(["todowrite", "todoread"])
 /** Shell prefixes that mark a text payload as a context injection. */
 const INJECTION_SHELL_PREFIXES = ["<system-reminder>", "<rules-context>", "<memory-context>"] as const
 
+// UI-only record of rule sources actually included in the system prompt.
+// The server marks these text parts ignored, so their display metadata never
+// becomes a second, weaker source of model instructions.
+const INSTRUCTION_SOURCES_START = "<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n"
+const INSTRUCTION_SOURCES_END = "\n</rules-context>"
+
+export function instructionSourcePaths(part: Part): string[] | undefined {
+  if (part.type !== "text" || part.synthetic !== true || part.ignored !== true) return undefined
+  if (!part.text.startsWith(INSTRUCTION_SOURCES_START) || !part.text.endsWith(INSTRUCTION_SOURCES_END)) return undefined
+  try {
+    const paths: unknown = JSON.parse(
+      part.text.slice(INSTRUCTION_SOURCES_START.length, -INSTRUCTION_SOURCES_END.length),
+    )
+    if (!Array.isArray(paths) || !paths.every((path) => typeof path === "string")) return undefined
+    return paths
+  } catch {
+    return undefined
+  }
+}
+
+/** Show only paths belonging to this Space; never leak an absolute fallback. */
+export function spaceRelativeInstructionPaths(paths: unknown, spaceRoot?: string): string[] {
+  if (!spaceRoot || !Array.isArray(paths)) return []
+  const normalized = spaceRoot.replaceAll("\\", "/")
+  const root = normalized.replace(/\/+$/, "") || (normalized.startsWith("/") ? "/" : "")
+  if (!root) return []
+  const prefix = root === "/" ? "/" : root + "/"
+  return [
+    ...new Set(
+      paths.flatMap((value: unknown) => {
+        if (typeof value !== "string") return []
+        const path = value.replaceAll("\\", "/")
+        if (!path.startsWith(prefix)) return []
+        const relative = path.slice(prefix.length)
+        return relative && !relative.split("/").some((segment) => segment === ".." || segment === ".") ? [relative] : []
+      }),
+    ),
+  ]
+}
+
 /**
  * Returns whether a text payload is a shell-wrapped context injection.
  * Matching is content-based on the trimmed text so wopal-plugin task

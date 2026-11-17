@@ -120,7 +120,9 @@ function PanelChatInner(props: {
   })
 
   const composer = createSessionComposerState()
-  const sessionWorking = createMemo(() => !isDraftSessionId(props.session.id) && sync.data.session_working(props.session.id))
+  const sessionWorking = createMemo(
+    () => !isDraftSessionId(props.session.id) && sync.data.session_working(props.session.id),
+  )
   // Adopt a real server session when the user sends the first message of a
   // draft chat. The composer's submit flow created the session; the panel
   // swaps the draft binding for the real one and keeps the submit going.
@@ -144,9 +146,12 @@ function PanelChatInner(props: {
     if (result.status !== "committed") {
       // Adopt refused (panel re-bound meanwhile): undo the pre-seed so the
       // orphan slot cannot shadow the session that owns it now.
-      sync.set("message", produce((message) => {
-        delete message[session.id]
-      }))
+      sync.set(
+        "message",
+        produce((message) => {
+          delete message[session.id]
+        }),
+      )
       return false
     }
     return true
@@ -679,6 +684,7 @@ function PanelChatInner(props: {
             loadOlder={historyLoader.loadAndReveal}
             scroll={ui.scroll}
             directory={props.directory}
+            spaceRoot={props.spacePath}
             showReasoningSummaries={settings.general.showReasoningSummaries()}
             shellToolPartsExpanded={settings.general.shellToolPartsExpanded()}
             editToolPartsExpanded={settings.general.editToolPartsExpanded()}

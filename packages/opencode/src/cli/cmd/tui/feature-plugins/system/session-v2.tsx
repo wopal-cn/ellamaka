@@ -480,50 +480,53 @@ function AssistantTool(props: { part: SessionMessageAssistantTool; sessionID: st
     part: props.part,
   }
   return (
-    <Switch>
-      <Match when={props.part.name === "bash"}>
-        <Bash {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "glob"}>
-        <Glob {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "read"}>
-        <Read {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "grep"}>
-        <Grep {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "webfetch"}>
-        <WebFetch {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "websearch"}>
-        <WebSearch {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "write"}>
-        <Write {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "edit"}>
-        <Edit {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "apply_patch"}>
-        <ApplyPatch {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "todowrite"}>
-        <TodoWrite {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "question"}>
-        <Question {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "skill"}>
-        <Skill {...toolprops} />
-      </Match>
-      <Match when={props.part.name === "task"}>
-        <Task {...toolprops} />
-      </Match>
-      <Match when={true}>
-        <GenericTool {...toolprops} />
-      </Match>
-    </Switch>
+    <>
+      <Switch>
+        <Match when={props.part.name === "bash"}>
+          <Bash {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "glob"}>
+          <Glob {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "read"}>
+          <Read {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "grep"}>
+          <Grep {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "webfetch"}>
+          <WebFetch {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "websearch"}>
+          <WebSearch {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "write"}>
+          <Write {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "edit"}>
+          <Edit {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "apply_patch"}>
+          <ApplyPatch {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "todowrite"}>
+          <TodoWrite {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "question"}>
+          <Question {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "skill"}>
+          <Skill {...toolprops} />
+        </Match>
+        <Match when={props.part.name === "task"}>
+          <Task {...toolprops} />
+        </Match>
+        <Match when={true}>
+          <GenericTool {...toolprops} />
+        </Match>
+      </Switch>
+      <LoadedRules part={props.part} />
+    </>
   )
 }
 
@@ -778,22 +781,32 @@ function Glob(props: ToolProps) {
 }
 
 function Read(props: ToolProps) {
+  return (
+    <InlineTool
+      icon="→"
+      pending="Reading file..."
+      complete={stringValue(props.input.filePath) ?? pendingInput(props.part)}
+      spinner={props.part.state.status === "running"}
+      part={props.part}
+    >
+      Read {normalizePath(stringValue(props.input.filePath) ?? pendingInput(props.part))}{" "}
+      {input(props.input, ["filePath"])}
+    </InlineTool>
+  )
+}
+
+function LoadedRules(props: { part: SessionMessageAssistantTool }) {
   const { theme } = useTheme()
   const loaded = createMemo(() =>
-    arrayValue(props.metadata.loaded).filter((item): item is string => typeof item === "string"),
+    props.part.state.status === "completed"
+      ? arrayValue(props.part.provider?.metadata?.loaded).filter((item): item is string => typeof item === "string")
+      : [],
   )
+  const suspended = () =>
+    props.part.state.status === "completed" &&
+    (toolOutput(props.part.state.content)?.startsWith("File not modified.") ?? false)
   return (
-    <>
-      <InlineTool
-        icon="→"
-        pending="Reading file..."
-        complete={stringValue(props.input.filePath) ?? pendingInput(props.part)}
-        spinner={props.part.state.status === "running"}
-        part={props.part}
-      >
-        Read {normalizePath(stringValue(props.input.filePath) ?? pendingInput(props.part))}{" "}
-        {input(props.input, ["filePath"])}
-      </InlineTool>
+    <Show when={loaded().length > 0}>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3} flexShrink={0}>
@@ -803,7 +816,12 @@ function Read(props: ToolProps) {
           </box>
         )}
       </For>
-    </>
+      <Show when={suspended()}>
+        <text paddingLeft={6} fg={theme.warning}>
+          File not modified; retry required
+        </text>
+      </Show>
+    </Show>
   )
 }
 

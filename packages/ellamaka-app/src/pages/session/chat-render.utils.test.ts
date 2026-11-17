@@ -10,10 +10,43 @@ import {
   isInjectionPart,
   isInjectionText,
   isRenderablePart,
+  instructionSourcePaths,
   parseSyntheticInjection,
   partTitle,
   relativizeProjectPath,
+  spaceRelativeInstructionPaths,
 } from "./chat-render.utils"
+
+describe("rule injection display sources", () => {
+  test("parses only ignored synthetic instruction provenance records", () => {
+    const body = '<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n["/repo/AGENTS.md"]\n</rules-context>'
+    expect(
+      instructionSourcePaths({
+        id: "p-rule",
+        sessionID: "s",
+        messageID: "u",
+        type: "text",
+        text: body,
+        synthetic: true,
+        ignored: true,
+      }),
+    ).toEqual(["/repo/AGENTS.md"])
+    expect(instructionSourcePaths(textPart("p", "u", body, true))).toBeUndefined()
+    expect(
+      instructionSourcePaths(textPart("p", "u", "<rules-context>normal rules</rules-context>", true)),
+    ).toBeUndefined()
+  })
+
+  test("uses Space root, not session cwd, and never exposes outside or traversal paths", () => {
+    expect(
+      spaceRelativeInstructionPaths(
+        ["/repo/AGENTS.md", "/repo/projects/example/AGENTS.md", "/outside/AGENTS.md", "/repo/../outside.txt"],
+        "/repo",
+      ),
+    ).toEqual(["AGENTS.md", "projects/example/AGENTS.md"])
+    expect(spaceRelativeInstructionPaths(["/repo/AGENTS.md"], undefined)).toEqual([])
+  })
+})
 
 function userMessage(id: string): UserMessage {
   return {

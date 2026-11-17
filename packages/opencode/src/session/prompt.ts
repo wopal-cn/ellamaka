@@ -1569,6 +1569,37 @@ export const layer = Layer.effect(
             const instructions = systemInstructions.text
             visibleForBatch = Instruction.snapshot(msgs, { baseline: systemInstructions.baseline })
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            // Persist source paths for the Workbench transcript, not a second
+            // copy of the rules. "ignored" keeps this UI-only part out of model
+            // input; systemResult above is the source of truth for attachment.
+            if (
+              step === 1 &&
+              systemInstructions.baseline.loaded.length > 0 &&
+              !msgs.some(
+                (m) =>
+                  m.info.id === lastUser.id &&
+                  m.parts.some(
+                    (p) =>
+                      p.type === "text" &&
+                      p.synthetic &&
+                      p.ignored &&
+                      p.text.startsWith("<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n"),
+                  ),
+              )
+            ) {
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                sessionID,
+                messageID: lastUser.id,
+                type: "text",
+                synthetic: true,
+                ignored: true,
+                text:
+                  "<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n" +
+                  JSON.stringify(systemInstructions.baseline.loaded) +
+                  "\n</rules-context>",
+              })
+            }
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
 
