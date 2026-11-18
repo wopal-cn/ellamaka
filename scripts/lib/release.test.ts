@@ -121,6 +121,16 @@ describe("build.sh release channel guard", () => {
     // every CLI release build.
     expect(buildSh).toMatch(/if \[\[ -z "\$\{ELLAMAKA_RELEASE:-\}" \]\]; then\n\s*export ELLAMAKA_CHANNEL="\$CHANNEL"/)
   })
+
+  test("dsh closure generators resolve through PROJECT_ROOT", async () => {
+    const buildSh = await Bun.file(join(REPO_ROOT, "scripts/build.sh")).text()
+    // The generators locate their own package root, but bun resolves the script
+    // argument against the caller's cwd: a repo-relative path failed every
+    // invocation from outside the repo root (e.g. the space root).
+    for (const script of ["generate-dsh-runtime-manifest.ts", "generate-dsh-runtime-lock.ts"]) {
+      expect(buildSh).toContain(`local generator="$PROJECT_ROOT/packages/ellamaka-cordis/script/${script}"`)
+    }
+  })
 })
 
 describe("release shell positional version", () => {

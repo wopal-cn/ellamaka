@@ -66,7 +66,10 @@ source "$PROJECT_ROOT/scripts/lib/version.sh"
 # when the committed manifest is missing or dirty. The build entry itself
 # (ellamaka-release build.ts) also gates — this keeps the local chain explicit.
 ensure_dsh_manifest() {
-  local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts"
+  # Absolute path: the generators resolve their package root themselves, but a
+  # bare relative path only resolves when the caller's cwd is the repo root
+  # (build.sh is invoked from arbitrary directories, e.g. the space root).
+  local generator="$PROJECT_ROOT/packages/ellamaka-cordis/script/generate-dsh-runtime-manifest.ts"
   if [ -n "${ELLAMAKA_RELEASE:-}" ]; then
     bun "$generator" --check --quiet
     return 0
@@ -84,7 +87,7 @@ ensure_dsh_manifest() {
 # missing or drifted (only happens after a dependency version bump; the
 # generator's fast path exits in milliseconds when the fingerprint matches).
 ensure_dsh_lock() {
-  local generator="packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts"
+  local generator="$PROJECT_ROOT/packages/ellamaka-cordis/script/generate-dsh-runtime-lock.ts"
   if [ -n "${ELLAMAKA_RELEASE:-}" ]; then
     bun "$generator" --check --quiet
     return 0
