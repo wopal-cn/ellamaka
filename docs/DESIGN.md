@@ -1,26 +1,8 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-16
+> **Updated**: 2026-11-22
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
-> **Sub-DESIGNs**:
->
-> - `./DESIGN-auth.md` — Draft，阶段 3 Host/DSH 认证统一方向，不属本轮实施范围
-> - `./DESIGN-config-engine.md` — Draft，阶段 3 配置编辑设计，不属本轮实施范围
-> - `./DESIGN-wopalspace.md` — private `@wopal/wopalspace` application capabilities、API、领域逻辑与 Core integration boundary
-> - `./DESIGN-wopalspace-ontology-sync.md` — Ontology source-chain 状态、同步事务、reconciliation 与正式 Git 历史契约
-> - `./DESIGN-desktop.md` — 官方桌面应用架构
-> - `./DESIGN-distribution.md` — 分发与版本身份唯一真相源
-> - `./DESIGN-dsh-base.md` — dsh 集成基础：文件领地、依赖闭包、Profile 生命周期
-> - `./DESIGN-dsh-web.md` — Web profile：插件供应链与当前 iframe 承载
-> - `./DESIGN-dsh-custumize.md` — Proposed，空间皮肤/独立 DSH 标签/实验 profile，后续细化，不属本轮实施
-> - `./DESIGN-ellamaka-sdk.md` — 统一公开 SDK、OpenAPI 3.1、HTTP 与本机 Worker transport
-> - `./DESIGN-ellamaka-tools.md` — 工具容器 profile：能力采用与沙箱
-> - `./DESIGN-instruction-loading.md` — 会话指令加载：AGENTS.md 基线、目录级挂载与归属
-> - `./DESIGN-logging.md` — 日志架构：角色分域路由、文件生命周期、Trace 与脱敏策略
-> - `./DESIGN-onboarding.md` — WopalSpace Setup/Onboarding 在 Ellamaka Server host 上的集成
-> - `./DESIGN-workbench.md` — Workbench 工作台设计
-> - `./testing-isolation.md` — 测试隔离规范：隔离模型、门禁规则与包级测试基座
 
 ## Role
 
@@ -95,6 +77,11 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | Session 能力边界                     | 保留静态 config/agent 权限与持久 session permission；可选 plugin runtime rules 只在单次 permission ask 前临时叠加，不改 run loop/Permission Service 持久状态                                                  | [Session Capability Contract](#session-capability-contract)                                       |
 | Runtime Context Contribution         | 插件通过 messages.transform 在 retained history 尾部追加本次请求的临时上下文；动态 Skill catalog 等运行态信息不改 system/tool 前缀                                                                            | [Runtime Context Contribution](#runtime-context-contribution)                                     |
 | 引擎安装识别                         | 识别 `$WOPAL_HOME/bin/` 安装路径                                                                                                                                                                              | [Install Contract](./DESIGN-distribution.md#install-contract)                                     |
+| WopalSpace 应用域                    | private `@wopal/wopalspace` 的 Setup、Ontology、Space application 能力、API 与领域逻辑 | [WopalSpace Application Domain](./DESIGN-wopalspace.md) |
+| Ontology 同步                        | source-chain 状态、同步事务、reconciliation 与正式 Git 历史契约 | [Ontology Sync](./DESIGN-wopalspace-ontology-sync.md) |
+| 认证统一方向                         | 阶段 3 Host/DSH 认证统一方向，当前阶段不实施 | [Auth](./DESIGN-auth.md) |
+| DSH 定制方向                         | 空间皮肤、独立 DSH 标签与实验 profile 的后续方向 | [DSH Customization](./DESIGN-dsh-custumize.md) |
+| 静态质量门禁                         | lint、格式化与 CSS 的检查范围、停检取舍、基线契约与门禁入口 | [Static Quality Gates](./DESIGN-quality-gates.md) |
 
 定制逻辑以独立模块承载：新文件优先，上游文件只保留最小 import 与调用注入点。
 
