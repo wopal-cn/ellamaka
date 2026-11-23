@@ -17,23 +17,11 @@ import { dict as desktopNo } from "./no"
 import { dict as desktopBr } from "./br"
 import { dict as desktopBs } from "./bs"
 
-import { dict as appEn } from "../../../../ellamaka-app/src/i18n/en"
-import { dict as appZh } from "../../../../ellamaka-app/src/i18n/zh"
-import { dict as appZht } from "../../../../ellamaka-app/src/i18n/zht"
-import { dict as appKo } from "../../../../ellamaka-app/src/i18n/ko"
-import { dict as appDe } from "../../../../ellamaka-app/src/i18n/de"
-import { dict as appEs } from "../../../../ellamaka-app/src/i18n/es"
-import { dict as appFr } from "../../../../ellamaka-app/src/i18n/fr"
-import { dict as appDa } from "../../../../ellamaka-app/src/i18n/da"
-import { dict as appJa } from "../../../../ellamaka-app/src/i18n/ja"
-import { dict as appPl } from "../../../../ellamaka-app/src/i18n/pl"
-import { dict as appRu } from "../../../../ellamaka-app/src/i18n/ru"
-import { dict as appUk } from "../../../../ellamaka-app/src/i18n/uk"
-import { dict as appAr } from "../../../../ellamaka-app/src/i18n/ar"
-import { dict as appNo } from "../../../../ellamaka-app/src/i18n/no"
-import { dict as appBr } from "../../../../ellamaka-app/src/i18n/br"
-import { dict as appBs } from "../../../../ellamaka-app/src/i18n/bs"
-
+// The Electron shell translates only its own chrome (dialogs, updater, CLI
+// install). It never renders App copy: the shared renderer owns that through
+// `loadLocaleDict`, which loads App dictionaries on demand. Importing the App
+// dictionaries here would do the opposite — it pins all 16 of them into the
+// shell's entry chunk as static imports and cancels their code splitting.
 export type Locale =
   | "en"
   | "zh"
@@ -52,8 +40,7 @@ export type Locale =
   | "br"
   | "bs"
 
-type RawDictionary = typeof appEn & typeof desktopEn
-type Dictionary = i18n.Flatten<RawDictionary>
+type Dictionary = i18n.Flatten<typeof desktopEn>
 
 const LOCALES: readonly Locale[] = [
   "en",
@@ -140,25 +127,25 @@ function pickLocale(value: unknown): Locale | null {
   return parseLocale(record.locale)
 }
 
-const base = i18n.flatten({ ...appEn, ...desktopEn })
+const base = i18n.flatten(desktopEn)
 
-function build(locale: Locale): Dictionary {
-  if (locale === "en") return base
-  if (locale === "zh") return { ...base, ...i18n.flatten(appZh), ...i18n.flatten(desktopZh) }
-  if (locale === "zht") return { ...base, ...i18n.flatten(appZht), ...i18n.flatten(desktopZht) }
-  if (locale === "de") return { ...base, ...i18n.flatten(appDe), ...i18n.flatten(desktopDe) }
-  if (locale === "es") return { ...base, ...i18n.flatten(appEs), ...i18n.flatten(desktopEs) }
-  if (locale === "fr") return { ...base, ...i18n.flatten(appFr), ...i18n.flatten(desktopFr) }
-  if (locale === "da") return { ...base, ...i18n.flatten(appDa), ...i18n.flatten(desktopDa) }
-  if (locale === "ja") return { ...base, ...i18n.flatten(appJa), ...i18n.flatten(desktopJa) }
-  if (locale === "pl") return { ...base, ...i18n.flatten(appPl), ...i18n.flatten(desktopPl) }
-  if (locale === "ru") return { ...base, ...i18n.flatten(appRu), ...i18n.flatten(desktopRu) }
-  if (locale === "uk") return { ...base, ...i18n.flatten(appUk), ...i18n.flatten(desktopUk) }
-  if (locale === "ar") return { ...base, ...i18n.flatten(appAr), ...i18n.flatten(desktopAr) }
-  if (locale === "no") return { ...base, ...i18n.flatten(appNo), ...i18n.flatten(desktopNo) }
-  if (locale === "br") return { ...base, ...i18n.flatten(appBr), ...i18n.flatten(desktopBr) }
-  if (locale === "bs") return { ...base, ...i18n.flatten(appBs), ...i18n.flatten(desktopBs) }
-  return { ...base, ...i18n.flatten(appKo), ...i18n.flatten(desktopKo) }
+const DICTIONARIES: Record<Locale, () => Dictionary> = {
+  en: () => base,
+  zh: () => ({ ...base, ...i18n.flatten(desktopZh) }),
+  zht: () => ({ ...base, ...i18n.flatten(desktopZht) }),
+  ko: () => ({ ...base, ...i18n.flatten(desktopKo) }),
+  de: () => ({ ...base, ...i18n.flatten(desktopDe) }),
+  es: () => ({ ...base, ...i18n.flatten(desktopEs) }),
+  fr: () => ({ ...base, ...i18n.flatten(desktopFr) }),
+  da: () => ({ ...base, ...i18n.flatten(desktopDa) }),
+  ja: () => ({ ...base, ...i18n.flatten(desktopJa) }),
+  pl: () => ({ ...base, ...i18n.flatten(desktopPl) }),
+  ru: () => ({ ...base, ...i18n.flatten(desktopRu) }),
+  uk: () => ({ ...base, ...i18n.flatten(desktopUk) }),
+  ar: () => ({ ...base, ...i18n.flatten(desktopAr) }),
+  no: () => ({ ...base, ...i18n.flatten(desktopNo) }),
+  br: () => ({ ...base, ...i18n.flatten(desktopBr) }),
+  bs: () => ({ ...base, ...i18n.flatten(desktopBs) }),
 }
 
 const state = {
@@ -167,7 +154,7 @@ const state = {
   init: undefined as Promise<Locale> | undefined,
 }
 
-state.dict = build(state.locale)
+state.dict = DICTIONARIES[state.locale]()
 
 const translate = i18n.translator(() => state.dict, i18n.resolveTemplate)
 
@@ -185,7 +172,7 @@ export function initI18n(): Promise<Locale> {
     const next = pickLocale(value) ?? state.locale
 
     state.locale = next
-    state.dict = build(next)
+    state.dict = DICTIONARIES[next]()
     return next
   })().catch(() => state.locale)
 

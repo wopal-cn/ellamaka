@@ -2,6 +2,17 @@ import { readFile } from "node:fs/promises"
 
 const DEFAULT_MODELS_URL = "https://models.opencode.ai"
 
+// The catalog is a multi-megabyte download (~6.6 MB at the time of writing),
+// and the network is routinely slower than a build-time deadline suggests.
+// A too-tight budget silently downgrades the build to the committed snapshot:
+// the build still succeeds, but its embedded provider list is whatever the
+// snapshot held when someone last refreshed it. Match the runtime fetch
+// budget in `@wopal/ellamaka-core/models-dev` (10s) so build-time and
+// run-time agree on when the network counts as unavailable.
+const DEFAULT_TIMEOUT_MS = 10_000
+
+export { DEFAULT_TIMEOUT_MS }
+
 type CatalogSource = "explicit" | "network" | "snapshot" | "empty"
 
 type Response = {
@@ -116,7 +127,7 @@ export async function loadModelCatalog(options: LoadModelCatalogOptions): Promis
   const network = await loadValidNetworkCatalog({
     sourceUrl: options.sourceUrl ?? DEFAULT_MODELS_URL,
     fetch: options.fetch ?? globalThis.fetch,
-    timeoutMs: options.timeoutMs ?? 3000,
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     warn,
   })
   if (network) return { data: network, source: "network" }

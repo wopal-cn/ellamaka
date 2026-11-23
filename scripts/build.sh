@@ -49,6 +49,7 @@ Desktop options:
   --force                 CI: skip dirty-tree / unpushed confirmation
   --install               Install locally (mac: .app to /Applications).
                           Skipped for CI builds of non-host platforms.
+  --verbose               Show full step output instead of the merged warning list
 EOF
   exit 0
 }
@@ -58,6 +59,96 @@ shift 2>/dev/null || true
 
 # Shared version resolution for CLI / Desktop builds.
 source "$PROJECT_ROOT/scripts/lib/version.sh"
+
+# ── Diagnostic reporting ──────────────────────────────────────────
+# Build steps separate their streams: progress goes to stdout, warnings go to
+# stderr (electron-vite runs with --logLevel warn). Reporting the merged output
+# as "warnings" labelled every progress line as a problem and buried the real
+# ones, so only diagnostics are reported.
+#
+# electron-builder is the exception: it writes every level to stdout and only
+# colour separates info from warn/error, so its step runs with FORCE_COLOR=1
+# and its *stdout* is filtered by colour (colored=1).
+#
+# A step with no diagnostics prints nothing, so a clean build stays quiet.
+WARN_FILTER="$PROJECT_ROOT/scripts/lib/warn-report.awk"
+
+# strip_ansi <file> — the package step runs electron-builder with FORCE_COLOR=1,
+# so wherever its raw output is reprinted verbatim the codes must go.
+strip_ansi() {
+  sed $'s/\033\\[[0-9;]*m//g' "$1"
+}
+
+# report_diagnostics <file> <colored> <verbose>
+report_diagnostics() {
+  local file="$1" colored="$2" verbose="$3"
+  [ -s "$file" ] || return 0
+
+  if [ "$verbose" = "true" ]; then
+    strip_ansi "$file" | sed 's/^/      /' >&2
+    return 0
+  fi
+
+  local filtered count shown
+  filtered="$(awk -v root="$PROJECT_ROOT/" -v colored="$colored" -f "$WARN_FILTER" "$file" 2>/dev/null)" || true
+  [ -z "$filtered" ] && return 0
+
+  count="$(printf '%s\n' "$filtered" | wc -l | tr -d ' ')"
+  shown="$filtered"
+  if [ "$count" -gt 20 ]; then
+    shown="$(printf '%s\n' "$filtered" | head -20)"
+  fi
+
+  printf "    ⚠ 真实告警 %s 条（--verbose 看完整输出）:\n" "$count" >&2
+  printf '%s\n' "$shown" | sed 's/^/      /' >&2
+  if [ "$count" -gt 20 ]; then
+    printf "      …另有 %s 条未显示\n" "$((count - 20))" >&2
+  fi
+}
+
+# report_failure <file> <tail-lines>
+report_failure() {
+  strip_ansi "$1" | tail -"$2" | sed 's/^/      /' >&2
+}
+
+# install_app <source.app> <app-name>
+#
+# Replaces <install-root>/<name>.app without ever leaving a half-written bundle
+# behind: copy to a sibling staging path, then rename it into place, keeping the
+# old bundle until the new one has landed. A failure at any step leaves the
+# installed app untouched.
+#
+# The install root is overridable so the swap can be exercised in a temp dir.
+install_app() {
+  local source="$1" app_name="$2"
+  local root="${ELLAMAKA_INSTALL_ROOT:-/Applications}"
+  local dest="${root}/${app_name}.app"
+  local staging="${root}/.${app_name}.app.new"
+  local previous="${root}/.${app_name}.app.previous"
+
+  rm -rf "$staging" "$previous"
+  if ! cp -R "$source" "$staging"; then
+    rm -rf "$staging"
+    printf "  ✗ install failed while copying; %s is unchanged\n" "$dest" >&2
+    return 1
+  fi
+
+  # Keep the previous bundle until the new one is in place: a failed rename
+  # must not leave the user with no app at all.
+  if [ -e "$dest" ] && ! mv "$dest" "$previous"; then
+    rm -rf "$staging"
+    printf "  ✗ install failed while moving the old bundle; %s is unchanged\n" "$dest" >&2
+    return 1
+  fi
+  if ! mv "$staging" "$dest"; then
+    [ -e "$previous" ] && mv "$previous" "$dest"
+    rm -rf "$staging"
+    printf "  ✗ install failed while placing the new bundle; %s was restored\n" "$dest" >&2
+    return 1
+  fi
+
+  rm -rf "$previous"
+}
 
 # ── DSH runtime manifest freshness ────────────────────────────────
 # The CLI binary inlines generated/dsh-runtime-manifest.json at bundle time
@@ -253,6 +344,13 @@ function build_desktop() {
   CI_OUT_DIR="$PROJECT_ROOT/dist/ci"
   CI_NO_WAIT=false
   CI_FORCE=false
+  VERBOSE=false
+  STEP_OUTS=()
+
+  # An interrupt mid-step would otherwise leave the captured step output in
+  # $TMPDIR forever: the success and failure paths each clean up, but Ctrl-C and
+  # SIGTERM do not pass through them.
+  trap 'rm -f "${STEP_OUTS[@]}"' EXIT INT TERM
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -320,6 +418,10 @@ function build_desktop() {
         INSTALL=true
         shift
         ;;
+      --verbose)
+        VERBOSE=true
+        shift
+        ;;
       *)
         echo "❌ Unknown option: $1"
         exit 1
@@ -359,10 +461,16 @@ function build_desktop() {
 
   DESKTOP_DIR="$PROJECT_ROOT/packages/ellamaka-desktop"
 
+  # A running app does not block the build. Replacing the bundle under a live
+  # process is safe on macOS: the process keeps its unlinked binary, the
+  # database lives outside the bundle, and the ad-hoc signature survives
+  # `cp -R`. The one thing worth saying out loud is that the single-instance
+  # lock makes the OLD window come forward until the app is restarted, which
+  # reads as "the update did nothing".
+  local APP_RUNNING=false
   if $INSTALL && [[ "$(uname -s)" == "Darwin" ]]; then
     if pgrep -f "${APP_NAME}.app/Contents/MacOS" >/dev/null 2>&1; then
-      printf "  ✗ %s is running. Quit it first.\n" "$APP_NAME" >&2
-      exit 1
+      APP_RUNNING=true
     fi
   fi
 
@@ -377,39 +485,42 @@ function build_desktop() {
 
   # Step 1: Build
   if [ -t 2 ]; then printf "  1/%d  build         building...\r" "$total" >&2; fi
-  local build_out
-  build_out=$(bun run build 2>&1) || {
+  local build_out build_err
+  build_out="$(mktemp)"
+  build_err="$(mktemp)"
+  STEP_OUTS+=("$build_out" "$build_err")
+  if ! bun run build >"$build_out" 2>"$build_err"; then
     if [ -t 2 ]; then printf "\r\033[K" >&2; fi
     printf "  1/%d  build         ✗ failed\n" "$total" >&2
-    echo "$build_out" | tail -30 >&2
+    report_failure "$build_err" 30
     exit 1
-  }
+  fi
   if [ -t 2 ]; then printf "\r\033[K" >&2; fi
   printf "  1/%d  build         ✓ done\n" "$total" >&2
-  # Show warnings from build output (non-empty, non-command-echo lines)
-  local build_warn
-  build_warn=$(echo "$build_out" | grep -v '^$' | grep -v '^$ ' | head -10)
-  if [ -n "$build_warn" ]; then
-    printf "    ⚠ warnings:\n" >&2
-    echo "$build_warn" | sed 's/^/      /' >&2
-  fi
+  report_diagnostics "$build_err" 0 "$VERBOSE"
+  rm -f "$build_out" "$build_err"
 
   # Step 2: Package
   if [ -t 2 ]; then printf "  2/%d  package       packaging...\r" "$total" >&2; fi
-  local pkg_out
-  pkg_out=$(bun run package:mac 2>&1) || {
+  local pkg_out pkg_err
+  pkg_out="$(mktemp)"
+  pkg_err="$(mktemp)"
+  STEP_OUTS+=("$pkg_out" "$pkg_err")
+  # FORCE_COLOR makes electron-builder colour-tag each level on stdout, which is
+  # how its warn/error lines are told apart from progress. NO_COLOR has to go in
+  # the same assignment: a caller who exports it (a CI image, a no-colour shell)
+  # otherwise makes Node print "NO_COLOR is ignored due to FORCE_COLOR" on
+  # stderr, which reads as a build warning and is not one.
+  if ! env -u NO_COLOR FORCE_COLOR=1 bun run package:mac >"$pkg_out" 2>"$pkg_err"; then
     if [ -t 2 ]; then printf "\r\033[K" >&2; fi
     printf "  2/%d  package       ✗ failed\n" "$total" >&2
-    echo "$pkg_out" | tail -30 >&2
+    report_failure "$pkg_out" 25
+    strip_ansi "$pkg_err" | sed 's/^/      /' >&2
     exit 1
-  }
-  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
-  local pkg_warn
-  pkg_warn=$(echo "$pkg_out" | grep -v '^$' | grep -v '^$ ' | head -10)
-  if [ -n "$pkg_warn" ]; then
-    printf "    ⚠ warnings:\n" >&2
-    echo "$pkg_warn" | sed 's/^/      /' >&2
   fi
+  if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+  report_diagnostics "$pkg_out" 1 "$VERBOSE"
+  rm -f "$pkg_out" "$pkg_err"
   APP_PATH=$(find "$DESKTOP_DIR/dist" -name "${APP_NAME}.app" -type d -maxdepth 3 2>/dev/null | head -1)
   if [[ -z "$APP_PATH" ]]; then
     printf "  2/%d  package       ✗ .app not found\n" "$total" >&2
@@ -419,10 +530,13 @@ function build_desktop() {
 
   if $INSTALL; then
     if [ -t 2 ]; then printf "  3/%d  install       copying...\r" "$total" >&2; fi
-    rm -rf "/Applications/${APP_NAME}.app"
-    cp -R "$APP_PATH" "/Applications/"
+    install_app "$APP_PATH" "$APP_NAME"
     if [ -t 2 ]; then printf "\r\033[K" >&2; fi
     printf "  3/%d  install       ✓ /Applications/%s\n" "$total" "${APP_NAME}.app" >&2
+    if $APP_RUNNING; then
+      printf "      ℹ %s was running; the old window stays in front until you restart it.\n" "$APP_NAME" >&2
+      printf "        Restart with: osascript -e 'quit app \"%s\"' && open -a \"%s\"\n" "$APP_NAME" "$APP_NAME" >&2
+    fi
   fi
 }
 

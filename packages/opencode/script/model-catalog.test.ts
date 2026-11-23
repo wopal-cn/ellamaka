@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { loadModelCatalog } from "./model-catalog"
+import { loadModelCatalog, DEFAULT_TIMEOUT_MS } from "./model-catalog"
 
 const catalog = JSON.stringify({
   acme: {
@@ -128,7 +128,7 @@ describe("loadModelCatalog", () => {
         release: false,
         readFile: (filepath) => readFile(filepath, "utf8"),
         warn: quietWarn,
-        fetch: async () => response("{\"acme\":"),
+        fetch: async () => response('{"acme":'),
       })
 
       expect(result).toEqual({ data: catalog, source: "snapshot" })
@@ -220,5 +220,38 @@ describe("loadModelCatalog", () => {
         }),
       ).rejects.toThrow("No valid provider catalog available for release build")
     })
+  })
+
+  test("an expired deadline falls back to the snapshot", async () => {
+    // A fetch that never settles on its own, so the only way this can resolve
+    // is the deadline aborting it. The explicit budget keeps the test instant
+    // and proves the fallback path is reachable without waiting on the clock.
+    await withTempDir(async (dir) => {
+      const snapshotPath = path.join(dir, "models.json")
+      await writeFile(snapshotPath, otherCatalog)
+
+      const result = await loadModelCatalog({
+        snapshotPath,
+        sourceUrl: "https://catalog.example.test",
+        release: true,
+        readFile: (filepath) => readFile(filepath, "utf8"),
+        warn: quietWarn,
+        timeoutMs: 1,
+        fetch: (_url, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })
+          }),
+      })
+
+      expect(result).toEqual({ data: otherCatalog, source: "snapshot" })
+    })
+  })
+
+  test("the build deadline is at least the runtime fetch budget", async () => {
+    // The catalog is several megabytes, and a build-time deadline tighter than
+    // the runtime one turns a merely slow network into a silent downgrade to a
+    // stale committed snapshot. The runtime budget is 10s
+    // (`@wopal/ellamaka-core/models-dev`), so pin the build default to it.
+    expect(DEFAULT_TIMEOUT_MS).toBeGreaterThanOrEqual(10_000)
   })
 })

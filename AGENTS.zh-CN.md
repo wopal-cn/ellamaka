@@ -75,7 +75,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - 日志：由 ellamaka-core 的结构化 logger 统一路由和脱敏，插件只用内置 `ctx.logger`（不 `console.log`、不自建 logger）。必须记：生命周期变化、错误与异常（含降级路径）、关键决策。不得记：循环内逐条、成功路径例行、可从上下文推出的信息。循环要聚合成一条摘要；上下文放结构化字段而非拼进消息；`catch` 不得吞异常。默认 INFO，DEBUG 用于诊断，TRACE 按类别显式开启。任何日志都不得记录凭证、prompt/消息正文、工具参数、命令、路径或无界子进程输出。分级、路由与文件细则见 DESIGN-logging。
 - 排障：放大日志用 `--log-level` / `--trace <类别>`，不要往代码里加临时日志；显式 `--log-level` 覆盖 `--trace` 提升。日志定位（角色分域目录、dev scope、DSH 文件）见 DESIGN-logging。
 - 启动与进度：只报告真实执行的阶段，有真实总量才给计数/百分比，长阶段发心跳；进度走 stderr 或专用 UI，机器 stdout 保持纯净。`wopal.dsh.web.enabled=false` 且 `ELLAMAKA_DSH_TOOLS=0` 时报告跳过 DSH preparation，并保持零 DSH 文件/网络/mount 副作用。Tools profile 加载失败可以保留 Native Tools；一旦 Tools 已 ready 且当前 Space 采用 `dsh-adapter`，沙箱或工具执行失败必须原样失败，严禁改用 Native Tools 重试。
-- 构建脚本输出：`scripts/build.sh` 所有进度走 stderr，stdout 保持机器可读；`--verbose` 展开捕获的子进程输出（vite 警告、生成器日志）。DSH manifest/lock 生成器接受 `--quiet` 静默成功消息。CLI 构建入口（`build.ts`）捕获 vite 输出，仅在 `ELLAMAKA_BUILD_VERBOSE=1` 时展开，否则只报告警告计数。
+- 构建脚本输出：`scripts/build.sh` 所有进度走 stderr，stdout 保持机器可读；`--verbose` 展开捕获的子进程输出（vite 警告、生成器日志）。Desktop 每个 step 只报告真实诊断、不报告进度：`build` 只读 vite 的 stderr；`package` 以 `FORCE_COLOR=1` 运行 electron-builder，因为它把各级别都写 stdout、只有颜色能区分 warn/error。干净的 step 不打印告警段。DSH manifest/lock 生成器接受 `--quiet` 静默成功消息。CLI 构建入口（`build.ts`）捕获 vite 输出，仅在 `ELLAMAKA_BUILD_VERBOSE=1` 时展开，否则只报告警告计数。
 
 ## Testing
 

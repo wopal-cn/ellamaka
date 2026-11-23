@@ -45,9 +45,11 @@ CLI 常用选项：
 | `--install`                    | 安装二进制（软链到 `~/.wopal/bin`）                                                                                            |
 | `--verbose`                    | 显示完整子进程输出（vite 警告、生成器日志等）                                                                                  |
 
-Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建；`--platform linux\|win` → dispatch GitHub Actions CI 并下载产物。CI 构建仅接受 `--channel beta\|stable`（`main` 仅本地）。
+Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建；`--platform linux\|win` → dispatch GitHub Actions CI 并下载产物。CI 构建仅接受 `--channel beta\|stable`（`main` 仅本地）。Desktop 同样支持 `--verbose`。
 
-**输出契约**：构建进度全部走 stderr，stdout 保持干净。vite 警告默认折叠为计数，`--verbose` 展开完整输出。DSH 生成器通过 `--quiet` 静默成功消息，失败时仍打印错误到 stderr。
+**输出契约**：构建进度全部走 stderr，stdout 保持干净。
+
+每个 step 只报告真实诊断，不报告进度日志：`build` 只读 vite 的 stderr（`--logLevel warn`，stdout 的 prebuild/sidecar 进度不计入）；`package` 的 electron-builder 把各级别都写 stdout，因此以 `FORCE_COLOR=1` 运行并按颜色只取 warn/error。一个干净的构建不打印任何告警段落。默认最多列 20 条，`--verbose` 展开该步骤的完整原始输出。DSH 生成器通过 `--quiet` 静默成功消息，失败时仍打印错误到 stderr。
 
 ### `release-cli.sh` / `release-desktop.sh` — 一步发布 CLI / Desktop 版本
 
@@ -157,6 +159,10 @@ OpenAPI spec 在启动时直接从当前源码生成（`generatedOpenApi()`）�
 - `highest_release_tag` — 发布版本最高 tag 查询（failed-attempt 判定用）
 
 发布版本推断已迁移至 `packages/ellamaka-release/src/version-line.ts`（统一版本线模型），由 `scripts/lib/release.sh` 调用。
+
+### `lib/warn-report.awk` — 构建诊断过滤
+
+被 `build.sh` 的 `report_diagnostics` 用于从单个 step 的原始输出里挑出"真实告警"：丢掉 `$ <command>` 回显、空行、vite 代码片段与 `[plugin vite:reporter]` 裸分隔行，路径转成项目相对路径。`colored=1` 时按 ANSI 颜色只保留 warn/error（用于 electron-builder 的 stdout）。契约由 `warn-report-integration.test.ts` 锁定。
 
 ## 推荐工作流
 

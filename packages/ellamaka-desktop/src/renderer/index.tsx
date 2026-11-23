@@ -29,7 +29,9 @@ import { mapSidecarStateToAction, resolveSidecarServer } from "./sidecar-adapter
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(t("error.dev.rootNotFound"))
+  // Developer-facing assertion: it only fires in a dev build, so it stays a
+  // plain literal instead of pulling an App dictionary key into the shell.
+  throw new Error("Root element not found. Did you forget to add it to index.html?")
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {

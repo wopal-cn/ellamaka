@@ -24,9 +24,18 @@ const PUBLISH_URLS: Record<string, string | undefined> = {
   local: undefined,
 }
 
-const packageName = ({ beta: "ellamaka-beta", main: "ellamaka-main", stable: "ellamaka", local: "ellamaka-main" } as Record<string, string>)[channel]
+const packageName = (
+  { beta: "ellamaka-beta", main: "ellamaka-main", stable: "ellamaka", local: "ellamaka-main" } as Record<string, string>
+)[channel]
 
-const artifactPrefix = ({ beta: "ellamaka-desktop-beta", stable: "ellamaka-desktop", main: "ellamaka-desktop", local: "ellamaka-desktop" } as Record<string, string>)[channel]
+const artifactPrefix = (
+  {
+    beta: "ellamaka-desktop-beta",
+    stable: "ellamaka-desktop",
+    main: "ellamaka-desktop",
+    local: "ellamaka-desktop",
+  } as Record<string, string>
+)[channel]
 
 const getBase = (): Configuration => ({
   ...(electronDist ? { electronDist } : {}),
@@ -44,11 +53,6 @@ const getBase = (): Configuration => ({
   },
   files: ["out/**/*", "resources/**/*", "!resources/release-identity.json"],
   extraResources: [
-    {
-      from: "native/",
-      to: "native/",
-      filter: ["index.js", "index.d.ts", "build/Release/mac_window.node", "swift-build/**"],
-    },
     {
       // release-identity.json must live outside app.asar (Contents/Resources)
       // so external consumers (wopal-cli) can probe the embedded identity.

@@ -40,12 +40,40 @@ const sentry =
       })
     : false
 
+// `virtual:opencode-server` resolves to the prebuilt sidecar bundle, which the
+// main build then bundles a second time. Rollup is analysing a finished
+// artifact, so its findings there are noise rather than anything the desktop
+// can fix:
+//
+//   UNUSED_EXTERNAL_IMPORT  the symbols are used; the dist re-exports them
+//                           through paths Rollup does not follow
+//   EVAL                    protobufjs/inquire, gray-matter and the emscripten
+//                           glue all reach for `eval` inside their own
+//                           implementation; forking upstream is the only fix,
+//                           and the sidecar runs locally on already-trusted code
+//
+// Suppress only these, and only for that one artifact, so a real problem in a
+// desktop source file still prints. The list is deliberately narrow: a blanket
+// `onwarn` would hide the warnings this narrowing exists to surface.
+const SIDECAR_DIST_FILE = path.resolve(__dirname, OPENCODE_SERVER_DIST, "node.js")
+const SIDECAR_DIST_NOISE = new Set(["UNUSED_EXTERNAL_IMPORT", "EVAL"])
+function onwarn(warning, defaultHandler) {
+  // `EVAL` carries the artifact in `id`; `UNUSED_EXTERNAL_IMPORT` carries it in
+  // `ids` with `id` left undefined.
+  const files = warning.id ? [warning.id] : (warning.ids ?? [])
+  const onlySidecarDist =
+    SIDECAR_DIST_NOISE.has(warning.code) && files.length > 0 && files.every((file) => file === SIDECAR_DIST_FILE)
+  if (!onlySidecarDist) defaultHandler(warning)
+}
+
 export default defineConfig({
   main: {
     define: {
       "import.meta.env.ELLAMAKA_CHANNEL": JSON.stringify(channel),
     },
     build: {
+      // Rollup reports every one of these across two passes; only the desktop's
+      // own sources matter here, so drop the sidecar artifact's findings.
       rollupOptions: {
         input: {
           index: "src/main/index.ts",
@@ -56,6 +84,7 @@ export default defineConfig({
         // npm bootstrap deps bundled in the opencode server dist); it is loaded
         // lazily at runtime with a graceful fallback, so keep it external.
         external: ["kerberos"],
+        onwarn,
       },
       externalizeDeps: { include: [nodePtyPkg], exclude: [...BUNDLED_SOURCE_DEPS] },
     },
@@ -134,12 +163,41 @@ export default defineConfig({
     },
     publicDir: "../../../ellamaka-app/public",
     root: "src/renderer",
+    // Mirrors `ellamaka-app/vite.config.ts`. Files carrying a
+    // `@jsxImportSource` pragma (the workbench status-bar diagnostics module
+    // and virtua's solid entry) are compiled by vite-plugin-solid, but Vite's
+    // built-in esbuild pass still inspects them with the tsconfig
+    // `jsx: "preserve"` + `jsxImportSource` pair. esbuild rejects that
+    // combination with a spurious "React automatic transform" warning.
+    // Declaring the automatic transform here settles the esbuild pass; it does
+    // not alter output because .tsx/.jsx are handed to Solid's babel pipeline
+    // regardless.
+    esbuild: { jsx: "automatic" },
     build: {
       sourcemap: true,
       rollupOptions: {
         input: {
           main: "src/renderer/index.html",
           loading: "src/renderer/loading.html",
+        },
+        output: {
+          // Mirrors `ellamaka-app/vite.config.ts`. The oniguruma wasm binary
+          // (vscode-oniguruma, used by shiki) and the "wasm" language grammar
+          // (a shiki bundled TextMate grammar) both land in chunks Rollup names
+          // "wasm", colliding their sourcemap filenames. Give the binary its
+          // own chunk name. The descriptor match keeps the SolidJS vendor chunk
+          // from drifting back into the entry bundle.
+          manualChunks(id) {
+            if (id.includes("oniguruma")) return "onig-wasm"
+            if (
+              id.includes("node_modules/solid-js") ||
+              id.includes("node_modules/@solidjs") ||
+              id.includes("node_modules/@solid-primitives") ||
+              id.includes("node_modules/@kobalte")
+            )
+              return "solid-vendor"
+            return undefined
+          },
         },
       },
     },

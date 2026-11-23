@@ -43,6 +43,36 @@ describe("electron renderer html", () => {
 })
 
 /**
+ * The theme preload script must be inlined, not linked. The shared app vite
+ * plugin does the replacement, and a mismatch between the pattern it expects
+ * and the markup here fails silently: the link stays a classic script, Vite
+ * warns that it cannot be bundled, and the theme flashes before the bundle
+ * applies it. Pin the contract from both sides so neither can drift.
+ */
+describe("theme preload inlining contract", () => {
+  const INLINE_PATTERN = /<script id="oc-theme-preload-script" src="\.?\/oc-theme-preload\.js"><\/script>/
+
+  for (const name of ["index.html", "loading.html"]) {
+    test(`${name} is matched by the app plugin's inline pattern`, async () => {
+      expect(await html(name)).toMatch(INLINE_PATTERN)
+    })
+  }
+
+  test("the app plugin inlines both the relative and root-relative form", async () => {
+    const plugin = await Bun.file(join(root, "../ellamaka-app/vite.js")).text()
+    // String.raw keeps the regex's own backslashes, so this asserts the exact
+    // characters the plugin compiles.
+    expect(plugin).toContain(String.raw`src="\.?\/oc-theme-preload\.js"`)
+    expect(plugin).toContain('order: "pre"')
+  })
+
+  test("the app's own index.html is still matched", async () => {
+    const appHtml = await Bun.file(join(root, "../ellamaka-app/index.html")).text()
+    expect(appHtml).toMatch(INLINE_PATTERN)
+  })
+})
+
+/**
  * Vite resolves `publicDir` relative to `root`, not the config file.
  * This test reads the actual values from electron.vite.config.ts to catch
  * regressions where the publicDir path no longer resolves correctly
