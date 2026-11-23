@@ -106,6 +106,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     }
     return batchVisibility
   }
+  // Track rule files whose full body has already been attached to a tool result
+  // in this batch. This deduplicates duplicate reminders across parallel calls
+  // without changing batch-start visibility for preflight modification checks.
+  const batchAttached = new Set<string>()
+  const claimForBatch = (items: readonly Instruction.DirectoryInstruction[]) => {
+    const fresh: Instruction.DirectoryInstruction[] = []
+    for (const item of items) {
+      if (batchAttached.has(item.filepath)) continue
+      batchAttached.add(item.filepath)
+      fresh.push(item)
+    }
+    return fresh
+  }
 
   const argumentPath = (args: Record<string, unknown>, key: string) => {
     const value = args[key]
@@ -163,7 +176,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
     // Transitional: the native read still attaches rules itself before the
     // wrapper took over attachment. Append only what this result lacks.
-    const missing = resolution.attach.filter((item) => !Instruction.containsInstruction(result.output, item.filepath))
+    const alreadyInOutput = resolution.attach.filter((item) =>
+      Instruction.containsInstruction(result.output, item.filepath),
+    )
+    for (const item of alreadyInOutput) batchAttached.add(item.filepath)
+    const missing = claimForBatch(
+      resolution.attach.filter((item) => !Instruction.containsInstruction(result.output, item.filepath)),
+    )
     const current = result.metadata?.["loaded"]
     const existing = Array.isArray(current) ? current.filter((item): item is string => typeof item === "string") : []
     const loaded = [...new Set([...existing, ...missing.map((item) => item.filepath)])]
@@ -180,14 +199,19 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   // A suspended modification is not an executed file operation: it returns the
   // rules and a retry instruction, and the pipeline must not treat it as a write
   // (no FileOpEvent, no diagnostics backfill, no underlying tool call).
-  const suspended = (result: Tool.ExecuteResult, resolution: Instruction.Resolution): Tool.ExecuteResult => ({
-    ...result,
-    title: result.title || "Instructions required",
-    metadata: { ...result.metadata, loaded: resolution.attach.map((item) => item.filepath) },
-    output:
-      "File not modified. The following instructions apply to this file; read them and repeat the same tool call to apply the change.\n\n" +
-      resolution.attach.map((item) => item.reminder).join("\n\n"),
-  })
+  const suspended = (result: Tool.ExecuteResult, resolution: Instruction.Resolution): Tool.ExecuteResult => {
+    const fresh = claimForBatch(resolution.attach)
+    return {
+      ...result,
+      title: result.title || "Instructions required",
+      metadata: { ...result.metadata, loaded: fresh.map((item) => item.filepath) },
+      output:
+        fresh.length > 0
+          ? "File not modified. The following instructions apply to this file; read them and repeat the same tool call to apply the change.\n\n" +
+            fresh.map((item) => item.reminder).join("\n\n")
+          : "File not modified. Applicable instructions for this file were already attached to another tool result in this batch; read them and repeat the same tool call to apply the change.",
+    }
+  }
 
   const preflightModification = Effect.fnUntraced(function* (
     toolId: string,

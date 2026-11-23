@@ -448,6 +448,40 @@ describe("Instruction.inspect", () => {
       }),
     ),
   )
+
+  it.live("does not re-attach a subdirectory instruction configured via symlinked path", () =>
+    Effect.gen(function* () {
+      const root = yield* tmpWithFiles({
+        "shared/AGENTS.md": "# Shared Instructions",
+        "shared/file.ts": "const x = 1",
+        "sub/file.ts": "const y = 2",
+      })
+      const fs = yield* FileSystem.FileSystem
+      yield* fs.symlink(path.join(root, "shared"), path.join(root, "dirlink"))
+      yield* fs.symlink(path.join(root, "shared", "AGENTS.md"), path.join(root, "sub", "AGENTS.md"))
+
+      const layer = Instruction.layer.pipe(
+        Layer.provide(TestConfig.layer({ get: () => Effect.succeed({ instructions: ["dirlink/AGENTS.md"] }) })),
+        Layer.provide(AppFileSystem.defaultLayer),
+        Layer.provide(FetchHttpClient.layer),
+        Layer.provide(Global.layerWith({ home: root, config: root })),
+        Layer.provide(RuntimeFlags.layer({})),
+      )
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const direct = yield* svc.inspect({ filepath: "shared/file.ts" })
+        expect(direct.attach).toEqual([])
+        expect(direct.files).toEqual([])
+        expect(direct.status).toBe("none")
+
+        const aliased = yield* svc.inspect({ filepath: "sub/file.ts" })
+        expect(aliased.attach).toEqual([])
+        expect(aliased.files).toEqual([])
+        expect(aliased.status).toBe("none")
+      }).pipe(provideInstance(root), Effect.provide(layer))
+    }),
+  )
 })
 
 describe("Instruction.system", () => {

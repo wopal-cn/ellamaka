@@ -360,7 +360,7 @@ export function InstructionLoadBlock(props: { paths: unknown; spaceRoot?: string
   const language = useLanguage()
   const paths = createMemo(() => spaceRelativeInstructionPaths(props.paths, props.spaceRoot))
   return (
-    <Show when={paths().length > 0}>
+    <Show when={paths().length > 0 || props.suspended}>
       <div data-component="chat-injection" data-injection-tag="rules" data-instruction-load="">
         <div data-slot="chat-injection-trigger" data-instruction-static="">
           <div data-slot="chat-injection-header-left">
@@ -372,16 +372,18 @@ export function InstructionLoadBlock(props: { paths: unknown; spaceRoot?: string
             <span data-slot="chat-instruction-suspended">{language.t("workbench.chat.instructionNotModified")}</span>
           </Show>
         </div>
-        <div data-slot="chat-instruction-paths">
-          <For each={paths()}>
-            {(path) => (
-              <div data-slot="chat-instruction-row">
-                <span aria-hidden="true">↳</span>
-                <span data-slot="chat-instruction-path">{path}</span>
-              </div>
-            )}
-          </For>
-        </div>
+        <Show when={paths().length > 0}>
+          <div data-slot="chat-instruction-paths">
+            <For each={paths()}>
+              {(path) => (
+                <div data-slot="chat-instruction-row">
+                  <span aria-hidden="true">↳</span>
+                  <span data-slot="chat-instruction-path">{path}</span>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
       </div>
     </Show>
   )

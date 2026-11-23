@@ -1,3 +1,4 @@
+import { instructionSourcePaths as parseInstructionSourcePaths } from "@wopal/ellamaka-core/util/instruction-sources"
 import type { AssistantMessage, Message, Part, UserMessage } from "@wopal/ellamaka-sdk/v2"
 
 /**
@@ -48,21 +49,8 @@ const INJECTION_SHELL_PREFIXES = ["<system-reminder>", "<rules-context>", "<memo
 // UI-only record of rule sources actually included in the system prompt.
 // The server marks these text parts ignored, so their display metadata never
 // becomes a second, weaker source of model instructions.
-const INSTRUCTION_SOURCES_START = "<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n"
-const INSTRUCTION_SOURCES_END = "\n</rules-context>"
-
 export function instructionSourcePaths(part: Part): string[] | undefined {
-  if (part.type !== "text" || part.synthetic !== true || part.ignored !== true) return undefined
-  if (!part.text.startsWith(INSTRUCTION_SOURCES_START) || !part.text.endsWith(INSTRUCTION_SOURCES_END)) return undefined
-  try {
-    const paths: unknown = JSON.parse(
-      part.text.slice(INSTRUCTION_SOURCES_START.length, -INSTRUCTION_SOURCES_END.length),
-    )
-    if (!Array.isArray(paths) || !paths.every((path) => typeof path === "string")) return undefined
-    return paths
-  } catch {
-    return undefined
-  }
+  return parseInstructionSourcePaths(part)
 }
 
 /** Show only paths belonging to this Space; never leak an absolute fallback. */

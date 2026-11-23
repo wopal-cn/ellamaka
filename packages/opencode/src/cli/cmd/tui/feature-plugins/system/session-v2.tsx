@@ -806,7 +806,7 @@ function LoadedRules(props: { part: SessionMessageAssistantTool }) {
     props.part.state.status === "completed" &&
     (toolOutput(props.part.state.content)?.startsWith("File not modified.") ?? false)
   return (
-    <Show when={loaded().length > 0}>
+    <Show when={loaded().length > 0 || suspended()}>
       <For each={loaded()}>
         {(filepath) => (
           <box paddingLeft={3} flexShrink={0}>
@@ -817,9 +817,11 @@ function LoadedRules(props: { part: SessionMessageAssistantTool }) {
         )}
       </For>
       <Show when={suspended()}>
-        <text paddingLeft={6} fg={theme.warning}>
-          File not modified; retry required
-        </text>
+        <box paddingLeft={3} flexShrink={0}>
+          <text paddingLeft={3} fg={theme.warning}>
+            File not modified; retry required
+          </text>
+        </box>
       </Show>
     </Show>
   )

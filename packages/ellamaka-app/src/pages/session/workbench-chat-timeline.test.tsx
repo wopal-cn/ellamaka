@@ -417,6 +417,86 @@ describe("WorkbenchChatTimeline", () => {
     host.remove()
   })
 
+  test("shows the suspended notice even when a parallel write has no duplicate rule paths", () => {
+    const u = userMessage("u-suspended-empty")
+    const a = assistantMessage("a-suspended-empty", u.id)
+    withSync(
+      [u, a],
+      [
+        textPart("p-ask", u.id, "edit two files"),
+        toolPart(
+          "p-edit-dedup",
+          a.id,
+          {
+            status: "completed",
+            input: { filePath: "/repo/projects/example/src/b.ts" },
+            output:
+              "File not modified. Applicable instructions for this file were already attached to another tool result in this batch; read them and repeat the same tool call to apply the change.",
+            metadata: { loaded: [] },
+            title: "Instructions required",
+            time: { start: 2, end: 3 },
+          },
+          "edit",
+        ),
+      ],
+      { type: "idle" },
+    )
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: [u],
+          directory: "/repo/projects/example",
+          spaceRoot: "/repo",
+          virtualize: false,
+        })}
+      />
+    ))
+    expect(host.querySelector("[data-instruction-load]")).not.toBeNull()
+    expect(host.querySelector("[data-slot='chat-instruction-suspended']")?.textContent).toContain(
+      "workbench.chat.instructionNotModified",
+    )
+    expect(host.querySelector("[data-slot='chat-instruction-paths']")).toBeNull()
+    host.remove()
+  })
+
+  test("hides the suspended notice once a suspended tool result has been compacted", () => {
+    const u = userMessage("u-suspended-compacted")
+    const a = assistantMessage("a-suspended-compacted", u.id)
+    withSync(
+      [u, a],
+      [
+        textPart("p-ask", u.id, "edit file"),
+        toolPart(
+          "p-edit-compacted",
+          a.id,
+          {
+            status: "completed",
+            input: { filePath: "/repo/projects/example/src/b.ts" },
+            output:
+              "File not modified. Applicable instructions for this file were already attached to another tool result in this batch; read them and repeat the same tool call to apply the change.",
+            metadata: { loaded: [] },
+            title: "Instructions required",
+            time: { start: 1, end: 2, compacted: 3 },
+          },
+          "edit",
+        ),
+      ],
+      { type: "idle" },
+    )
+    const host = mount(() => (
+      <WorkbenchChatTimeline
+        {...baseProps({
+          userMessages: [u],
+          directory: "/repo/projects/example",
+          spaceRoot: "/repo",
+          virtualize: false,
+        })}
+      />
+    ))
+    expect(host.querySelector("[data-instruction-load]")).toBeNull()
+    host.remove()
+  })
+
   test("renders a shell-wrapped user part without the synthetic flag as an injection outside the bubble", () => {
     const u1 = userMessage("u-flagless")
     const a1 = assistantMessage("a-flagless", "u-flagless")

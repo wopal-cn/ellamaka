@@ -94,6 +94,7 @@ import { SessionRetry } from "@/session/retry"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
+import { ToolLoadedRules, UserInstructionSources } from "./instruction-load"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1417,6 +1418,7 @@ function UserMessage(props: {
           </box>
         </box>
       </Show>
+      <UserInstructionSources parts={props.parts} marginTop={props.index === 0 && !text() ? 0 : 1} />
       <Show when={compaction()}>
         <box
           marginTop={1}
@@ -1737,7 +1739,7 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
             <GenericTool {...toolprops} />
           </Match>
         </Switch>
-        <LoadedRules part={props.part} />
+        <ToolLoadedRules part={props.part} />
       </>
     </Show>
   )
@@ -2120,34 +2122,6 @@ function Read(props: ToolProps<typeof ReadTool>) {
     >
       Read {pathFormatter.format(props.input.filePath)} {input(props.input, ["filePath"])}
     </InlineTool>
-  )
-}
-
-function LoadedRules(props: { part: ToolPart }) {
-  const { theme } = useTheme()
-  const pathFormatter = usePathFormatter()
-  const loaded = createMemo(() => {
-    if (props.part.state.status !== "completed" || props.part.state.time.compacted) return []
-    const value: unknown = props.part.state.metadata?.loaded
-    return Array.isArray(value) ? value.filter((path): path is string => typeof path === "string") : []
-  })
-  return (
-    <Show when={loaded().length > 0}>
-      <For each={loaded()}>
-        {(filepath) => (
-          <box paddingLeft={3}>
-            <text paddingLeft={3} fg={theme.textMuted}>
-              ↳ Loaded {pathFormatter.format(filepath)}
-            </text>
-          </box>
-        )}
-      </For>
-      <Show when={props.part.state.status === "completed" && props.part.state.title === "Instructions required"}>
-        <text paddingLeft={6} fg={theme.warning}>
-          File not modified; retry required
-        </text>
-      </Show>
-    </Show>
   )
 }
 

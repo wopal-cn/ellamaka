@@ -694,7 +694,7 @@ describe("session-tools directory instructions", () => {
     }),
   )
 
-  it.instance("uses the batch-start context so parallel reads each mount the rule", () =>
+  it.instance("deduplicates directory rules across parallel reads in the same batch", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
       const rule = path.join(test.directory, "src", "AGENTS.md")
@@ -702,7 +702,7 @@ describe("session-tools directory instructions", () => {
       registryTools = [toolDef("read", makeResult("file contents"))]
 
       const tools = yield* resolveTools()
-      const [first, second] = yield* Effect.all(
+      const results = yield* Effect.all(
         [
           invoke(tools, "read", { filePath: path.join(test.directory, "src", "a.ts") }),
           invoke(tools, "read", { filePath: path.join(test.directory, "src", "b.ts") }),
@@ -710,8 +710,12 @@ describe("session-tools directory instructions", () => {
         { concurrency: "unbounded" },
       )
 
-      expect(first["output"]).toBe(`file contents${reminder(rule, "# Src Rule")}`)
-      expect(second["output"]).toBe(`file contents${reminder(rule, "# Src Rule")}`)
+      const withRule = results.filter((item) => item["output"] === `file contents${reminder(rule, "# Src Rule")}`)
+      const withoutRule = results.filter((item) => item["output"] === "file contents")
+      expect(withRule).toHaveLength(1)
+      expect(withoutRule).toHaveLength(1)
+      expect(withRule[0]["metadata"]).toEqual({ loaded: [rule] })
+      expect(withoutRule[0]["metadata"]).toEqual({ loaded: [] })
     }),
   )
 
@@ -749,31 +753,47 @@ describe("session-tools directory instructions", () => {
     Effect.gen(function* () {
       const test = yield* TestInstance
       const root = realpathSync(test.directory)
-      const rule = path.join(root, "src", "AGENTS.md")
-      yield* writeRule(rule, "# Src Rule")
-      registryTools = [toolDef("read", makeResult("file contents"))]
+      const srcRule = path.join(root, "src", "AGENTS.md")
+      const otherRule = path.join(root, "other", "AGENTS.md")
+      yield* writeRule(srcRule, "# Src Rule")
+      yield* writeRule(otherRule, "# Other Rule")
+      registryTools = [
+        countingTool("read", makeResult("file contents")),
+        countingTool("write", makeResult("Wrote file successfully.")),
+      ]
+      yield* registerRecorder
 
       // Simulate the caller publishing its post-transform snapshot only after
       // the first tool already ran: later calls must keep using that baseline.
       let snapshot: Instruction.Visibility | undefined
       const tools = yield* resolveTools({
-        messages: [storedReadMessage(reminder(rule, "# Src Rule"))],
+        messages: [storedReadMessage(reminder(srcRule, "# Src Rule"))],
         instructionVisibility: () => snapshot,
       })
 
       const first = yield* invoke(tools, "read", { filePath: path.join(root, "src", "a.ts") })
-      expect(first["output"]).toBe("file contents" + reminder(rule, "# Src Rule"))
+      expect(first["output"]).toBe("file contents" + reminder(srcRule, "# Src Rule"))
+      expect(first["metadata"]).toEqual({ loaded: [srcRule] })
 
-      snapshot = { text: [{ text: reminder(rule, "# Src Rule"), loaded: [rule] }] }
-      const [second, third] = yield* Effect.all(
+      snapshot = {
+        text: [
+          { text: reminder(srcRule, "# Src Rule"), loaded: [srcRule] },
+          { text: reminder(otherRule, "# Other Rule"), loaded: [otherRule] },
+        ],
+      }
+      const [otherRead, pausedWrite] = yield* Effect.all(
         [
-          invoke(tools, "read", { filePath: path.join(root, "src", "b.ts") }),
-          invoke(tools, "read", { filePath: path.join(root, "src", "c.ts") }),
+          invoke(tools, "read", { filePath: path.join(root, "other", "b.ts") }),
+          invoke(tools, "write", { filePath: path.join(root, "src", "c.ts"), content: "x" }),
         ],
         { concurrency: "unbounded" },
       )
-      expect(second["output"]).toBe("file contents" + reminder(rule, "# Src Rule"))
-      expect(third["output"]).toBe("file contents" + reminder(rule, "# Src Rule"))
+      expect(otherRead["output"]).toBe("file contents" + reminder(otherRule, "# Other Rule"))
+      expect(otherRead["metadata"]).toEqual({ loaded: [otherRule] })
+      expect(pausedWrite["output"]).toMatch(/File not modified/i)
+      expect(pausedWrite["output"]).not.toContain("# Src Rule")
+      expect(pausedWrite["metadata"]).toEqual({ loaded: [] })
+      expect(executions).toEqual(["read", "read"])
     }),
   )
 
@@ -885,13 +905,14 @@ describe("session-tools modification preflight", () => {
       ]
       yield* registerRecorder
 
-      const tools = yield* resolveTools()
-      const edit = yield* invoke(tools, "edit", {
+      const editTools = yield* resolveTools()
+      const edit = yield* invoke(editTools, "edit", {
         filePath: path.join(test.directory, "src", "a.ts"),
         oldString: "a",
         newString: "b",
       })
-      const replace = yield* invoke(tools, "str_replace_editor", {
+      const replaceTools = yield* resolveTools()
+      const replace = yield* invoke(replaceTools, "str_replace_editor", {
         command: "str_replace",
         path: "src/b.ts",
         old_str: "a",
@@ -952,11 +973,82 @@ describe("session-tools modification preflight", () => {
         { concurrency: "unbounded" },
       )
 
-      expect(read.output).toContain(rule)
-      expect(write.output).toContain(rule)
+      expect(write.output).toMatch(/File not modified/)
+      const withBody = [read, write].filter((item) => item.output.includes("# Src Rule"))
+      const withoutBody = [read, write].filter((item) => !item.output.includes("# Src Rule"))
+      expect(withBody).toHaveLength(1)
+      expect(withoutBody).toHaveLength(1)
+      expect(withBody[0].metadata).toMatchObject({ loaded: [rule] })
+      expect(withoutBody[0].metadata).toMatchObject({ loaded: [] })
       expect(executions).toEqual(["read"])
       expect(emittedEvents.map((event) => event.toolId)).toEqual(["read"])
     }),
+  )
+
+  it.instance("deduplicates rule body across multiple parallel paused writes in the same batch", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const root = realpathSync(test.directory)
+      const rule = path.join(root, "src", "AGENTS.md")
+      yield* writeRule(rule, "# Src Rule")
+      registryTools = [countingTool("write", makeResult("Wrote file successfully."))]
+      yield* registerRecorder
+
+      const tools = yield* resolveTools({ instructionVisibility: () => ({ text: [] }) })
+      const results = yield* Effect.all(
+        [
+          invoke(tools, "write", { filePath: path.join(root, "src", "a.ts"), content: "x" }),
+          invoke(tools, "write", { filePath: path.join(root, "src", "b.ts"), content: "y" }),
+        ],
+        { concurrency: "unbounded" },
+      )
+
+      expect(executions).toEqual([])
+      expect(emittedEvents).toEqual([])
+      for (const item of results) {
+        expect(item.output).toMatch(/File not modified/)
+      }
+      const withBody = results.filter((item) => item.output.includes("# Src Rule"))
+      const withoutBody = results.filter((item) => !item.output.includes("# Src Rule"))
+      expect(withBody).toHaveLength(1)
+      expect(withoutBody).toHaveLength(1)
+      expect(withBody[0].metadata).toMatchObject({ loaded: [rule] })
+      expect(withoutBody[0].metadata).toMatchObject({ loaded: [] })
+      expect(withoutBody[0].output).toContain("already attached to another tool result in this batch")
+    }),
+  )
+
+  it.instance(
+    "attaches only the missing nested rule when a sibling read in the same batch already mounted the parent rule",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const root = realpathSync(test.directory)
+        const srcRule = path.join(root, "src", "AGENTS.md")
+        const subRule = path.join(root, "src", "sub", "AGENTS.md")
+        yield* writeRule(srcRule, "# Src Rule")
+        yield* writeRule(subRule, "# Sub Rule")
+        registryTools = [
+          countingTool("read", makeResult("file contents")),
+          countingTool("write", makeResult("Wrote file successfully.")),
+        ]
+        yield* registerRecorder
+
+        const tools = yield* resolveTools({ instructionVisibility: () => ({ text: [] }) })
+        const read = yield* invoke(tools, "read", { filePath: path.join(root, "src", "a.ts") })
+        const write = yield* invoke(tools, "write", {
+          filePath: path.join(root, "src", "sub", "b.ts"),
+          content: "x",
+        })
+
+        expect(read.output).toContain("# Src Rule")
+        expect(read.metadata).toMatchObject({ loaded: [srcRule] })
+        expect(write.output).toMatch(/File not modified/)
+        expect(write.output).toContain("# Sub Rule")
+        expect(write.output).not.toContain("# Src Rule")
+        expect(write.metadata).toMatchObject({ loaded: [subRule] })
+        expect(executions).toEqual(["read"])
+      }),
   )
 
   it.instance("rejects a modification when an applicable rule cannot be read", () =>

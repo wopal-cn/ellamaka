@@ -365,6 +365,11 @@ export const layer: Layer.Layer<
       }
 
       const sys = yield* systemPaths()
+      const canonicalSys = new Set<string>(sys)
+      for (const filepath of sys) {
+        const real = yield* fs.realPath(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+        if (real) canonicalSys.add(path.resolve(real))
+      }
       if (operation === "modify") {
         if (visible.baseline) {
           errors.push(...visible.baseline.errors)
@@ -387,7 +392,13 @@ export const layer: Layer.Layer<
       while (current !== canonicalRoot && AppFileSystem.contains(canonicalRoot, current)) {
         const found = yield* find(current)
         const self = found ? path.resolve(found) === target : false
-        if (found && (operation === "modify" || !self) && !sys.has(path.resolve(found))) {
+        const foundReal = found
+          ? ((yield* fs.realPath(found).pipe(Effect.catch(() => Effect.succeed(undefined)))) ?? found)
+          : undefined
+        const inBaseline = found
+          ? canonicalSys.has(path.resolve(found)) || (foundReal ? canonicalSys.has(path.resolve(foundReal)) : false)
+          : false
+        if (found && (operation === "modify" || !self) && !inBaseline) {
           const loaded = yield* readRule(found)
           if ("error" in loaded) {
             errors.push({

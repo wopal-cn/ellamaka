@@ -190,7 +190,10 @@ function ToolPartBlock(props: {
     props.part.state.status === "completed" && !props.part.state.time.compacted
       ? props.part.state.metadata?.loaded
       : undefined
-  const suspended = () => props.part.state.status === "completed" && props.part.state.title === "Instructions required"
+  const suspended = () =>
+    props.part.state.status === "completed" &&
+    !props.part.state.time.compacted &&
+    props.part.state.title === "Instructions required"
   return (
     <>
       <Show

@@ -7,6 +7,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { AppFileSystem } from "@wopal/ellamaka-core/filesystem"
 import { CrossSpawnSpawner } from "@wopal/ellamaka-core/cross-spawn-spawner"
 import { Global } from "@wopal/ellamaka-core/global"
+import { instructionSourcePaths } from "@wopal/ellamaka-core/util/instruction-sources"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InternalHook } from "@/hook/internal-hook"
 import { Instruction } from "@/session/instruction"
@@ -144,9 +145,9 @@ const providerConfig = (baseURL: string) => ({
   agent: { build: { model: "test/test-model" } },
 })
 
-const useProvider = Effect.fn("test.useProvider")(function* (baseURL: string) {
+const useProvider = Effect.fn("test.useProvider")(function* (baseURL: string, extra?: Partial<Config.Info>) {
   return yield* Effect.acquireRelease(
-    Effect.promise(() => writeGlobalTestConfig(providerConfig(baseURL))),
+    Effect.promise(() => writeGlobalTestConfig({ ...providerConfig(baseURL), ...extra })),
     (owner) => Effect.promise(() => removeGlobalTestConfig(owner)),
   )
 })
@@ -217,6 +218,9 @@ const isStringArray = (value: unknown): value is string[] =>
 
 const isExecuteResult = (value: unknown): value is { output: string; metadata?: Record<string, unknown> } =>
   typeof value === "object" && value !== null && "output" in value && typeof value.output === "string"
+
+const baselineSourceParts = (msg: MessageV2.WithParts) =>
+  msg.parts.filter((part): part is MessageV2.TextPart => instructionSourcePaths(part) !== undefined)
 
 // Real services supply the agent, model and session so the tool pipeline runs as it
 // does for a session; only the processor callbacks are inert.
@@ -638,16 +642,22 @@ describe("instruction loading integration", () => {
         },
       }
 
-      const tools = yield* resolveToolsWith({ sessionID: session.id, messages: [] })
-      const read = yield* invoke(tools, "read", { filePath: file })
+      const readTools = yield* resolveToolsWith({ sessionID: session.id, messages: [] })
+      const read = yield* invoke(readTools, "read", { filePath: file })
       expect(read.output).toContain("Instructions from: " + rule)
       expect(read.output).toContain("container contents")
-      expect(read.metadata).toMatchObject({ source: "dsh" })
+      expect(read.metadata).toMatchObject({ source: "dsh", loaded: [rule] })
 
-      // view is a read: it mounts the rule when the model has not seen it yet.
-      const view = yield* invoke(tools, "str_replace_editor", { command: "view", path: file })
+      // A parallel str_replace_editor view in the same batch does not re-attach the rule.
+      const sameBatchView = yield* invoke(readTools, "str_replace_editor", { command: "view", path: file })
+      expect(sameBatchView.output).not.toContain("# Src Rule")
+      expect(sameBatchView.metadata).toMatchObject({ source: "dsh-view", loaded: [] })
+
+      // view in a fresh batch without visible rules mounts the rule itself.
+      const viewTools = yield* resolveToolsWith({ sessionID: session.id, messages: [] })
+      const view = yield* invoke(viewTools, "str_replace_editor", { command: "view", path: file })
       expect(view.output).toContain("Instructions from: " + rule)
-      expect(view.metadata).toMatchObject({ source: "dsh-view" })
+      expect(view.metadata).toMatchObject({ source: "dsh-view", loaded: [rule] })
     }),
   )
 
@@ -709,5 +719,277 @@ describe("instruction loading integration", () => {
       expect(dsh.edits).toBe(1)
       expect(events.filter((item) => item.toolId === "str_replace_editor")).toHaveLength(1)
     }),
+  )
+
+  it.instance("records baseline instruction sources once across turns and again after compaction", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      dsh.supply.current = {}
+      yield* useProvider(llm.url)
+      const test = yield* TestInstance
+      const fs = yield* AppFileSystem.Service
+      const rootRule = path.join(test.directory, "AGENTS.md")
+      yield* fs.writeWithDirs(rootRule, "# Root Rule").pipe(Effect.orDie)
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      // Turn 1: baseline instruction sources are recorded once.
+      const turn1 = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "turn 1" }],
+      })
+      yield* llm.text("reply 1")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const afterTurn1 = yield* sessions.messages({ sessionID: session.id })
+      const turn1Stored = afterTurn1.find((item) => item.info.id === turn1.info.id)
+      expect(turn1Stored).toBeDefined()
+      const turn1Sources = baselineSourceParts(turn1Stored!)
+      expect(turn1Sources).toHaveLength(1)
+      expect(instructionSourcePaths(turn1Sources[0])).toContain(rootRule)
+
+      // Turn 2 (e.g. background progress notification): must not repeat baseline sources.
+      const turn2 = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "<system-reminder>[WOPAL TASK PROGRESS] running</system-reminder>" }],
+      })
+      yield* llm.text("reply 2")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const afterTurn2 = yield* sessions.messages({ sessionID: session.id })
+      const turn2Stored = afterTurn2.find((item) => item.info.id === turn2.info.id)
+      expect(turn2Stored).toBeDefined()
+      expect(baselineSourceParts(turn2Stored!)).toHaveLength(0)
+
+      // Completed compaction clears earlier messages from model visibility.
+      const compactionUserID = MessageID.ascending()
+      yield* sessions.updateMessage({
+        id: compactionUserID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: session.id,
+        messageID: compactionUserID,
+        type: "compaction",
+        auto: true,
+      })
+      const summaryAssistantID = MessageID.ascending()
+      yield* sessions.updateMessage({
+        id: summaryAssistantID,
+        sessionID: session.id,
+        role: "assistant",
+        parentID: compactionUserID,
+        time: { created: Date.now() },
+        mode: "compaction",
+        agent: "compaction",
+        path: { cwd: test.directory, root: test.directory },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ModelID.make("test-model"),
+        providerID: ProviderID.make("test"),
+        summary: true,
+        finish: "stop",
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: session.id,
+        messageID: summaryAssistantID,
+        type: "text",
+        text: "compacted summary",
+      })
+
+      // Turn 3 after compaction: baseline sources are recorded again, compaction marker untouched.
+      const turn3 = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "after compaction" }],
+      })
+      yield* llm.text("reply 3")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const afterTurn3 = yield* sessions.messages({ sessionID: session.id })
+      const compactionStored = afterTurn3.find((item) => item.info.id === compactionUserID)
+      expect(compactionStored?.parts.map((part) => part.type)).toEqual(["compaction"])
+      const turn3Stored = afterTurn3.find((item) => item.info.id === turn3.info.id)
+      expect(baselineSourceParts(turn3Stored!)).toHaveLength(1)
+
+      // Turn 4 after compaction: must not repeat again.
+      const turn4 = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "turn 4" }],
+      })
+      yield* llm.text("reply 4")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const afterTurn4 = yield* sessions.messages({ sessionID: session.id })
+      const turn4Stored = afterTurn4.find((item) => item.info.id === turn4.info.id)
+      expect(baselineSourceParts(turn4Stored!)).toHaveLength(0)
+    }),
+  )
+
+  it.instance("records baseline instruction sources after in-loop auto compaction when step > 1", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      dsh.supply.current = {}
+      yield* useProvider(llm.url)
+      const test = yield* TestInstance
+      const fs = yield* AppFileSystem.Service
+      const rootRule = path.join(test.directory, "AGENTS.md")
+      yield* fs.writeWithDirs(rootRule, "# Root Rule").pipe(Effect.orDie)
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      // Turn 1 gets the initial baseline record.
+      const turn1 = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "turn 1" }],
+      })
+      yield* llm.text("reply 1")
+      yield* prompt.loop({ sessionID: session.id })
+
+      // Enqueue a pending auto-compaction user message and run the loop:
+      // step=1 runs compaction (producing summary + continueMsg), step=2 runs the model call.
+      const compactionUserID = MessageID.ascending()
+      yield* sessions.updateMessage({
+        id: compactionUserID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: { providerID: ProviderID.make("test"), modelID: ModelID.make("test-model") },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        sessionID: session.id,
+        messageID: compactionUserID,
+        type: "compaction",
+        auto: true,
+      })
+
+      yield* llm.text("summary text")
+      yield* llm.text("continued reply")
+      yield* prompt.loop({ sessionID: session.id })
+
+      const msgs = yield* sessions.messages({ sessionID: session.id })
+      const compactionStored = msgs.find((item) => item.info.id === compactionUserID)
+      expect(compactionStored?.parts.map((part) => part.type)).toEqual(["compaction"])
+
+      const continueMsg = msgs.find(
+        (item) =>
+          item.info.role === "user" &&
+          item.info.id !== turn1.info.id &&
+          item.info.id !== compactionUserID &&
+          item.parts.some((part) => part.type === "text" && part.metadata?.compaction_continue === true),
+      )
+      expect(continueMsg).toBeDefined()
+      expect(baselineSourceParts(continueMsg!)).toHaveLength(1)
+    }),
+  )
+
+  it.instance(
+    "keeps a single baseline sources part across multi-step loops and updates in place when baseline changes",
+    () =>
+      Effect.gen(function* () {
+        const llm = yield* TestLLMServer
+        dsh.supply.current = {}
+        yield* useProvider(llm.url, { instructions: ["extra/*.md"] })
+        const test = yield* TestInstance
+        const fs = yield* AppFileSystem.Service
+        const rootRule = path.join(test.directory, "AGENTS.md")
+        const note = path.join(test.directory, "note.ts")
+        const extraSecond = path.join(test.directory, "extra", "second.md")
+        const extraThird = path.join(test.directory, "extra", "third.md")
+        yield* fs.writeWithDirs(rootRule, "# Root Rule").pipe(Effect.orDie)
+        yield* fs.writeWithDirs(note, "export const note = 1").pipe(Effect.orDie)
+
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        // Turn 1 runs two loop steps while the baseline stays unchanged -> still one part.
+        const turn1 = yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "turn 1" }],
+        })
+        yield* llm.tool("read", { filePath: note })
+        yield* llm.text("done 1")
+        yield* prompt.loop({ sessionID: session.id })
+
+        const afterTurn1 = yield* sessions.messages({ sessionID: session.id })
+        const turn1Stored = afterTurn1.find((item) => item.info.id === turn1.info.id)
+        expect(turn1Stored).toBeDefined()
+        const turn1Sources = baselineSourceParts(turn1Stored!)
+        expect(turn1Sources).toHaveLength(1)
+        expect(instructionSourcePaths(turn1Sources[0])).toEqual([rootRule])
+
+        // Turn 2 grows the configured baseline twice inside the same user turn's loop:
+        // step 1 unchanged -> step 2 writes Turn 2's part -> step 3 updates that same part in place.
+        const turn2 = yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "turn 2" }],
+        })
+        yield* llm.tool("write", { filePath: extraSecond, content: "# Second" })
+        yield* llm.tool("write", { filePath: extraThird, content: "# Third" })
+        yield* llm.text("done 2")
+        yield* prompt.loop({ sessionID: session.id })
+
+        const afterTurn2 = yield* sessions.messages({ sessionID: session.id })
+        const turn1AfterTurn2 = afterTurn2.find((item) => item.info.id === turn1.info.id)
+        const turn1SourcesAfter = baselineSourceParts(turn1AfterTurn2!)
+        expect(turn1SourcesAfter).toHaveLength(1)
+        expect(instructionSourcePaths(turn1SourcesAfter[0])).toEqual([rootRule])
+
+        const turn2Stored = afterTurn2.find((item) => item.info.id === turn2.info.id)
+        expect(turn2Stored).toBeDefined()
+        const turn2Sources = baselineSourceParts(turn2Stored!)
+        expect(turn2Sources).toHaveLength(1)
+        const turn2Paths = instructionSourcePaths(turn2Sources[0])
+        expect(turn2Paths).toContain(rootRule)
+        expect(turn2Paths).toContain(extraSecond)
+        expect(turn2Paths).toContain(extraThird)
+
+        // Turn 3 sees the expanded baseline already recorded on Turn 2 -> no duplicate part.
+        const turn3 = yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "turn 3" }],
+        })
+        yield* llm.text("done 3")
+        yield* prompt.loop({ sessionID: session.id })
+
+        const afterTurn3 = yield* sessions.messages({ sessionID: session.id })
+        const turn3Stored = afterTurn3.find((item) => item.info.id === turn3.info.id)
+        expect(turn3Stored).toBeDefined()
+        expect(baselineSourceParts(turn3Stored!)).toHaveLength(0)
+      }),
   )
 })

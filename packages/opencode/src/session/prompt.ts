@@ -30,6 +30,7 @@ import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@wopal/ellamaka-core/util/error"
+import { formatInstructionSources, instructionSourcePaths } from "@wopal/ellamaka-core/util/instruction-sources"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
@@ -82,6 +83,38 @@ const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested struc
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
+
+function latestInstructionSourcesPart(
+  messages: readonly MessageV2.WithParts[],
+): { info: MessageV2.User; part: MessageV2.TextPart } | undefined {
+  const completedCompactions = new Set<MessageID>()
+  for (const m of messages) {
+    if (m.info.role === "assistant" && m.info.summary && m.info.finish && !m.info.error) {
+      completedCompactions.add(m.info.parentID)
+    }
+  }
+  let latestCompaction: MessageV2.User | undefined
+  for (const m of messages) {
+    if (m.info.role !== "user") continue
+    if (!completedCompactions.has(m.info.id)) continue
+    if (!m.parts.some((p) => p.type === "compaction")) continue
+    if (!latestCompaction || MessageV2.isAfter(m.info, latestCompaction)) {
+      latestCompaction = m.info
+    }
+  }
+  let latest: { info: MessageV2.User; part: MessageV2.TextPart } | undefined
+  for (const m of messages) {
+    if (m.info.role !== "user") continue
+    if (latestCompaction && !MessageV2.isAfter(m.info, latestCompaction)) continue
+    for (const p of m.parts) {
+      if (p.type !== "text" || instructionSourcePaths(p) === undefined) continue
+      if (!latest || m.info.id === latest.info.id || MessageV2.isAfter(m.info, latest.info)) {
+        latest = { info: m.info, part: p }
+      }
+    }
+  }
+  return latest
+}
 
 function isOrphanedInterruptedTool(part: MessageV2.ToolPart) {
   // cleanup() marks abandoned tool_use blocks this way after retries/aborts.
@@ -1572,32 +1605,22 @@ export const layer = Layer.effect(
             // Persist source paths for the Workbench transcript, not a second
             // copy of the rules. "ignored" keeps this UI-only part out of model
             // input; systemResult above is the source of truth for attachment.
-            if (
-              step === 1 &&
-              systemInstructions.baseline.loaded.length > 0 &&
-              !msgs.some(
-                (m) =>
-                  m.info.id === lastUser.id &&
-                  m.parts.some(
-                    (p) =>
-                      p.type === "text" &&
-                      p.synthetic &&
-                      p.ignored &&
-                      p.text.startsWith("<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n"),
-                  ),
-              )
-            ) {
+            const currentUserMsg = msgs.find((m) => m.info.id === lastUser.id)
+            const isCompactionUser = currentUserMsg?.parts.some((p) => p.type === "compaction") ?? false
+            const baselineSourcesText =
+              systemInstructions.baseline.loaded.length > 0
+                ? formatInstructionSources(systemInstructions.baseline.loaded)
+                : undefined
+            const latestSources = latestInstructionSourcesPart(msgs)
+            if (baselineSourcesText && !isCompactionUser && latestSources?.part.text !== baselineSourcesText) {
               yield* sessions.updatePart({
-                id: PartID.ascending(),
+                id: latestSources?.info.id === lastUser.id ? latestSources.part.id : PartID.ascending(),
                 sessionID,
                 messageID: lastUser.id,
                 type: "text",
                 synthetic: true,
                 ignored: true,
-                text:
-                  "<rules-context>\n[WOPAL INSTRUCTION SOURCES]\n" +
-                  JSON.stringify(systemInstructions.baseline.loaded) +
-                  "\n</rules-context>",
+                text: baselineSourcesText,
               })
             }
             const format = lastUser.format ?? { type: "text" as const }
