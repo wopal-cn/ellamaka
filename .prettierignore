@@ -15,6 +15,13 @@ packages/ui/
 **/gen/
 **/*.gen.ts
 
+# The DSH runtime manifest and lock are generator output, and the manifest is
+# compared byte-exactly against freshly generated text by its drift guard
+# (`generate-dsh-runtime-manifest.ts --check`). The generator emits compact
+# single-line JSON, so expanding it here breaks that comparison on a clean
+# checkout. Reformatting it is not a fix: change the generator instead.
+packages/ellamaka-cordis/generated/
+
 # Experimental directory: the lint gate does not check it either, and these
 # HTML pages carry large inline style/script blocks that a whole-file rewrite
 # would churn without a gate to protect them.
