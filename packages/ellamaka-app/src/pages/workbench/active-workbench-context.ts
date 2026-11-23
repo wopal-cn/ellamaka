@@ -16,9 +16,10 @@ export type ActiveWorkbenchContext = {
 }
 
 export function selectActiveWorkbenchContext(snapshot: ActiveWorkbenchSnapshot): ActiveWorkbenchContext | undefined {
-  const tab = snapshot.activeTabPath !== undefined
-    ? snapshot.tabs.find((candidate) => candidate.path === snapshot.activeTabPath)
-    : snapshot.tabs.find((candidate) => candidate.name === snapshot.activeSpaceName)
+  const tab =
+    snapshot.activeTabPath !== undefined
+      ? snapshot.tabs.find((candidate) => candidate.path === snapshot.activeTabPath)
+      : snapshot.tabs.find((candidate) => candidate.name === snapshot.activeSpaceName)
   if (!tab) return undefined
   const space = snapshot.spaces[tab.path]
   if (!space) return undefined

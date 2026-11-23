@@ -1,0 +1,1016 @@
+{
+  "version": 1,
+  "generatedWith": {
+    "oxlint": "1.60.0"
+  },
+  "entries": [
+    {
+      "file": "packages/ellamaka-app/e2e/backend.ts",
+      "rule": "eslint(preserve-caught-error)",
+      "message": "There is no cause error attached to this new thrown error.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/public/oc-theme-preload.js",
+      "rule": "eslint(block-scoped-var)",
+      "message": "'baseSize' is used outside of binding context.",
+      "count": 12
+    },
+    {
+      "file": "packages/ellamaka-app/public/oc-theme-preload.js",
+      "rule": "eslint(block-scoped-var)",
+      "message": "'root' is used outside of binding context.",
+      "count": 12
+    },
+    {
+      "file": "packages/ellamaka-app/public/oc-theme-preload.js",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Catch parameter 'e' is caught but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/script/e2e-local.ts",
+      "rule": "typescript-eslint(await-thenable)",
+      "message": "Unexpected iterable of non-Promise (non-\"Thenable\") values passed to promise aggregator.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/addons/serialize.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 4
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-connect-provider.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 3
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-manage-models.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-release-notes.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 4
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-select-mcp.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-select-server.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Function 'showRequestError' is declared but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-select-server.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'createResource' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/dialog-settings.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'props' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/file-tree.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 3
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'DockTray' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'drainPendingSessionSandbox' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'agentsShouldFadeIn' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'providersShouldFadeIn' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'settings' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'shell' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'space' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/prompt-input.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/session/session-context-tab.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 3
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Button' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Icon' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'IconButton' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'TooltipKeybind' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'canBack' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'canForward' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'counterZoom' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'hasProjects' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'nav' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/components/titlebar.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'web' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/directory-sync.ts",
+      "rule": "typescript-eslint(no-redundant-type-constituents)",
+      "message": "'unknown' overrides all other types in this union type.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/directory-sync.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/file/path.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/global-sync/bootstrap.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Function 'showErrors' is declared but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/global-sync/event-reducer.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/global-sync/queue.ts",
+      "rule": "typescript-eslint(await-thenable)",
+      "message": "Unexpected iterable of non-Promise (non-\"Thenable\") values passed to promise aggregator.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'removePersisted' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'SESSION_STATE_KEYS' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'platform' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/layout.tsx",
+      "rule": "typescript-eslint(no-useless-default-assignment)",
+      "message": "Default value is useless because the parameter has type `Record<string, any>` (not nullish). This default assignment will never be used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/local.tsx",
+      "rule": "typescript-eslint(no-useless-default-assignment)",
+      "message": "Default value is useless because the parameter has type `Record<string, any>` (not nullish). This default assignment will never be used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/platform.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'ServerConnection' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/server-seed.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'ServerConnection' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/server.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'HEALTH_POLL_INTERVAL_MS' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/server.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/sync.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'SKIP_PARTS' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/terminal.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'id' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 7
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/terminal.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'pty' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/terminal.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'to' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/context/terminal.tsx",
+      "rule": "typescript-eslint(no-meaningless-void-operator)",
+      "message": "void operator shouldn't be used on void; it should convey that a return value is being ignored",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-app/src/hooks/use-providers.ts",
+      "rule": "eslint-plugin-unicorn(no-useless-spread)",
+      "message": "Using a spread operator here creates a new array unnecessarily.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/hooks/use-session-history-loader.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'id' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/error.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Icon' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/error.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Logo' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/error.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Sentry' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/error.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'createSignal' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/home.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Button' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/home.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Logo' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/home.tsx",
+      "rule": "eslint-plugin-unicorn(no-useless-spread)",
+      "message": "Using a spread operator here creates a new array unnecessarily.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Function 'navigateToProjectIndex' is declared but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'ResizeHandle' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'arm' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'location' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'peekProject' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'sidebarContent' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "typescript-eslint(no-unnecessary-boolean-literal-compare)",
+      "message": "This expression unnecessarily compares a boolean value to a boolean instead of using it directly.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Button' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Type 'Project' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/chat-blocks.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/chat-render.utils.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/chat-transcript.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/composer/session-question-dock.tsx",
+      "rule": "typescript-eslint(no-unnecessary-boolean-literal-compare)",
+      "message": "This expression unnecessarily compares a boolean value to a boolean instead of using it directly.",
+      "count": 3
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/helpers.ts",
+      "rule": "typescript-eslint(no-redundant-type-constituents)",
+      "message": "'any' overrides all other types in this union type.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/markdown-incremental-dom.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/session/use-local-panel-actions.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/panel-header.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'createSignal' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/session-tree-space.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This value can be trivially inferred for this type parameter, so it can be omitted.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/session-tree.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'getPanelBadge' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/session-tree.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'handleSpaceClick' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/session-tree.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'selectedSessionID' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/session-tree.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'sessionsForPath' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/session-tree.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'showSpaceMenu' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/sidebar-flyout.test.ts",
+      "rule": "eslint-plugin-unicorn(no-useless-spread)",
+      "message": "Using a spread operator here creates a new array unnecessarily.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/status-bar-diagnostics.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'onCleanup' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/pages/workbench/parts/status-bar-diagnostics.tsx",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'onMount' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/theme-preload.test.ts",
+      "rule": "typescript-eslint(no-implied-eval)",
+      "message": "Implied eval. Do not use the Function constructor to create functions.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/utils/comment-note.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 4
+    },
+    {
+      "file": "packages/ellamaka-app/src/utils/persist.ts",
+      "rule": "typescript-eslint(no-unnecessary-boolean-literal-compare)",
+      "message": "This expression unnecessarily compares a boolean value to a boolean instead of using it directly.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/utils/persist.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 4
+    },
+    {
+      "file": "packages/ellamaka-app/src/utils/prompt.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-app/src/utils/runtime-adapters.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-parameters)",
+      "message": "Type parameter T is used only once in the function signature.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-app/src/utils/server.ts",
+      "rule": "typescript-eslint(no-misused-spread)",
+      "message": "Using the spread operator on an array in an object will result in a list of indices.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-brand/detect.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Catch parameter '_' is caught but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-brand/test/detect.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'dirname' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-brand/test/detect.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'homedir' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/dsh-virtual-webserver.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 4
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/dsh-web.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 5
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/hub.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'T' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/hub.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-parameters)",
+      "message": "Type parameter T is never used in the function signature.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/plugins/desktop-worker.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Type 'ChildProcess' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/plugins/plugin-metadata.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/plugins/profile-resolution.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This is the default value for this type parameter, so it can be omitted.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/plugins/runtime.ts",
+      "rule": "eslint(no-unmodified-loop-condition)",
+      "message": "'replaying' is not modified in this loop.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/plugins/runtime.ts",
+      "rule": "eslint(no-unmodified-loop-condition)",
+      "message": "'stopped' is not modified in this loop.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/plugins/runtime.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Type 'FSWatcher' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/runtime/materializer.ts",
+      "rule": "eslint(preserve-caught-error)",
+      "message": "There is no cause error attached to this new thrown error.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/runtime/materializer.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/src/runtime/registry.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'fetchFn' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/bun-hmr.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'insertRows' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/dsh-virtual-webserver.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'Duplex' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/dsh-virtual-webserver.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Type 'IncomingMessage' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/dsh-virtual-webserver.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Type 'ServerResponse' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/dsh-virtual-webserver.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Type 'VirtualWebServerOptions' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/dsh-virtual-webserver.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'sandbox' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/plugins-compose.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'readFileSync' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/plugins-compose.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'readProfileManifest' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/plugins-compose.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'startDshPluginService' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/plugins-patch-layer.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'mkdirSync' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/probe-base-only.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'dshReq' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/probe-container-tools.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'ctx' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/probe-container-tools.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'dshAnchorDir' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/web-cold-reload.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'phase' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-cordis/test/web-cold-reload.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'baseUrl' is assigned a value but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-core/src/effect/runtime.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-core/src/github-copilot/chat/openai-compatible-chat-language-model.ts",
+      "rule": "typescript-eslint(no-unnecessary-boolean-literal-compare)",
+      "message": "This expression unnecessarily compares a boolean value to a boolean instead of using it directly.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-core/src/github-copilot/chat/openai-compatible-chat-language-model.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 2
+    },
+    {
+      "file": "packages/ellamaka-core/src/process.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-core/src/project.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This is the default value for this type parameter, so it can be omitted.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-core/src/util/lazy.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-desktop/src/main/ipc.test.ts",
+      "rule": "eslint(no-useless-catch)",
+      "message": "Unnecessary try/catch wrapper",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-desktop/src/renderer/loading.tsx",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/cli/cleanup.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Identifier 'parseReleaseTag' is imported but never used.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/cli/cleanup.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'deletedVersions' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/inventory.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'cliPaths' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/inventory.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'desktopPaths' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/inventory.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/manifest.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'baseUrl' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/manifest.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Parameter 'tag' is declared but never used. Unused parameters should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/src/version-line.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/ellamaka-release/test/context.test.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'COMMIT_40' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/http-recorder/src/cassette.ts",
+      "rule": "eslint-plugin-unicorn(no-useless-fallback-in-spread)",
+      "message": "Empty fallbacks in spreads are unnecessary",
+      "count": 1
+    },
+    {
+      "file": "packages/http-recorder/src/redaction.ts",
+      "rule": "eslint-plugin-unicorn(no-useless-spread)",
+      "message": "Using a spread operator here creates a new array unnecessarily.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/example/tutorial.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'generateDynamicObject' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/example/tutorial.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'generateOnce' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/example/tutorial.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'generateStructuredObject' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/example/tutorial.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'inspectFakeProvider' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/example/tutorial.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'rawOverlayExample' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/example/tutorial.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'streamText' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/script/recording-cost-report.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This value can be trivially inferred for this type parameter, so it can be omitted.",
+      "count": 2
+    },
+    {
+      "file": "packages/llm/script/setup-recording-env.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This is the default value for this type parameter, so it can be omitted.",
+      "count": 2
+    },
+    {
+      "file": "packages/llm/script/setup-recording-env.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/script/setup-recording-env.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-conversion)",
+      "message": "This type conversion does not change the type or value of the expression.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/src/cache-policy.ts",
+      "rule": "typescript-eslint(no-misused-spread)",
+      "message": "Using the spread operator on class instances will lose their class prototype.",
+      "count": 2
+    },
+    {
+      "file": "packages/llm/src/cache-policy.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 4
+    },
+    {
+      "file": "packages/llm/src/route/auth-options.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This is the default value for this type parameter, so it can be omitted.",
+      "count": 4
+    },
+    {
+      "file": "packages/llm/src/route/transport/websocket.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This is the default value for this type parameter, so it can be omitted.",
+      "count": 2
+    },
+    {
+      "file": "packages/llm/src/schema/events.ts",
+      "rule": "typescript-eslint(no-duplicate-type-constituents)",
+      "message": "Union type constituent is duplicated with ContentBlockID.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/src/schema/events.ts",
+      "rule": "typescript-eslint(no-duplicate-type-constituents)",
+      "message": "Union type constituent is duplicated with ToolCallID.",
+      "count": 1
+    },
+    {
+      "file": "packages/llm/src/tool.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-arguments)",
+      "message": "This is the default value for this type parameter, so it can be omitted.",
+      "count": 1
+    },
+    {
+      "file": "packages/opencode/src/workbench/session-tree.ts",
+      "rule": "eslint(no-unused-vars)",
+      "message": "Variable 'knownScopes' is declared but never used. Unused variables should start with a '_'.",
+      "count": 1
+    },
+    {
+      "file": "packages/plugin/src/tui.ts",
+      "rule": "typescript-eslint(no-redundant-type-constituents)",
+      "message": "'JSX.Element' is an 'error' type that acts as 'any' and overrides all other types in this union type.",
+      "count": 2
+    },
+    {
+      "file": "packages/sdk/js/src/v2/client.ts",
+      "rule": "typescript-eslint(no-misused-spread)",
+      "message": "Using the spread operator on an array in an object will result in a list of indices.",
+      "count": 2
+    },
+    {
+      "file": "packages/sdk/js/src/v2/server.ts",
+      "rule": "typescript-eslint(no-unnecessary-type-assertion)",
+      "message": "This assertion is unnecessary since it does not change the type of the expression.",
+      "count": 1
+    }
+  ]
+}

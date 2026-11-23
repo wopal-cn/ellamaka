@@ -151,7 +151,6 @@ describe("WorkbenchStore", () => {
   test("backfills the stable id for tabs persisted before the id field existed", () => {
     // Legacy layout: tabs carry only name/path/type (no id). Hydration must
     // backfill id = path (General uses its name) so the type contract holds.
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- exercises pre-id persisted data
     const legacy = {
       schemaVersion: 2,
       display: { showTitlebar: true, showStatusbar: true, showSpaceRail: true, showFileViewer: true },

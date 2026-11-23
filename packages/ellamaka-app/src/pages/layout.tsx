@@ -1165,7 +1165,7 @@ export default function Layout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-select-provider").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectProvider />)
+      void dialog.show(() => <x.DialogSelectProvider />)
     })
   }
 
@@ -1173,7 +1173,7 @@ export default function Layout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-select-server").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSelectServer />)
+      void dialog.show(() => <x.DialogSelectServer />)
     })
   }
 
@@ -1181,7 +1181,7 @@ export default function Layout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-settings").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogSettings />)
+      void dialog.show(() => <x.DialogSettings />)
     })
   }
 
@@ -1410,7 +1410,7 @@ export default function Layout(props: ParentProps) {
     const run = ++dialogRun
     void import("@/components/dialog-edit-project").then((x) => {
       if (dialogDead || dialogRun !== run) return
-      dialog.show(() => <x.DialogEditProject project={project} />)
+      void dialog.show(() => <x.DialogEditProject project={project} />)
     })
   }
 
@@ -1436,7 +1436,7 @@ export default function Layout(props: ParentProps) {
       const run = ++dialogRun
       void import("@/components/dialog-select-directory").then((x) => {
         if (dialogDead || dialogRun !== run) return
-        dialog.show(
+        void dialog.show(
           () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} />,
           () => resolve(null),
         )

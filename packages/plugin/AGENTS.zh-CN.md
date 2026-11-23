@@ -14,21 +14,20 @@ description: Plugin SDK 包，提供 server 插件（tools、hooks、auth）和 
 
 纯类型导出包，无运行时逻辑。CLI 通过 TypeScript 直接加载 `src/`，不消费构建产物。
 
-| Directory | Responsibility |
-|---|---|
-| `src/index.ts` | Server 插件 API：`Plugin`、`Hooks`、`AuthHook`、`ProviderHook`、`PluginInput` |
-| `src/tool.ts` | `tool()` 工厂函数 + `ToolContext` / `ToolResult` |
-| `src/tui.ts` | TUI 插件 API：`TuiPlugin`、`TuiPluginApi`、slot/route/dialog/theme 类型 |
-| `src/shell.ts` | `BunShell` 类型绑定，供插件访问 shell |
-| `src/example*.ts` | 参考实现，非测试 |
+| Directory         | Responsibility                                                                |
+| ----------------- | ----------------------------------------------------------------------------- |
+| `src/index.ts`    | Server 插件 API：`Plugin`、`Hooks`、`AuthHook`、`ProviderHook`、`PluginInput` |
+| `src/tool.ts`     | `tool()` 工厂函数 + `ToolContext` / `ToolResult`                              |
+| `src/tui.ts`      | TUI 插件 API：`TuiPlugin`、`TuiPluginApi`、slot/route/dialog/theme 类型       |
+| `src/shell.ts`    | `BunShell` 类型绑定，供插件访问 shell                                         |
+| `src/example*.ts` | 参考实现，非测试                                                              |
 
 ## Development Commands
 
-| Scenario | Command | When |
-|---|---|---|
+| Scenario  | Command                                    | When               |
+| --------- | ------------------------------------------ | ------------------ |
 | Typecheck | `bun run typecheck` from `packages/plugin` | After type changes |
 
 ## Testing
 
 父级 Testing Best Practices 与 TDD 适用性规则继续生效。本包是纯类型包：带行为的 helper 在 canonical 规则判定需要 RED 循环时必须使用 TDD；仅声明变化若无法形成有意义的运行时失败断言，则用 package typecheck 与所属 contract tests 验证，不制造假的 RED。
-

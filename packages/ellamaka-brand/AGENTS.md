@@ -15,13 +15,13 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 
 This package is responsible for ellamaka's brand identity injection and build. Upstream files reference brand constants via `import { BINARY_NAME } from "@ellamaka/build/branding"` rather than hardcoding brand values in source.
 
-| File | Responsibility |
-|------|---------------|
-| `branding.ts` | Brand constants (BINARY_NAME, CHANNEL_*); changes require rebuild via `bun ../ellamaka-release/src/cli/build.ts` |
-| `detect.ts` | WopalSpace auto-detection: walks up from cwd looking for `.wopal/.git` worktree marker |
-| `is-wopal-install.ts` | Installation path guard: checks whether `process.execPath` resides under `WOPAL_HOME/bin/` |
-| `logo.ts` | ellamaka ASCII logo |
-| `test/` | Package-level tests |
+| File                  | Responsibility                                                                                                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `branding.ts`         | Brand constants (BINARY*NAME, CHANNEL*\*); changes require rebuild via `bun ../ellamaka-release/src/cli/build.ts` |
+| `detect.ts`           | WopalSpace auto-detection: walks up from cwd looking for `.wopal/.git` worktree marker                            |
+| `is-wopal-install.ts` | Installation path guard: checks whether `process.execPath` resides under `WOPAL_HOME/bin/`                        |
+| `logo.ts`             | ellamaka ASCII logo                                                                                               |
+| `test/`               | Package-level tests                                                                                               |
 
 > Build/release tooling (branded CLI build, release identity, manifests,
 > Gitee releases, cleanup, upstream lock, legacy inventory) moved to
@@ -29,10 +29,10 @@ This package is responsible for ellamaka's brand identity injection and build. U
 
 ## Development Commands
 
-| Scenario | Command |
-|----------|---------|
-| Test | `bun test` from `packages/ellamaka-brand` |
-| Build | `bun ../ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` from `packages/ellamaka-brand` |
+| Scenario | Command                                                                                         |
+| -------- | ----------------------------------------------------------------------------------------------- |
+| Test     | `bun test` from `packages/ellamaka-brand`                                                       |
+| Build    | `bun ../ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` from `packages/ellamaka-brand` |
 
 ## Implementation Rules
 

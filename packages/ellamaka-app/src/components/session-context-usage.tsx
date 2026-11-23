@@ -110,24 +110,27 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   return (
     <Show when={params.id}>
       {/* WopalSpace workbench injection: workbench 上下文中弹 popup 替代打开侧边 tab */}
-      <Show when={embedded} fallback={
-        <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
-          <Switch>
-            <Match when={variant() === "indicator"}>{circle()}</Match>
-            <Match when={true}>
-              <Button
-                type="button"
-                variant="ghost"
-                class="size-6"
-                onClick={openContext}
-                aria-label={language.t("context.usage.view")}
-              >
-                {circle()}
-              </Button>
-            </Match>
-          </Switch>
-        </Tooltip>
-      }>
+      <Show
+        when={embedded}
+        fallback={
+          <Tooltip value={tooltipValue()} placement={props.placement ?? "top"}>
+            <Switch>
+              <Match when={variant() === "indicator"}>{circle()}</Match>
+              <Match when={true}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  class="size-6"
+                  onClick={openContext}
+                  aria-label={language.t("context.usage.view")}
+                >
+                  {circle()}
+                </Button>
+              </Match>
+            </Switch>
+          </Tooltip>
+        }
+      >
         <SessionContextPopup sessionId={params.id} />
       </Show>
     </Show>

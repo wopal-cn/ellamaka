@@ -23,9 +23,7 @@ function isWorkbenchLocks(value: unknown): value is WorkbenchLocks {
   return !!value && typeof value === "object" && "request" in value && typeof value.request === "function"
 }
 
-export async function requestWorkbenchLock(
-  locks: WorkbenchLocks | undefined,
-): Promise<LockRequestResult> {
+export async function requestWorkbenchLock(locks: WorkbenchLocks | undefined): Promise<LockRequestResult> {
   if (!locks) return { state: "locked" }
 
   return new Promise<LockRequestResult>((resolve) => {
@@ -35,7 +33,9 @@ export async function requestWorkbenchLock(
         return
       }
       let release: () => void
-      const hold = new Promise<void>((res) => { release = res })
+      const hold = new Promise<void>((res) => {
+        release = res
+      })
       resolve({ state: "locked", release: release! })
       await hold
     })
@@ -66,19 +66,13 @@ export function WorkbenchSingletonGuard(props: { children: JSX.Element }) {
       fallback={
         <div class="flex h-dvh flex-col items-center justify-center gap-4 bg-v2-background-bg-deep text-v2-text-text-base p-8">
           <div class="text-center max-w-md">
-            <h2 class="text-18-semibold text-text-strong mb-2">
-              {t("workbench.singleton.title")}
-            </h2>
-            <p class="text-14-regular text-text-muted">
-              {t("workbench.singleton.message")}
-            </p>
+            <h2 class="text-18-semibold text-text-strong mb-2">{t("workbench.singleton.title")}</h2>
+            <p class="text-14-regular text-text-muted">{t("workbench.singleton.message")}</p>
           </div>
         </div>
       }
     >
-      <Show when={state() === "locked"}>
-        {props.children}
-      </Show>
+      <Show when={state() === "locked"}>{props.children}</Show>
     </Show>
   )
 }

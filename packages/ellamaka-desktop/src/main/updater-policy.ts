@@ -65,7 +65,10 @@ function compareSemVer(a: string, b: string): number {
  */
 export function authorizeUpdate(input: UpdateAuthorizationInput): UpdateAuthorization {
   if (input.currentChannel !== input.targetChannel) {
-    return { authorized: false, reason: `cross-channel update denied: ${input.currentChannel} -> ${input.targetChannel}` }
+    return {
+      authorized: false,
+      reason: `cross-channel update denied: ${input.currentChannel} -> ${input.targetChannel}`,
+    }
   }
   if (compareSemVer(input.targetVersion, input.currentVersion) <= 0) {
     return { authorized: false, reason: `downgrade or no-op denied: ${input.currentVersion} -> ${input.targetVersion}` }
@@ -103,9 +106,7 @@ export type AuthorizeFromFeedInput = {
  * authorize the update. If the fetch fails or the manifest is not valid
  * JSON, fail closed (authorized=false, failed=true).
  */
-export async function authorizeUpdateFromFeed(
-  input: AuthorizeFromFeedInput,
-): Promise<UpdateAuthorizationResult> {
+export async function authorizeUpdateFromFeed(input: AuthorizeFromFeedInput): Promise<UpdateAuthorizationResult> {
   let manifestVersion: string
   try {
     const resp = await input.fetch(input.feedManifestUrl)

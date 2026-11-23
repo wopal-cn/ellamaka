@@ -240,303 +240,303 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       onDblClick={maximize}
     >
       {(() => {
-            const serverSync = useServerSync()
-            const navigate = useNavigate()
-            const homeMatch = useMatch(() => "/")
+        const serverSync = useServerSync()
+        const navigate = useNavigate()
+        const homeMatch = useMatch(() => "/")
 
-            const newSessionHref = () => {
-              if (params.dir) return `/${params.dir}/session`
+        const newSessionHref = () => {
+          if (params.dir) return `/${params.dir}/session`
 
-              const project = layout.projects.list()[0]
-              if (!project) return "/"
+          const project = layout.projects.list()[0]
+          if (!project) return "/"
 
-              return `/${base64Encode(project.worktree)}/session`
-            }
+          return `/${base64Encode(project.worktree)}/session`
+        }
 
-            type Tab = { dir: string; sessionId: string; href: string }
+        type Tab = { dir: string; sessionId: string; href: string }
 
-            const [tabsStore, tabsStoreActions] = iife(() => {
-              const [store, setStore] = createStore<Tab[]>(
-                iife(() => {
-                  if (!params.dir || !params.id) return []
-                  return [
-                    {
-                      dir: decodeDirectory(params.dir) ?? "",
-                      sessionId: params.id,
-                      href: makeSessionHref(params.dir, params.id),
-                    },
-                  ]
+        const [tabsStore, tabsStoreActions] = iife(() => {
+          const [store, setStore] = createStore<Tab[]>(
+            iife(() => {
+              if (!params.dir || !params.id) return []
+              return [
+                {
+                  dir: decodeDirectory(params.dir) ?? "",
+                  sessionId: params.id,
+                  href: makeSessionHref(params.dir, params.id),
+                },
+              ]
+            }),
+          )
+
+          const actions = {
+            addTab: (tab: Tab) => {
+              setStore(
+                produce((tabs) => {
+                  if (tabs.some((t) => t.href === tab.href)) return
+
+                  tabs.push(tab)
                 }),
               )
+            },
+            removeTab: (href: string) => {
+              void startTransition(() => {
+                setStore(
+                  produce((tabs) => {
+                    const index = tabs.findIndex((t) => t.href === href)
+                    if (index === -1) return
+                    tabs.splice(index, 1)
+                    const nextTab = tabs[index] ?? tabs[tabs.length - 1]
+                    if (nextTab) navigate(nextTab.href)
+                    else navigate("/")
+                  }),
+                )
+              })
+            },
+            removeSessions: (input: SessionTabsRemovedDetail) => {
+              void startTransition(() => {
+                setStore(
+                  produce((tabs) => {
+                    const sessionIDs = new Set(input.sessionIDs)
+                    const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
+                    const currentIndex = currentHref ? tabs.findIndex((tab) => tab.href === currentHref) : -1
+                    const removedCurrent =
+                      currentIndex !== -1 &&
+                      tabs[currentIndex]?.dir === input.directory &&
+                      sessionIDs.has(tabs[currentIndex]?.sessionId ?? "")
 
-              const actions = {
-                addTab: (tab: Tab) => {
-                  setStore(
-                    produce((tabs) => {
-                      if (tabs.some((t) => t.href === tab.href)) return
+                    for (let i = tabs.length - 1; i >= 0; i--) {
+                      const tab = tabs[i]
+                      if (!tab) continue
+                      if (tab.dir !== input.directory) continue
+                      if (!sessionIDs.has(tab.sessionId)) continue
+                      tabs.splice(i, 1)
+                    }
 
-                      tabs.push(tab)
-                    }),
-                  )
-                },
-                removeTab: (href: string) => {
-                  void startTransition(() => {
-                    setStore(
-                      produce((tabs) => {
-                        const index = tabs.findIndex((t) => t.href === href)
-                        if (index === -1) return
-                        tabs.splice(index, 1)
-                        const nextTab = tabs[index] ?? tabs[tabs.length - 1]
-                        if (nextTab) navigate(nextTab.href)
-                        else navigate("/")
-                      }),
-                    )
-                  })
-                },
-                removeSessions: (input: SessionTabsRemovedDetail) => {
-                  void startTransition(() => {
-                    setStore(
-                      produce((tabs) => {
-                        const sessionIDs = new Set(input.sessionIDs)
-                        const currentHref = params.dir && params.id ? makeSessionHref(params.dir, params.id) : undefined
-                        const currentIndex = currentHref ? tabs.findIndex((tab) => tab.href === currentHref) : -1
-                        const removedCurrent =
-                          currentIndex !== -1 &&
-                          tabs[currentIndex]?.dir === input.directory &&
-                          sessionIDs.has(tabs[currentIndex]?.sessionId ?? "")
+                    if (!removedCurrent) return
+                    const nextTab = tabs[currentIndex] ?? tabs[tabs.length - 1]
+                    if (nextTab) navigate(nextTab.href)
+                    else navigate("/")
+                  }),
+                )
+              })
+            },
+          }
 
-                        for (let i = tabs.length - 1; i >= 0; i--) {
-                          const tab = tabs[i]
-                          if (!tab) continue
-                          if (tab.dir !== input.directory) continue
-                          if (!sessionIDs.has(tab.sessionId)) continue
-                          tabs.splice(i, 1)
-                        }
+          return [store, actions]
+        })
 
-                        if (!removedCurrent) return
-                        const nextTab = tabs[currentIndex] ?? tabs[tabs.length - 1]
-                        if (nextTab) navigate(nextTab.href)
-                        else navigate("/")
-                      }),
-                    )
-                  })
+        makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
+          const detail = readSessionTabsRemovedDetail(event)
+          if (!detail) return
+          tabsStoreActions.removeSessions(detail)
+        })
+
+        createEffect(() => {
+          const params = useParams()
+          if (!(params.dir && params.id)) return
+
+          tabsStoreActions.addTab({
+            dir: decodeDirectory(params.dir) ?? "",
+            sessionId: params.id,
+            href: makeSessionHref(params.dir, params.id),
+          })
+        })
+
+        createEffect(() => {
+          rememberOfficialRoute(path())
+        })
+
+        const projects = createMemo(() => layout.projects.list())
+        const projectByID = createMemo(
+          () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
+        )
+
+        const currentSessionTab = () => {
+          if (!params.dir || !params.id) return undefined
+          const href = makeSessionHref(params.dir, params.id)
+          return tabsStore.find((tab) => tab.href === href)
+        }
+
+        const closeCurrentSessionTab = () => {
+          const tab = currentSessionTab()
+          if (!tab) return false
+          tabsStoreActions.removeTab(tab.href)
+          return true
+        }
+
+        const closeNewSessionTab = () => {
+          if (!(params.dir && !params.id)) return false
+          const last = tabsStore[tabsStore.length - 1]
+          if (last) navigate(last.href)
+          else navigate("/")
+          return true
+        }
+
+        makeEventListener(
+          document,
+          "keydown",
+          (event) => {
+            if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+            if (event.key.toLowerCase() !== "w") return
+            if (!(closeCurrentSessionTab() || closeNewSessionTab())) return
+
+            event.preventDefault()
+            event.stopPropagation()
+          },
+          { capture: true },
+        )
+
+        command.register(() => {
+          const commands = [
+            {
+              id: `tab.prev`,
+              category: "tab",
+              title: "",
+              keybind: `mod+option+ArrowLeft`,
+              hidden: true,
+              onSelect: () => {
+                let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
+                if (index === -1) return
+
+                index -= 1
+                if (index === -1) index = tabsStore.length - 1
+
+                const next = tabsStore[index]
+                if (next) navigate(next.href)
+              },
+            },
+            {
+              id: `tab.next`,
+              category: "tab",
+              title: "",
+              keybind: `mod+option+ArrowRight`,
+              hidden: true,
+              onSelect: () => {
+                let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
+                if (index === -1) return
+
+                index += 1
+                if (index === tabsStore.length) index = 0
+
+                const next = tabsStore[index]
+                if (next) navigate(next.href)
+              },
+            },
+            ...Array.from({ length: 9 }, (_, i) => {
+              const index = i
+              const number = index + 1
+              return {
+                id: `tab.${number}`,
+                category: "tab",
+                title: "",
+                keybind: `mod+${number}`,
+                disabled: layout.projects.list().length <= index,
+                hidden: true,
+                onSelect: () => {
+                  const tab = tabsStore[index]
+                  if (tab) navigate(tab.href)
                 },
               }
+            }),
+          ]
 
-              return [store, actions]
-            })
+          return commands
+        })
 
-            makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
-              const detail = readSessionTabsRemovedDetail(event)
-              if (!detail) return
-              tabsStoreActions.removeSessions(detail)
-            })
+        const tabsEnriched = iife(() => {
+          const base = mapArray(
+            () => tabsStore,
+            (tab) => {
+              const sync = serverSync.createDirSyncContext(tab.dir)
+              const session = sync.session.get(tab.sessionId)
+              return session ? { ...tab, info: session } : null
+            },
+          )
 
-            createEffect(() => {
-              const params = useParams()
-              if (!(params.dir && params.id)) return
+          return () => base().flatMap((s) => (s ? [s] : []))
+        })
 
-              tabsStoreActions.addTab({
-                dir: decodeDirectory(params.dir) ?? "",
-                sessionId: params.id,
-                href: makeSessionHref(params.dir, params.id),
-              })
-            })
+        return (
+          <div
+            class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 py-2"
+            classList={{
+              "pl-2": mac(),
+              "pl-4": !mac(),
+            }}
+          >
+            <ChannelIndicator />
+            <Show when={windows() || linux()}>
+              <WindowsAppMenu command={command} platform={platform} variant="v2" />
+            </Show>
+            <IconButtonV2
+              variant="ghost-muted"
+              size="large"
+              as="a"
+              href="/"
+              class="!w-9"
+              icon={<IconV2 name="grid-plus" />}
+              state={homeMatch() ? "pressed" : undefined}
+            />
+            <ButtonV2
+              variant="ghost"
+              size="normal"
+              class="h-8 shrink-0 px-2 text-v2-text-text-muted"
+              onClick={() => navigate("/workbench")}
+            >
+              {language.t("workbench.entry")}
+            </ButtonV2>
 
-            createEffect(() => {
-              rememberOfficialRoute(path())
-            })
-
-            const projects = createMemo(() => layout.projects.list())
-            const projectByID = createMemo(
-              () => new Map(projects().flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
-            )
-
-            const currentSessionTab = () => {
-              if (!params.dir || !params.id) return undefined
-              const href = makeSessionHref(params.dir, params.id)
-              return tabsStore.find((tab) => tab.href === href)
-            }
-
-            const closeCurrentSessionTab = () => {
-              const tab = currentSessionTab()
-              if (!tab) return false
-              tabsStoreActions.removeTab(tab.href)
-              return true
-            }
-
-            const closeNewSessionTab = () => {
-              if (!(params.dir && !params.id)) return false
-              const last = tabsStore[tabsStore.length - 1]
-              if (last) navigate(last.href)
-              else navigate("/")
-              return true
-            }
-
-            makeEventListener(
-              document,
-              "keydown",
-              (event) => {
-                if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-                if (event.key.toLowerCase() !== "w") return
-                if (!(closeCurrentSessionTab() || closeNewSessionTab())) return
-
-                event.preventDefault()
-                event.stopPropagation()
-              },
-              { capture: true },
-            )
-
-            command.register(() => {
-              const commands = [
-                {
-                  id: `tab.prev`,
-                  category: "tab",
-                  title: "",
-                  keybind: `mod+option+ArrowLeft`,
-                  hidden: true,
-                  onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
-                    if (index === -1) return
-
-                    index -= 1
-                    if (index === -1) index = tabsStore.length - 1
-
-                    const next = tabsStore[index]
-                    if (next) navigate(next.href)
-                  },
-                },
-                {
-                  id: `tab.next`,
-                  category: "tab",
-                  title: "",
-                  keybind: `mod+option+ArrowRight`,
-                  hidden: true,
-                  onSelect: () => {
-                    let index = tabsStore.findIndex((tab) => tab.href === currentSessionTab()?.href)
-                    if (index === -1) return
-
-                    index += 1
-                    if (index === tabsStore.length) index = 0
-
-                    const next = tabsStore[index]
-                    if (next) navigate(next.href)
-                  },
-                },
-                ...Array.from({ length: 9 }, (_, i) => {
-                  const index = i
-                  const number = index + 1
-                  return {
-                    id: `tab.${number}`,
-                    category: "tab",
-                    title: "",
-                    keybind: `mod+${number}`,
-                    disabled: layout.projects.list().length <= index,
-                    hidden: true,
-                    onSelect: () => {
-                      const tab = tabsStore[index]
-                      if (tab) navigate(tab.href)
-                    },
-                  }
-                }),
-              ]
-
-              return commands
-            })
-
-            const tabsEnriched = iife(() => {
-              const base = mapArray(
-                () => tabsStore,
-                (tab) => {
-                  const sync = serverSync.createDirSyncContext(tab.dir)
-                  const session = sync.session.get(tab.sessionId)
-                  return session ? { ...tab, info: session } : null
-                },
-              )
-
-              return () => base().flatMap((s) => (s ? [s] : []))
-            })
-
-            return (
-              <div
-                class="h-full flex-1 flex flex-row items-center gap-1.5 pr-3 py-2"
-                classList={{
-                  "pl-2": mac(),
-                  "pl-4": !mac(),
-                }}
-              >
-                <ChannelIndicator />
-                <Show when={windows() || linux()}>
-                  <WindowsAppMenu command={command} platform={platform} variant="v2" />
-                </Show>
-                <IconButtonV2
-                  variant="ghost-muted"
-                  size="large"
-                  as="a"
-                  href="/"
-                  class="!w-9"
-                  icon={<IconV2 name="grid-plus" />}
-                  state={homeMatch() ? "pressed" : undefined}
-                />
-                <ButtonV2
-                  variant="ghost"
-                  size="normal"
-                  class="h-8 shrink-0 px-2 text-v2-text-text-muted"
-                  onClick={() => navigate("/workbench")}
-                >
-                  {language.t("workbench.entry")}
-                </ButtonV2>
-
-                <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
-                  <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
-                    <For each={tabsEnriched()}>
-                      {(tab, i) => (
-                        <>
-                          {i() !== 0 && (
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          )}
-                          <TabNavItem
-                            href={tab.href}
-                            title={tab.info.title}
-                            project={projectForSession(tab.info, projects(), projectByID())}
-                            directory={tab.dir}
-                            onClose={() => tabsStoreActions.removeTab(tab.href)}
-                          />
-                        </>
+            <div class="flex min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden">
+              <div class="flex min-w-0 flex-row items-center gap-1.5 overflow-hidden">
+                <For each={tabsEnriched()}>
+                  {(tab, i) => (
+                    <>
+                      {i() !== 0 && (
+                        <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
                       )}
-                    </For>
-                  </div>
-                  <Show
-                    when={creating() && params.dir}
-                    fallback={
-                      <IconButtonV2
-                        type="button"
-                        variant="ghost-muted"
-                        size="large"
-                        class="shrink-0"
-                        icon={<IconV2 name="plus" />}
-                        as="a"
-                        href={newSessionHref()}
-                        aria-label={language.t("command.session.new")}
+                      <TabNavItem
+                        href={tab.href}
+                        title={tab.info.title}
+                        project={projectForSession(tab.info, projects(), projectByID())}
+                        directory={tab.dir}
+                        onClose={() => tabsStoreActions.removeTab(tab.href)}
                       />
-                    }
-                  >
-                    <NewSessionTabItem
-                      href={`/${params.dir}/session`}
-                      title={language.t("command.session.new")}
-                      onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
-                    />
-                  </Show>
-                  <div class="min-w-0 flex-1" />
-                </div>
-                <TitlebarV2Right state={v2RightState()} />
-                <Show when={windows() && !electronWindows()}>
-                  <div data-tauri-decorum-tb class="flex flex-row" />
-                </Show>
+                    </>
+                  )}
+                </For>
               </div>
-            )
-     })()}
-   </header>
+              <Show
+                when={creating() && params.dir}
+                fallback={
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="shrink-0"
+                    icon={<IconV2 name="plus" />}
+                    as="a"
+                    href={newSessionHref()}
+                    aria-label={language.t("command.session.new")}
+                  />
+                }
+              >
+                <NewSessionTabItem
+                  href={`/${params.dir}/session`}
+                  title={language.t("command.session.new")}
+                  onClose={() => navigate(tabsEnriched().at(-1)?.href ?? "/")}
+                />
+              </Show>
+              <div class="min-w-0 flex-1" />
+            </div>
+            <TitlebarV2Right state={v2RightState()} />
+            <Show when={windows() && !electronWindows()}>
+              <div data-tauri-decorum-tb class="flex flex-row" />
+            </Show>
+          </div>
+        )
+      })()}
+    </header>
   )
 }
 

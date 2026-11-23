@@ -34,9 +34,7 @@ export function SessionContextPopup(props: {
     return sync.data.message[props.sessionId] ?? []
   })
 
-  const metrics = createMemo(() =>
-    getSessionContextMetrics(messages(), [...providers.all().values()]),
-  )
+  const metrics = createMemo(() => getSessionContextMetrics(messages(), [...providers.all().values()]))
 
   const context = createMemo(() => metrics().context)
   const cost = createMemo(() => metrics().totalCost)
@@ -71,12 +69,7 @@ export function SessionContextPopup(props: {
       class="flex items-center justify-center cursor-pointer rounded hover:bg-v2-overlay-simple-overlay-hover p-0.5"
       aria-label="Context usage"
     >
-      <ProgressCircle
-        size={16}
-        strokeWidth={2}
-        percentage={usage()}
-        class={ringColor()}
-      />
+      <ProgressCircle size={16} strokeWidth={2} percentage={usage()} class={ringColor()} />
     </button>
   )
 
@@ -92,27 +85,17 @@ export function SessionContextPopup(props: {
       >
         <Show
           when={context()}
-          fallback={
-            <div class="p-3 text-12-regular text-v2-text-text-muted">
-              No context data
-            </div>
-          }
+          fallback={<div class="p-3 text-12-regular text-v2-text-text-muted">No context data</div>}
         >
           {(ctx) => (
             <div class="flex flex-col gap-3 p-3">
               <div class="flex items-center justify-between">
-                <span class="text-12-medium text-v2-text-text-base">
-                  Context Usage
-                </span>
-                <span class="text-11-regular text-v2-text-text-muted">
-                  {ctx().modelLabel}
-                </span>
+                <span class="text-12-medium text-v2-text-text-base">Context Usage</span>
+                <span class="text-11-regular text-v2-text-text-muted">{ctx().modelLabel}</span>
               </div>
 
               <div class="flex items-center justify-between">
-                <span class="text-11-medium text-v2-text-text-base">
-                  {Math.round(usage())}% usage
-                </span>
+                <span class="text-11-medium text-v2-text-text-base">{Math.round(usage())}% usage</span>
                 <span class="text-11-regular text-v2-text-text-muted">
                   {ctx().total.toLocaleString(language.intl())}
                   <Show when={ctx().limit}>
@@ -124,35 +107,19 @@ export function SessionContextPopup(props: {
               </div>
 
               <div class="flex flex-col gap-0.5 text-11-regular">
-                <MetricRow
-                  label="Input"
-                  value={ctx().input.toLocaleString(language.intl())}
-                />
-                <MetricRow
-                  label="Output"
-                  value={ctx().output.toLocaleString(language.intl())}
-                />
+                <MetricRow label="Input" value={ctx().input.toLocaleString(language.intl())} />
+                <MetricRow label="Output" value={ctx().output.toLocaleString(language.intl())} />
                 <MetricRow
                   label="Cache R/W"
                   value={`${ctx().cacheRead.toLocaleString(language.intl())} / ${ctx().cacheWrite.toLocaleString(language.intl())}`}
                 />
-                <MetricRow
-                  label="User Messages"
-                  value={counts().user.toLocaleString(language.intl())}
-                />
-                <MetricRow
-                  label="Assistant Messages"
-                  value={counts().assistant.toLocaleString(language.intl())}
-                />
+                <MetricRow label="User Messages" value={counts().user.toLocaleString(language.intl())} />
+                <MetricRow label="Assistant Messages" value={counts().assistant.toLocaleString(language.intl())} />
               </div>
 
               <div class="flex items-center justify-between border-t border-v2-border-border-base pt-2">
-                <span class="text-11-regular text-v2-text-text-muted">
-                  Cost
-                </span>
-                <span class="text-11-medium text-v2-text-text-base">
-                  {usd().format(cost())}
-                </span>
+                <span class="text-11-regular text-v2-text-text-muted">Cost</span>
+                <span class="text-11-medium text-v2-text-text-base">{usd().format(cost())}</span>
               </div>
             </div>
           )}

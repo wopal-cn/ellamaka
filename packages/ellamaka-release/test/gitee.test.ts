@@ -72,9 +72,7 @@ describe("create-gitee-release.mjs", () => {
   })
 
   test("builds create body with ellamaka name", () => {
-    expect(
-      script.buildCreateBody({ version: "0.1.0", tag: "v0.1.0", notesContent: "notes", token: "TOKEN" }),
-    ).toEqual({
+    expect(script.buildCreateBody({ version: "0.1.0", tag: "v0.1.0", notesContent: "notes", token: "TOKEN" })).toEqual({
       tag_name: "v0.1.0",
       name: "ellamaka v0.1.0",
       body: "notes",

@@ -18,9 +18,7 @@ export type OpenCodeEditRendererProps = {
 
 /** Strips ANSI escape sequences from terminal output. */
 function stripAnsi(text: string): string {
-  /* eslint-disable no-control-regex */
   return text.replace(/\u001b\][\s\S]*?(?:\u0007|\u001b\\)/g, "").replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
-  /* eslint-enable no-control-regex */
 }
 
 function toolStatusLabel(status: string) {

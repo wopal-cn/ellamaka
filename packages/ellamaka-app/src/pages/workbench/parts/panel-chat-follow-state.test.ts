@@ -11,7 +11,9 @@ describe("Workbench chat follow state", () => {
     const following = transitionChatFollowState(initialChatFollowState, "resume")
 
     expect(shouldKeepChatAtLatest(following)).toBe(true)
-    expect(shouldRestoreChatFollowAfterCompletion({ previousWorking: true, working: false, state: following })).toBe(true)
+    expect(shouldRestoreChatFollowAfterCompletion({ previousWorking: true, working: false, state: following })).toBe(
+      true,
+    )
   })
 
   test("preserves a user-selected reading position across completion", () => {
@@ -27,6 +29,8 @@ describe("Workbench chat follow state", () => {
 
     expect(paused).toBe("paused")
     expect(resumed).toBe("following")
-    expect(shouldRestoreChatFollowAfterCompletion({ previousWorking: false, working: false, state: resumed })).toBe(false)
+    expect(shouldRestoreChatFollowAfterCompletion({ previousWorking: false, working: false, state: resumed })).toBe(
+      false,
+    )
   })
 })

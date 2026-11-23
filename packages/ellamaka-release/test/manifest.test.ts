@@ -248,11 +248,13 @@ describe("package-release.mjs", () => {
     expect(artifacts.map((a) => a.name)).toEqual(["ellamaka-darwin-arm64.tar.gz"])
   })
 
-  test("accepts a custom base URL", () => {    const outputDir = resolve(makeTempdir(), "output")
+  test("accepts a custom base URL", () => {
+    const outputDir = resolve(makeTempdir(), "output")
     generate(outputDir, "https://example.com/ellamaka")
     const manifest = JSON.parse(readFileSync(join(outputDir, "manifest.json"), "utf8"))
 
-    for (const artifact of manifest.artifacts) expect(artifact.url).toBe(`https://example.com/ellamaka/v0.1.0-test/${artifact.name}`)
+    for (const artifact of manifest.artifacts)
+      expect(artifact.url).toBe(`https://example.com/ellamaka/v0.1.0-test/${artifact.name}`)
     expect(manifest.checksumsUrl).toBe("https://example.com/ellamaka/v0.1.0-test/checksums.txt")
   })
 

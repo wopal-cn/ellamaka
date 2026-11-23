@@ -72,17 +72,13 @@ describe("buildReleaseContext", () => {
   })
 
   test("rejects a bad upstream lock", () => {
-    const badLock = JSON.parse(
-      readFileSync(join(fixturesDir, "upstream-lock", "short-commit.lock.json"), "utf8"),
+    const badLock = JSON.parse(readFileSync(join(fixturesDir, "upstream-lock", "short-commit.lock.json"), "utf8"))
+    expect(() => buildReleaseContext({ tag: "ellamaka-cli-v1.17.1", ...baseArgs, upstreamLock: badLock })).toThrow(
+      /ECOMMIT/,
     )
-    expect(() =>
-      buildReleaseContext({ tag: "ellamaka-cli-v1.17.1", ...baseArgs, upstreamLock: badLock }),
-    ).toThrow(/ECOMMIT/)
   })
 
   test("rejects a missing workflowRunId", () => {
-    expect(() =>
-      buildReleaseContext({ tag: "ellamaka-cli-v1.17.1", ...baseArgs, workflowRunId: "" }),
-    ).toThrow(/ERUN/)
+    expect(() => buildReleaseContext({ tag: "ellamaka-cli-v1.17.1", ...baseArgs, workflowRunId: "" })).toThrow(/ERUN/)
   })
 })

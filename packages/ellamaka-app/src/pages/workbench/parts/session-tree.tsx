@@ -48,7 +48,7 @@ export function SessionTree(props: {
       const value = localStorage.getItem(key)
       if (!value) return new Set<string>()
       const parsed = JSON.parse(value)
-      return new Set<string>(Array.isArray(parsed) ? parsed : parsed.spaces ?? [])
+      return new Set<string>(Array.isArray(parsed) ? parsed : (parsed.spaces ?? []))
     } catch (error) {
       reportWorkbenchError(`read ${key}`, error)
       return new Set<string>()
@@ -82,7 +82,10 @@ export function SessionTree(props: {
 
   const mergeSessions = (serverSessions: GroupSession[]): MergedSession[] =>
     mergeSessionTreeSessions(
-      serverSessions.map((session) => ({ id: session.id, title: sessions.getSession(session.id)?.title ?? session.title })),
+      serverSessions.map((session) => ({
+        id: session.id,
+        title: sessions.getSession(session.id)?.title ?? session.title,
+      })),
       (sessionID) => wb.findSessionBinding(sessionID) !== undefined,
       Object.values(sessions.sessions()).flat(),
     )
@@ -124,12 +127,7 @@ export function SessionTree(props: {
   const load = async (force = false) => {
     const key = sessions.refreshKey()
     const refreshVersion = wb.refreshVersion
-    if (
-      !force &&
-      tree().scopes.length > 0 &&
-      key === lastRefreshKey &&
-      refreshVersion === lastRefreshVersion
-    ) return
+    if (!force && tree().scopes.length > 0 && key === lastRefreshKey && refreshVersion === lastRefreshVersion) return
     lastRefreshKey = key
     lastRefreshVersion = refreshVersion
     await loadTree()
@@ -149,9 +147,8 @@ export function SessionTree(props: {
     const session = sessions.getSession(active)
     const path = session?.spacePath ?? session?.spaceName
     if (!path) return
-    setExpandedSpaces((previous) => previous.has(path) ? previous : new Set([...previous, path]))
+    setExpandedSpaces((previous) => (previous.has(path) ? previous : new Set([...previous, path])))
   })
-
 
   createEffect(() => {
     try {
@@ -170,12 +167,13 @@ export function SessionTree(props: {
     })
   })
 
-  const toggleSpace = (path: string) => setExpandedSpaces((previous) => {
-    const next = new Set(previous)
-    if (next.has(path)) next.delete(path)
-    else next.add(path)
-    return next
-  })
+  const toggleSpace = (path: string) =>
+    setExpandedSpaces((previous) => {
+      const next = new Set(previous)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
 
   const handleSpaceClick = (space: WopalSpace) => {
     setSelectedSessionID(undefined)
@@ -187,7 +185,13 @@ export function SessionTree(props: {
     props.onSpaceClick(space)
   }
 
-  const showSessionMenu = (event: MouseEvent, session: MergedSession, spacePath: string, data: GroupSession, locationKind: SessionTreeLocation["kind"]) => {
+  const showSessionMenu = (
+    event: MouseEvent,
+    session: MergedSession,
+    spacePath: string,
+    data: GroupSession,
+    locationKind: SessionTreeLocation["kind"],
+  ) => {
     event.preventDefault()
     event.stopPropagation()
     const space = props.spaces.find((candidate) => candidate.path === spacePath)
@@ -199,43 +203,50 @@ export function SessionTree(props: {
       items: [
         {
           label: t("workbench.tree.details"),
-          action: () => void dialog.show(() => (
-            <DialogSessionDetails
-              session={data}
-              locationKind={locationKind}
-            />
-          )),
+          action: () => void dialog.show(() => <DialogSessionDetails session={data} locationKind={locationKind} />),
         },
         {
           label: t("workbench.tree.rename"),
-          action: () => void dialog.show(() => (
-            <DialogRenameSession
-              currentTitle={session.title}
-              onRename={async (title) => {
-                await actions.renameSession({ scope: scopeFromTab(space), sessionID: session.id, directory: data.directory, title })
-              }}
-            />
-          )),
+          action: () =>
+            void dialog.show(() => (
+              <DialogRenameSession
+                currentTitle={session.title}
+                onRename={async (title) => {
+                  await actions.renameSession({
+                    scope: scopeFromTab(space),
+                    sessionID: session.id,
+                    directory: data.directory,
+                    title,
+                  })
+                }}
+              />
+            )),
         },
         {
           label: pinned ? t("workbench.tree.unpin") : t("workbench.tree.pin"),
-          action: () => setPinnedSessions((previous) => {
-            const next = new Set(previous)
-            if (next.has(session.id)) next.delete(session.id)
-            else next.add(session.id)
-            return next
-          }),
+          action: () =>
+            setPinnedSessions((previous) => {
+              const next = new Set(previous)
+              if (next.has(session.id)) next.delete(session.id)
+              else next.add(session.id)
+              return next
+            }),
         },
         {
           label: t("common.delete"),
-          action: () => void dialog.show(() => (
-            <DialogDeleteSession
-              sessionTitle={session.title}
-              onDelete={async () => {
-                await actions.deleteSession({ scope: scopeFromTab(space), sessionID: session.id, directory: data.directory })
-              }}
-            />
-          )),
+          action: () =>
+            void dialog.show(() => (
+              <DialogDeleteSession
+                sessionTitle={session.title}
+                onDelete={async () => {
+                  await actions.deleteSession({
+                    scope: scopeFromTab(space),
+                    sessionID: session.id,
+                    directory: data.directory,
+                  })
+                }}
+              />
+            )),
         },
       ],
     })
@@ -247,19 +258,21 @@ export function SessionTree(props: {
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
-      items: [{
-        label: t("workbench.tree.newSession"),
-        action: async () => {
-          try {
-            wb.openTab(space)
-            wb.ensureSpace(space.path)
-            const target = wb.spaceState(space.path)?.panels.find((panel) => panel.slotState === "empty")
-            if (target) await actions.createSession({ scope: scopeFromTab(space), panelID: target.id })
-          } catch (error) {
-            reportWorkbenchError("create session from tree", error)
-          }
+      items: [
+        {
+          label: t("workbench.tree.newSession"),
+          action: async () => {
+            try {
+              wb.openTab(space)
+              wb.ensureSpace(space.path)
+              const target = wb.spaceState(space.path)?.panels.find((panel) => panel.slotState === "empty")
+              if (target) await actions.createSession({ scope: scopeFromTab(space), panelID: target.id })
+            } catch (error) {
+              reportWorkbenchError("create session from tree", error)
+            }
+          },
         },
-      }],
+      ],
     })
   }
 

@@ -12,7 +12,7 @@ function createTimedFlyout(input: { pinned?: () => boolean } = {}) {
   const flyout = createFlyoutController({
     pinned: input.pinned ?? (() => false),
     setTimeoutFn: ((fn: () => void, ms: number) => {
-      const id = { } as unknown as ReturnType<typeof setTimeout>
+      const id = {} as unknown as ReturnType<typeof setTimeout>
       pending.set(id, () => fn())
       void ms
       return id
@@ -21,7 +21,13 @@ function createTimedFlyout(input: { pinned?: () => boolean } = {}) {
       pending.delete(id)
     }) as typeof clearTimeout,
   })
-  return { flyout, flush: () => { for (const fn of [...pending.values()]) fn() }, pending }
+  return {
+    flyout,
+    flush: () => {
+      for (const fn of [...pending.values()]) fn()
+    },
+    pending,
+  }
 }
 
 describe("flyoutVisibilityClass", () => {

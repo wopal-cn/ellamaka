@@ -50,7 +50,8 @@ export function parseArgs(argv: string[]) {
   }
   if (!flags.releaseContextPath) {
     for (const key of ["version", "tag"]) {
-      if (!flags[key]) throw new Error(`Missing required flag: --${key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}`)
+      if (!flags[key])
+        throw new Error(`Missing required flag: --${key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}`)
     }
   }
 
@@ -78,12 +79,31 @@ export function parseArgs(argv: string[]) {
 //   manifest. The ext set is a historical superset — rpm is no longer
 //   produced, but older versioned manifests still declare it.
 const CLI_ARCHIVE_RE = /^ellamaka-([^-]+)-(arm64|x64)(?:-(baseline))?\.(tar\.gz|zip)$/
-const DESKTOP_ARCHIVE_RE = /^ellamaka-desktop-(?:beta-)?([^-]+)-(arm64|x64|amd64|x86_64|aarch64)\.(dmg|zip|exe|AppImage|deb|rpm)$/
-const DESKTOP_OS_MAP: Record<string, string> = { darwin: "darwin", mac: "darwin", win32: "windows", win: "windows", linux: "linux" }
-const DESKTOP_ARCH_MAP: Record<string, string> = { arm64: "arm64", x64: "x64", amd64: "x64", x86_64: "x64", aarch64: "arm64" }
+const DESKTOP_ARCHIVE_RE =
+  /^ellamaka-desktop-(?:beta-)?([^-]+)-(arm64|x64|amd64|x86_64|aarch64)\.(dmg|zip|exe|AppImage|deb|rpm)$/
+const DESKTOP_OS_MAP: Record<string, string> = {
+  darwin: "darwin",
+  mac: "darwin",
+  win32: "windows",
+  win: "windows",
+  linux: "linux",
+}
+const DESKTOP_ARCH_MAP: Record<string, string> = {
+  arm64: "arm64",
+  x64: "x64",
+  amd64: "x64",
+  x86_64: "x64",
+  aarch64: "arm64",
+}
 const ARCHIVE_EXT_RE = /\.(tar\.gz|zip|dmg|exe|AppImage|deb|rpm)$/
 
-export function parseArchiveName(filename: string): { os: string; arch: string; variant: string | null; ext: string; product: string } {
+export function parseArchiveName(filename: string): {
+  os: string
+  arch: string
+  variant: string | null
+  ext: string
+  product: string
+} {
   const desktopMatch = filename.match(DESKTOP_ARCHIVE_RE)
   if (desktopMatch) {
     return {
@@ -122,14 +142,21 @@ function archLabel(arch: string) {
   return arch
 }
 
-export function buildReleaseNotes(version: string, artifacts: Array<{ product: string; ext: string; os: string; arch: string; name: string; url: string }>, manifestUrl: string, checksumsUrl: string) {
+export function buildReleaseNotes(
+  version: string,
+  artifacts: Array<{ product: string; ext: string; os: string; arch: string; name: string; url: string }>,
+  manifestUrl: string,
+  checksumsUrl: string,
+) {
   const downloads = artifacts.filter((artifact) => artifact.product !== "desktop" || artifact.ext !== "zip")
   const lines = [
     "## Downloads",
     "",
     "| OS | Arch | Download |",
     "| --- | --- | --- |",
-    ...downloads.map((artifact) => `| ${osLabel(artifact.os)} | ${archLabel(artifact.arch)} | [${artifact.name}](${artifact.url}) |`),
+    ...downloads.map(
+      (artifact) => `| ${osLabel(artifact.os)} | ${archLabel(artifact.arch)} | [${artifact.name}](${artifact.url}) |`,
+    ),
     "",
     "## Verification",
     "",
@@ -184,9 +211,7 @@ export function buildManifest({
   if (releaseContextPath) {
     const ctx = JSON.parse(fs.readFileSync(releaseContextPath, "utf8"))
     if (ctx.version !== version) {
-      throw new Error(
-        `release context version ${ctx.version} does not match --version ${version}`,
-      )
+      throw new Error(`release context version ${ctx.version} does not match --version ${version}`)
     }
     const manifest = {
       manifestSchemaVersion: 2,
@@ -238,9 +263,7 @@ export function manifestCommand(flags: {
     const ctx = JSON.parse(fs.readFileSync(flags.releaseContextPath, "utf8"))
     if (!ctx.version) throw new Error(`release context ${flags.releaseContextPath} has no version`)
     if (version !== undefined && version !== ctx.version) {
-      throw new Error(
-        `release context version ${ctx.version} does not match --version ${version}`,
-      )
+      throw new Error(`release context version ${ctx.version} does not match --version ${version}`)
     }
     version = ctx.version
     tag = flags.tag ?? `v${ctx.version}`
@@ -267,7 +290,8 @@ export function manifestCommand(flags: {
     }
   }
 
-  if (files.length === 0) throw new Error("No archive files found matching ellamaka-*-*.{tar.gz,zip,dmg,exe,AppImage,deb,rpm}")
+  if (files.length === 0)
+    throw new Error("No archive files found matching ellamaka-*-*.{tar.gz,zip,dmg,exe,AppImage,deb,rpm}")
 
   const versionBaseUrl = `${baseUrl}/v${version}`
   const manifestUrl = `${versionBaseUrl}/manifest.json`
@@ -302,7 +326,10 @@ export function manifestCommand(flags: {
   fs.mkdirSync(outputDir, { recursive: true })
   fs.writeFileSync(path.join(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n")
   fs.writeFileSync(path.join(outputDir, "checksums.txt"), checksumLines.join("\n") + "\n")
-  fs.writeFileSync(path.join(outputDir, "release-notes.md"), buildReleaseNotes(version!, artifacts, manifestUrl, checksumsUrl))
+  fs.writeFileSync(
+    path.join(outputDir, "release-notes.md"),
+    buildReleaseNotes(version!, artifacts, manifestUrl, checksumsUrl),
+  )
 
   console.log(`Generated: ${path.join(outputDir, "manifest.json")}`)
   console.log(`Generated: ${path.join(outputDir, "checksums.txt")}`)

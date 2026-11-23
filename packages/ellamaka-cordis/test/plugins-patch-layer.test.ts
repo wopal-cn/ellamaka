@@ -38,14 +38,7 @@ describe("readUserPatchState", () => {
 
   test("inserts are read from - insert: blocks (4-space item ids)", () => {
     const root = tempRoot()
-    writeFileSync(
-      patchPathOf(root),
-      [
-        "- insert:",
-        "    - id: dsh-market",
-        "      name: dshmarket",
-      ].join("\n") + "\n",
-    )
+    writeFileSync(patchPathOf(root), ["- insert:", "    - id: dsh-market", "      name: dshmarket"].join("\n") + "\n")
     const state = readUserPatchState(patchPathOf(root))
     expect(state.inserts).toEqual(["dsh-market"])
   })
@@ -143,11 +136,7 @@ describe("queued writes", () => {
     const root = tempRoot()
     const patchPath = patchPathOf(root)
     writeFileSync(patchPath, "[]\n")
-    await Promise.all([
-      disableRow(patchPath, "row-a"),
-      disableRow(patchPath, "row-b"),
-      disableRow(patchPath, "row-c"),
-    ])
+    await Promise.all([disableRow(patchPath, "row-a"), disableRow(patchPath, "row-b"), disableRow(patchPath, "row-c")])
     const state = readUserPatchState(patchPath)
     expect(state.disables.sort()).toEqual(["row-a", "row-b", "row-c"])
   })

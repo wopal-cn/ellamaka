@@ -29,15 +29,13 @@ export function mergeSessionTreeSessions(
     if (seenIds.has(serverSession.id)) return []
     seenIds.add(serverSession.id)
 
-    return [{
-      id: serverSession.id,
-      title: localTitles.get(serverSession.id) ?? (serverSession.title || serverSession.id),
-      status: isSessionBound(serverSession.id)
-        ? "bound"
-        : serverSession.timeArchived
-          ? "archived"
-          : "idle",
-    }]
+    return [
+      {
+        id: serverSession.id,
+        title: localTitles.get(serverSession.id) ?? (serverSession.title || serverSession.id),
+        status: isSessionBound(serverSession.id) ? "bound" : serverSession.timeArchived ? "archived" : "idle",
+      },
+    ]
   })
 }
 

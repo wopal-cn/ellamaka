@@ -249,11 +249,18 @@ window.api.onMenuCommand((id) => {
 })
 listenForDeepLinks()
 
-  render(() => {
-    const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false, version: pkg.version, dshProxyOrigin: undefined })))
-    const platform = createPlatform(() => windowConfig()?.version ?? pkg.version, () => windowConfig()?.dshProxyOrigin)
-    document.documentElement.dataset.platform = platform.os ? `desktop-${platform.os}` : "desktop"
-    const loadLocale = async () => {
+render(() => {
+  const [windowConfig] = createResource(() =>
+    window.api
+      .getWindowConfig()
+      .catch(() => ({ updaterEnabled: false, version: pkg.version, dshProxyOrigin: undefined })),
+  )
+  const platform = createPlatform(
+    () => windowConfig()?.version ?? pkg.version,
+    () => windowConfig()?.dshProxyOrigin,
+  )
+  document.documentElement.dataset.platform = platform.os ? `desktop-${platform.os}` : "desktop"
+  const loadLocale = async () => {
     const current = await platform.storage?.("ellamaka.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
@@ -350,19 +357,10 @@ listenForDeepLinks()
     })
   })
 
-
-
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <Show
-          when={
-            !sidecar.loading &&
-            !windowConfig.loading &&
-            !windowCount.loading &&
-            !locale.loading
-          }
-        >
+        <Show when={!sidecar.loading && !windowConfig.loading && !windowCount.loading && !locale.loading}>
           {(_) => {
             return (
               <AppInterface

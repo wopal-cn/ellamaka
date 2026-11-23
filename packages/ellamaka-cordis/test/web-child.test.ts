@@ -106,7 +106,6 @@ describe("dsh:web child process boundary", () => {
         if (line.startsWith("{")) {
           const parsed: unknown = JSON.parse(line)
           expect(parsed).toMatchObject({ ready: true })
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- expect guard above pins the shape
           ready = parsed as { ready: boolean; port: number }
           break
         }
@@ -138,7 +137,7 @@ describe("dsh:web child process boundary", () => {
 
     // Graceful shutdown over stdin (the host-coordinated channel; the
     // profile's own signal path owns SIGTERM) releases the Home lease, exits 0.
-    child.stdin.write("shutdown\n")
+    await child.stdin.write("shutdown\n")
     await Promise.race([
       child.exited,
       new Promise((_, reject) => setTimeout(() => reject(new Error("child did not exit after shutdown")), 15_000)),
@@ -173,7 +172,6 @@ describe("dsh:web child process boundary", () => {
         if (line.startsWith("{")) {
           const parsed: unknown = JSON.parse(line)
           expect(parsed).toMatchObject({ ready: true })
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- expect guard above pins the shape
           ready = parsed as { ready: boolean; port: number }
           break
         }
@@ -185,7 +183,7 @@ describe("dsh:web child process boundary", () => {
     // bare visit).
     expect(typeof ready!.authPath).toBe("string")
     expect(ready!.authPath).toMatch(/^\/\?token=/)
-    child.stdin.write("shutdown\n")
+    await child.stdin.write("shutdown\n")
     await Promise.race([
       child.exited,
       new Promise((_, reject) =>
@@ -226,7 +224,7 @@ describe("dsh:web child process boundary", () => {
       }
     }
     expect(sawReady).toBe(true)
-    child.stdin.end()
+    await child.stdin.end()
     await Promise.race([
       child.exited,
       new Promise((_, reject) =>
@@ -263,7 +261,6 @@ describe("dsh:web child proxy container", () => {
     await import("../src/runtime/web-child")
     const address: unknown = upstream.address()
     expect(address).toHaveProperty("port")
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- expect guard above pins the shape
     const port = (address as { port: number }).port
 
     const body = await new Promise<string>((resolve, reject) => {

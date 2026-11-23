@@ -40,12 +40,15 @@ let dshHttpProxyPort: number | undefined
 // Port 0: the OS assigns a free port so the packaged app and dev instances
 // can run side by side without an EADDRINUSE race (the listen() promise
 // resolves with the actual bound port).
-void dshHttpProxy.listen(0).then((port) => {
-  dshHttpProxyPort = port
-  writeLog("protocol", "dsh http proxy listening", { port })
-}).catch((error) => {
-  writeLog("protocol", "dsh http proxy listen failed", { error }, "error")
-})
+void dshHttpProxy
+  .listen(0)
+  .then((port) => {
+    dshHttpProxyPort = port
+    writeLog("protocol", "dsh http proxy listening", { port })
+  })
+  .catch((error) => {
+    writeLog("protocol", "dsh http proxy listen failed", { error }, "error")
+  })
 
 protocol.registerSchemesAsPrivileged([
   {

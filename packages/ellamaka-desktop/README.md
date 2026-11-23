@@ -32,34 +32,34 @@ Electron is a thin shell — it only manages window lifecycle and the sidecar pr
 
 ### Layer Responsibilities
 
-| Layer | Responsibility |
-|---|---|
-| **Main Process** | Creates windows, starts/stops the sidecar, holds sidecar connection credentials. Terminates the sidecar and all child processes on app exit |
-| **Preload** | Exposes a minimal IPC interface (window, file picker, menus, updates, sidecar init). Renderer has context isolation enabled, Node integration disabled |
-| **Renderer** | The `@wopal/ellamaka-app` `/workbench` route. Receives `platform: "desktop"` via `PlatformProvider` for file picker, menus, updates, and system integration |
-| **Sidecar** | Node runtime built from `packages/opencode`. Listens on loopback only, generates temporary auth credentials per launch. Owns PTY creation, probing, reconnection, Grace reaping, and explicit deletion |
+| Layer            | Responsibility                                                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Main Process** | Creates windows, starts/stops the sidecar, holds sidecar connection credentials. Terminates the sidecar and all child processes on app exit                                                            |
+| **Preload**      | Exposes a minimal IPC interface (window, file picker, menus, updates, sidecar init). Renderer has context isolation enabled, Node integration disabled                                                 |
+| **Renderer**     | The `@wopal/ellamaka-app` `/workbench` route. Receives `platform: "desktop"` via `PlatformProvider` for file picker, menus, updates, and system integration                                            |
+| **Sidecar**      | Node runtime built from `packages/opencode`. Listens on loopback only, generates temporary auth credentials per launch. Owns PTY creation, probing, reconnection, Grace reaping, and explicit deletion |
 
 ### Relationship with ellamaka-app Workbench
 
 The Workbench doesn't know whether it's running in a browser or Electron. It gets platform capabilities through `PlatformProvider`:
 
-| Capability | Browser | Electron |
-|-----------|---------|----------|
-| File picker | Browser native | Via Preload IPC |
-| Menus | None | Native Electron menus |
-| Updates | None | Electron updater |
-| PTY lifecycle | Identical | Identical |
+| Capability    | Browser        | Electron              |
+| ------------- | -------------- | --------------------- |
+| File picker   | Browser native | Via Preload IPC       |
+| Menus         | None           | Native Electron menus |
+| Updates       | None           | Electron updater      |
+| PTY lifecycle | Identical      | Identical             |
 
 PTY creation, probing, reconnection, and deletion logic is fully shared and does not fork by platform. The Electron Renderer only adds a desktop platform adaptation layer and does not maintain an independent copy of PTY ownership.
 
 ### State Ownership
 
-| State | Owner | Lifecycle |
-|-------|-------|-----------|
-| Panel layout, PTY ID hints | `ellamaka-app` / `localStorage` | Cross-refresh, cross-launch |
-| PTY sessions, subscribers, grace timer | Ellamaka sidecar | Current sidecar runtime |
-| PTY/TUI OS processes | Ellamaka sidecar | Current sidecar runtime |
-| Sidecar credentials | Electron Main Process | Current app process |
+| State                                  | Owner                           | Lifecycle                   |
+| -------------------------------------- | ------------------------------- | --------------------------- |
+| Panel layout, PTY ID hints             | `ellamaka-app` / `localStorage` | Cross-refresh, cross-launch |
+| PTY sessions, subscribers, grace timer | Ellamaka sidecar                | Current sidecar runtime     |
+| PTY/TUI OS processes                   | Ellamaka sidecar                | Current sidecar runtime     |
+| Sidecar credentials                    | Electron Main Process           | Current app process         |
 
 ### PTY Lifecycle Rules
 
@@ -95,12 +95,12 @@ Electron Main Process (src/main/index.ts)
 
 All commands run from `packages/ellamaka-desktop/`.
 
-| Command | Purpose |
-|------|------|
-| `bun test --preload ./electron-mock.ts --force-exit src` | Run tests (requires electron mock) |
-| `bun run typecheck` | TypeScript type check (`tsgo -b`) |
-| `bun run build` | Vite + electron-vite build → `out/` |
-| `bun run package:mac` | macOS unsigned dev DMG/ZIP → `dist/` |
+| Command                                                  | Purpose                              |
+| -------------------------------------------------------- | ------------------------------------ |
+| `bun test --preload ./electron-mock.ts --force-exit src` | Run tests (requires electron mock)   |
+| `bun run typecheck`                                      | TypeScript type check (`tsgo -b`)    |
+| `bun run build`                                          | Vite + electron-vite build → `out/`  |
+| `bun run package:mac`                                    | macOS unsigned dev DMG/ZIP → `dist/` |
 
 ## Build Steps
 
@@ -145,16 +145,16 @@ bash scripts/check-app-baseline.sh
 
 See [验证契约](../../docs/DESIGN-desktop.md#验证契约). Automated checks run in CI. Manual runtime verification:
 
-| # | Check | How |
-|---|-------|-----|
-| 1 | Electron loads Workbench `/workbench` on startup | Launch app, verify the UI is Workbench |
-| 3 | TUI/Terminal can be created, receive I/O, and resize | Create a Session, switch to TUI view |
-| 4 | PTY ID and PID survive Renderer refresh | Create a TUI, then `Cmd+R` refresh |
-| 5 | No duplicate PTYs after refresh | PTY count unchanged in sidecar after refresh |
-| 6 | Panel close kills its PTY process | Close a Panel |
-| 7 | Space close kills all its PTYs | Close a Space Tab |
-| 9 | App exit kills sidecar and all child processes | Quit app, `ps aux \| grep` to confirm |
-| 11 | Renderer can reconnect after crash | Simulate crash and recovery |
+| #   | Check                                                | How                                          |
+| --- | ---------------------------------------------------- | -------------------------------------------- |
+| 1   | Electron loads Workbench `/workbench` on startup     | Launch app, verify the UI is Workbench       |
+| 3   | TUI/Terminal can be created, receive I/O, and resize | Create a Session, switch to TUI view         |
+| 4   | PTY ID and PID survive Renderer refresh              | Create a TUI, then `Cmd+R` refresh           |
+| 5   | No duplicate PTYs after refresh                      | PTY count unchanged in sidecar after refresh |
+| 6   | Panel close kills its PTY process                    | Close a Panel                                |
+| 7   | Space close kills all its PTYs                       | Close a Space Tab                            |
+| 9   | App exit kills sidecar and all child processes       | Quit app, `ps aux \| grep` to confirm        |
+| 11  | Renderer can reconnect after crash                   | Simulate crash and recovery                  |
 
 ## Branding
 
@@ -167,17 +167,17 @@ See [验证契约](../../docs/DESIGN-desktop.md#验证契约). Automated checks 
 
 ## Key Files
 
-| File | Role |
-|------|------|
-| `src/main/index.ts` | Main Process entry — app lifecycle, window creation, sidecar orchestration |
-| `src/main/sidecar.ts` | Sidecar worker thread — server listen/stop |
-| `src/main/server.ts` | Sidecar spawn, health check, env setup |
-| `src/main/ipc.ts` | IPC handler registry |
-| `src/main/constants.ts` | Channel, store key constants |
-| `src/preload/index.ts` | Context bridge — ElectronAPI → `window.api` |
-| `src/renderer/index.tsx` | Renderer entry — platform setup, routing, sidecar connection |
-| `electron-builder.config.ts` | Packaging config (unsigned macOS dev build) |
-| `electron.vite.config.ts` | Vite config (main/preload/renderer builds) |
+| File                         | Role                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `src/main/index.ts`          | Main Process entry — app lifecycle, window creation, sidecar orchestration |
+| `src/main/sidecar.ts`        | Sidecar worker thread — server listen/stop                                 |
+| `src/main/server.ts`         | Sidecar spawn, health check, env setup                                     |
+| `src/main/ipc.ts`            | IPC handler registry                                                       |
+| `src/main/constants.ts`      | Channel, store key constants                                               |
+| `src/preload/index.ts`       | Context bridge — ElectronAPI → `window.api`                                |
+| `src/renderer/index.tsx`     | Renderer entry — platform setup, routing, sidecar connection               |
+| `electron-builder.config.ts` | Packaging config (unsigned macOS dev build)                                |
+| `electron.vite.config.ts`    | Vite config (main/preload/renderer builds)                                 |
 
 ## Security Boundaries
 

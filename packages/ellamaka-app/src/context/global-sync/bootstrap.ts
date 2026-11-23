@@ -229,7 +229,7 @@ export async function bootstrapDirectory(input: {
 
   const rev = (providerRev.get(input.directory) ?? 0) + 1
   providerRev.set(input.directory, rev)
-  ;(async () => {
+  void (async () => {
     const slow = [
       () => Promise.resolve(input.loadSessions(input.directory)),
       () =>

@@ -122,7 +122,7 @@
   display: flex;
   justify-content: center;
   align-items: stretch;
-  padding: 24px 28px 16px;   /* 水平 padding 加大（16 → 28），与 header 20px 对齐并留出对称呼吸感 */
+  padding: 24px 28px 16px; /* 水平 padding 加大（16 → 28），与 header 20px 对齐并留出对称呼吸感 */
   overflow: hidden;
 }
 
@@ -165,7 +165,11 @@
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 12px 30px rgb(0 0 0 / 28%);
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, opacity 160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
 }
 
 .ob-nav-arrow:hover:not(:disabled) {
@@ -339,7 +343,7 @@
   backdrop-filter: blur(24px);
   border: 1px solid var(--ob-card-border);
   border-radius: 16px;
-  padding: 28px;        /* 内边距加大（24 → 28），给放大后的内容更多呼吸感 */
+  padding: 28px; /* 内边距加大（24 → 28），给放大后的内容更多呼吸感 */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -379,8 +383,8 @@
   flex-direction: column;
   gap: 16px;
   width: 100%;
-  margin-top: 0;         /* 偏下调整为偏上：移除 auto，改回顶对齐 */
-  margin-bottom: auto;   /* 下方仍分摊剩余空间，保持视觉平衡 */
+  margin-top: 0; /* 偏下调整为偏上：移除 auto，改回顶对齐 */
+  margin-bottom: auto; /* 下方仍分摊剩余空间，保持视觉平衡 */
 }
 
 .ob-result-status-header {
@@ -1000,7 +1004,9 @@
   border-radius: 12px;
   background: rgb(255 255 255 / 3.5%);
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .ob-source-option:hover:not(:disabled) {
@@ -1073,7 +1079,9 @@
   border-radius: 12px;
   background: rgb(255 255 255 / 3.5%);
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .ob-mode-option:hover:not(:disabled) {
@@ -1391,7 +1399,10 @@
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 9px;
   background: rgb(255 255 255 / 3.5%);
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .ob-space-type-item:hover {
@@ -1706,7 +1717,9 @@
 }
 
 @keyframes ob-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Responsive */

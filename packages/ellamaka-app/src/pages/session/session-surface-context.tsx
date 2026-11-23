@@ -21,11 +21,7 @@ type SessionSurfaceContextValue = {
 const SessionSurfaceContext = createContext<SessionSurfaceContextValue>()
 
 export function EmbeddedSessionSurfaceProvider(props: { children: JSX.Element }) {
-  return (
-    <SessionSurfaceContext.Provider value={{ kind: "embedded" }}>
-      {props.children}
-    </SessionSurfaceContext.Provider>
-  )
+  return <SessionSurfaceContext.Provider value={{ kind: "embedded" }}>{props.children}</SessionSurfaceContext.Provider>
 }
 
 export function useSessionSurface(): SessionSurfaceContextValue | undefined {

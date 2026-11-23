@@ -18,14 +18,17 @@ packages/opencode/src/util/log.ts
 **Log 级别**: `DEBUG(0) < INFO(1) < WARN(2) < ERROR(3)`
 
 **日志格式**:
+
 ```
 <时间戳> +<延迟ms> <标签> <消息>
 ```
+
 示例:
 
 `2026-04-17T10:30:00 +42ms service=llm providerID=anthropic modelID=claude-sonnet-4-6 stream`
 
 **输出去向**:
+
 - `--print-logs`: 写入 stderr
 - 默认（无此标志）: 写入 `Global.Path.log/<ISO_TIMESTAMP>.log`（自动轮换，保留最近 10 个文件）
 - 本地/dev 安装默认级别自动为 `DEBUG`，生产安装默认为 `INFO`
@@ -57,18 +60,18 @@ opencode --log-level DEBUG --print-logs
 
 **每轮 Agent 会看到的日志**:
 
-| 级别 | 来源 | 格式 |
-|------|------|------|
-| INFO | `llm.ts:81` | `stream {modelID, providerID}` |
-| INFO | `llm.ts:323` | `stream error {error}` |
-| INFO | `llm.ts:330` | `repairing tool call {tool, repaired}` |
-| INFO | `prompt.ts:1315` | `loop {step: N}` |
-| INFO | `prompt.ts:1351` | `exiting loop` |
-| DEBUG | `registry.ts:286` | `time(tool.id) started/completed` |
-| DEBUG | `prompt.ts:363` | `time(resolveTools) started/completed` |
-| INFO | `mcp/index.ts:447` | `create() {toolCount}` |
-| INFO | `prompt.ts:970` | `file {mime}` |
-| INFO | `prompt.ts:1044` | `mcp resource {clientName, uri}` |
+| 级别  | 来源               | 格式                                   |
+| ----- | ------------------ | -------------------------------------- |
+| INFO  | `llm.ts:81`        | `stream {modelID, providerID}`         |
+| INFO  | `llm.ts:323`       | `stream error {error}`                 |
+| INFO  | `llm.ts:330`       | `repairing tool call {tool, repaired}` |
+| INFO  | `prompt.ts:1315`   | `loop {step: N}`                       |
+| INFO  | `prompt.ts:1351`   | `exiting loop`                         |
+| DEBUG | `registry.ts:286`  | `time(tool.id) started/completed`      |
+| DEBUG | `prompt.ts:363`    | `time(resolveTools) started/completed` |
+| INFO  | `mcp/index.ts:447` | `create() {toolCount}`                 |
+| INFO  | `prompt.ts:970`    | `file {mime}`                          |
+| INFO  | `prompt.ts:1044`   | `mcp resource {clientName, uri}`       |
 
 **Tag 信息** (每个 LLM 调用都附带):
 
@@ -83,44 +86,48 @@ opencode 官方最推荐的深度调试方式。能看到**每个 span 的上下
 **启用方式**:
 
 1. 安装 Jaeger（最简单）：
+
 ```bash
 docker run --rm -d -p 16686:16686 -p 4318:4318 jaegertracing/all-in-one:latest
 ```
 
 2. 设环境变量：
+
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
 3. 在 `opencode.jsonc` 开启：
+
 ```jsonc
 {
   "experimental": {
-    "openTelemetry": true
-  }
+    "openTelemetry": true,
+  },
 }
 ```
 
 关键实现细节：
+
 - OTel 注册了 `AsyncLocalStorageContextManager` ，确保 AI SDK spans 和 Effect 代码的父 span 能正确关联
 - 日志和 Traces 分别导出到 `{endpoint}/v1/logs` 和 `{endpoint}/v1/traces`
 - AI SDK spans 附带 metadata: `userId`, `sessionId`
 
 **能看到的完整 Span 链路**：
 
-| Span Name | 所在文件 | 覆盖范围 |
-|-----------|----------|----------|
-| `session.llm` | `src/session/llm.ts` | LLM 调用（AI SDK `streamText` wrapper） |
-| `SessionPrompt.runner` | `src/session/prompt.ts` | 主提示词处理 |
-| `SessionPrompt.loop` | `src/session/prompt.ts` | 每轮 agent 循环 |
-| `SessionPrompt.resolveTools` | `src/session/prompt.ts` | 工具解析 + 插件注入 |
-| `SessionPrompt.handleSubtask` | `src/session/prompt.ts` | 子任务处理 |
-| `SessionPrompt.ensureTitle` | `src/session/prompt.ts` | 标题生成 |
-| `SessionPrompt.compact` | `src/session/prompt.ts` | 上下文压缩 |
-| `Tool.execute` | `src/tool/tool.ts` | 每次工具执行 |
-| `Plugin.trigger` | `src/plugin/index.ts` | 插件 hook |
-| `Npm.reify` | `src/shared/npm.ts` | npm 安装 |
-| `InstanceBootstrap` | `src/project/bootstrap.ts` | 启动流程 |
+| Span Name                     | 所在文件                   | 覆盖范围                                |
+| ----------------------------- | -------------------------- | --------------------------------------- |
+| `session.llm`                 | `src/session/llm.ts`       | LLM 调用（AI SDK `streamText` wrapper） |
+| `SessionPrompt.runner`        | `src/session/prompt.ts`    | 主提示词处理                            |
+| `SessionPrompt.loop`          | `src/session/prompt.ts`    | 每轮 agent 循环                         |
+| `SessionPrompt.resolveTools`  | `src/session/prompt.ts`    | 工具解析 + 插件注入                     |
+| `SessionPrompt.handleSubtask` | `src/session/prompt.ts`    | 子任务处理                              |
+| `SessionPrompt.ensureTitle`   | `src/session/prompt.ts`    | 标题生成                                |
+| `SessionPrompt.compact`       | `src/session/prompt.ts`    | 上下文压缩                              |
+| `Tool.execute`                | `src/tool/tool.ts`         | 每次工具执行                            |
+| `Plugin.trigger`              | `src/plugin/index.ts`      | 插件 hook                               |
+| `Npm.reify`                   | `src/shared/npm.ts`        | npm 安装                                |
+| `InstanceBootstrap`           | `src/project/bootstrap.ts` | 启动流程                                |
 
 浏览器打开 `http://localhost:16686` 查看瀑布图，可以清晰看到每个 span 的执行时间和依赖关系。
 
@@ -177,6 +184,7 @@ tail -f ~/Library/Application\ Support/opencode/logs/*.log
 ### 环境信息
 
 `environment(model)` 函数返回：
+
 - 模型名称和 ID
 - 工作目录路径
 - Workspace root
@@ -206,13 +214,15 @@ tail -f ~/Library/Application\ Support/opencode/logs/*.log
 
 ### 工具过滤
 
-最终发**给 LLM 的工具会经过权限过滤 (`llm.ts:433-438`)：
+最终发\*\*给 LLM 的工具会经过权限过滤 (`llm.ts:433-438`)：
+
 - `Permission.disabled()` — 获取禁用的工具列表
 - 过滤掉用户配置中 `false` 的工具
 
 ### 模型特定优化
 
 不同模型可能获得不同的工具集：
+
 - GPT 模型 → 获得 `patch` 工具，替换 `edit`/`write`
 - 需要 OpenCode/exa 配置 → 才能用 `search`/`code` 工具
 
@@ -265,17 +275,17 @@ tail -f ~/Library/Application\ Support/opencode/logs/*.log
 
 ## 七、源码参考索引
 
-| 模块 | 文件 |
-|------|------|
-| 日志系统 | `packages/opencode/src/util/log.ts` |
-| Effect Logger | `packages/opencode/src/effect/logger.ts` |
-| 模型调用 | `packages/opencode/src/session/llm.ts` |
-| 提示词处理 | `packages/opencode/src/session/prompt.ts` |
-| 系统提示模板 | `packages/opencode/src/session/system.ts` |
-| 工具注册 | `packages/opencode/src/tool/registry.ts` |
-| 插件加载 | `packages/opencode/src/plugin/index.ts` |
+| 模块          | 文件                                            |
+| ------------- | ----------------------------------------------- |
+| 日志系统      | `packages/opencode/src/util/log.ts`             |
+| Effect Logger | `packages/opencode/src/effect/logger.ts`        |
+| 模型调用      | `packages/opencode/src/session/llm.ts`          |
+| 提示词处理    | `packages/opencode/src/session/prompt.ts`       |
+| 系统提示模板  | `packages/opencode/src/session/system.ts`       |
+| 工具注册      | `packages/opencode/src/tool/registry.ts`        |
+| 插件加载      | `packages/opencode/src/plugin/index.ts`         |
 | Observability | `packages/opencode/src/effect/observability.ts` |
-| 认证系统 | `packages/opencode/src/auth/index.ts` |
-| 配置加载 | `packages/opencode/src/config/config.ts` |
-| Bootstrap | `packages/opencode/src/project/bootstrap.ts` |
-| MCP | `packages/opencode/src/mcp/index.ts` |
+| 认证系统      | `packages/opencode/src/auth/index.ts`           |
+| 配置加载      | `packages/opencode/src/config/config.ts`        |
+| Bootstrap     | `packages/opencode/src/project/bootstrap.ts`    |
+| MCP           | `packages/opencode/src/mcp/index.ts`            |

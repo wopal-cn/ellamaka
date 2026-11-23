@@ -92,6 +92,22 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # The lint gate is itself code: a broken baseline comparison must fail
+      # loudly instead of silently accepting new diagnostics.
+      - name: Lint gate tests
+        run: bun run test:lint-gate
+
+      # Formatting is a separate gate from lint: it covers the files this
+      # repository owns and Prettier can parse, and it is the one check that
+      # rewrites whole files, so upstream-inherited packages stay out of it.
+      - name: Format check
+        run: bun run format:check
+
+      # CSS is a separate parser and rule set; the lint gate above does not see
+      # it. Kept error-level so a violation fails the run instead of printing.
+      - name: CSS check
+        run: bun run --cwd packages/ellamaka-app lint:css
+
       # Behavioural order check: the same suite must pass with the test files
       # loaded forwards, backwards, and in the two-file combinations that share
       # state. A suite that only passes in one order is order-dependent.

@@ -26,7 +26,6 @@ async function expandThemeGlob(source: string, path: string) {
 
 async function transformSolid(source: string, path: string) {
   // vite-plugin-solid exposes transform through Vite's overloaded hook type.
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
   const transform = solid.transform as unknown as SolidTransform
   return transform(source, path, { ssr: false })
 }

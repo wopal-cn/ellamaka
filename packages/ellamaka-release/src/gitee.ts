@@ -41,11 +41,24 @@ export function parseArgs(argv: string[]) {
 
 export function parseRepo(repo: string) {
   const parts = repo.split("/")
-  if (parts.length !== 2 || !parts[0] || !parts[1]) throw new Error(`Invalid --repo format: ${repo}. Expected owner/repo`)
+  if (parts.length !== 2 || !parts[0] || !parts[1])
+    throw new Error(`Invalid --repo format: ${repo}. Expected owner/repo`)
   return { owner: parts[0], repo: parts[1] }
 }
 
-export function buildCreateBody({ version, tag, notesContent, token, productName = "ellamaka" }: { version: string; tag: string; notesContent: string; token: string; productName?: string }) {
+export function buildCreateBody({
+  version,
+  tag,
+  notesContent,
+  token,
+  productName = "ellamaka",
+}: {
+  version: string
+  tag: string
+  notesContent: string
+  token: string
+  productName?: string
+}) {
   return {
     tag_name: tag,
     name: `${productName} v${version}`,
@@ -63,7 +76,17 @@ async function readJson(resp: Response, context: string) {
   return JSON.parse(text)
 }
 
-export async function createOrGetRelease({ fetch, baseUrl, owner, repo, tag, version, notesContent, token, productName = "ellamaka" }: {
+export async function createOrGetRelease({
+  fetch,
+  baseUrl,
+  owner,
+  repo,
+  tag,
+  version,
+  notesContent,
+  token,
+  productName = "ellamaka",
+}: {
   fetch: typeof globalThis.fetch
   baseUrl: string
   owner: string
@@ -82,7 +105,7 @@ export async function createOrGetRelease({ fetch, baseUrl, owner, repo, tag, ver
     // Delete and recreate so created_at reflects the current release date.
     // PATCH preserves the original created_at, which keeps the release from
     // appearing as "latest" on the Gitee homepage.
-    const deleteUrl = `${baseUrl}/repos/${owner}/${repo}/releases/${(tagBody as { id: unknown }).id}?access_token=${encodeURIComponent(token)}`
+    const deleteUrl = `${baseUrl}/repos/${owner}/${repo}/releases/${String((tagBody as { id: unknown }).id)}?access_token=${encodeURIComponent(token)}`
     const deleteResp = await fetch(deleteUrl, { method: "DELETE" })
     if (deleteResp.status !== 204) {
       const text = await deleteResp.text()
@@ -97,7 +120,8 @@ export async function createOrGetRelease({ fetch, baseUrl, owner, repo, tag, ver
     body: JSON.stringify(buildCreateBody({ version, tag, notesContent, token, productName })),
   })
   const created = await readJson(createResp, "create release")
-  if (!created || !(created as { id?: unknown }).id) throw new Error(`Create returned no id: ${JSON.stringify(created)}`)
+  if (!created || !(created as { id?: unknown }).id)
+    throw new Error(`Create returned no id: ${JSON.stringify(created)}`)
   return { id: (created as { id: unknown }).id, created: true }
 }
 

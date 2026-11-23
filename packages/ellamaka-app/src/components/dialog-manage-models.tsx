@@ -16,7 +16,7 @@ export const DialogManageModels: Component = () => {
   const dialog = useDialog()
 
   const handleConnectProvider = () => {
-    dialog.show(() => <DialogSelectProvider />)
+    void dialog.show(() => <DialogSelectProvider />)
   }
   const providerRank = (id: string) => popularProviders.indexOf(id)
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)

@@ -16,15 +16,15 @@ description: Long-lived DSH bridge ownership, runtime closure, profile, and veri
 
 ellamaka-cordis is the product's DSH bridge, embedded in Ellamaka CLI and Desktop. It owns the DSH import boundary and adapts DSH to the host Server/runtime.
 
-| Path | Responsibility |
-|---|---|
-| src/hub.ts | Cordis context boundary and lifecycle |
-| src/dsh-web.ts | Assemble the web and ellamaka-tools profiles |
-| src/dsh-virtual-webserver.ts | Register DSH routes/upgrades on the Ellamaka Server listener |
-| src/runtime/ | Resolve and materialize the product runtime closure |
-| src/plugins/ | Profile declaration, plugin composition, installation, and runtime updates |
-| src/log-bridge.ts | Route Cordis plugin logs through Ellamaka logging |
-| generated/ and script/ | Generated runtime manifest/lock and their generators |
+| Path                         | Responsibility                                                             |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| src/hub.ts                   | Cordis context boundary and lifecycle                                      |
+| src/dsh-web.ts               | Assemble the web and ellamaka-tools profiles                               |
+| src/dsh-virtual-webserver.ts | Register DSH routes/upgrades on the Ellamaka Server listener               |
+| src/runtime/                 | Resolve and materialize the product runtime closure                        |
+| src/plugins/                 | Profile declaration, plugin composition, installation, and runtime updates |
+| src/log-bridge.ts            | Route Cordis plugin logs through Ellamaka logging                          |
+| generated/ and script/       | Generated runtime manifest/lock and their generators                       |
 
 Keep these ownership facts:
 
@@ -39,15 +39,15 @@ Keep these ownership facts:
 
 Run from packages/ellamaka-cordis/.
 
-| Scenario | Command | When |
-|---|---|---|
-| Full tests | bun test | All Cordis tests |
-| Unit tests | bun run test:unit | Pure/module tests |
-| Integration tests | bun run test:integration | Real Cordis composition |
-| Typecheck | bun run typecheck | After TypeScript changes |
-| Regenerate manifest | bun script/generate-dsh-runtime-manifest.ts | After closure input changes |
-| Regenerate lock | bun script/generate-dsh-runtime-lock.ts | After closure input changes |
-| Check manifest drift | bun script/generate-dsh-runtime-manifest.ts --check | Before delivery |
+| Scenario             | Command                                             | When                        |
+| -------------------- | --------------------------------------------------- | --------------------------- |
+| Full tests           | bun test                                            | All Cordis tests            |
+| Unit tests           | bun run test:unit                                   | Pure/module tests           |
+| Integration tests    | bun run test:integration                            | Real Cordis composition     |
+| Typecheck            | bun run typecheck                                   | After TypeScript changes    |
+| Regenerate manifest  | bun script/generate-dsh-runtime-manifest.ts         | After closure input changes |
+| Regenerate lock      | bun script/generate-dsh-runtime-lock.ts             | After closure input changes |
+| Check manifest drift | bun script/generate-dsh-runtime-manifest.ts --check | Before delivery             |
 
 ## Implementation Rules
 

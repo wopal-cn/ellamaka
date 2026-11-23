@@ -3,14 +3,16 @@ import { getTerminalImeFrame } from "./terminal-ime-frame"
 
 describe("getTerminalImeFrame", () => {
   test("anchors the IME textarea to the caret without padding", () => {
-    expect(getTerminalImeFrame({
-      cursorX: 3,
-      cursorY: 2,
-      cellWidth: 8,
-      cellHeight: 18,
-      paddingLeft: 0,
-      paddingTop: 0,
-    })).toEqual({
+    expect(
+      getTerminalImeFrame({
+        cursorX: 3,
+        cursorY: 2,
+        cellWidth: 8,
+        cellHeight: 18,
+        paddingLeft: 0,
+        paddingTop: 0,
+      }),
+    ).toEqual({
       left: "24px",
       top: "36px",
       width: "8px",
@@ -20,14 +22,16 @@ describe("getTerminalImeFrame", () => {
   })
 
   test("includes container padding for embedded terminal layouts", () => {
-    expect(getTerminalImeFrame({
-      cursorX: 4,
-      cursorY: 1,
-      cellWidth: 9,
-      cellHeight: 20,
-      paddingLeft: 24,
-      paddingTop: 12,
-    })).toEqual({
+    expect(
+      getTerminalImeFrame({
+        cursorX: 4,
+        cursorY: 1,
+        cellWidth: 9,
+        cellHeight: 20,
+        paddingLeft: 24,
+        paddingTop: 12,
+      }),
+    ).toEqual({
       left: "60px",
       top: "32px",
       width: "9px",

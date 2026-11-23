@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { disableTerminalScrollbar, terminalColumnsWithoutScrollbar, terminalRowsForContainer } from "./terminal-scrollbar"
+import {
+  disableTerminalScrollbar,
+  terminalColumnsWithoutScrollbar,
+  terminalRowsForContainer,
+} from "./terminal-scrollbar"
 
 describe("terminal scrollbar removal", () => {
   test("uses the width that ghostty reserves for its scrollbar", () => {

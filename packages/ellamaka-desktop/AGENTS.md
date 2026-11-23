@@ -15,13 +15,13 @@ description: Long-lived Electron shell, IPC, sidecar ownership, and verification
 
 ellamaka-desktop is the Electron host for the shared ellamaka-app renderer. Main owns the native application/window and sidecar process lifecycle; the Server sidecar owns Runtime APIs and PTY processes.
 
-| Path | Responsibility |
-|---|---|
-| src/main/ | App/window lifecycle, sidecar supervision, IPC registration, native credentials, and updates |
-| src/preload/ | Small allowlisted API exposed to the renderer |
-| src/renderer/ | Desktop entry, routing, platform adapters, and shared app loading |
-| packages/ellamaka-app/ | Shared Browser/Desktop UI and renderer-owned layout state |
-| packages/opencode/ | Server sidecar implementation, Session and PTY resource ownership |
+| Path                   | Responsibility                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| src/main/              | App/window lifecycle, sidecar supervision, IPC registration, native credentials, and updates |
+| src/preload/           | Small allowlisted API exposed to the renderer                                                |
+| src/renderer/          | Desktop entry, routing, platform adapters, and shared app loading                            |
+| packages/ellamaka-app/ | Shared Browser/Desktop UI and renderer-owned layout state                                    |
+| packages/opencode/     | Server sidecar implementation, Session and PTY resource ownership                            |
 
 Keep these ownership facts:
 
@@ -37,13 +37,13 @@ Keep these ownership facts:
 
 Run from packages/ellamaka-desktop/.
 
-| Scenario | Command | When |
-|---|---|---|
-| Tests | bun test --preload ./electron-mock.ts --force-exit src | Main/preload/renderer logic |
-| Typecheck | bun run typecheck | After TypeScript changes |
-| Build | bun run build | After Desktop changes |
-| Package macOS dev build | bun run package:mac | Packaging/resource checks |
-| Dev server help | ../../scripts/dev.sh help | Cross-package GUI validation |
+| Scenario                | Command                                                | When                         |
+| ----------------------- | ------------------------------------------------------ | ---------------------------- |
+| Tests                   | bun test --preload ./electron-mock.ts --force-exit src | Main/preload/renderer logic  |
+| Typecheck               | bun run typecheck                                      | After TypeScript changes     |
+| Build                   | bun run build                                          | After Desktop changes        |
+| Package macOS dev build | bun run package:mac                                    | Packaging/resource checks    |
+| Dev server help         | ../../scripts/dev.sh help                              | Cross-package GUI validation |
 
 Build the opencode sidecar with `bun ../opencode/script/build-node.ts` before the Desktop build when sidecar code changes.
 

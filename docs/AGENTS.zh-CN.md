@@ -19,8 +19,8 @@ AGENTS 可以保留帮助实施者找到正确模块的精简、稳定归属图�
 
 ## Development Commands
 
-| Scenario | Command | When |
-|---|---|---|
+| Scenario          | Command                                                                                   | When         |
+| ----------------- | ----------------------------------------------------------------------------------------- | ------------ |
 | DESIGN 一致性检查 | python3 ../../../.wopal/skills/dev-doc-master/scripts/verify-docset.py . --main DESIGN.md | 修改文档集后 |
 
 ## Implementation Rules

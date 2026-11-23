@@ -9,4 +9,7 @@ packages/http-recorder/test/record-replay.test.ts:generic-api-key:127
 packages/http-recorder/test/record-replay.test.ts:gcp-api-key:129
 packages/http-recorder/test/record-replay.test.ts:generic-api-key:150
 packages/http-recorder/test/record-replay.test.ts:generic-api-key:314
-packages/ellamaka-release/test/precommit-hook.test.ts:generic-api-key:194
+# The hook test asserts that a fake secret blocks a commit, so it commits one on
+# purpose. The file is renamed and its fixture line moves with the test body;
+# keep the fingerprint in step with it.
+packages/ellamaka-release/test/precommit-hook-integration.test.ts:generic-api-key:510

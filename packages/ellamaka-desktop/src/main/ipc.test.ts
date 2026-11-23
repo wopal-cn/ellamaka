@@ -7,7 +7,12 @@
  * IPC channel name mapping is statically defined in ipc.ts and not in test scope.
  */
 import { describe, expect, test, beforeEach } from "bun:test"
-import { SidecarSupervisor, type SidecarRuntimeState, type SidecarSpawnResult, type SidecarSpawnFactory } from "./sidecar-supervisor"
+import {
+  SidecarSupervisor,
+  type SidecarRuntimeState,
+  type SidecarSpawnResult,
+  type SidecarSpawnFactory,
+} from "./sidecar-supervisor"
 import { IPC_HANDLE_CHANNELS, IPC_EVENT_CHANNELS } from "./ipc-channels"
 
 // ── Test Helpers ──────────────────────────────────────────────────────────
@@ -19,7 +24,10 @@ function createSpawnResult(): {
 } {
   let healthResolve!: () => void
   let healthReject!: (error: Error) => void
-  const healthWait = new Promise<void>((res, rej) => { healthResolve = res; healthReject = rej })
+  const healthWait = new Promise<void>((res, rej) => {
+    healthResolve = res
+    healthReject = rej
+  })
   return {
     result: { listener: { stop: async () => {} }, health: { wait: healthWait } },
     passHealth: () => healthResolve(),
@@ -33,12 +41,26 @@ class MockSpawner {
   private pendingReject: ((error: Error) => void) | undefined
   callCount = 0
   spawn: SidecarSpawnFactory = async (_h, _p, _pw, options) => {
-    this.callCount++; this.onExitCallback = options.onExit
-    return new Promise<SidecarSpawnResult>((resolve, reject) => { this.pendingResolve = resolve; this.pendingReject = reject })
+    this.callCount++
+    this.onExitCallback = options.onExit
+    return new Promise<SidecarSpawnResult>((resolve, reject) => {
+      this.pendingResolve = resolve
+      this.pendingReject = reject
+    })
   }
-  resolve(result: SidecarSpawnResult) { this.pendingResolve?.(result); this.pendingResolve = undefined; this.pendingReject = undefined }
-  reject(error: Error) { this.pendingReject?.(error); this.pendingResolve = undefined; this.pendingReject = undefined }
-  triggerExit(code: number) { this.onExitCallback?.(code) }
+  resolve(result: SidecarSpawnResult) {
+    this.pendingResolve?.(result)
+    this.pendingResolve = undefined
+    this.pendingReject = undefined
+  }
+  reject(error: Error) {
+    this.pendingReject?.(error)
+    this.pendingResolve = undefined
+    this.pendingReject = undefined
+  }
+  triggerExit(code: number) {
+    this.onExitCallback?.(code)
+  }
 }
 
 function createSupervisor(mockSpawner: MockSpawner) {
@@ -46,12 +68,18 @@ function createSupervisor(mockSpawner: MockSpawner) {
     spawn: mockSpawner.spawn,
     setTimeout: ((cb: () => void, ms: number) => setTimeout(cb, ms)) as typeof setTimeout,
     clearTimeout: ((id: any) => clearTimeout(id)) as typeof clearTimeout,
-    hostname: "127.0.0.1", port: 12345, password: "test-password",
-    backoffMs: [10, 20, 30], maxAttempts: 3, stableWindowMs: 100,
+    hostname: "127.0.0.1",
+    port: 12345,
+    password: "test-password",
+    backoffMs: [10, 20, 30],
+    maxAttempts: 3,
+    stableWindowMs: 100,
   })
 }
 
-function tick(ms = 5): Promise<void> { return new Promise((r) => setTimeout(r, ms)) }
+function tick(ms = 5): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -74,7 +102,8 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
 
     test("reflects state changes after start", async () => {
       const getSidecarState = () => supervisor.getState()
-      supervisor.start(); await tick()
+      void supervisor.start()
+      await tick()
       expect(getSidecarState().status).toBe("starting")
     })
   })
@@ -82,13 +111,20 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
   describe("restartSidecar", () => {
     test("calls supervisor.restart('user')", async () => {
       const restartSidecar = () => supervisor.restart("user")
-      supervisor.start(); await tick()
-      const r1 = createSpawnResult(); mockSpawner.resolve(r1.result); r1.passHealth(); await tick()
+      void supervisor.start()
+      await tick()
+      const r1 = createSpawnResult()
+      mockSpawner.resolve(r1.result)
+      r1.passHealth()
+      await tick()
       expect(supervisor.getState().status).toBe("ready")
 
-      const p = restartSidecar(); await tick()
+      const p = restartSidecar()
+      await tick()
       expect(supervisor.getState().status).toBe("starting")
-      const r2 = createSpawnResult(); mockSpawner.resolve(r2.result); r2.passHealth()
+      const r2 = createSpawnResult()
+      mockSpawner.resolve(r2.result)
+      r2.passHealth()
       await p
       expect(supervisor.getState().status).toBe("ready")
       expect(supervisor.getState().generation).toBe(2)
@@ -100,12 +136,15 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
       const received: SidecarRuntimeState[] = []
       const subscribeToSidecarState = (listener: (state: SidecarRuntimeState) => void) => supervisor.subscribe(listener)
       const unsub = subscribeToSidecarState((state) => received.push(state))
-      supervisor.start(); await tick()
+      void supervisor.start()
+      await tick()
       expect(received.length).toBeGreaterThanOrEqual(1)
       expect(received[0].status).toBe("starting")
       unsub()
       const countAfterUnsub = received.length
-      const r1 = createSpawnResult(); mockSpawner.resolve(r1.result); r1.passHealth()
+      const r1 = createSpawnResult()
+      mockSpawner.resolve(r1.result)
+      r1.passHealth()
       expect(received.length).toBe(countAfterUnsub)
     })
 
@@ -114,11 +153,14 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
       const subscribeToSidecarState = (listener: (state: SidecarRuntimeState) => void) => supervisor.subscribe(listener)
       const unsub = subscribeToSidecarState((state) => received.push(state))
       expect(received.length).toBe(0)
-      supervisor.start(); await tick()
+      void supervisor.start()
+      await tick()
       expect(received.length).toBeGreaterThanOrEqual(1)
       unsub()
       const countAfterUnsub = received.length
-      const r1 = createSpawnResult(); mockSpawner.resolve(r1.result); r1.passHealth()
+      const r1 = createSpawnResult()
+      mockSpawner.resolve(r1.result)
+      r1.passHealth()
       expect(received.length).toBe(countAfterUnsub)
     })
   })
@@ -128,10 +170,18 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
       const awaitInitialization = async (sendStep: (step: any) => void) => {
         sendStep({ phase: "server_waiting" })
         const state = await supervisor.waitForReady()
-        return { url: state.connection?.url ?? "", username: state.connection?.username ?? null, password: state.connection?.password ?? null }
+        return {
+          url: state.connection?.url ?? "",
+          username: state.connection?.username ?? null,
+          password: state.connection?.password ?? null,
+        }
       }
-      supervisor.start(); await tick()
-      const r1 = createSpawnResult(); mockSpawner.resolve(r1.result); r1.passHealth(); await tick()
+      void supervisor.start()
+      await tick()
+      const r1 = createSpawnResult()
+      mockSpawner.resolve(r1.result)
+      r1.passHealth()
+      await tick()
       const result = await awaitInitialization(() => {})
       expect(result.url).toBe("http://127.0.0.1:12345")
       expect(result.username).toBe("ellamaka")
@@ -140,13 +190,23 @@ describe("IPC Deps contract (integration with SidecarSupervisor)", () => {
 
     test("rejects when supervisor is failed", async () => {
       const awaitInitialization = async () => {
-        try { await supervisor.waitForReady() } catch (e) { throw e }
+        try {
+          await supervisor.waitForReady()
+        } catch (e) {
+          throw e
+        }
         return { url: "", username: null, password: null }
       }
-      supervisor.start(); await tick()
-      mockSpawner.reject(new Error("fail")); await tick()
-      await tick(20); mockSpawner.reject(new Error("fail again")); await tick()
-      await tick(40); mockSpawner.reject(new Error("fail again")); await tick()
+      void supervisor.start()
+      await tick()
+      mockSpawner.reject(new Error("fail"))
+      await tick()
+      await tick(20)
+      mockSpawner.reject(new Error("fail again"))
+      await tick()
+      await tick(40)
+      mockSpawner.reject(new Error("fail again"))
+      await tick()
       expect(supervisor.getState().status).toBe("failed")
       await expect(awaitInitialization()).rejects.toThrow()
     })
@@ -200,12 +260,7 @@ describe("IPC channel registry (unregister coverage)", () => {
     "save-recent-model",
   ])
 
-  const EXPECTED_EVENT_CHANNELS = new Set([
-    "loading-window-complete",
-    "open-link",
-    "show-notification",
-    "relaunch",
-  ])
+  const EXPECTED_EVENT_CHANNELS = new Set(["loading-window-complete", "open-link", "show-notification", "relaunch"])
 
   test("IPC_HANDLE_CHANNELS covers every handle channel registered in ipc.ts", () => {
     const actual = new Set(IPC_HANDLE_CHANNELS as readonly string[])

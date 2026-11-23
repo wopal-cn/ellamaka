@@ -57,9 +57,9 @@ export function PanelHeader(props: {
   const handleClose = () => {
     const spacePath = props.spacePath
     if (spacePath === undefined || spacePath === null) return
-    void actions.closePanel({ scope: panelScope(), panelID: props.panel.id }).catch((error) =>
-      reportWorkbenchError("close panel", error),
-    )
+    void actions
+      .closePanel({ scope: panelScope(), panelID: props.panel.id })
+      .catch((error) => reportWorkbenchError("close panel", error))
   }
 
   return (
@@ -101,8 +101,12 @@ export function PanelHeader(props: {
           style={{ color: hasOpenSplitPty() ? "var(--v2-icon-icon-accent)" : undefined }}
           state={props.panel.splitTerminal ? "pressed" : undefined}
           icon={<IconV2 name="terminal" />}
-          aria-label={t(props.panel.splitTerminal ? "workbench.panel.splitTerminal.hide" : "workbench.panel.splitTerminal.show")}
-          title={t(props.panel.splitTerminal ? "workbench.panel.splitTerminal.hide" : "workbench.panel.splitTerminal.show")}
+          aria-label={t(
+            props.panel.splitTerminal ? "workbench.panel.splitTerminal.hide" : "workbench.panel.splitTerminal.show",
+          )}
+          title={t(
+            props.panel.splitTerminal ? "workbench.panel.splitTerminal.hide" : "workbench.panel.splitTerminal.show",
+          )}
           onClick={(e: MouseEvent) => {
             e.stopPropagation()
             e.preventDefault()
@@ -129,8 +133,10 @@ export function PanelHeader(props: {
                     classList={{
                       "text-v2-text-text-faint cursor-not-allowed": view.disabled,
                       "cursor-pointer": !view.disabled,
-                      "bg-v2-overlay-simple-overlay-pressed text-v2-text-text-strong font-semibold shadow-xs": isActiveView() && !view.disabled,
-                      "text-v2-text-text-muted hover:text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover font-normal": !isActiveView() && !view.disabled,
+                      "bg-v2-overlay-simple-overlay-pressed text-v2-text-text-strong font-semibold shadow-xs":
+                        isActiveView() && !view.disabled,
+                      "text-v2-text-text-muted hover:text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover font-normal":
+                        !isActiveView() && !view.disabled,
                     }}
                     disabled={view.disabled}
                     onClick={(e) => {
@@ -167,8 +173,10 @@ export function PanelHeader(props: {
               classList={{
                 "text-v2-text-text-faint cursor-not-allowed": view.disabled,
                 "cursor-pointer": !view.disabled,
-                "bg-v2-overlay-simple-overlay-pressed text-v2-text-text-strong font-semibold shadow-xs": isActiveView() && !view.disabled,
-                "text-v2-text-text-muted hover:text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover font-normal": !isActiveView() && !view.disabled,
+                "bg-v2-overlay-simple-overlay-pressed text-v2-text-text-strong font-semibold shadow-xs":
+                  isActiveView() && !view.disabled,
+                "text-v2-text-text-muted hover:text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover font-normal":
+                  !isActiveView() && !view.disabled,
               }}
               disabled={view.disabled}
               onClick={(e) => {
@@ -177,7 +185,9 @@ export function PanelHeader(props: {
                 wb.setPanelViewMode(spacePath, props.panel.id, view.id)
               }}
             >
-              <span class={view.hasOpenTui && !isActiveView() ? "text-v2-icon-icon-accent" : undefined}>{view.label}</span>
+              <span class={view.hasOpenTui && !isActiveView() ? "text-v2-icon-icon-accent" : undefined}>
+                {view.label}
+              </span>
             </button>
           )
         }}

@@ -25,7 +25,9 @@ export function useWorkbenchSurface(): SurfaceContextValue {
 }
 
 export const WorkbenchSurfaceProvider: ParentComponent<SurfaceContextValue> = (props) => (
-  <WorkbenchSurfaceContext.Provider value={{ hasTabs: props.hasTabs, visible: props.visible, toggleVisibility: props.toggleVisibility }}>
+  <WorkbenchSurfaceContext.Provider
+    value={{ hasTabs: props.hasTabs, visible: props.visible, toggleVisibility: props.toggleVisibility }}
+  >
     {props.children}
   </WorkbenchSurfaceContext.Provider>
 )

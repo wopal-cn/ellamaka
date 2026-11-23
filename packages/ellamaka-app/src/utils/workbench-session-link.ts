@@ -29,9 +29,7 @@ export type ParsedWorkbenchSessionLink = {
  *
  * Accepts both `?session=id` and `session=id` forms.
  */
-export function parseWorkbenchSessionLink(
-  search: string,
-): ParsedWorkbenchSessionLink | undefined {
+export function parseWorkbenchSessionLink(search: string): ParsedWorkbenchSessionLink | undefined {
   const params = new URLSearchParams(search)
   const values = params.getAll(WORKBENCH_SESSION_LINK_PARAM)
   if (values.length !== 1) return undefined

@@ -319,7 +319,6 @@ function createFakeFork() {
     })
     // UtilityProcess cannot be constructed outside Electron; the fake implements
     // exactly the members the spawn path uses.
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
     return child as ReturnType<SidecarFork>
   }
 

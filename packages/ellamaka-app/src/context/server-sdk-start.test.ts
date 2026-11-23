@@ -5,7 +5,18 @@ test("starts Global Events without a paint frame and suppresses a start after cl
   let callback: () => void = () => {}
   let cancelled = 0
   let starts = 0
-  const cancel = scheduleServerSdkEventStart(async () => { starts += 1 }, (fn) => { callback = fn; return 1 }, () => { cancelled += 1 })
+  const cancel = scheduleServerSdkEventStart(
+    async () => {
+      starts += 1
+    },
+    (fn) => {
+      callback = fn
+      return 1
+    },
+    () => {
+      cancelled += 1
+    },
+  )
   callback()
   expect(starts).toBe(1)
   cancel()

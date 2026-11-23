@@ -391,7 +391,9 @@ export class SidecarSupervisor {
 
     this.retryTimer = this.deps.setTimeout(() => {
       this.retryTimer = undefined
-      this.enqueue(() => this.doRetry())
+      // Fire-and-forget: the retry chain is owned by the supervisor queue, and
+      // doRetry() reports its own failures through doLost().
+      void this.enqueue(() => this.doRetry())
     }, delay)
   }
 

@@ -57,7 +57,9 @@ export function WorkbenchPromptRegistryProvider(props: ParentProps) {
     },
   }
 
-  return <WorkbenchPromptRegistryContext.Provider value={value}>{props.children}</WorkbenchPromptRegistryContext.Provider>
+  return (
+    <WorkbenchPromptRegistryContext.Provider value={value}>{props.children}</WorkbenchPromptRegistryContext.Provider>
+  )
 }
 
 export function useWorkbenchPromptRegistry() {

@@ -79,7 +79,8 @@ const api: ElectronAPI = {
     return () => ipcRenderer.removeListener("sidecar-state", handler)
   },
   restartSidecar: () => ipcRenderer.invoke("restart-sidecar"),
-  saveRecentModel: (model: { providerID: string; modelID: string } | string) => ipcRenderer.invoke("save-recent-model", model),
+  saveRecentModel: (model: { providerID: string; modelID: string } | string) =>
+    ipcRenderer.invoke("save-recent-model", model),
 }
 
 contextBridge.exposeInMainWorld("api", api)

@@ -9,10 +9,7 @@
         { "name": "v1.15.13-4", "sha": "385cb694419f98103af0e8fc6187ddcbcbb6eecb" },
         { "name": "v1.15.13-3", "sha": "385cb694419f98103af0e8fc6187ddcbcbb6eecb" }
       ],
-      "versionedPaths": [
-        "ellamaka/v1.15.13-4",
-        "ellamaka/v1.15.13-3"
-      ],
+      "versionedPaths": ["ellamaka/v1.15.13-4", "ellamaka/v1.15.13-3"],
       "manifests": [
         {
           "version": "1.15.13-4",

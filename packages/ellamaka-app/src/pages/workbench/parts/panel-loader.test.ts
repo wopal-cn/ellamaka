@@ -16,11 +16,9 @@ describe("directoryLabel", () => {
   })
 
   test("labels nested locations by their relative directory", () => {
-    expect(
-      directoryLabel(
-        location({ kind: "project", relativeDirectory: "projects/ellamaka" }),
-      ),
-    ).toBe("projects/ellamaka")
+    expect(directoryLabel(location({ kind: "project", relativeDirectory: "projects/ellamaka" }))).toBe(
+      "projects/ellamaka",
+    )
   })
 
   test("falls back to the full path when the path has no parent", () => {

@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import { SqlClient } from "effect/unstable/sql/SqlClient"

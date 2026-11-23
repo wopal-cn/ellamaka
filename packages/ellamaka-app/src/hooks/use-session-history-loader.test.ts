@@ -70,12 +70,12 @@ describe("useSessionHistoryLoader", () => {
         historyLoading: () => loading,
         loadMore: loadMoreFn,
         userScrolled: () => true,
-        scroller: () => ({ scrollTop: 0 } as HTMLDivElement),
+        scroller: () => ({ scrollTop: 0 }) as HTMLDivElement,
       })
 
       // loadAndReveal calls fetchOlderMessages which checks historyLoading()
       // synchronously and returns early — no async needed.
-      hook.loadAndReveal()
+      void hook.loadAndReveal()
       dispose()
     })
 
@@ -104,10 +104,10 @@ describe("useSessionHistoryLoader", () => {
         historyLoading: () => loading,
         loadMore: loadMoreFn,
         userScrolled: () => true,
-        scroller: () => ({ scrollTop: 0 } as HTMLDivElement),
+        scroller: () => ({ scrollTop: 0 }) as HTMLDivElement,
       })
 
-      hook.loadAndReveal()
+      void hook.loadAndReveal()
       dispose()
     })
 

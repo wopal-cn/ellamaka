@@ -71,11 +71,7 @@ export interface DesktopPnpmHandle {
 
 /** The injectable install-worker service (upstream DesktopPnpmLike subset). */
 export interface DesktopPnpmService {
-  runPlugin(
-    args: readonly string[],
-    invokingDir: string,
-    signal?: AbortSignal,
-  ): DesktopPnpmHandle
+  runPlugin(args: readonly string[], invokingDir: string, signal?: AbortSignal): DesktopPnpmHandle
 }
 
 /** The two services the market probes before choosing its install path. */
@@ -151,28 +147,26 @@ export function createDesktopWorker(options: CreateDesktopWorkerOptions): Deskto
     const onAbort = (): void => cancel()
     signal?.addEventListener("abort", onAbort, { once: true })
 
-    const done = new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>(
-      (resolve) => {
-        child.on("error", (error) => {
-          // A binary that never launched (ENOENT) surfaces here. Mirror the
-          // market's exit-127 contract and carry the locating detail on stderr.
-          settled = true
-          signal?.removeEventListener("abort", onAbort)
-          stderr.write(`ellamaka binary failed to start: ${error.message}
+    const done = new Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+      child.on("error", (error) => {
+        // A binary that never launched (ENOENT) surfaces here. Mirror the
+        // market's exit-127 contract and carry the locating detail on stderr.
+        settled = true
+        signal?.removeEventListener("abort", onAbort)
+        stderr.write(`ellamaka binary failed to start: ${error.message}
 `)
-          stderr.end()
-          stdout.end()
-          resolve({ exitCode: 127, signal: null })
-        })
-        child.on("close", (code, sig) => {
-          settled = true
-          signal?.removeEventListener("abort", onAbort)
-          stdout.end()
-          stderr.end()
-          resolve({ exitCode: code, signal: sig ?? null })
-        })
-      },
-    )
+        stderr.end()
+        stdout.end()
+        resolve({ exitCode: 127, signal: null })
+      })
+      child.on("close", (code, sig) => {
+        settled = true
+        signal?.removeEventListener("abort", onAbort)
+        stdout.end()
+        stderr.end()
+        resolve({ exitCode: code, signal: sig ?? null })
+      })
+    })
 
     return { stdout, stderr, done, cancel }
   }

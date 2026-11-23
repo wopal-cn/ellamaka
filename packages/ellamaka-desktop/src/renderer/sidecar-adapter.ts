@@ -16,10 +16,7 @@ export type SidecarAdapterAction =
  * @param state - Current sidecar state from Main process
  * @param previousGeneration - The last known generation number (0 if none)
  */
-export function mapSidecarStateToAction(
-  state: SidecarRuntimeState,
-  previousGeneration: number,
-): SidecarAdapterAction {
+export function mapSidecarStateToAction(state: SidecarRuntimeState, previousGeneration: number): SidecarAdapterAction {
   switch (state.status) {
     case "starting":
       return { action: "wait" }

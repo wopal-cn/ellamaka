@@ -7,6 +7,7 @@ import * as os from "node:os"
 import * as path from "node:path"
 import { HttpRecorder } from "../src"
 import { redactedErrorRequest } from "../src/effect"
+import * as matching from "../src/matching"
 import type { Interaction } from "../src/schema"
 
 const seedCassetteDirectory = (directory: string, name: string, interactions: ReadonlyArray<Interaction>) =>
@@ -436,5 +437,20 @@ describe("http-recorder", () => {
         ),
       ),
     )
+  })
+})
+
+describe("safeText diagnostics", () => {
+  test("serializes plain payloads as JSON", () => {
+    expect(matching.safeText({ a: 1 })).toBe('{"a":1}')
+  })
+
+  test("keeps String() text for values with no JSON form", () => {
+    expect(matching.safeText(undefined)).toBe("undefined")
+    const symbol = Symbol("marker")
+    expect(matching.safeText(symbol)).toBe(symbol.toString())
+    const fn = () => "x"
+    expect(matching.safeText(fn)).toBe(String(fn))
+    expect(matching.safeText({ toJSON: () => undefined })).toBe("[unserializable value]")
   })
 })

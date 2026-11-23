@@ -16,15 +16,15 @@ description: ellamaka-cordis 长期有效的 DSH 桥接、运行时闭包、prof
 
 ellamaka-cordis 是随 Ellamaka CLI 和 Desktop 分发的产品 DSH Bridge。它拥有 DSH import 边界，并负责适配 DSH 与宿主 Server/Runtime。
 
-| 路径 | 职责 |
-|---|---|
-| src/hub.ts | Cordis context 边界和生命周期 |
-| src/dsh-web.ts | 装配 web 与 ellamaka-tools 两个 profile |
+| 路径                         | 职责                                                      |
+| ---------------------------- | --------------------------------------------------------- |
+| src/hub.ts                   | Cordis context 边界和生命周期                             |
+| src/dsh-web.ts               | 装配 web 与 ellamaka-tools 两个 profile                   |
 | src/dsh-virtual-webserver.ts | 在 Ellamaka Server listener 上注册和分发 DSH 路由/upgrade |
-| src/runtime/ | 解析并物化产品运行时闭包 |
-| src/plugins/ | profile 声明、插件组合、安装和运行时更新 |
-| src/log-bridge.ts | 将 Cordis 插件日志接入 Ellamaka 日志系统 |
-| generated/、script/ | 运行时 manifest/lock 生成物及生成器 |
+| src/runtime/                 | 解析并物化产品运行时闭包                                  |
+| src/plugins/                 | profile 声明、插件组合、安装和运行时更新                  |
+| src/log-bridge.ts            | 将 Cordis 插件日志接入 Ellamaka 日志系统                  |
+| generated/、script/          | 运行时 manifest/lock 生成物及生成器                       |
 
 请遵守这些归属事实：
 
@@ -39,15 +39,15 @@ ellamaka-cordis 是随 Ellamaka CLI 和 Desktop 分发的产品 DSH Bridge。它
 
 从 packages/ellamaka-cordis/ 运行。
 
-| Scenario | Command | When |
-|---|---|---|
-| 全量测试 | bun test | 全部 Cordis 测试 |
-| 单元测试 | bun run test:unit | 纯逻辑/模块测试 |
-| 集成测试 | bun run test:integration | 真实 Cordis 装配 |
-| 类型检查 | bun run typecheck | 修改 TypeScript 后 |
-| 重建 manifest | bun script/generate-dsh-runtime-manifest.ts | 闭包输入变化后 |
-| 重建 lock | bun script/generate-dsh-runtime-lock.ts | 闭包输入变化后 |
-| 检查 manifest 漂移 | bun script/generate-dsh-runtime-manifest.ts --check | 交付前 |
+| Scenario           | Command                                             | When               |
+| ------------------ | --------------------------------------------------- | ------------------ |
+| 全量测试           | bun test                                            | 全部 Cordis 测试   |
+| 单元测试           | bun run test:unit                                   | 纯逻辑/模块测试    |
+| 集成测试           | bun run test:integration                            | 真实 Cordis 装配   |
+| 类型检查           | bun run typecheck                                   | 修改 TypeScript 后 |
+| 重建 manifest      | bun script/generate-dsh-runtime-manifest.ts         | 闭包输入变化后     |
+| 重建 lock          | bun script/generate-dsh-runtime-lock.ts             | 闭包输入变化后     |
+| 检查 manifest 漂移 | bun script/generate-dsh-runtime-manifest.ts --check | 交付前             |
 
 ## Implementation Rules
 

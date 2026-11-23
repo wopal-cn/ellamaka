@@ -42,9 +42,7 @@ function revealMock(behavior: (input: RevealSessionInput) => RevealSessionResult
   return { fn, calls }
 }
 
-function baseParams(
-  overrides: Partial<CoordinateWorkbenchSessionLinkParams>,
-): CoordinateWorkbenchSessionLinkParams {
+function baseParams(overrides: Partial<CoordinateWorkbenchSessionLinkParams>): CoordinateWorkbenchSessionLinkParams {
   return {
     sessionID: "ses-1",
     groups: [],

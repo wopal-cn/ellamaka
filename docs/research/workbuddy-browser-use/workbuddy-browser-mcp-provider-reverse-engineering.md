@@ -26,26 +26,26 @@
 
 ### 发布产物身份
 
-| 对象 | 实测身份或位置 | 证据用途 |
-| --- | --- | --- |
-| WorkBuddy Desktop | macOS 5.11.3，`/Applications/WorkBuddy.app` | 内置 IAB 的 Electron 主进程实现 |
-| Electron ASAR | `Contents/Resources/app.asar`，SHA-256 `45965c389b9674ef359fb5fc331a40ca0c0777c8380104f2e9ea8950bced614f` | 锁定所研究的 Desktop 版本 |
-| Desktop JavaScript | ASAR 内 `main/main-bootstrap.js`，1,004,814 字节、595 行，SHA-256 `598ef38edaf23c655dfb3e0dfd119c129de3364d304ebec02cda0c87c350c1cc` | 主要 Desktop 代码分析对象 |
-| Browser Use 插件 | 用户安装缓存 `.workbuddy/plugins/cache/workbuddy-browser-use/browser-use/1.2.2/` | MCP 可执行文件、插件配置和 Skill |
-| 原版 `browser-mcp` | Mach-O ARM64，1,235,712 字节，SHA-256 `4979d59bae493dc1c95d50c800d34c5bfdb6b25426d444600f9eb9646531e022` | MCP 实际行为和原生反编译对象 |
-| 原版 `browser-extension-native-host` | Mach-O ARM64，595,744 字节，SHA-256 `2c72cd983dcd85e69f0a75500cabfd79eea5897fee1da4f44ac3f638368c0c00` | 外部浏览器扩展路径的旁证，非 IAB 必要组件 |
-| 原版 Browser Use Skill | 插件内 `skills/workbuddy-browser-use/SKILL.md` | Agent 使用浏览器的操作约定 |
+| 对象                                 | 实测身份或位置                                                                                                                       | 证据用途                                  |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------- |
+| WorkBuddy Desktop                    | macOS 5.11.3，`/Applications/WorkBuddy.app`                                                                                          | 内置 IAB 的 Electron 主进程实现           |
+| Electron ASAR                        | `Contents/Resources/app.asar`，SHA-256 `45965c389b9674ef359fb5fc331a40ca0c0777c8380104f2e9ea8950bced614f`                            | 锁定所研究的 Desktop 版本                 |
+| Desktop JavaScript                   | ASAR 内 `main/main-bootstrap.js`，1,004,814 字节、595 行，SHA-256 `598ef38edaf23c655dfb3e0dfd119c129de3364d304ebec02cda0c87c350c1cc` | 主要 Desktop 代码分析对象                 |
+| Browser Use 插件                     | 用户安装缓存 `.workbuddy/plugins/cache/workbuddy-browser-use/browser-use/1.2.2/`                                                     | MCP 可执行文件、插件配置和 Skill          |
+| 原版 `browser-mcp`                   | Mach-O ARM64，1,235,712 字节，SHA-256 `4979d59bae493dc1c95d50c800d34c5bfdb6b25426d444600f9eb9646531e022`                             | MCP 实际行为和原生反编译对象              |
+| 原版 `browser-extension-native-host` | Mach-O ARM64，595,744 字节，SHA-256 `2c72cd983dcd85e69f0a75500cabfd79eea5897fee1da4f44ac3f638368c0c00`                               | 外部浏览器扩展路径的旁证，非 IAB 必要组件 |
+| 原版 Browser Use Skill               | 插件内 `skills/workbuddy-browser-use/SKILL.md`                                                                                       | Agent 使用浏览器的操作约定                |
 
 路径均用于**在已安装的本机上定位原始产物**，不表示这些第三方文件属于 Ellamaka 仓库。插件 `.mcp.json` 指向 `${CODEBUDDY_PLUGIN_ROOT}/bin/browser-mcp`，其插件版本为 `1.2.2`；原生 MCP `initialize` 返回的内部服务版本则是 `0.2.1`，两者不是同一个版本号。
 
 ### 本文对证据的用词
 
-| 标记 | 含义 |
-| --- | --- |
-| **实测** | 实际运行二进制或分析工具，获得可观察响应/分析结果 |
-| **静态代码证据** | 在发布产物的 JavaScript、原生字节、函数引用或伪代码中确认存在的实现 |
-| **历史实验** | 前序会话曾测试成功，但未将原始请求/响应记录纳入本次持久化证据 |
-| **推断 / 待验证** | 根据实现结构作出的工程判断，尚不能代表真实端到端行为 |
+| 标记              | 含义                                                                |
+| ----------------- | ------------------------------------------------------------------- |
+| **实测**          | 实际运行二进制或分析工具，获得可观察响应/分析结果                   |
+| **静态代码证据**  | 在发布产物的 JavaScript、原生字节、函数引用或伪代码中确认存在的实现 |
+| **历史实验**      | 前序会话曾测试成功，但未将原始请求/响应记录纳入本次持久化证据       |
+| **推断 / 待验证** | 根据实现结构作出的工程判断，尚不能代表真实端到端行为                |
 
 Ghidra 识别出的函数边界、调用约定和伪代码均可能受 Rust 优化、内联和符号缺失影响；**反编译伪代码不等于原始 Rust 源代码**。
 
@@ -86,16 +86,16 @@ Desktop UI：与浏览器宿主同步标签、可视区域及原生页面视图
 
 以下偏移是 `main/main-bootstrap.js` **解压后 UTF-8 文本中的字符位置**，不是 Mach-O 地址，也不是原始工程源码行号。它们便于在相同 SHA-256 的发布产物中重新定位类定义。
 
-| 类 | 文本偏移 | 静态可见职责 |
-| --- | ---: | --- |
-| `BrowserPageHost` | `441952` | 页面创建、原生视图挂载、尺寸与可见性 |
-| `BrowserManager` | `452317` | 窗口/分组/标签与 Session 管理 |
-| `DomCuaCdp` | `487900` | CDP 附着、目标与 frame 操作 |
-| `DomCua` | `508560` | DOM 可见快照及基于 CDP 的交互 |
-| `BrowserController` | `535506` | 标签认领、授权、操作分派、清理 |
-| `ElectronBrowserRuntime` | `553686` | 创建并保存每个 Session 的 Controller |
-| `BrowserProviderRouter` | `555998` | Socket、握手、Provider 列表、请求/取消 |
-| `BrowserRuntimeHost` | `568698` | 浏览器共享运行时、Session 准备、MCP 启动环境与生命周期 |
+| 类                       | 文本偏移 | 静态可见职责                                           |
+| ------------------------ | -------: | ------------------------------------------------------ |
+| `BrowserPageHost`        | `441952` | 页面创建、原生视图挂载、尺寸与可见性                   |
+| `BrowserManager`         | `452317` | 窗口/分组/标签与 Session 管理                          |
+| `DomCuaCdp`              | `487900` | CDP 附着、目标与 frame 操作                            |
+| `DomCua`                 | `508560` | DOM 可见快照及基于 CDP 的交互                          |
+| `BrowserController`      | `535506` | 标签认领、授权、操作分派、清理                         |
+| `ElectronBrowserRuntime` | `553686` | 创建并保存每个 Session 的 Controller                   |
+| `BrowserProviderRouter`  | `555998` | Socket、握手、Provider 列表、请求/取消                 |
+| `BrowserRuntimeHost`     | `568698` | 浏览器共享运行时、Session 准备、MCP 启动环境与生命周期 |
 
 能够直接观察到的关键实现包括：
 
@@ -111,17 +111,17 @@ Desktop UI：与浏览器宿主同步标签、可视区域及原生页面视图
 
 同一发布版代码中的 `BrowserProviderRouter` 包含下列值，均属于**原版 Desktop 的静态合同观察**，不自动成为 Ellamaka 的设计约束：
 
-| 合同项 | 原版代码观察 |
-| --- | --- |
-| `PROTOCOL_VERSION` | `1` |
-| `MAX_FRAME_BYTES` | `16,777,216`（16 MiB） |
-| `MAX_IN_FLIGHT` | `64` |
-| 默认 heartbeat 超时 | `15,000 ms` |
-| 默认握手超时 | `5,000 ms` |
-| 默认 Provider 类型、名称 | `desktop` / `WorkBuddy Browser` |
-| `tab_model` | `multi_tab` |
-| 握手声明上限 | `max_browsers: 1`、`max_tabs: 256` |
-| 本地连接校验 | 存在按宿主系统选择的同用户 peer 检查逻辑 |
+| 合同项                   | 原版代码观察                             |
+| ------------------------ | ---------------------------------------- |
+| `PROTOCOL_VERSION`       | `1`                                      |
+| `MAX_FRAME_BYTES`        | `16,777,216`（16 MiB）                   |
+| `MAX_IN_FLIGHT`          | `64`                                     |
+| 默认 heartbeat 超时      | `15,000 ms`                              |
+| 默认握手超时             | `5,000 ms`                               |
+| 默认 Provider 类型、名称 | `desktop` / `WorkBuddy Browser`          |
+| `tab_model`              | `multi_tab`                              |
+| 握手声明上限             | `max_browsers: 1`、`max_tabs: 256`       |
+| 本地连接校验             | 存在按宿主系统选择的同用户 peer 检查逻辑 |
 
 这些上限说明原版协议的设计边界，不说明所有边界都经过动态压力测试。安全性也不能只从某一段自动批准逻辑推断：标签权限、Session 认领、peer 校验、运行时归属及用户确认边界均需要分别复验。
 
@@ -134,13 +134,13 @@ Desktop UI：与浏览器宿主同步标签、可视区域及原生页面视图
 - `serverInfo.name = browser-mcp`，`serverInfo.version = 0.2.1`。
 - **32 个工具**及实际 `inputSchema`。精确的参数、类型、必填字段和嵌套结构保存在相邻 JSON 附件中；下表只做分组索引。
 
-| 分组 | 工具数 | MCP 工具 |
-| --- | ---: | --- |
-| 浏览器发现 | 2 | `browsers_list`、`browser_info` |
-| 标签与用户页面 | 8 | `tabs_list`、`tabs_selected`、`tabs_get`、`tabs_new`、`tabs_claim`、`tabs_close`、`tabs_finalize`、`user_open_tabs` |
-| 页面级操作 | 8 | `tab_url`、`tab_title`、`tab_goto`、`tab_back`、`tab_forward`、`tab_reload`、`tab_focus`、`tab_screenshot` |
-| 坐标 CUA | 8 | `cua_click`、`cua_double_click`、`cua_move`、`cua_drag`、`cua_scroll`、`cua_keypress`、`cua_type`、`cua_execute` |
-| DOM CUA | 6 | `dom_cua_get_visible_dom`、`dom_cua_click`、`dom_cua_double_click`、`dom_cua_scroll`、`dom_cua_keypress`、`dom_cua_type` |
+| 分组           | 工具数 | MCP 工具                                                                                                                 |
+| -------------- | -----: | ------------------------------------------------------------------------------------------------------------------------ |
+| 浏览器发现     |      2 | `browsers_list`、`browser_info`                                                                                          |
+| 标签与用户页面 |      8 | `tabs_list`、`tabs_selected`、`tabs_get`、`tabs_new`、`tabs_claim`、`tabs_close`、`tabs_finalize`、`user_open_tabs`      |
+| 页面级操作     |      8 | `tab_url`、`tab_title`、`tab_goto`、`tab_back`、`tab_forward`、`tab_reload`、`tab_focus`、`tab_screenshot`               |
+| 坐标 CUA       |      8 | `cua_click`、`cua_double_click`、`cua_move`、`cua_drag`、`cua_scroll`、`cua_keypress`、`cua_type`、`cua_execute`         |
+| DOM CUA        |      6 | `dom_cua_get_visible_dom`、`dom_cua_click`、`dom_cua_double_click`、`dom_cua_scroll`、`dom_cua_keypress`、`dom_cua_type` |
 
 **区分两层命名**：`tabs_new` 是 Agent 可见的 MCP Tool；`tabs.new` 是 Provider 内部方法名。两者不是同一个接口；其他工具也需以真实请求/响应确认映射和参数转换。
 
@@ -152,27 +152,27 @@ Desktop UI：与浏览器宿主同步标签、可视区域及原生页面视图
 
 分析结果：
 
-| 项目 | 实测值 |
-| --- | ---: |
-| Ghidra 识别函数 | 1,780 |
-| 非自动命名的函数 | 508（含运行库；不是业务函数数） |
-| 定向检索的字符串命中 | 29 |
-| 对应的代码引用 | 62 |
-| 按名称/引用筛选的候选函数 | 13 |
-| 目标函数反编译 | 12 成功、1 超时 |
+| 项目                      |                          实测值 |
+| ------------------------- | ------------------------------: |
+| Ghidra 识别函数           |                           1,780 |
+| 非自动命名的函数          | 508（含运行库；不是业务函数数） |
+| 定向检索的字符串命中      |                              29 |
+| 对应的代码引用            |                              62 |
+| 按名称/引用筛选的候选函数 |                              13 |
+| 目标函数反编译            |                 12 成功、1 超时 |
 
 主要交叉引用索引（地址为 **Mach-O 在 Ghidra 中的虚拟地址**）：
 
-| 函数入口 | 静态引用的关键标识 | 能支持的判断 |
-| --- | --- | --- |
-| `0x100024e68` | `session_hello`、`BROWSER_MCP_SESSION_ID` | 涉及会话握手/身份处理 |
-| `0x100023ab8` | `BROWSER_MCP_PROVIDER_ENDPOINT`、`BROWSER_MCP_SESSION_ID` | 涉及启动环境读取 |
-| `0x100026a1c` | `providers_list` | 涉及 Provider 发现/结果处理 |
-| `0x10002f014` | `provider_invoke` | 涉及向 Provider 请求操作 |
-| `0x100028444` | `provider_cancel` | 涉及请求取消 |
-| `0x100031310` | `capability.negotiate`、`tabs.new`、`tab.goto`、`dom_cua.click` 等 | 涉及工具与内部方法分派；**首次反编译超时** |
-| `0x1000621ec` | `protocol_mismatch`、`host_restarted`、`browser_not_found`、`stale_tab` 等 | 涉及错误类型处理 |
-| `0x10006a97c` | `provider_directory_in_root` | 可读命名的协议辅助函数，已生成伪代码 |
+| 函数入口      | 静态引用的关键标识                                                         | 能支持的判断                               |
+| ------------- | -------------------------------------------------------------------------- | ------------------------------------------ |
+| `0x100024e68` | `session_hello`、`BROWSER_MCP_SESSION_ID`                                  | 涉及会话握手/身份处理                      |
+| `0x100023ab8` | `BROWSER_MCP_PROVIDER_ENDPOINT`、`BROWSER_MCP_SESSION_ID`                  | 涉及启动环境读取                           |
+| `0x100026a1c` | `providers_list`                                                           | 涉及 Provider 发现/结果处理                |
+| `0x10002f014` | `provider_invoke`                                                          | 涉及向 Provider 请求操作                   |
+| `0x100028444` | `provider_cancel`                                                          | 涉及请求取消                               |
+| `0x100031310` | `capability.negotiate`、`tabs.new`、`tab.goto`、`dom_cua.click` 等         | 涉及工具与内部方法分派；**首次反编译超时** |
+| `0x1000621ec` | `protocol_mismatch`、`host_restarted`、`browser_not_found`、`stale_tab` 等 | 涉及错误类型处理                           |
+| `0x10006a97c` | `provider_directory_in_root`                                               | 可读命名的协议辅助函数，已生成伪代码       |
 
 “引用某个字符串”证明函数接触过该标识，**不等于函数内部所有分支和执行语义已经被证明**。尤其是 `0x100031310` 超时，尚不能声称已完整还原 32 工具的分派算法。
 
@@ -241,32 +241,32 @@ Agent / 我们自己的 Browser Use Skill 约定
 
 ## 两条路径的现阶段比较
 
-| 维度 | 路径 A：原版 MCP + 自建 Provider | 路径 B：自建 MCP + 自建 Provider |
-| --- | --- | --- |
-| 技术可行性 | 高，已有部分模拟 Provider 实验 | 高，接口和关键业务入口已可研究 |
-| 首个真实浏览器原型 | 预计所需工作较少 | 需先补充 MCP 工具层 |
-| 原版 MCP 工具一致性 | 二进制天然一致，Provider 仍需对齐 | 必须按行为验证 |
-| 内部协议 | 要兼容第三方协议 | 可以自主制定 |
-| 跨平台与后续升级 | 受第三方二进制限制 | 实现可自主控制 |
-| 版权与商业发布 | 原版二进制及 Skill 需要授权确认 | 适合独立实现，但仍需规范处理第三方材料 |
-| 当前最大技术未知 | 32 工具的真实浏览器集成与异常恢复 | 输出/错误/取消语义的完整合同与实现工作量 |
+| 维度                | 路径 A：原版 MCP + 自建 Provider  | 路径 B：自建 MCP + 自建 Provider         |
+| ------------------- | --------------------------------- | ---------------------------------------- |
+| 技术可行性          | 高，已有部分模拟 Provider 实验    | 高，接口和关键业务入口已可研究           |
+| 首个真实浏览器原型  | 预计所需工作较少                  | 需先补充 MCP 工具层                      |
+| 原版 MCP 工具一致性 | 二进制天然一致，Provider 仍需对齐 | 必须按行为验证                           |
+| 内部协议            | 要兼容第三方协议                  | 可以自主制定                             |
+| 跨平台与后续升级    | 受第三方二进制限制                | 实现可自主控制                           |
+| 版权与商业发布      | 原版二进制及 Skill 需要授权确认   | 适合独立实现，但仍需规范处理第三方材料   |
+| 当前最大技术未知    | 32 工具的真实浏览器集成与异常恢复 | 输出/错误/取消语义的完整合同与实现工作量 |
 
 **没有作出 A 或 B 的最终选择，也没有批准任何产品架构变更。** 两条路径可用同一套外部行为测试逐步比较。尤其“稳定性”必须通过真实浏览器运行、长期会话、竞态和异常恢复来验证，而不能从原版程序存在或伪代码能生成直接推出。
 
 ## 后续研究的验证清单
 
-| 验证事项 | 当前状态 | 为什么需要 |
-| --- | --- | --- |
-| 固定版本、产物 SHA-256、32 工具输入 Schema | **已实测并持久化** | 让后续研究复用相同基线 |
-| Desktop JavaScript 主要模块与启动调用关系 | **已完成静态定位** | 指导 Provider 最小实现边界 |
-| Provider 握手与 `tabs.new` 的模拟实验 | **历史实验，缺持久报文** | 下次复验协议兼容并归档准确结果 |
-| 原版 MCP → 自建真实页面 → 用户可见操作 | **未验证** | 路径 A 的关键集成证据 |
-| DOM CUA、坐标 CUA、截图、批处理 | **未做全工具实测** | 验证 32 工具而非仅工具列表 |
-| 会话关闭、标签保留、用户接管、多窗口 | **未验证** | 确认所有权与 Process 生命周期 |
-| 错误、取消、超时、断线、重连、并发 | **未验证** | 稳定性的主要风险 |
-| `0x100031310` 分派函数更精细的代码恢复 | **首次超时** | 路径 B 的高保真行为研究 |
-| Windows/Linux 的二进制或自建运行时 | **未验证** | 跨平台可实施性 |
-| 原版二进制和 Skill 的使用/重分发许可 | **未确认** | 产品化法律边界 |
+| 验证事项                                   | 当前状态                 | 为什么需要                     |
+| ------------------------------------------ | ------------------------ | ------------------------------ |
+| 固定版本、产物 SHA-256、32 工具输入 Schema | **已实测并持久化**       | 让后续研究复用相同基线         |
+| Desktop JavaScript 主要模块与启动调用关系  | **已完成静态定位**       | 指导 Provider 最小实现边界     |
+| Provider 握手与 `tabs.new` 的模拟实验      | **历史实验，缺持久报文** | 下次复验协议兼容并归档准确结果 |
+| 原版 MCP → 自建真实页面 → 用户可见操作     | **未验证**               | 路径 A 的关键集成证据          |
+| DOM CUA、坐标 CUA、截图、批处理            | **未做全工具实测**       | 验证 32 工具而非仅工具列表     |
+| 会话关闭、标签保留、用户接管、多窗口       | **未验证**               | 确认所有权与 Process 生命周期  |
+| 错误、取消、超时、断线、重连、并发         | **未验证**               | 稳定性的主要风险               |
+| `0x100031310` 分派函数更精细的代码恢复     | **首次超时**             | 路径 B 的高保真行为研究        |
+| Windows/Linux 的二进制或自建运行时         | **未验证**               | 跨平台可实施性                 |
+| 原版二进制和 Skill 的使用/重分发许可       | **未确认**               | 产品化法律边界                 |
 
 这张清单是**研究问题索引**，不是实施 Plan 或既定选型。下一次可以优先拿真实浏览器打通最小调用闭环，再针对失败部分定向分析或反编译，避免无目的地还原整份二进制。
 

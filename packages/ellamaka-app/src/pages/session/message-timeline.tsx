@@ -546,7 +546,9 @@ export function MessageTimeline(props: {
       if (isSelectionInsideList()) {
         bottomAnchorFrames -= 1
       } else {
-        bottomAnchorFrames = working() ? Math.min(bottomAnchorMaxFrames, bottomAnchorFrames + 4) : bottomAnchorFrames - 1
+        bottomAnchorFrames = working()
+          ? Math.min(bottomAnchorMaxFrames, bottomAnchorFrames + 4)
+          : bottomAnchorFrames - 1
       }
       if (bottomAnchorFrames <= 0) return
       bottomAnchorFrame = requestAnimationFrame(tick)

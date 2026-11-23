@@ -79,23 +79,23 @@ Workbench Renderer 同时消费公开 Platform client 与 app-private client：�
 
 #### API Ownership
 
-| 能力 | Owner / contract | Workbench 用法 |
-| --- | --- | --- |
-| Session 状态与 metadata | Runtime public API | 构建会话投影、通知和运行状态 |
-| Space registry/projects/files/search | WopalSpace public API | 构建 Space 导航、文件树与创建候选 |
-| Session Tree | App BFF private API | 按 General/Space/location 聚合官方导航树 |
-| creation locations | App BFF private API | 返回官方“开始会话”选择器候选 |
-| General/Space Session provision | App BFF private API | 校验产品目标并创建 Runtime Session |
-| DSH iframe entry | App BFF private API | 返回官方 App 当前可用的受控嵌入入口 |
+| 能力                                 | Owner / contract      | Workbench 用法                           |
+| ------------------------------------ | --------------------- | ---------------------------------------- |
+| Session 状态与 metadata              | Runtime public API    | 构建会话投影、通知和运行状态             |
+| Space registry/projects/files/search | WopalSpace public API | 构建 Space 导航、文件树与创建候选        |
+| Session Tree                         | App BFF private API   | 按 General/Space/location 聚合官方导航树 |
+| creation locations                   | App BFF private API   | 返回官方“开始会话”选择器候选             |
+| General/Space Session provision      | App BFF private API   | 校验产品目标并创建 Runtime Session       |
+| DSH iframe entry                     | App BFF private API   | 返回官方 App 当前可用的受控嵌入入口      |
 
 App BFF 的私有 HTTP contract 固定为：
 
-| Operation | Method/path | Contract |
-| --- | --- | --- |
-| `app.workbench.createSession` | `POST /workbench/sessions` | 输入 General 或 registered Space target，完成产品级目标校验后创建 Runtime Session；同一 requestID 幂等 |
-| `app.workbench.sessionTree` | `GET /workbench/session-tree` | 聚合 General/Space、project/location 与 active root Session，供官方左侧导航树使用 |
-| `app.workbench.locations` | `GET /workbench/locations` | 输入 Space 与可选 query，返回 Space root、registered projects、recent/search 候选；不暴露任意文件系统浏览 |
-| `app.workbench.dshEntry` | `GET /workbench/dsh-url` | 返回当前宿主可用的受控 DSH iframe entry；未挂载时返回空值 |
+| Operation                     | Method/path                   | Contract                                                                                                  |
+| ----------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `app.workbench.createSession` | `POST /workbench/sessions`    | 输入 General 或 registered Space target，完成产品级目标校验后创建 Runtime Session；同一 requestID 幂等    |
+| `app.workbench.sessionTree`   | `GET /workbench/session-tree` | 聚合 General/Space、project/location 与 active root Session，供官方左侧导航树使用                         |
+| `app.workbench.locations`     | `GET /workbench/locations`    | 输入 Space 与可选 query，返回 Space root、registered projects、recent/search 候选；不暴露任意文件系统浏览 |
+| `app.workbench.dshEntry`      | `GET /workbench/dsh-url`      | 返回当前宿主可用的受控 DSH iframe entry；未挂载时返回空值                                                 |
 
 Session status/summary 直接消费 Runtime public operation；Space files/list/read 直接消费 WopalSpace public operation。
 
@@ -109,12 +109,12 @@ Workbench 不读取 DSH 进程环境变量。Web Tab 的存在与内容只消费
 
 DSH Tab 的存在与内容由 Runtime `dsh.web` 状态驱动：
 
-| `dsh.web` | Workbench 行为 |
-| --- | --- |
-| `disabled` | 不呈现 DSH Tab |
-| `preparing` | 呈现固定 DSH Tab；内容显示“正在启动 DSH…”等准备态，不显示 Assistant 代替它 |
-| `ready` | 呈现 DSH Tab，并在当前 sidecar generation ready 后取得 `app.workbench.dshEntry`、加载 iframe |
-| `degraded` | 保留 DSH Tab，显示 DSH 不可用与诊断入口；不自动切换到 Assistant |
+| `dsh.web`   | Workbench 行为                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| `disabled`  | 不呈现 DSH Tab                                                                               |
+| `preparing` | 呈现固定 DSH Tab；内容显示“正在启动 DSH…”等准备态，不显示 Assistant 代替它                   |
+| `ready`     | 呈现 DSH Tab，并在当前 sidecar generation ready 后取得 `app.workbench.dshEntry`、加载 iframe |
+| `degraded`  | 保留 DSH Tab，显示 DSH 不可用与诊断入口；不自动切换到 Assistant                              |
 
 `WorkbenchRuntime` 是 Renderer 中 `dsh.web` / `dsh.tools` 的运行时事实所有者。它组合 `/global/health`、host `core.preparation` invalidation 与周期 health 探测，并对 Server identity/generation 做 stale-response 防护。`core.preparation` 只提示“需要重新读取 health”；事件自身的 `READY` 不代表 Web profile 已完成挂载。
 
@@ -180,10 +180,10 @@ bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌�
 
 每个面板通过 `slotState` 处于以下两种状态之一：
 
-| 槽位状态 | 含义 | 主视图能力 | 绑定 Session |
-|----------|------|-----------|--------------|
-| `empty` | 槽位为空，等待装载 | 显示 `PanelLoader` 装载器 | 无 |
-| `bound` | 槽位绑定了 Session | 支持 TUI / Chat / Context 主视图切换，可在面板底部展开 Split Terminal | 有 |
+| 槽位状态 | 含义               | 主视图能力                                                            | 绑定 Session |
+| -------- | ------------------ | --------------------------------------------------------------------- | ------------ |
+| `empty`  | 槽位为空，等待装载 | 显示 `PanelLoader` 装载器                                             | 无           |
+| `bound`  | 槽位绑定了 Session | 支持 TUI / Chat / Context 主视图切换，可在面板底部展开 Split Terminal | 有           |
 
 不存在"裸 Terminal 面板"状态。终端体验由 Split Terminal 子区域提供。
 
@@ -197,17 +197,17 @@ type PanelViewMode = string // "tui" | "chat" | "context"
 type WorkbenchPanel = {
   id: string
   slotState: PanelSlotState
-  boundSessionId?: string     // 当 slotState === "bound" 时，绑定的 Session ID
-  viewMode?: PanelViewMode    // 当前激活的主视图（可选，向前兼容）
-  mode: PanelMode             // 面板模式，与 viewMode 同步但持久化必需
-  directory: string           // 面板当前的 CWD（工作路径）
-  width: number               // flex 占比分配（列宽）
-  splitTerminal: boolean      // 面板底部 Split Terminal 是否打开
-  splitHeight?: number        // Split Terminal 的高度（像素值）
+  boundSessionId?: string // 当 slotState === "bound" 时，绑定的 Session ID
+  viewMode?: PanelViewMode // 当前激活的主视图（可选，向前兼容）
+  mode: PanelMode // 面板模式，与 viewMode 同步但持久化必需
+  directory: string // 面板当前的 CWD（工作路径）
+  width: number // flex 占比分配（列宽）
+  splitTerminal: boolean // 面板底部 Split Terminal 是否打开
+  splitHeight?: number // Split Terminal 的高度（像素值）
   // PTY IDs — 作为重连提示持久化，使用前必须由 PTY Manager 探测验证
-  tuiPtyId?: string           // TUI 进程的 PTY ID
-  termPtyId?: string          // Terminal 模式 PTY ID
-  splitPtyId?: string         // Split Terminal 的 PTY ID
+  tuiPtyId?: string // TUI 进程的 PTY ID
+  termPtyId?: string // Terminal 模式 PTY ID
+  splitPtyId?: string // Split Terminal 的 PTY ID
 }
 ```
 
@@ -230,7 +230,7 @@ type PanelViewCtx = {
   panel: WorkbenchPanel
   session?: Session
   directory: string
-  sdk: DirectorySdk                 // 由 Panel 的唯一 Provider 注入
+  sdk: DirectorySdk // 由 Panel 的唯一 Provider 注入
   spaceName: string
   spacePath: string
 }
@@ -238,8 +238,8 @@ type PanelViewCtx = {
 type PanelViewDef = {
   id: string
   label: string
-  requiresSession: boolean     // 渲染是否必须绑定 Session
-  showContext: boolean         // 是否在面板头部呈现 Context 状态环
+  requiresSession: boolean // 渲染是否必须绑定 Session
+  showContext: boolean // 是否在面板头部呈现 Context 状态环
   render: (ctx: PanelViewCtx) => JSX.Element
 }
 ```
@@ -307,6 +307,7 @@ Workbench Chat 不复刻 Kilo Code 专有实现；Kilo Code 提供信息架构�
 展示层以 Ellamaka 自己的 SDK v2 契约为唯一数据依据。会话消息由 `session.messages` / `session.message` 返回的 `MessageV2.WithParts` 提供；Assistant 通过 `parentID` 归属用户消息；`message.updated`、`message.part.updated`、`message.part.delta` 和 `message.part.removed` 驱动实时更新；`session.diff` 和用户消息的 `summary.diffs` 提供变更汇总。`task` 工具完成或运行时在 `state.metadata.sessionId` 中提供子 Session ID，展开子代理活动时通过现有 Session 消息 API 按需读取该子 Session。Chat 不依赖 Kilo Code 的后端扩展、消息排序补丁或专有 WebView 消息。
 
 新增文件：
+
 - `chat-transcript.ts`：Turn 投影、转录行切分、稳定 key 与实时尾部划分
 - `chat-render.utils.ts`：基于 Ellamaka SDK 的 Part 过滤、工具分类和摘要提取
 - `chat-turn.tsx`：跨转录行共享的 ChatTurn 视觉边界与 AgentResponse 容器
@@ -366,13 +367,13 @@ PanelChat
 
 Workbench Chat 使用现有字体体系收敛层级，不建立独立于产品的字号系统：
 
-| 语义层级 | 字体 | 字号与字重 | 行高 | 用途 |
-|----------|------|------------|------|------|
-| 正文 | `--font-family-sans` | 14px / regular | 165% | 用户消息、Agent 最终回复、说明文本 |
-| 块标题 | `--font-family-sans` | 14px / medium | 150% | Shell、编辑、子代理、错误等块标题 |
-| 次级信息 | `--font-family-sans` | 13px / regular | 150% | 模型、耗时、路径、参数、状态说明、思考内容 |
-| 次级标签 | `--font-family-sans` | 13px / medium | 130%–150% | 思考标签、工具类型、计数和小节标签 |
-| 代码与输出 | `--font-family-mono` | 13px / regular | 150% | Shell 命令与输出、代码、路径细节、Diff |
+| 语义层级   | 字体                 | 字号与字重     | 行高      | 用途                                       |
+| ---------- | -------------------- | -------------- | --------- | ------------------------------------------ |
+| 正文       | `--font-family-sans` | 14px / regular | 165%      | 用户消息、Agent 最终回复、说明文本         |
+| 块标题     | `--font-family-sans` | 14px / medium  | 150%      | Shell、编辑、子代理、错误等块标题          |
+| 次级信息   | `--font-family-sans` | 13px / regular | 150%      | 模型、耗时、路径、参数、状态说明、思考内容 |
+| 次级标签   | `--font-family-sans` | 13px / medium  | 130%–150% | 思考标签、工具类型、计数和小节标签         |
+| 代码与输出 | `--font-family-mono` | 13px / regular | 150%      | Shell 命令与输出、代码、路径细节、Diff     |
 
 正文与工具标题保持同一 14px 基准，通过字重、颜色和容器关系建立层级。元数据统一为 13px，并使用 `font-variant-numeric: tabular-nums` 显示耗时、Token 和计数。Chat 内不使用 11px 或 12px 承载常规信息，确保中文、复杂路径和窄面板下仍有稳定可读性。
 
@@ -397,26 +398,26 @@ Chat 从 Workbench 主题继承颜色，不引入 VS Code 专用色或 Kilo 品�
 
 Part 分类同时读取所属 Message 的 `role`。`file`、`agent` 和 `subtask` 属于用户输入模型；Assistant 活动以 `text`、`reasoning`、`tool`、`retry` 与 Message 结果状态为主。未知组合进入安全的 Generic 展示，不因 SDK 后续扩展丢失内容。
 
-| SDK Part Type | Chat Block | 说明 |
-|--------------|-----------|------|
-| `text` | NarrativeBlock | 最终回复正文 |
-| `reasoning` | ReasoningBlock | 思考过程 |
-| `tool` (tool=read/glob/grep/list) | ContextToolBlock | 每次读取或检索独立展示 |
-| `tool` (tool=bash/shell) | ShellActivityBlock | Shell 命令与输出 |
-| `tool` (tool=edit/write/apply_patch) | FileChangeBlock | 文件编辑 |
-| `tool` (tool=task/wopal_task) | SubagentActivityBlock | 子代理任务（内联展开） |
-| `tool` (tool=todowrite/todoread) | **隐藏** | 由 Composer 上方 SessionTodoDock 独占展示，不进入时间线 |
-| `tool` (其他) | GenericToolBlock | 通用工具/MCP |
-| `subtask` | UserMessageBlock | Slash Command 触发的子任务输入，显示 command、description 或 prompt 摘要 |
-| `agent` | UserMessageBlock | 用户提示词中的 Agent 选择，不属于 Assistant 活动 |
-| `file` | UserMessageBlock | 用户提示词的附件、文件引用或资源引用，不代表文件变更 |
-| `compaction` | TurnDivider | 上下文压缩分隔 |
-| `retry` | TurnOutcome | 模型重试记录；实时重试同时读取 Session Status |
-| `step-start` / `step-finish` | **隐藏** | 不进入时间线，仅用于状态同步 |
-| `snapshot` / `patch` | **隐藏** | 内部快照/补丁，不展示 |
-| `tool` (tool=question) | InteractionBlock | 已回答问题的历史摘要；待回答状态由 Question SSE 请求拥有 |
-| Permission Request | Composer 上方 Permission Dock | 独立 SSE 请求，不属于 Part |
-| `text.synthetic` | NarrativeBlock 临时状态 | 仅在所属 Assistant Message 运行时显示，完成后隐藏 |
+| SDK Part Type                        | Chat Block                    | 说明                                                                     |
+| ------------------------------------ | ----------------------------- | ------------------------------------------------------------------------ |
+| `text`                               | NarrativeBlock                | 最终回复正文                                                             |
+| `reasoning`                          | ReasoningBlock                | 思考过程                                                                 |
+| `tool` (tool=read/glob/grep/list)    | ContextToolBlock              | 每次读取或检索独立展示                                                   |
+| `tool` (tool=bash/shell)             | ShellActivityBlock            | Shell 命令与输出                                                         |
+| `tool` (tool=edit/write/apply_patch) | FileChangeBlock               | 文件编辑                                                                 |
+| `tool` (tool=task/wopal_task)        | SubagentActivityBlock         | 子代理任务（内联展开）                                                   |
+| `tool` (tool=todowrite/todoread)     | **隐藏**                      | 由 Composer 上方 SessionTodoDock 独占展示，不进入时间线                  |
+| `tool` (其他)                        | GenericToolBlock              | 通用工具/MCP                                                             |
+| `subtask`                            | UserMessageBlock              | Slash Command 触发的子任务输入，显示 command、description 或 prompt 摘要 |
+| `agent`                              | UserMessageBlock              | 用户提示词中的 Agent 选择，不属于 Assistant 活动                         |
+| `file`                               | UserMessageBlock              | 用户提示词的附件、文件引用或资源引用，不代表文件变更                     |
+| `compaction`                         | TurnDivider                   | 上下文压缩分隔                                                           |
+| `retry`                              | TurnOutcome                   | 模型重试记录；实时重试同时读取 Session Status                            |
+| `step-start` / `step-finish`         | **隐藏**                      | 不进入时间线，仅用于状态同步                                             |
+| `snapshot` / `patch`                 | **隐藏**                      | 内部快照/补丁，不展示                                                    |
+| `tool` (tool=question)               | InteractionBlock              | 已回答问题的历史摘要；待回答状态由 Question SSE 请求拥有                 |
+| Permission Request                   | Composer 上方 Permission Dock | 独立 SSE 请求，不属于 Part                                               |
+| `text.synthetic`                     | NarrativeBlock 临时状态       | 仅在所属 Assistant Message 运行时显示，完成后隐藏                        |
 
 ##### NarrativeBlock：自然语言与最终回复
 
@@ -505,15 +506,15 @@ Session 处于忙碌状态时，Chat 在实时尾部持续表达当前阶段，�
 
 默认展开状态由内容类型与生命周期共同决定：
 
-| 内容块 | 运行中 | 刚完成 | 历史回放 |
-|--------|--------|--------|----------|
-| 正文 | 展开 | 展开 | 展开 |
-| 思考 | 展开预览 | 自动折叠 | 折叠 |
-| 上下文读取 | 当前调用展开 | 折叠 | 折叠 |
-| Shell | 展开并跟随输出 | 保持当前选择 | 折叠 |
-| 文件变更 | 展开当前文件 | 折叠 | 折叠 |
-| 子代理 | 展开时间轴 | 折叠为摘要 | 折叠 |
-| 错误 | 展开错误摘要 | 展开错误摘要 | 展开错误摘要 |
+| 内容块     | 运行中         | 刚完成       | 历史回放     |
+| ---------- | -------------- | ------------ | ------------ |
+| 正文       | 展开           | 展开         | 展开         |
+| 思考       | 展开预览       | 自动折叠     | 折叠         |
+| 上下文读取 | 当前调用展开   | 折叠         | 折叠         |
+| Shell      | 展开并跟随输出 | 保持当前选择 | 折叠         |
+| 文件变更   | 展开当前文件   | 折叠         | 折叠         |
+| 子代理     | 展开时间轴     | 折叠为摘要   | 折叠         |
+| 错误       | 展开错误摘要   | 展开错误摘要 | 展开错误摘要 |
 
 Shell 和文件编辑的用户设置覆盖表中的初始默认值。设置值只在一个新 Part 首次进入呈现层时读取一次，不作为已经挂载块的实时受控状态。
 
@@ -637,12 +638,14 @@ const allStoresReady = () => wb.ready()
 
 > [!IMPORTANT]
 > **水合完成前（allStoresReady 为 false）禁止行为**：
+>
 > - 不渲染 `Workspace` 与侧栏/标题栏主体（渲染 Splash 占位）。
 > - 不执行 `ensureSpace()`（避免写入默认布局覆盖持久化数据）。
 > - 不创建 PTY，不连接终端。
 > - 不处理任何可能引发布局或生命周期副作用的事件。
 >
 > **水合完成后**：
+>
 > - 渲染恢复的布局，并只挂载当前 Space 的 Panel；其他 Space 首次访问时挂载。
 > - PTY Manager 对已挂载 Panel 的持久化 PTY ID 发起探测，存活的重连，已死的标记为待重建。视图挂载时通过 `ptyManager.ensure()` 按需创建或复用。
 
@@ -678,11 +681,11 @@ Renderer 中的 PTY 关联由 `pty-manager.tsx` 统一管理，后台进程生�
 
 **Renderer 核心操作**：
 
-| 操作 | 行为 |
-|------|------|
-| `ensure()` | 检查持久化的 PTY ID 是否存在。存在则**先探测**：向服务端验证该 PTY 是否存活。存活则复用（终端上下文完整保留）。已死则清除旧 ID、创建新 PTY、更新 PTY ID。不存在则直接创建。创建请求附带 generation token，异步返回时检查 generation 是否过期。同时记录 PTY 真实 cwd（`ptyDirectories` Map），用于后续 DELETE 的正确路由。 |
-| `delete()` | 从 Renderer 内存缓存移除 PTY 关联。该操作只管理前端引用，不把普通 WebSocket 断连解释为进程销毁。 |
-| `disposePty()` / `disposePanel()` / `disposeSpace()` | 用户显式关闭 PTY、Panel 或 Space 时立即请求 sidecar 终止对应进程，并清除 `ptyDirectories` 与持久化 PTY ID。 |
+| 操作                                                 | 行为                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ensure()`                                           | 检查持久化的 PTY ID 是否存在。存在则**先探测**：向服务端验证该 PTY 是否存活。存活则复用（终端上下文完整保留）。已死则清除旧 ID、创建新 PTY、更新 PTY ID。不存在则直接创建。创建请求附带 generation token，异步返回时检查 generation 是否过期。同时记录 PTY 真实 cwd（`ptyDirectories` Map），用于后续 DELETE 的正确路由。 |
+| `delete()`                                           | 从 Renderer 内存缓存移除 PTY 关联。该操作只管理前端引用，不把普通 WebSocket 断连解释为进程销毁。                                                                                                                                                                                                                          |
+| `disposePty()` / `disposePanel()` / `disposeSpace()` | 用户显式关闭 PTY、Panel 或 Space 时立即请求 sidecar 终止对应进程，并清除 `ptyDirectories` 与持久化 PTY ID。                                                                                                                                                                                                               |
 
 **探测机制**：PTY Manager 在 `ensure()` 或 Terminal 断连恢复时，若持久化状态中存在 PTY ID，先向服务端发起探测请求。结果分为三态：2xx → `alive` 并复用；明确 404 → `dead`，清除旧 ID 并按需创建；`Failed to fetch`、超时和其他非权威响应 → `unknown`，保留 PTY ID 与布局，等待传输重连或 sidecar generation 对账。禁止把 transport failure 当作 PTY 进程退出。
 
@@ -701,17 +704,17 @@ Renderer 中的 PTY 关联由 `pty-manager.tsx` 统一管理，后台进程生�
 
 **生命周期规则**：
 
-| 事件 | 行为 |
-|------|------|
-| 视图切换（TUI ↔ Chat ↔ Context） | **不释放 PTY**。已挂载的 TUI Terminal 与 WebSocket subscriber 保持存活，切回时复用同一终端。 |
-| Split Terminal 收起 | **不释放 PTY**。只隐藏渲染区域并保持 WebSocket subscriber，终端上下文保留。再次展开复用同一连接。 |
-| Panel 关闭 | `disposePanel()`：释放该面板所有 PTY，清除持久化 ID。 |
-| Space Tab 关闭 | `disposeSpace()`：释放该 Space 全部 PTY，清除持久化 ID。 |
-| 浏览器或 Electron Renderer 刷新 | `pagehide` 只 flush 布局和 PTY ID 提示。WebSocket 断开后进入 Grace；新 Renderer 只为当前 Space 探测并重连其原 PTY，取消回收任务。保存的后台 Space 等首次切回才恢复。 |
-| 后端或 sidecar 重启（页面未刷新） | 当前可见 Space 对账会话并按需恢复 PTY；隐藏 keep-alive Space 不自动创建 instance 或 PTY 连接，保留现场并等用户切回。 |
-| 浏览器 Tab 或桌面窗口关闭 | WebSocket 断开后进入 Grace。没有新连接时，sidecar 在 10 秒后自动终止 PTY。 |
-| Electron 应用退出 | Main Process 停止 sidecar，Instance finalizer 立即终止全部 PTY。 |
-| Panel 绑定到新 Session | 释放旧 Session 的 TUI PTY，清除旧 ID，为新 Session 创建新 PTY。 |
+| 事件                               | 行为                                                                                                                                                                 |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 视图切换（TUI ↔ Chat ↔ Context） | **不释放 PTY**。已挂载的 TUI Terminal 与 WebSocket subscriber 保持存活，切回时复用同一终端。                                                                         |
+| Split Terminal 收起                | **不释放 PTY**。只隐藏渲染区域并保持 WebSocket subscriber，终端上下文保留。再次展开复用同一连接。                                                                    |
+| Panel 关闭                         | `disposePanel()`：释放该面板所有 PTY，清除持久化 ID。                                                                                                                |
+| Space Tab 关闭                     | `disposeSpace()`：释放该 Space 全部 PTY，清除持久化 ID。                                                                                                             |
+| 浏览器或 Electron Renderer 刷新    | `pagehide` 只 flush 布局和 PTY ID 提示。WebSocket 断开后进入 Grace；新 Renderer 只为当前 Space 探测并重连其原 PTY，取消回收任务。保存的后台 Space 等首次切回才恢复。 |
+| 后端或 sidecar 重启（页面未刷新）  | 当前可见 Space 对账会话并按需恢复 PTY；隐藏 keep-alive Space 不自动创建 instance 或 PTY 连接，保留现场并等用户切回。                                                 |
+| 浏览器 Tab 或桌面窗口关闭          | WebSocket 断开后进入 Grace。没有新连接时，sidecar 在 10 秒后自动终止 PTY。                                                                                           |
+| Electron 应用退出                  | Main Process 停止 sidecar，Instance finalizer 立即终止全部 PTY。                                                                                                     |
+| Panel 绑定到新 Session             | 释放旧 Session 的 TUI PTY，清除旧 ID，为新 Session 创建新 PTY。                                                                                                      |
 
 **异步安全**：创建 PTY 的 Promise 必须携带 generation token。若 Promise resolve 时 Panel 已关闭或 Session 已变更，立即释放该 PTY，禁止将失效 ID 写入持久化状态。
 
@@ -742,13 +745,13 @@ WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确�
 
 **事件处理规则**：
 
-| 事件 | 行为 |
-|------|------|
-| `session.created` | 使对应 Space 的 SessionTree 加载失效；服务器返回后写入 Projection。 |
-| `session.deleted` | 通过 Action 解绑所有引用该 Session 的 Panel、释放对应 PTY，再删除 Projection。 |
+| 事件                                   | 行为                                                                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.created`                      | 使对应 Space 的 SessionTree 加载失效；服务器返回后写入 Projection。                                                                                           |
+| `session.deleted`                      | 通过 Action 解绑所有引用该 Session 的 Panel、释放对应 PTY，再删除 Projection。                                                                                |
 | `session.updated`（含 `timeArchived`） | 将归档视为服务端权威状态变化：使 SessionTree 加载失效，通过 Action 解绑所有引用该 Session 的 Panel、释放对应 PTY、删除 Projection，并向用户显示状态变化提示。 |
-| `session.updated`（标题变更） | Shell SSE 只 patch 对应 Projection 项；不伪造 Session 或触发无关树级重载。 |
-| `message.part.*` | 仅更新对应 `PanelChat` 的消息流，不触发树或其它 Panel 的更新。 |
+| `session.updated`（标题变更）          | Shell SSE 只 patch 对应 Projection 项；不伪造 Session 或触发无关树级重载。                                                                                    |
+| `message.part.*`                       | 仅更新对应 `PanelChat` 的消息流，不触发树或其它 Panel 的更新。                                                                                                |
 
 Panel 绑定只能由显式的用户关闭/替换操作、服务器 `session.deleted` 事件或带归档时间的 `session.updated` 事件解除。外部删除或归档已经装载的 Session 时，Workbench 必须释放对应 PTY 和 Panel 绑定，并向用户显示状态变化提示。远端数据加载完成前不得根据空列表解绑 Panel，避免初始空数组误判。Projection 的失效信号只用于通知树重新拉取，不能承载会话领域数据，也不能写入持久化。
 
@@ -893,12 +896,12 @@ Workbench 在运行状况异常（网络抖动、服务或环境配置损坏）�
 
 ### 异常分类与应对原则
 
-| 严重性等级 | 典型场景 | 前端渲染表现 | 自愈/应对机制 |
-| :--- | :--- | :--- | :--- |
-| **运行时完整性错误 (Fatal)** | 数据库损坏或无法恢复的应用根异常 | 全局 `ErrorPage`（独占式阻断） | 停止会破坏运行时事实的操作，并提供恢复与日志入口。 |
-| **共享管理不可用 (Degraded)** | 空间准备、共享配置服务或 DSH 能力出现可恢复错误 | 状态栏诊断中心 | 已可用的 Session、Chat、TUI 与 PTY 保持工作；受影响的管理动作暂停，并显示对应 setup/诊断入口。 |
-| **瞬态连接丢失 (Connection)** | WebSocket 断连 / 服务端 API 失去响应（抖动） | 模态遮罩层 (Modal Overlay) | 在视口覆盖半透明遮罩，阻断全部用户输入保护状态；启动指数退避自动重连，连接恢复后自动闭合。 |
-| **局部非阻塞错误 (Warning)** | 空面板选择受控目录时 `locations` 接口拉取失败 | 状态栏局部错误区 + 局部重试 | **严禁抛出至面板 ErrorBoundary**！保持面板可操作，在底部状态栏指示错误并提供"重试/清除"入口。 |
+| 严重性等级                    | 典型场景                                        | 前端渲染表现                   | 自愈/应对机制                                                                                  |
+| :---------------------------- | :---------------------------------------------- | :----------------------------- | :--------------------------------------------------------------------------------------------- |
+| **运行时完整性错误 (Fatal)**  | 数据库损坏或无法恢复的应用根异常                | 全局 `ErrorPage`（独占式阻断） | 停止会破坏运行时事实的操作，并提供恢复与日志入口。                                             |
+| **共享管理不可用 (Degraded)** | 空间准备、共享配置服务或 DSH 能力出现可恢复错误 | 状态栏诊断中心                 | 已可用的 Session、Chat、TUI 与 PTY 保持工作；受影响的管理动作暂停，并显示对应 setup/诊断入口。 |
+| **瞬态连接丢失 (Connection)** | WebSocket 断连 / 服务端 API 失去响应（抖动）    | 模态遮罩层 (Modal Overlay)     | 在视口覆盖半透明遮罩，阻断全部用户输入保护状态；启动指数退避自动重连，连接恢复后自动闭合。     |
+| **局部非阻塞错误 (Warning)**  | 空面板选择受控目录时 `locations` 接口拉取失败   | 状态栏局部错误区 + 局部重试    | **严禁抛出至面板 ErrorBoundary**！保持面板可操作，在底部状态栏指示错误并提供"重试/清除"入口。  |
 
 ### 网络断连与模态保护
 

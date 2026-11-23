@@ -29,7 +29,6 @@ const clean = (input?: Fields): Fields =>
   )
 
 const text = (input: unknown): string => {
-  // oxlint-disable-next-line no-base-to-string
   if (Array.isArray(input)) return input.map((item) => String(item)).join(" ")
   // oxlint-disable-next-line no-base-to-string
   return input === undefined ? "" : String(input)

@@ -207,14 +207,33 @@ export namespace Timeline {
       rows.push(
         new TimelineRow.Error({
           userMessageID: userMessage.id,
-          text: unwrapErrorMessage(
-            typeof data === "string" ? data : data === undefined || data === null ? "" : String(data),
-          ),
+          text: unwrapErrorMessage(typeof data === "string" ? data : serializeErrorData(data)),
         }),
       )
     }
 
     return rows
+  }
+
+  // `error.data.message` is `unknown` because one variant types it as a record.
+  // Stringifying an object would yield "[object Object]"; feed the JSON form
+  // into unwrapErrorMessage so an embedded message can still be recovered.
+  function serializeErrorData(data: unknown) {
+    if (data === undefined || data === null) return ""
+    if (typeof data === "object") {
+      try {
+        return JSON.stringify(data) ?? ""
+      } catch {
+        return ""
+      }
+    }
+    if (typeof data === "string") return data
+    // `toString()` on function/symbol keeps String()'s text without the
+    // "[object Object]" hazard the rule reports.
+    if (typeof data === "function" || typeof data === "symbol") return data.toString()
+    // Remaining primitive kinds stringify exactly like String() would.
+    if (typeof data === "number" || typeof data === "boolean" || typeof data === "bigint") return String(data)
+    return ""
   }
 
   function reasoningHeading(text: string) {

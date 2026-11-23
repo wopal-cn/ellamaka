@@ -89,6 +89,8 @@ describe("server selection persistence", () => {
   })
 
   test("stores the stable sidecar key instead of its generation-specific URL", () => {
-    expect(normalizeServerSelection({ fallback, key: ServerConnection.key(local), servers: [local, spark] })).toBe(fallback)
+    expect(normalizeServerSelection({ fallback, key: ServerConnection.key(local), servers: [local, spark] })).toBe(
+      fallback,
+    )
   })
 })

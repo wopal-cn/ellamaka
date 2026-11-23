@@ -64,6 +64,14 @@ describe("filterTargets", () => {
   })
 
   test("fails fast when filters combine to an empty set", () => {
-    expect(() => filterTargets({ platformArg: "linux", archArg: "primary", singleFlag: true, currentPlatform: "freebsd", currentArch: "x64" })).toThrow(/no build targets match/)
+    expect(() =>
+      filterTargets({
+        platformArg: "linux",
+        archArg: "primary",
+        singleFlag: true,
+        currentPlatform: "freebsd",
+        currentArch: "x64",
+      }),
+    ).toThrow(/no build targets match/)
   })
 })

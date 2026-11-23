@@ -55,7 +55,6 @@ export function prepareStepGuideMarkdown(markdown: string, assets: StepGuideAsse
   const replacements: Array<{ raw: string; html: string }> = []
   void marked.walkTokens(marked.lexer(markdown), (token) => {
     if (token.type !== "image") return
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- marked does not narrow Token by its type field
     const image = token as Tokens.Image
     const resolved = resolveStepGuideImageSource(image.href, assets)
     if (!resolved) {

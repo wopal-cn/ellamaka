@@ -26,7 +26,9 @@ const {
   PROFILE_TEMPLATES,
 } = await import("@deepseek-ai/dsh-app-boot")
 const { provideCmdline } = await import("@deepseek-ai/dsh-cmdline")
-const { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } = await import("@deepseek-ai/dsh-launch-environment")
+const { createLaunchEnvironmentSnapshot, DSH_LAUNCH_ENVIRONMENT_KEY } = await import(
+  "@deepseek-ai/dsh-launch-environment"
+)
 const { dshHomePath } = await import("@deepseek-ai/dsh-home-paths")
 const Loader = (await import("@deepseek-ai/cordis-plugin-loader")).default
 const { pathToFileURL } = await import("node:url")
@@ -48,7 +50,10 @@ console.log("profile dir:", profileDir)
 healProfilesModuleFallback(req.resolve("@deepseek-ai/dsh/package.json"), home)
 
 const profile = loadProfile("ellamaka", profileName, dshAnchorDir, home)
-console.log("profile bundles:", profile.layers.map((l) => l.packageName))
+console.log(
+  "profile bundles:",
+  profile.layers.map((l) => l.packageName),
+)
 
 const ctx = new Context()
 ctx.baseUrl = pathToFileURL(join(profile.dir, "cordis.yml")).href + "/"
@@ -87,7 +92,10 @@ console.log("webServer present (expect undefined):", webServer)
 const tools = ctx.get("tools")
 console.log("tools service present:", !!tools)
 if (tools) {
-  const names = tools.schemas().map((s: { name: string }) => s.name).sort()
+  const names = tools
+    .schemas()
+    .map((s: { name: string }) => s.name)
+    .sort()
   console.log("tool count:", names.length)
   console.log("has grep:", names.includes("grep"), "has glob:", names.includes("glob"))
   console.log("sample tools:", names.slice(0, 20).join(", "))

@@ -83,15 +83,21 @@ export function run(opts?: { dryRun?: boolean; version?: string }) {
   applyLockUpdate({ dryRun, version })
 }
 
-export function applyLockUpdate({ dryRun, version, lockPath = LOCK_PATH }: { dryRun?: boolean; version: string; lockPath?: string }) {
+export function applyLockUpdate({
+  dryRun,
+  version,
+  lockPath = LOCK_PATH,
+}: {
+  dryRun?: boolean
+  version: string
+  lockPath?: string
+}) {
   const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"))
 
   const commit = resolveUpstreamCommit(version)
   lock.sources.opencode.version = version
   lock.sources.opencode.gitCommit = commit
-  process.stdout.write(
-    `[engine] sources.opencode → version=${version}, commit=${commit}\n`,
-  )
+  process.stdout.write(`[engine] sources.opencode → version=${version}, commit=${commit}\n`)
 
   validateUpstreamLock(lock)
   if (dryRun) {

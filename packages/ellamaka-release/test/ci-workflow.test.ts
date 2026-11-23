@@ -62,6 +62,21 @@ describe("ci workflow — jobs", () => {
     expect(indexOfStep(job, "checks", "turbo run test:ci")).toBe(jobSteps(job, "checks").length - 1)
   })
 
+  test("checks job gates formatting and CSS between lint and the test suites", () => {
+    // These two gates fail the run rather than printing: formatting rewrites
+    // whole files and CSS has its own parser, so neither is covered by the
+    // oxlint gate above them. Pinning the order keeps them from being dropped
+    // silently and keeps the fast gates ahead of the slow suites.
+    const job = getJob(ci, "checks")
+    expectStepOrder(job, "checks", [
+      "bun run lint",
+      "bun run test:lint-gate",
+      "bun run format:check",
+      "bun run --cwd packages/ellamaka-app lint:css",
+      "turbo run test:ci",
+    ])
+  })
+
   test("slow job probes the sandbox before the real DSH tool tests", () => {
     const job = getJob(ci, "slow")
     expect(job["runs-on"]).toBe("ubuntu-24.04")

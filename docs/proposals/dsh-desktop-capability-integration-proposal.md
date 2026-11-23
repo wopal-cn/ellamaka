@@ -508,20 +508,20 @@ desktop-update-core
 
 以下是 RC.3 的**候选能力盘点**，不是已批准的启用清单。对于已由官方 `dsh-web-app` 装配的能力，首先检查有效配置和 UI，不应重复安装相同插件。
 
-| 能力 | RC.3 依据与当前判断 | Web profile 可承载性 | 初步建议 |
-| ---- | ------------------ | ------------------- | -------- |
-| 右侧 Browser | `ui-sidebar-browser` 已由官方 Web bundle 声明，但 `profileContext.name !== 'desktop'` 时默认禁用；Ellamaka 当前无启用覆盖 | **可以**，Web 版本使用 sandboxed `iframe`，支持网页标签和地址栏；部分站点会拒绝嵌入 | 优先评估显式 opt-in，先验证内外网 URL、隔离、导航和关闭行为 |
-| 右侧文档预览、文件树、终端 | `ui-sidebar-documentpreview`、`ui-sidebar-files`、`ui-sidebar-terminal` 已在官方 Web bundle 中 | **已有基础插件**；须实际验证文件读取、Workspace 范围、终端会话 | 先做能力冒烟测试，不重复装包 |
-| Workspace 目录选择、插件管理 | `directory-picker-auto` 和 Web Plugin Manager 已在官方组合中；内嵌闭包含原生/浏览目录选择器 | **已有**，Host 可以独立选择目录选择后端；官方 Electron 对话框属于另一层 | 先测试真实点击路径、重连与运行时服务；故障不以复制 Desktop profile 处理 |
-| Voice Input | 官方可选 `@deepseek-ai/dsh-experimental-voice-input-bundle`；当前官方 Desktop 实例已选入 | **有 Web 插件路径**，但涉及麦克风授权、本地识别模型下载和原生依赖 | 可选专题，先确认跨浏览器和 Ellamaka Desktop 的录音权限 |
-| Auto Review | 官方可选 `@deepseek-ai/dsh-experimental-auto-review`；明确支持 Web/headless | **可以**，但审核结果允许 Full access 执行，增加模型调用成本与安全风险 | 默认不启用；先单独审查权限/审批政策 |
-| Inspector / 统计 | 官方可选 `@deepseek-ai/dsh-experimental-inspector-profile`，提供 Session Inspector、统计和 NodeJS 调试 | **Web 可承载**，但可能启用未脱敏抓包和本地代码执行 | 仅开发诊断场景候选，不作为普通用户默认能力 |
-| 会话与操作体验 | 官方可选 Session Search、Session Titles、Badge Skill、CoT Translation、Ralph、Persistent Terminal 等 bundle | 主要是 Web/Host 组合，逐项核验插件的注入服务和实际平台条件 | 按用户收益、安全与运行资源分组评估，避免把实验性能力一键全开 |
-| 协作与工作流扩展 | 官方可选 LiveShare、Worktree、Forge、Plugin Market、Personalized Recommendations | **待逐项验证**；部分会与 WopalSpace 的协作、工作树、插件分发或隐私模型重叠 | 先明确 owner、数据隔离和重复功能；无需求不默认启用 |
-| Computer Use / CUA | 官方 `@deepseek-ai/dsh-cua-bundle` 是可选能力 | **宿主依赖与权限待审计**；不能因包可见就推断 Desktop 能执行 | 单独做能力和安全边界研究，必要部分归第二阶段 |
-| 外部编码 Agent | 官方按需安装 `@deepseek-ai/dsh-subagent-codex`、`@deepseek-ai/dsh-subagent-claude-code` | **有正式按需 bundle**，需依赖相应 CLI、原生认证及运行环境 | 可作为 Coding/Agent 增强候选，与现有 Wopal/Fae/Rook 委派分清职责 |
-| DeepSeek 对话导入 | 精确 RC.3 发行清单另有可选 `@deepseek-ai/dsh-deepseek-chat-import`；当前参考仓旧快照清单不含它 | **待核验完整导入契约**、数据来源、隐私和目标 Session 归属 | 属于版本新增能力审计的代表案例；先研究再选择 |
-| 第三方市场插件 | 当前官方 Web 实例装有 `dsh-plugin-shop`、`dshmarket`；Ellamaka 已有官方 Plugin Manager | 属于外部安装选项，**不是官方核心模板的缺失项** | 先检查现有插件管理的功能缺口，再选择接入来源 |
+| 能力                         | RC.3 依据与当前判断                                                                                                       | Web profile 可承载性                                                                | 初步建议                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 右侧 Browser                 | `ui-sidebar-browser` 已由官方 Web bundle 声明，但 `profileContext.name !== 'desktop'` 时默认禁用；Ellamaka 当前无启用覆盖 | **可以**，Web 版本使用 sandboxed `iframe`，支持网页标签和地址栏；部分站点会拒绝嵌入 | 优先评估显式 opt-in，先验证内外网 URL、隔离、导航和关闭行为             |
+| 右侧文档预览、文件树、终端   | `ui-sidebar-documentpreview`、`ui-sidebar-files`、`ui-sidebar-terminal` 已在官方 Web bundle 中                            | **已有基础插件**；须实际验证文件读取、Workspace 范围、终端会话                      | 先做能力冒烟测试，不重复装包                                            |
+| Workspace 目录选择、插件管理 | `directory-picker-auto` 和 Web Plugin Manager 已在官方组合中；内嵌闭包含原生/浏览目录选择器                               | **已有**，Host 可以独立选择目录选择后端；官方 Electron 对话框属于另一层             | 先测试真实点击路径、重连与运行时服务；故障不以复制 Desktop profile 处理 |
+| Voice Input                  | 官方可选 `@deepseek-ai/dsh-experimental-voice-input-bundle`；当前官方 Desktop 实例已选入                                  | **有 Web 插件路径**，但涉及麦克风授权、本地识别模型下载和原生依赖                   | 可选专题，先确认跨浏览器和 Ellamaka Desktop 的录音权限                  |
+| Auto Review                  | 官方可选 `@deepseek-ai/dsh-experimental-auto-review`；明确支持 Web/headless                                               | **可以**，但审核结果允许 Full access 执行，增加模型调用成本与安全风险               | 默认不启用；先单独审查权限/审批政策                                     |
+| Inspector / 统计             | 官方可选 `@deepseek-ai/dsh-experimental-inspector-profile`，提供 Session Inspector、统计和 NodeJS 调试                    | **Web 可承载**，但可能启用未脱敏抓包和本地代码执行                                  | 仅开发诊断场景候选，不作为普通用户默认能力                              |
+| 会话与操作体验               | 官方可选 Session Search、Session Titles、Badge Skill、CoT Translation、Ralph、Persistent Terminal 等 bundle               | 主要是 Web/Host 组合，逐项核验插件的注入服务和实际平台条件                          | 按用户收益、安全与运行资源分组评估，避免把实验性能力一键全开            |
+| 协作与工作流扩展             | 官方可选 LiveShare、Worktree、Forge、Plugin Market、Personalized Recommendations                                          | **待逐项验证**；部分会与 WopalSpace 的协作、工作树、插件分发或隐私模型重叠          | 先明确 owner、数据隔离和重复功能；无需求不默认启用                      |
+| Computer Use / CUA           | 官方 `@deepseek-ai/dsh-cua-bundle` 是可选能力                                                                             | **宿主依赖与权限待审计**；不能因包可见就推断 Desktop 能执行                         | 单独做能力和安全边界研究，必要部分归第二阶段                            |
+| 外部编码 Agent               | 官方按需安装 `@deepseek-ai/dsh-subagent-codex`、`@deepseek-ai/dsh-subagent-claude-code`                                   | **有正式按需 bundle**，需依赖相应 CLI、原生认证及运行环境                           | 可作为 Coding/Agent 增强候选，与现有 Wopal/Fae/Rook 委派分清职责        |
+| DeepSeek 对话导入            | 精确 RC.3 发行清单另有可选 `@deepseek-ai/dsh-deepseek-chat-import`；当前参考仓旧快照清单不含它                            | **待核验完整导入契约**、数据来源、隐私和目标 Session 归属                           | 属于版本新增能力审计的代表案例；先研究再选择                            |
+| 第三方市场插件               | 当前官方 Web 实例装有 `dsh-plugin-shop`、`dshmarket`；Ellamaka 已有官方 Plugin Manager                                    | 属于外部安装选项，**不是官方核心模板的缺失项**                                      | 先检查现有插件管理的功能缺口，再选择接入来源                            |
 
 RC.3 实际发行版的 `OPTIONAL_BUNDLES` 包含 **16 个** bundle，`ON_DEMAND_BUNDLES` 包含 **2 个**外部子代理 bundle。表格不替代完整官方目录；Candidate J 的清单必须覆盖全部候选，并跟随被升级的发行制品更新。特别是 `dsh-deepseek-chat-import` 在已安装 RC.3 中出现、但不在当前参考仓的旧版源清单中，说明升级审计不能用参考仓 `main` 代替精确发布制品。
 
@@ -533,14 +533,14 @@ RC.3 实际发行版的 `OPTIONAL_BUNDLES` 包含 **16 个** bundle，`ON_DEMAND
 
 Ellamaka 的产品结构不同：Ellamaka Workbench 是自己的 Renderer，DSH Web 通过 `/dsh` 加载在嵌套 iframe 中，Electron Main 与 sidecar 均由 Ellamaka 拥有。Ellamaka 的 `window.api` 已有文件/目录选择等能力，但它不是官方 `dshDesktop` 协议；当前 DSH iframe 也没有获得官方的 Browser guest lease / `<webview>` 桥接。
 
-| 官方 Desktop 原生能力 | 当前 Ellamaka 对应面 | 第二阶段需要研究的适配 |
-| -------------------- | ------------------- | ---------------------- |
-| Browser `<webview>` | 主窗口 + DSH iframe；没有官方 `dshDesktop.browser` lease API，也未启用对应受控 guest 附着 | Electron Main 的 Browser guest ownership、存储分区、导航/权限检查、快捷键转发及 DSH iframe 到宿主的可信消息通道；不能仅设置 `webviewTag: true` |
-| 原生目录与文件操作 | Ellamaka 已有自有目录/文件对话框 IPC；DSH Web 有 `directory-picker-auto` | 决定复用 Host 目录选择器，还是为 DSH 映射受控原生对话框；要处理取消、窗口焦点及来源鉴权 |
-| 文件拖放、路径引用和保存 | Ellamaka Renderer 有自己的 preload 能力；官方 DSH 提供独立的 `fileDrag`、`fileActions` 和 `__DSH_HOST_PATHS__` | 明确 Session/Workspace 授权与资源归属，提供最小可验证的跨 iframe 桥接 |
-| 原生快捷键与浏览器焦点 | Ellamaka 已有菜单/窗口/快捷键；官方 Browser 可给受控 guest 转发快捷键 | 协调 Workbench、DSH UI、浏览器 guest 与终端的焦点和按键所有权 |
-| 麦克风及平台权限 | Ellamaka 有自有 Electron 窗口和权限流程 | 按页面 origin、用户授权和签名权限支持需要的 DSH 语音功能 |
-| Platform/更新/恢复/CLI 打包运行时 | 由 Ellamaka 已有产品身份、sidecar、更新和发布体系负责 | 只吸收有明确用户需求的原生机制；保留 Ellamaka 的版本、渠道、账户与产品责任 |
+| 官方 Desktop 原生能力             | 当前 Ellamaka 对应面                                                                                           | 第二阶段需要研究的适配                                                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser `<webview>`               | 主窗口 + DSH iframe；没有官方 `dshDesktop.browser` lease API，也未启用对应受控 guest 附着                      | Electron Main 的 Browser guest ownership、存储分区、导航/权限检查、快捷键转发及 DSH iframe 到宿主的可信消息通道；不能仅设置 `webviewTag: true` |
+| 原生目录与文件操作                | Ellamaka 已有自有目录/文件对话框 IPC；DSH Web 有 `directory-picker-auto`                                       | 决定复用 Host 目录选择器，还是为 DSH 映射受控原生对话框；要处理取消、窗口焦点及来源鉴权                                                        |
+| 文件拖放、路径引用和保存          | Ellamaka Renderer 有自己的 preload 能力；官方 DSH 提供独立的 `fileDrag`、`fileActions` 和 `__DSH_HOST_PATHS__` | 明确 Session/Workspace 授权与资源归属，提供最小可验证的跨 iframe 桥接                                                                          |
+| 原生快捷键与浏览器焦点            | Ellamaka 已有菜单/窗口/快捷键；官方 Browser 可给受控 guest 转发快捷键                                          | 协调 Workbench、DSH UI、浏览器 guest 与终端的焦点和按键所有权                                                                                  |
+| 麦克风及平台权限                  | Ellamaka 有自有 Electron 窗口和权限流程                                                                        | 按页面 origin、用户授权和签名权限支持需要的 DSH 语音功能                                                                                       |
+| Platform/更新/恢复/CLI 打包运行时 | 由 Ellamaka 已有产品身份、sidecar、更新和发布体系负责                                                          | 只吸收有明确用户需求的原生机制；保留 Ellamaka 的版本、渠道、账户与产品责任                                                                     |
 
 **关键设计选择**：官方 Desktop 的主页面是有自身 preload 的 `dsh-app://app`；Ellamaka 将 DSH 放入子 iframe。需要研究 DSH Browser 是继续在 Web 中使用 iframe，还是由 Ellamaka Main 在受控位置承载原生 guest，并通过限定来源、会话和能力的消息协议与 DSH UI 连接。安全边界由 Electron Main/可信 preload 拥有，不能把裸 Electron IPC、Node API、任意网址访问或 Host Cookie 暴露给嵌入页。
 
@@ -655,20 +655,20 @@ D  不缓存完整 shell env
 
 被选中的候选项应分别落入正式设计，而不是让本文长期承担产品契约。
 
-| 候选                      | 正式设计 owner                                                |
-| ------------------------- | ------------------------------------------------------------- |
-| A login-shell subsystem   | `DESIGN-desktop.md`                                           |
-| B Host env ownership      | `DESIGN-desktop.md`                                           |
-| C child env policy        | `DESIGN-desktop.md` + 实际 Runtime owner DESIGN（视审计结果） |
-| D env cache safety        | `DESIGN-desktop.md` / `DESIGN-logging.md`（按最终机制）       |
-| E bootstrap observability | `DESIGN-logging.md` + `DESIGN-desktop.md`                     |
-| F updater coordination    | `DESIGN-distribution.md` + `DESIGN-desktop.md`                |
-| G crash/quit/recovery     | `DESIGN-desktop.md`                                           |
-| H packaging/signing       | `DESIGN-distribution.md`                                      |
-| I shared package          | 单独架构提案，确定 owner 后再入 DESIGN                        |
-| J profile capability gate | `DESIGN-dsh-base.md` + `DESIGN-dsh-web.md`（版本与能力验收） |
-| K official Web capabilities | `DESIGN-dsh-web.md` + `DESIGN-workbench.md`（UI 选择与承载） |
-| L native Desktop adapters | `DESIGN-desktop.md` + `DESIGN-workbench.md`（必要时 `DESIGN-distribution.md`） |
+| 候选                        | 正式设计 owner                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| A login-shell subsystem     | `DESIGN-desktop.md`                                                            |
+| B Host env ownership        | `DESIGN-desktop.md`                                                            |
+| C child env policy          | `DESIGN-desktop.md` + 实际 Runtime owner DESIGN（视审计结果）                  |
+| D env cache safety          | `DESIGN-desktop.md` / `DESIGN-logging.md`（按最终机制）                        |
+| E bootstrap observability   | `DESIGN-logging.md` + `DESIGN-desktop.md`                                      |
+| F updater coordination      | `DESIGN-distribution.md` + `DESIGN-desktop.md`                                 |
+| G crash/quit/recovery       | `DESIGN-desktop.md`                                                            |
+| H packaging/signing         | `DESIGN-distribution.md`                                                       |
+| I shared package            | 单独架构提案，确定 owner 后再入 DESIGN                                         |
+| J profile capability gate   | `DESIGN-dsh-base.md` + `DESIGN-dsh-web.md`（版本与能力验收）                   |
+| K official Web capabilities | `DESIGN-dsh-web.md` + `DESIGN-workbench.md`（UI 选择与承载）                   |
+| L native Desktop adapters   | `DESIGN-desktop.md` + `DESIGN-workbench.md`（必要时 `DESIGN-distribution.md`） |
 
 进入正式设计后，再由 Issue/Plan 承载实施进度和任务拆分。
 

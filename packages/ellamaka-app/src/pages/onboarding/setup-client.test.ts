@@ -59,7 +59,6 @@ function sdk(overrides: Record<string, unknown> = {}) {
   }
   return {
     calls,
-    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- injectable transport double covers only the generated surfaces used here
     client: {
       wopalSpace: { setup },
       global: {

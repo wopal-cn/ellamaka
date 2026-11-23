@@ -1,17 +1,11 @@
 import type { PanelSlotState } from "../view-store"
 import { isDraftSessionId } from "@/utils/draft-session"
 
-export function shouldAcceptSessionDrop(input: {
-  targetSlotState: PanelSlotState
-  sourceHasLiveBinding: boolean
-}) {
+export function shouldAcceptSessionDrop(input: { targetSlotState: PanelSlotState; sourceHasLiveBinding: boolean }) {
   return sessionDropRejection(input) === undefined
 }
 
-export function sessionDropRejection(input: {
-  targetSlotState: PanelSlotState
-  sourceHasLiveBinding: boolean
-}) {
+export function sessionDropRejection(input: { targetSlotState: PanelSlotState; sourceHasLiveBinding: boolean }) {
   if (input.targetSlotState !== "empty") return "target-occupied" as const
   if (input.sourceHasLiveBinding) return "session-already-open" as const
   return undefined
@@ -38,10 +32,7 @@ export function sessionRemovalReasonFromEvent(input: {
   return undefined
 }
 
-export function shouldNotifySessionRemoval(input: {
-  affectedPanelCount: number
-  isBound: boolean
-}) {
+export function shouldNotifySessionRemoval(input: { affectedPanelCount: number; isBound: boolean }) {
   return input.affectedPanelCount > 0 && !input.isBound
 }
 
@@ -76,10 +67,16 @@ export function isSessionNotFound(error: unknown): boolean {
     if ("status" in error && typeof error.status === "number" && error.status === 404) return true
   }
   const message =
-    error instanceof Error ? error.message :
-    typeof error === "string" ? error :
-    (error && typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string") ? (error as { message: string }).message :
-    ""
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : error &&
+            typeof error === "object" &&
+            "message" in error &&
+            typeof (error as { message: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : ""
   return message.includes("Session not found") || message.includes("not found")
 }
 

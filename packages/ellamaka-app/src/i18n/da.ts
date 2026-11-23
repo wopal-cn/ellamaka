@@ -636,7 +636,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.description": "Vis model tænkeoversigter i tidslinjen",
 
   "settings.general.row.shellToolPartsExpanded.title": "Udvid resultater af værktøjskald",
-  "settings.general.row.shellToolPartsExpanded.description": "Vis resultater af værktøjskald udvidet som standard i tidslinjen",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Vis resultater af værktøjskald udvidet som standard i tidslinjen",
   "settings.general.row.editToolPartsExpanded.title": "Udvid resultater af redigeringsværktøj",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-værktøjsresultater udvidet som standard i tidslinjen",

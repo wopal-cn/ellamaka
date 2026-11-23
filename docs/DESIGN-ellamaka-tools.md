@@ -74,9 +74,9 @@ dsh-adapter 的实现放在 `packages/ellamaka-cordis/src/dsh-adapter/`，通过
 
 adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、Permission 询问和消息信息由引擎通过 PluginInput/ToolContext 交付；构建使用同一份 SDK 与 schema 实例，保证 schema 类型一致。
 
-| 代码边界        | 归属与变化原因                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| DSH 侧适配      | 同包内的 DSH 调用代码：registry 执行、调用外观、sandbox/approval 事件、provider 差异；随固定 DSH 版本适配 |
+| 代码边界        | 归属与变化原因                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| DSH 侧适配      | 同包内的 DSH 调用代码：registry 执行、调用外观、sandbox/approval 事件、provider 差异；随固定 DSH 版本适配               |
 | Ellamaka 侧接入 | 同包内的 plugin 导出：读取有效配置、tool.provider 的普通工具投影、Permission 询问、工具结果与 UI 元数据；随引擎契约维护 |
 | 用户行为参数    | settings.jsonc：沿用 dsh-adapter 参数键；General 消费产品默认与用户全局层，Space 再叠加空间覆盖，不随代码位置调整       |
 

@@ -264,7 +264,6 @@ export function update<Result>(adapter: Adapter<Result>, event: SessionEvent.Eve
         adapter.updateAssistant(
           produce(currentAssistant, (draft) => {
             const match = latestTool(draft, event.data.callID)
-            // oxlint-disable-next-line no-base-to-string -- event.delta is a Schema.String (runtime string)
             if (match && match.state.status === "pending") match.state.input += event.data.delta
           }),
         )

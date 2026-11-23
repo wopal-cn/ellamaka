@@ -160,8 +160,9 @@ export function previewSync(options: Omit<SyncOptions, "confirm">): SyncStep[] {
       if (!merge.tree) return steps
       const currentTree = git(repo, ["rev-parse", head + "^{tree}"], quarantine.env)
       const treeUnchanged = currentTree === merge.tree
-      const diffs =
-        treeUnchanged ? [] : parseDiffs(git(repo, ["diff", "--name-status", currentTree, merge.tree], quarantine.env))
+      const diffs = treeUnchanged
+        ? []
+        : parseDiffs(git(repo, ["diff", "--name-status", currentTree, merge.tree], quarantine.env))
       steps.push({
         step: stage.step,
         action: treeUnchanged ? "reconciled" : "merged",

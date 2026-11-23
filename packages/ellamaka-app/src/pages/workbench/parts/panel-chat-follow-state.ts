@@ -4,10 +4,7 @@ export type ChatFollowTransition = "resume" | "pause"
 export const initialChatFollowState: ChatFollowState = "following"
 
 /** The explicit latest-message intent is owned by the Workbench chat panel. */
-export function transitionChatFollowState(
-  _state: ChatFollowState,
-  transition: ChatFollowTransition,
-): ChatFollowState {
+export function transitionChatFollowState(_state: ChatFollowState, transition: ChatFollowTransition): ChatFollowState {
   return transition === "resume" ? "following" : "paused"
 }
 

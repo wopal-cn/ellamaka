@@ -161,10 +161,9 @@ describe("sync optimistic reducers", () => {
     const preWrap: Message = { ...userMessage("msg_fa2c3af72001", sessionID), time: { created: 1784448447887 } }
     const postWrap: Message = { ...userMessage("msg_002ceb729001", sessionID), time: { created: 1786753496981 } }
 
-    const page = mergeOptimisticPage(
-      { session: [preWrap], part: [{ id: preWrap.id, part: [] }], complete: true },
-      [{ message: postWrap, parts: [] }],
-    )
+    const page = mergeOptimisticPage({ session: [preWrap], part: [{ id: preWrap.id, part: [] }], complete: true }, [
+      { message: postWrap, parts: [] },
+    ])
 
     expect(page.session.map((x) => x.id)).toEqual(["msg_fa2c3af72001", "msg_002ceb729001"])
   })

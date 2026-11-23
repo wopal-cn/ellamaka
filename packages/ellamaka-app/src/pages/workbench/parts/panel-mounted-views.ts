@@ -9,9 +9,10 @@ type ReconcileMountedViewsInput = {
 }
 
 export function reconcileMountedViews(prev: Set<string>, input: ReconcileMountedViewsInput): Set<string> {
-  const next = input.prevBoundSessionId !== input.nextBoundSessionId || input.slotState === "empty"
-    ? new Set<string>()
-    : new Set(prev)
+  const next =
+    input.prevBoundSessionId !== input.nextBoundSessionId || input.slotState === "empty"
+      ? new Set<string>()
+      : new Set(prev)
 
   if (input.slotState !== "empty" && input.viewMode) {
     next.add(input.viewMode)

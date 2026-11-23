@@ -35,11 +35,12 @@ Ellamaka 的静态检查覆盖三类互相独立的检查：lint（`oxlint`）�
 
 ## Usage and Interface Contracts
 
-门禁通过仓库根 `package.json` 暴露五个命令，CI 与提交钩子共用同一份判断逻辑：
+门禁通过仓库根 `package.json` 暴露以下命令，CI 与提交钩子共用同一份判断逻辑：
 
 ```text
-bun run lint                       # 全仓门禁：新键 / 次数上升 / stale 三者任一即退出码 1
+bun run lint                       # 全仓门禁：新键 / 次数上升 / stale 三者任一或基线缺失即退出码 1
 bun run lint:fix                   # 收缩基线；只允许删除条目或降低次数，出现新键或次数上升即失败
+bun run lint:init                  # 只在从未建立过基线的仓库初始化一次；工作区或 Git 历史已有该文件时拒绝
 bun run lint:files <file>...       # 只判断这些文件的键（提交钩子使用）；未选中文件不参与比较，也不改写基线
 bun run test:lint-gate             # 门禁检查器自身单测
 bun run format                     # 对格式化范围内的已跟踪文件执行 prettier --write
@@ -58,14 +59,14 @@ bun run format:check               # 对同一范围执行 prettier --check
 
 范围按「归属」划定，不按「是否容易修」划定。
 
-| 范围 | 是否检查 | 理由 |
-|---|---|---|
-| 自有 package（`ellamaka-*`、`llm`、`sdk`、`wopalspace`、`plugin`、`http-recorder`、`effect-drizzle-sqlite`） | 检查 | 本仓拥有并负责 |
-| `packages/opencode`、`packages/ui` 中的上游继承代码 | 不检查 | 上游文件只做最小定制；缺陷由上游维护 |
-| `packages/opencode/src/wopal/`、`packages/opencode/src/workbench/` | 检查 | 位于上游 package 内但由本仓开发；lint 只读诊断、不改文件，可安全纳入 |
-| 生成代码（`**/gen/`、`**/*.gen.ts`） | 不检查 | 改了下次生成即丢失；问题应在生成器或生成源修正 |
-| `poc/` | 不检查 | 实验目录，生命周期单独决定 |
-| 测试代码 | 检查，但纯风格类型规则关闭 | `no-floating-promises` 等在测试里同样指向真实的漏 await；只有运行时零影响的规则才豁免 |
+| 范围                                                                                                         | 是否检查                   | 理由                                                                                  |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------- |
+| 自有 package（`ellamaka-*`、`llm`、`sdk`、`wopalspace`、`plugin`、`http-recorder`、`effect-drizzle-sqlite`） | 检查                       | 本仓拥有并负责                                                                        |
+| `packages/opencode`、`packages/ui` 中的上游继承代码                                                          | 不检查                     | 上游文件只做最小定制；缺陷由上游维护                                                  |
+| `packages/opencode/src/wopal/`、`packages/opencode/src/workbench/`                                           | 检查                       | 位于上游 package 内但由本仓开发；lint 只读诊断、不改文件，可安全纳入                  |
+| 生成代码（`**/gen/`、`**/*.gen.ts`）                                                                         | 不检查                     | 改了下次生成即丢失；问题应在生成器或生成源修正                                        |
+| `poc/`                                                                                                       | 不检查                     | 实验目录，生命周期单独决定                                                            |
+| 测试代码                                                                                                     | 检查，但纯风格类型规则关闭 | `no-floating-promises` 等在测试里同样指向真实的漏 await；只有运行时零影响的规则才豁免 |
 
 排除的含义是「整个路径不进入检查」，不是「关闭规则后仍报出来当噪音」。
 
@@ -73,11 +74,11 @@ bun run format:check               # 对同一范围执行 prettier --check
 
 停检必须同时给出数量、误报证据和保留的替代保护。停检是**明确的权衡**，不等于原保护被等价替换。
 
-| 规则 | 停检理由 | 保留的保护 |
-|---|---|---|
-| `typescript/no-unsafe-type-assertion` | 标记所有 `as` 类型收窄。抽样全部为显式边界断言（外部输入的运行时归一化），规则无法区分「必要收窄」与「危险断言」 | TypeScript strict 类型检查覆盖断言之外的类型一致性；review 时新增 `as` 仍可见 |
-| `typescript/consistent-return` | strict TS 下混合返回值已推为 `T \| undefined`，规则只要求多写一句显式 `return undefined` | 类型检查覆盖返回类型一致性；如需覆盖真实漏 return，应评估开启 `noImplicitReturns` |
-| `typescript/unbound-method` | 抽样 20 条全部为误报：Effect 静态方法引用、SolidJS `createSimpleContext` 的解构 `use`、显式 `.call(this)` 绑定的捕获 | review；`src/wopal/` 与 `src/workbench/` 之外的 class 实例方法调用由各自测试覆盖 |
+| 规则                                  | 停检理由                                                                                                             | 保留的保护                                                                        |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `typescript/no-unsafe-type-assertion` | 标记所有 `as` 类型收窄。抽样全部为显式边界断言（外部输入的运行时归一化），规则无法区分「必要收窄」与「危险断言」     | TypeScript strict 类型检查覆盖断言之外的类型一致性；review 时新增 `as` 仍可见     |
+| `typescript/consistent-return`        | strict TS 下混合返回值已推为 `T \| undefined`，规则只要求多写一句显式 `return undefined`                             | 类型检查覆盖返回类型一致性；如需覆盖真实漏 return，应评估开启 `noImplicitReturns` |
+| `typescript/unbound-method`           | 抽样 20 条全部为误报：Effect 静态方法引用、SolidJS `createSimpleContext` 的解构 `use`、显式 `.call(this)` 绑定的捕获 | review；`src/wopal/` 与 `src/workbench/` 之外的 class 实例方法调用由各自测试覆盖  |
 
 `unbound-method` 指向的问题（方法脱离接收者后 `this` 为 undefined）在以纯函数和工厂函数为主的代码中不会自发产生，
 但类型检查无法证明这个性质。这一缺口是承认的，不描述成「已被类型检查等价覆盖」。
@@ -92,12 +93,12 @@ bun run format:check               # 对同一范围执行 prettier --check
 
 格式化与 lint 的范围不同，因为它们对代码的改动方式不同。
 
-| 范围 | 是否检查 | 理由 |
-|---|---|---|
-| 自有 package 与仓库根的自有配置、脚本 | 检查 | 本仓拥有并负责 |
-| `packages/opencode`、`packages/ui` 整个 package（含 `src/wopal/`、`src/workbench/`） | 不检查 | 格式化会重写整文件，在上游文件上做无关格式化直接制造合并冲突；根 `AGENTS.md` 明确禁止 |
-| 生成代码、构建产物（`out/`、`dist/`、`release/` 下的生成清单） | 不检查 | 非手写内容，重写无意义 |
-| 测试代码 | 检查 | 与 lint 一致，测试也是本仓维护的代码 |
+| 范围                                                                                 | 是否检查 | 理由                                                                                  |
+| ------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------- |
+| 自有 package 与仓库根的自有配置、脚本                                                | 检查     | 本仓拥有并负责                                                                        |
+| `packages/opencode`、`packages/ui` 整个 package（含 `src/wopal/`、`src/workbench/`） | 不检查   | 格式化会重写整文件，在上游文件上做无关格式化直接制造合并冲突；根 `AGENTS.md` 明确禁止 |
+| 生成代码、构建产物（`out/`、`dist/`、`release/` 下的生成清单）                       | 不检查   | 非手写内容，重写无意义                                                                |
+| 测试代码                                                                             | 检查     | 与 lint 一致，测试也是本仓维护的代码                                                  |
 
 **`src/wopal/` 与 `src/workbench/` 只纳入 lint，不纳入格式化。** 代价是这两个目录不享受格式化门禁，换取的是不与上游
 产生整文件格式冲突。这是明确权衡，不是遗漏。
@@ -113,8 +114,13 @@ bun run format:check               # 对同一范围执行 prettier --check
   "entries": [
     // file 为仓库相对路径；rule 为诊断码（无 code 的诊断使用固定占位符）；
     // message 为折叠空白后的诊断消息；count 为同文件同规则同消息的出现次数
-    { "file": "packages/ellamaka-app/src/pages/layout.tsx", "rule": "typescript-eslint(no-floating-promises)", "message": "Promises must be awaited, add void operator to ignore.", "count": 2 }
-  ]
+    {
+      "file": "packages/ellamaka-app/src/pages/layout.tsx",
+      "rule": "typescript-eslint(no-floating-promises)",
+      "message": "Promises must be awaited, add void operator to ignore.",
+      "count": 2,
+    },
+  ],
 }
 ```
 
@@ -126,6 +132,15 @@ bun run format:check               # 对同一范围执行 prettier --check
   日后同键再加一条」会复用已修复债务的额度，门禁在总数不变的情况下放行回归。
 - **`must not` 收缩时放大**：`lint:fix` 检测到新键或次数上升时拒绝写入并失败，基线文件内容保持不变。
   不存在「接纳新违规」的开关。
+
+**基线文件本身缺失时一律失败，即使当前诊断为空。** 否则删除基线就等于重置门禁：先记录债务、再删除文件、
+再重新生成，被删除的违规会作为合法存量原样回到新基线里。首次生成因此不能与日常收缩共用路径：
+只有显式 `bun run lint:init` 才会写出新基线，而它以「可访问 Git 历史上是否建立过基线」为判据——
+工作区已有文件、`HEAD` 已有文件、或历史提交曾记录过该文件（哪怕删除本身已被提交）都拒绝。已建立的基线只能
+用 `git checkout <commit> -- .ci/oxlint-baseline.json` 恢复。日常 `lint:fix` 在文件缺失时失败，不写任何内容。
+
+判定必须失败关闭：Git 探测失败、或处于历史被截断的浅克隆、因而无法证明「从未建立」时，按已建立处理并拒绝初始化，
+由操作者补全历史后再判断。宁可挡住一次合法初始化，也不能把已建立的账本当成空白账本重开。
 
 ### 精度边界
 
@@ -139,12 +154,12 @@ bun run format:check               # 对同一范围执行 prettier --check
 
 ## Data and State Model
 
-| State | Location | Owner | Lifecycle & Rules |
-|---|---|---|---|
-| lint 基线 | `.ci/oxlint-baseline.json` | 门禁检查器 `packages/opencode/script/lint-gate/` | 随代码提交；只能通过 `lint:fix` 收缩，不接受手工放大 |
-| lint 配置 | `.oxlintrc.json` | 仓库根 | 范围、停检、测试路径 override 的唯一来源 |
-| 格式化配置 | 根 `package.json` 的 `prettier` 字段、`.prettierignore` | 仓库根 | `semi: false`、`printWidth: 120` 固定 |
-| CSS 规则 | `packages/ellamaka-app/.stylelintrc.json` | `packages/ellamaka-app` | 规则为 error 级，违规即失败 |
+| State      | Location                                                | Owner                                            | Lifecycle & Rules                                    |
+| ---------- | ------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| lint 基线  | `.ci/oxlint-baseline.json`                              | 门禁检查器 `packages/opencode/script/lint-gate/` | 随代码提交；只能通过 `lint:fix` 收缩，不接受手工放大 |
+| lint 配置  | `.oxlintrc.json`                                        | 仓库根                                           | 范围、停检、测试路径 override 的唯一来源             |
+| 格式化配置 | 根 `package.json` 的 `prettier` 字段、`.prettierignore` | 仓库根                                           | `semi: false`、`printWidth: 120` 固定                |
+| CSS 规则   | `packages/ellamaka-app/.stylelintrc.json`               | `packages/ellamaka-app`                          | 规则为 error 级，违规即失败                          |
 
 门禁本身不持有数据库或缓存状态；每次运行从已跟踪文件与基线文件重新推导结果。
 
@@ -168,7 +183,7 @@ stale 提示运行 `lint:fix`。`lint:fix` 在检测到放大时拒绝写入，�
 
 ## Reference Documents
 
-| Document | Purpose |
-|---|---|
+| Document                                 | Purpose                                                       |
+| ---------------------------------------- | ------------------------------------------------------------- |
 | [Test Isolation](./testing-isolation.md) | 测试隔离的同形门禁契约：四元组基线与 stale 判定语义的既有实现 |
-| [Distribution](./DESIGN-distribution.md) | 发布流程与 CI 触发策略的产品约束来源 |
+| [Distribution](./DESIGN-distribution.md) | 发布流程与 CI 触发策略的产品约束来源                          |

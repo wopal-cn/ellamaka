@@ -60,7 +60,6 @@ export type Workflow = {
 export function parseWorkflow(text: string): Workflow {
   // Bun.YAML.parse is untyped by design; the contracts below validate every
   // field they read, so this assertion only names the parsed shape.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return Bun.YAML.parse(text) as Workflow
 }
 

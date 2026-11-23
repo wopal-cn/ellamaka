@@ -74,7 +74,7 @@ describe("space sync rollback", () => {
 
 describe("space sync public recovery diagnostic", () => {
   test("names the failed leg and refuses to claim nothing changed", () => {
-    const error = syncFailure(new Error("state commit failed"), ["ontology main ref: ref is locked"]) 
+    const error = syncFailure(new Error("state commit failed"), ["ontology main ref: ref is locked"])
 
     expect(error).toBeInstanceOf(SpaceServiceError)
     expect(error.code).toBe(spaceErrorCodes.syncFailed)

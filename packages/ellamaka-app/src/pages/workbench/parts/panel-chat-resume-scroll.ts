@@ -49,7 +49,8 @@ export function chatTranscriptNavigation(event: KeyboardEvent): ChatTranscriptNa
   }
 
   const target = event.target
-  const prompt = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-component="prompt-input"]') : undefined
+  const prompt =
+    target instanceof HTMLElement ? target.closest<HTMLElement>('[data-component="prompt-input"]') : undefined
   // The active Workbench chat normally restores focus to an empty composer.
   // With no draft to navigate, transcript navigation is more useful than a
   // browser caret/page shortcut; any text or attachment keeps the editor's

@@ -22,9 +22,7 @@ export type TerminalImeComposition = {
   text: string
 }
 
-type TerminalImeCompositionEvent =
-  | { type: "start" | "update" | "end"; data: string }
-  | { type: "blur" }
+type TerminalImeCompositionEvent = { type: "start" | "update" | "end"; data: string } | { type: "blur" }
 
 export function updateTerminalImeComposition(
   current: TerminalImeComposition | undefined,

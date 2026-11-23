@@ -59,12 +59,18 @@ describe("createDshRuntimeApi", () => {
     for (const [spec, marker] of Object.entries(markers)) {
       const mod = (() => {
         switch (spec) {
-          case "@deepseek-ai/cordis": return api.cordis
-          case "@deepseek-ai/cordis-plugin-loader": return api.pluginLoader
-          case "@deepseek-ai/dsh-app-boot": return api.appBoot
-          case "@deepseek-ai/dsh-cmdline": return api.cmdline
-          case "@deepseek-ai/dsh-launch-environment": return api.launchEnv
-          case "@deepseek-ai/dsh-host-webserver": return api.hostWebserver
+          case "@deepseek-ai/cordis":
+            return api.cordis
+          case "@deepseek-ai/cordis-plugin-loader":
+            return api.pluginLoader
+          case "@deepseek-ai/dsh-app-boot":
+            return api.appBoot
+          case "@deepseek-ai/dsh-cmdline":
+            return api.cmdline
+          case "@deepseek-ai/dsh-launch-environment":
+            return api.launchEnv
+          case "@deepseek-ai/dsh-host-webserver":
+            return api.hostWebserver
         }
       })() as { marker: string; loaded: boolean }
       expect(mod.loaded).toBe(true)

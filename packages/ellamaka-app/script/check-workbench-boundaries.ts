@@ -38,10 +38,7 @@ const SDK_PROVIDER_OWNERS = new Set([
   `${WORKBENCH_ROOT}parts/workspace.tsx`,
   `${WORKBENCH_ROOT}workbench-directory-provider.tsx`,
 ])
-const PTY_RUNTIME_OWNERS = new Set([
-  `${WORKBENCH_ROOT}pty-manager.tsx`,
-  `${WORKBENCH_ROOT}workbench-actions-ports.ts`,
-])
+const PTY_RUNTIME_OWNERS = new Set([`${WORKBENCH_ROOT}pty-manager.tsx`, `${WORKBENCH_ROOT}workbench-actions-ports.ts`])
 const SESSION_PROJECTION_WRITERS = new Set([
   `${WORKBENCH_ROOT}index.tsx`,
   `${WORKBENCH_ROOT}workbench-actions.ts`,
@@ -72,7 +69,9 @@ function isShared(file: string) {
 function resolvesToWorkbench(file: string, specifier: string) {
   if (specifier.startsWith("@/")) return specifier.startsWith("@/pages/workbench/")
   if (!specifier.startsWith(".")) return false
-  return normalize(path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier))).startsWith(WORKBENCH_ROOT)
+  return normalize(path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier))).startsWith(
+    WORKBENCH_ROOT,
+  )
 }
 
 function isStoreSideEffectImport(specifier: string) {
@@ -182,7 +181,9 @@ export function inspectWorkbenchSources(entries: SourceEntry[]) {
       if (file.startsWith(WORKBENCH_ROOT) && file !== COMMAND_OWNER && ts.isCallExpression(node)) {
         const expression = node.expression
         const command =
-          ts.isPropertyAccessExpression(expression) && expression.name.text === "register" ? node.arguments[0] : undefined
+          ts.isPropertyAccessExpression(expression) && expression.name.text === "register"
+            ? node.arguments[0]
+            : undefined
         if (command && ts.isStringLiteral(command)) {
           violations.push({ rule: "panel-global-command-registration", file, detail: command.text })
         }

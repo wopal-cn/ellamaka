@@ -7,20 +7,8 @@
 // GitHub and Gitee. Product differences (channels, R2 roots, alias names,
 // restore strategy) come from src/cleanup/products.ts.
 
-import {
-  compareSemVer,
-  parseLegacyVersion,
-  parseReleaseVersion,
-  type ReleaseChannel,
-} from "../identity"
-import type {
-  AliasMap,
-  ProductConfig,
-  ReferenceGraph,
-  ReleaseSnapshot,
-  RetentionPlan,
-  WithdrawPlan,
-} from "./types"
+import { compareSemVer, parseLegacyVersion, parseReleaseVersion, type ReleaseChannel } from "../identity"
+import type { AliasMap, ProductConfig, ReferenceGraph, ReleaseSnapshot, RetentionPlan, WithdrawPlan } from "./types"
 
 // ---------------------------------------------------------------------------
 // Path helpers — delegated to ProductConfig (product-agnostic kernel)
@@ -269,7 +257,11 @@ export function planWithdraw({
   const needsRestore = steps.length > 0
   if (needsRestore) {
     if (withdrawnList.includes(fallbackVersion)) {
-      return { allowed: false, reason: `fallback ${fallbackVersion} is itself withdrawn — latest must never be restored to a withdrawn version`, steps: [] }
+      return {
+        allowed: false,
+        reason: `fallback ${fallbackVersion} is itself withdrawn — latest must never be restored to a withdrawn version`,
+        steps: [],
+      }
     }
     const fallbackPath = pathForVersion(config, fallbackVersion, channel)
     if (!snapshot.versionedPaths.includes(fallbackPath)) {

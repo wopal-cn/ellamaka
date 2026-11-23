@@ -176,19 +176,29 @@ export function readUserPatchState(patchPath: string): PatchState {
 export function disableRow(patchPath: string, rowId: string): Promise<{ ok: boolean; reason: string | null }> {
   return queuedWrite(async () => {
     if (!ROW_ID_RE.test(rowId)) {
-      return { ok: false, reason: `行 id 含特殊字符,不支持写入补丁层 / row id ${JSON.stringify(rowId)} cannot be written to the patch layer` }
+      return {
+        ok: false,
+        reason: `行 id 含特殊字符,不支持写入补丁层 / row id ${JSON.stringify(rowId)} cannot be written to the patch layer`,
+      }
     }
     const document = parsePatchDocument(patchPath) ?? parseDocument("")
     const rows = topRows(document)
     if (rows === undefined) {
-      return { ok: false, reason: "补丁层不是合法的条目数组,已拒绝修改以免破坏 / the patch layer is not a valid entry list; refused to modify" }
+      return {
+        ok: false,
+        reason:
+          "补丁层不是合法的条目数组,已拒绝修改以免破坏 / the patch layer is not a valid entry list; refused to modify",
+      }
     }
     if (rows.some((row) => row.id === rowId && row.disabled === true)) {
       return { ok: true, reason: null } // already disabled — idempotent no-op
     }
     const existing = rows.find((row) => row.id === rowId && row.disabled === false)
     if (existing !== undefined) {
-      return { ok: false, reason: `行 ${rowId} 被显式 force-enable,请手工处理 / row ${rowId} is force-enabled; resolve it by hand` }
+      return {
+        ok: false,
+        reason: `行 ${rowId} 被显式 force-enable,请手工处理 / row ${rowId} is force-enabled; resolve it by hand`,
+      }
     }
     const disabled = rowNode(document, rowId, true)
     const seq = appendTarget(document)
@@ -207,12 +217,19 @@ export function disableRow(patchPath: string, rowId: string): Promise<{ ok: bool
 export function enableRow(patchPath: string, rowId: string): Promise<{ ok: boolean; reason: string | null }> {
   return queuedWrite(async () => {
     if (!ROW_ID_RE.test(rowId)) {
-      return { ok: false, reason: `行 id 含特殊字符,不支持写入补丁层 / row id ${JSON.stringify(rowId)} cannot be written to the patch layer` }
+      return {
+        ok: false,
+        reason: `行 id 含特殊字符,不支持写入补丁层 / row id ${JSON.stringify(rowId)} cannot be written to the patch layer`,
+      }
     }
     const document = parsePatchDocument(patchPath) ?? parseDocument("")
     const rows = topRows(document)
     if (rows === undefined) {
-      return { ok: false, reason: "补丁层不是合法的条目数组,已拒绝修改以免破坏 / the patch layer is not a valid entry list; refused to modify" }
+      return {
+        ok: false,
+        reason:
+          "补丁层不是合法的条目数组,已拒绝修改以免破坏 / the patch layer is not a valid entry list; refused to modify",
+      }
     }
     const index = rows.findIndex((row) => row.id === rowId && row.disabled === true)
     const seq = appendTarget(document)

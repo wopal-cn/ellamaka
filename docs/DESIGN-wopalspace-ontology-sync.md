@@ -73,14 +73,14 @@ origin/main -> local main
 
 每个 directional segment 都以 `fromBranch` 为 source、`toBranch` 为 target，返回以下 history state：
 
-| `historyState` | 含义 |
-| --- | --- |
-| `same` | 两个 ref 指向同一 commit |
+| `historyState`    | 含义                                                            |
+| ----------------- | --------------------------------------------------------------- |
+| `same`            | 两个 ref 指向同一 commit                                        |
 | `source-ancestor` | source 已经进入 target ancestry；target 无需消费 source history |
 | `target-ancestor` | target 落后于 source；可以通过 fast-forward 吸收 source history |
-| `diverged` | 双方有共同祖先且各自存在独有 commit |
-| `no-common-base` | 两个可解析 ref 没有共同祖先 |
-| `unavailable` | 必需 ref 无法解析，不能建立可靠关系 |
+| `diverged`        | 双方有共同祖先且各自存在独有 commit                             |
+| `no-common-base`  | 两个可解析 ref 没有共同祖先                                     |
+| `unavailable`     | 必需 ref 无法解析，不能建立可靠关系                             |
 
 当共同祖先可用时，同时返回 `sourceAhead` 与 `targetAhead` commit 数；不可可靠计算时两者为 `null`。commit 数只说明 history shape，不直接等价于待同步文件数或待贡献内容。
 
@@ -90,12 +90,12 @@ origin/main -> local main
 
 merge 型 segment 使用 quarantined `merge-tree` 预测 source 合入 target 的结果：
 
-| `contentState` | 含义 |
-| --- | --- |
-| `aligned` | merge result tree 与 target 当前 tree 相同 |
-| `changes` | merge result tree 会改变 target tree；`fileDiffs` 列出实际变化 |
-| `conflict` | merge 无法干净完成；`conflictFiles` 列出冲突文件 |
-| `unknown` | 缺 ref、无共同祖先或无法可靠预测 |
+| `contentState` | 含义                                                           |
+| -------------- | -------------------------------------------------------------- |
+| `aligned`      | merge result tree 与 target 当前 tree 相同                     |
+| `changes`      | merge result tree 会改变 target tree；`fileDiffs` 列出实际变化 |
+| `conflict`     | merge 无法干净完成；`conflictFiles` 列出冲突文件               |
+| `unknown`      | 缺 ref、无共同祖先或无法可靠预测                               |
 
 `aligned` 不表示 history 已闭合。`historyState=diverged` 且 `contentState=aligned` 正是 squash/rebase 后最常见的 reconciliation 状态。
 
@@ -145,14 +145,14 @@ interface OntologyFlowAnalysis {
 
 merge 型 segment 的动作判定固定为：
 
-| History | Content | `requiredAction` |
-| --- | --- | --- |
-| `same` / `source-ancestor` | `aligned` | `none` |
-| `target-ancestor` | `aligned` / `changes` | `fast-forward` |
-| `diverged` | `aligned` | `reconcile-history` |
-| `diverged` | `changes` | `merge-content` |
-| `diverged` | `conflict` | `blocked` |
-| `no-common-base` / `unavailable` | `unknown` | `blocked` |
+| History                          | Content               | `requiredAction`    |
+| -------------------------------- | --------------------- | ------------------- |
+| `same` / `source-ancestor`       | `aligned`             | `none`              |
+| `target-ancestor`                | `aligned` / `changes` | `fast-forward`      |
+| `diverged`                       | `aligned`             | `reconcile-history` |
+| `diverged`                       | `changes`             | `merge-content`     |
+| `diverged`                       | `conflict`            | `blocked`           |
+| `no-common-base` / `unavailable` | `unknown`             | `blocked`           |
 
 这个表同时驱动 preview 与 apply，不允许 status 以 tree equality 把 `reconcile-history` 折叠成 `none`。push 与 contribute 的动作判定由 Inspect Contract 中对应 segment 规则定义。
 
@@ -162,12 +162,12 @@ merge 型 segment 的动作判定固定为：
 
 Fork 模式固定报告四个关系：
 
-| Segment | `kind` | 目的 |
-| --- | --- | --- |
-| `origin/main -> local main` | `merge` | 判断另一台机器或 fork main 的历史/内容是否需要先进入 local |
-| `upstream/main -> local main` | `merge` | 判断中央 source 是否需要 content merge 或 history reconciliation |
-| `local main -> origin/main` | `push` | 判断 fork mirror 是否需要普通 push，或是否必须先消费 remote history |
-| `local main -> upstream/main` | `contribute` | 判断当前 local main 是否存在仍可贡献的内容 |
+| Segment                       | `kind`       | 目的                                                                |
+| ----------------------------- | ------------ | ------------------------------------------------------------------- |
+| `origin/main -> local main`   | `merge`      | 判断另一台机器或 fork main 的历史/内容是否需要先进入 local          |
+| `upstream/main -> local main` | `merge`      | 判断中央 source 是否需要 content merge 或 history reconciliation    |
+| `local main -> origin/main`   | `push`       | 判断 fork mirror 是否需要普通 push，或是否必须先消费 remote history |
+| `local main -> upstream/main` | `contribute` | 判断当前 local main 是否存在仍可贡献的内容                          |
 
 Clone 模式只报告 `origin/main -> local main` merge segment；它没有 fork mirror 或 upstream contribution segment。
 
@@ -271,14 +271,7 @@ origin 与 upstream 保持独立 stage。二者代表不同远端事实、冲突
 preview 与 apply 返回同一 step vocabulary：
 
 ```ts
-type OntologySyncAction =
-  | "skipped"
-  | "fast-forwarded"
-  | "merged"
-  | "reconciled"
-  | "pushed"
-  | "conflict"
-  | "failed"
+type OntologySyncAction = "skipped" | "fast-forwarded" | "merged" | "reconciled" | "pushed" | "conflict" | "failed"
 
 interface OntologySyncStep {
   step: string

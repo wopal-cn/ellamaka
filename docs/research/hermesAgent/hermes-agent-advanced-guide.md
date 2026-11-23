@@ -85,12 +85,13 @@ class IterationBudget:
     max_total: int = 90       # 默认最大轮次
     remaining: int            # 剩余预算
     used: int                 # 已使用轮次
-    
+
     def consume() -> bool     # 消耗预算，返回是否成功
     def refund()              # 不消耗预算（用于 execute_code）
 ```
 
 **关键特性**：
+
 - 默认 **90 次** tool-calling 轮次
 - `execute_code`（编程式工具调用）**不消耗预算**（refund）
 - 预算耗尽时 **Grace Call**：注入 "总结已完成工作" 消息，给一次额外机会
@@ -99,30 +100,30 @@ class IterationBudget:
 **Grace Call 流程**：
 
 ```
-预算耗尽 → 设置 _budget_grace_call = True → 
-注入 User Message: "You have reached the iteration limit. 
-Summarize what you've accomplished..." → 
+预算耗尽 → 设置 _budget_grace_call = True →
+注入 User Message: "You have reached the iteration limit.
+Summarize what you've accomplished..." →
 最后一次 API 调用 → 返回摘要 → 结束对话
 ```
 
 ### 错误恢复矩阵（20+ 策略）
 
-| 错误类型 | 恢复策略 | 代码位置 |
-|---------|---------|----------|
-| Thinking signature invalid (Anthropic 400) | 剥离 `reasoning_details` 重试（一次性） | run_agent.py:~8500 |
-| Context length exceeded | 降低 context_length tier + 压缩历史 | run_agent.py:~8600 |
-| Max tokens too large | 降低 max_tokens 到可用值 | run_agent.py:~8550 |
-| 413 payload too large | 压缩历史（最多 3 次） | run_agent.py:~8520 |
-| 429 rate limit | Credential pool 轮换 → 切换 fallback provider | run_agent.py:~8400 |
-| Anthropic long-context tier | 将 context 降到 200K（标准层级） | run_agent.py:~8700 |
-| Truncated response (length finish) | 继续请求（最多 3 次）→ 回退 | run_agent.py:~8300 |
-| 推理耗尽（只有 think 没有回答） | 检测 think tag → 用户友好提示 → 建议 | run_agent.py:~8200 |
-| Invalid tool name | Auto-repair（模糊匹配）→ 返回错误让模型自纠正 | model_tools.py:~150 |
-| Invalid JSON args | 返回 JSON 修复建议给模型（最多 3 次） | model_tools.py:~200 |
-| Empty response | Thinking prefill 重试 → 空响应重试（3 次）→ fallback | run_agent.py:~8100 |
-| UnicodeEncodeError | 剥离 surrogate characters → 重试 | run_agent.py:~8000 |
-| 非可重试客户端错误 | 尝试 fallback → 失败则终止 | run_agent.py:~7900 |
-| 连接死亡 | 自动清理 TCP dead connection → 重建 | run_agent.py:~7600 |
+| 错误类型                                   | 恢复策略                                             | 代码位置            |
+| ------------------------------------------ | ---------------------------------------------------- | ------------------- |
+| Thinking signature invalid (Anthropic 400) | 剥离 `reasoning_details` 重试（一次性）              | run_agent.py:~8500  |
+| Context length exceeded                    | 降低 context_length tier + 压缩历史                  | run_agent.py:~8600  |
+| Max tokens too large                       | 降低 max_tokens 到可用值                             | run_agent.py:~8550  |
+| 413 payload too large                      | 压缩历史（最多 3 次）                                | run_agent.py:~8520  |
+| 429 rate limit                             | Credential pool 轮换 → 切换 fallback provider        | run_agent.py:~8400  |
+| Anthropic long-context tier                | 将 context 降到 200K（标准层级）                     | run_agent.py:~8700  |
+| Truncated response (length finish)         | 继续请求（最多 3 次）→ 回退                          | run_agent.py:~8300  |
+| 推理耗尽（只有 think 没有回答）            | 检测 think tag → 用户友好提示 → 建议                 | run_agent.py:~8200  |
+| Invalid tool name                          | Auto-repair（模糊匹配）→ 返回错误让模型自纠正        | model_tools.py:~150 |
+| Invalid JSON args                          | 返回 JSON 修复建议给模型（最多 3 次）                | model_tools.py:~200 |
+| Empty response                             | Thinking prefill 重试 → 空响应重试（3 次）→ fallback | run_agent.py:~8100  |
+| UnicodeEncodeError                         | 剥离 surrogate characters → 重试                     | run_agent.py:~8000  |
+| 非可重试客户端错误                         | 尝试 fallback → 失败则终止                           | run_agent.py:~7900  |
+| 连接死亡                                   | 自动清理 TCP dead connection → 重建                  | run_agent.py:~7600  |
 
 ### Parallel Tool Execution
 
@@ -140,6 +141,7 @@ _PATH_SCOPED_TOOLS = {
 ```
 
 **并行执行条件**：
+
 1. 不包含 `clarify`（需要用户交互）
 2. 所有工具是只读或路径不冲突
 3. 同一批次最多 8 个并发线程
@@ -165,13 +167,13 @@ else:
 
 **实现机制**：
 
-| 原则 | 实现 | 影响 |
-|------|------|------|
-| System prompt 冻结不变 | `_cached_system_prompt` 首次构建后永不重建 | Cache prefix 完全稳定 |
-| Memory 写入不刷新 prompt | memory tool 立即写 MEMORY.md，但 system prompt 不更新 | 避免 Cache Miss |
-| Skills 注入 user message | `skill_manage` 结果作为 user message 追加 | 不触碰 system prompt |
-| Plugin 上下文注入 user message | `pre_llm_call` hook 结果追加到当前 user message | 不修改 system prompt |
-| Anthropic cache 自动启用 | `apply_anthropic_cache_control()` 在 system + 最后 3 条注入 breakpoints | Cache 有效 |
+| 原则                           | 实现                                                                    | 影响                  |
+| ------------------------------ | ----------------------------------------------------------------------- | --------------------- |
+| System prompt 冻结不变         | `_cached_system_prompt` 首次构建后永不重建                              | Cache prefix 完全稳定 |
+| Memory 写入不刷新 prompt       | memory tool 立即写 MEMORY.md，但 system prompt 不更新                   | 避免 Cache Miss       |
+| Skills 注入 user message       | `skill_manage` 结果作为 user message 追加                               | 不触碰 system prompt  |
+| Plugin 上下文注入 user message | `pre_llm_call` hook 结果追加到当前 user message                         | 不修改 system prompt  |
+| Anthropic cache 自动启用       | `apply_anthropic_cache_control()` 在 system + 最后 3 条注入 breakpoints | Cache 有效            |
 
 **Cache Breakpoints 位置**：
 
@@ -223,14 +225,14 @@ _run_single_child():
 
 ### 委派约束
 
-| 约束 | 设计原因 |
-|------|---------|
+| 约束                 | 设计原因                                |
+| -------------------- | --------------------------------------- |
 | 子代理不共享对话历史 | 只看 goal + context，避免污染父代理状态 |
-| 阻塞等待 | 父代理等所有子代理完成，保证任务完整性 |
-| 不可递归委派 | 移除 delegate_task，深度限制 2 |
-| 不可交互用户 | 移除 clarify，子代理必须自主完成 |
-| 不写共享内存 | 移除 memory，避免跨代理记忆污染 |
-| 不用 execute_code | 要求逐步推理，而非写脚本批量执行 |
+| 阻塞等待             | 父代理等所有子代理完成，保证任务完整性  |
+| 不可递归委派         | 移除 delegate_task，深度限制 2          |
+| 不可交互用户         | 移除 clarify，子代理必须自主完成        |
+| 不写共享内存         | 移除 memory，避免跨代理记忆污染         |
+| 不用 execute_code    | 要求逐步推理，而非写脚本批量执行        |
 
 ### Background Review Agent
 
@@ -239,7 +241,7 @@ _run_single_child():
 **流程**：
 
 ```
-主代理完成响应 → 
+主代理完成响应 →
 后台线程启动审查 Agent →
     继承相同 model + tools + 对话历史 →
     注入审查 prompt →
@@ -312,7 +314,7 @@ _run_single_child():
 2. Bot Token (`xoxb-`) + App Token (`xapp-`)
 3. OAuth Scopes:
    ```
-   chat:write, app_mentions:read, channels:history, 
+   chat:write, app_mentions:read, channels:history,
    groups:history, im:history, im:read, im:write, users:read
    ```
 4. Socket Mode 启用
@@ -325,10 +327,12 @@ _run_single_child():
 #### WhatsApp
 
 两种模式：
+
 - **Bot 模式**：使用独立号码（推荐）
 - **Self-chat 模式**：使用个人号码与自己聊天
 
 配置：
+
 ```bash
 hermes whatsapp  # 交互式设置向导 + QR 码配对
 ```
@@ -359,6 +363,7 @@ slack:C12345678:U987654321         # Slack Channel + User
 ```
 
 **Session 持久化**：
+
 - SQLite + FTS5 全文搜索
 - 会话 ID 链接消息历史
 - 跨会话搜索：`session_search` 工具
@@ -367,14 +372,15 @@ slack:C12345678:U987654321         # Slack Channel + User
 
 **配置项**：`display.background_process_notifications`
 
-| 值 | 行为 |
-|---|------|
-| `all` | 运行状态更新 + 完成消息（默认） |
-| `result` | 仅完成消息 |
-| `error` | 仅 exit_code != 0 的消息 |
-| `off` | 不发送任何通知 |
+| 值       | 行为                            |
+| -------- | ------------------------------- |
+| `all`    | 运行状态更新 + 完成消息（默认） |
+| `result` | 仅完成消息                      |
+| `error`  | 仅 exit_code != 0 的消息        |
+| `off`    | 不发送任何通知                  |
 
 **触发条件**：
+
 ```python
 terminal(background=true, notify_on_complete=true)
 # 进程完成后 → Gateway 检测 → 触发新 Agent turn → 推送结果
@@ -398,12 +404,12 @@ hermes-acp
 
 ### 功能
 
-| 功能 | 说明 |
-|------|------|
-| Session 管理 | 创建/恢复/分叉/列出会话 |
-| Model 切换 | 运行时切换模型 |
+| 功能            | 说明                        |
+| --------------- | --------------------------- |
+| Session 管理    | 创建/恢复/分叉/列出会话     |
+| Model 切换      | 运行时切换模型              |
 | MCP Server 注册 | Stdio + SSE + HTTP 三种传输 |
-| 权限审批回调 | 危险命令审批 UI |
+| 权限审批回调    | 危险命令审批 UI             |
 
 ### 编辑器配置
 
@@ -445,11 +451,11 @@ mcp:
       transport: "stdio"
       command: "mcp-server-filesystem"
       args: ["--root", "/home/user/projects"]
-    
+
     github:
       transport: "sse"
       url: "http://localhost:3000/sse"
-    
+
     custom:
       transport: "http"
       url: "http://localhost:8080/mcp"
@@ -481,6 +487,7 @@ hermes mcp serve
 ```
 
 **工具列表**：
+
 - `conversations_list` — 列出所有会话
 - `conversation_get` — 获取会话详情
 - `messages_read` — 读取消息历史
@@ -583,6 +590,7 @@ See `references/api-docs.md` for API details.
 ```
 
 **技能注入方式**：
+
 - Skills 以 **User Message** 注入（不触碰 System Prompt）
 - 触发条件：用户输入匹配 `condition` 或手动调用 `/skill-name`
 
@@ -672,12 +680,12 @@ TOOLSETS = {
         "tools": ["web_search"],
         "includes": ["file", "terminal"]  # 递归包含
     },
-    
+
     "safe": {
         "tools": [],
         "includes": ["web", "vision"],  # 无终端
     },
-    
+
     "full_stack": {
         "tools": ["delegate_task"],
         "includes": ["terminal", "file", "web", "browser"]
@@ -705,27 +713,29 @@ resolve_toolset("*")  # 或 "all"
 
 ### 支持的 Provider
 
-| Provider | Auth Type | 端点 | 特点 |
-|----------|-----------|------|------|
-| `openrouter` | API Key | https://openrouter.ai/api/v1 | 200+ 模型，按使用付费 |
-| `nous` | OAuth | https://portal.nousresearch.com/v1 | 订阅制，工具托管 |
-| `anthropic` | API Key | https://api.anthropic.com | Claude 系列原生 |
-| `copilot` | `gh auth` | GitHub API | GitHub Copilot |
-| `gemini` | API Key | https://generativelanguage.googleapis.com | Gemini 系列 |
-| `zai` | API Key | https://open.bigmodel.cn/api | GLM 系列 |
-| `kimi-coding` | API Key | https://api.moonshot.cn | Moonshot 系列 |
-| `minimax` | API Key | https://api.minimax.chat | MiniMax 国际 |
-| `minimax-cn` | API Key | https://api.minimaxi.com | MiniMax 中国 |
-| `custom` | API Key + Base URL | 自定义 | OpenAI-compatible 端点 |
+| Provider      | Auth Type          | 端点                                      | 特点                   |
+| ------------- | ------------------ | ----------------------------------------- | ---------------------- |
+| `openrouter`  | API Key            | https://openrouter.ai/api/v1              | 200+ 模型，按使用付费  |
+| `nous`        | OAuth              | https://portal.nousresearch.com/v1        | 订阅制，工具托管       |
+| `anthropic`   | API Key            | https://api.anthropic.com                 | Claude 系列原生        |
+| `copilot`     | `gh auth`          | GitHub API                                | GitHub Copilot         |
+| `gemini`      | API Key            | https://generativelanguage.googleapis.com | Gemini 系列            |
+| `zai`         | API Key            | https://open.bigmodel.cn/api              | GLM 系列               |
+| `kimi-coding` | API Key            | https://api.moonshot.cn                   | Moonshot 系列          |
+| `minimax`     | API Key            | https://api.minimax.chat                  | MiniMax 国际           |
+| `minimax-cn`  | API Key            | https://api.minimaxi.com                  | MiniMax 中国           |
+| `custom`      | API Key + Base URL | 自定义                                    | OpenAI-compatible 端点 |
 
 ### Model 切换命令
 
 **临时切换**（当前会话）：
+
 ```
 /model gemini-2.5-pro
 ```
 
 **永久切换**：
+
 ```
 /model claude-sonnet-4.6 --global
 ```
@@ -737,7 +747,6 @@ fallback_providers:
   - "anthropic"
   - "openrouter"
   - "gemini"
-
 # 当主 Provider 失败时，按顺序尝试 Fallback
 ```
 
@@ -747,7 +756,7 @@ fallback_providers:
 
 ```yaml
 credential_pool_strategies:
-  openrouter: "fill_first"  # 或 "round_robin", "random"
+  openrouter: "fill_first" # 或 "round_robin", "random"
 ```
 
 **添加多个密钥**：
@@ -758,6 +767,7 @@ hermes auth add openrouter --api-key sk-or-v2-yyy
 ```
 
 **轮换策略**：
+
 - `fill_first`：持续使用第一个健康密钥直到耗尽
 - `round_robin`：每次选择轮换到下一个健康密钥
 - `random`：随机选择健康密钥
@@ -769,6 +779,7 @@ hermes auth add openrouter --api-key sk-or-v2-yyy
 ### Atropos RL 环境集成
 
 **依赖**：
+
 - `TINKER_API_KEY` — Tinker Console
 - `WANDB_API_KEY` — Weights & Biases
 
@@ -780,18 +791,18 @@ pip install hermes-agent[rl]
 
 ### RL 工具
 
-| 工具 | 说明 |
-|------|------|
-| `rl_list_environments` | 列出可用环境 |
-| `rl_select_environment` | 选择训练环境 |
-| `rl_get_current_config` | 获取当前配置 |
-| `rl_edit_config` | 编辑训练参数 |
-| `rl_start_training` | 启动训练 |
-| `rl_check_status` | 检查训练状态 |
-| `rl_stop_training` | 停止训练 |
-| `rl_get_results` | 获取训练结果 |
-| `rl_list_runs` | 列出历史训练 |
-| `rl_test_inference` | 测试训练后的模型 |
+| 工具                    | 说明             |
+| ----------------------- | ---------------- |
+| `rl_list_environments`  | 列出可用环境     |
+| `rl_select_environment` | 选择训练环境     |
+| `rl_get_current_config` | 获取当前配置     |
+| `rl_edit_config`        | 编辑训练参数     |
+| `rl_start_training`     | 启动训练         |
+| `rl_check_status`       | 检查训练状态     |
+| `rl_stop_training`      | 停止训练         |
+| `rl_get_results`        | 获取训练结果     |
+| `rl_list_runs`          | 列出历史训练     |
+| `rl_test_inference`     | 测试训练后的模型 |
 
 ---
 
@@ -806,12 +817,12 @@ pip install hermes-agent[rl]
 ```yaml
 jobs:
   daily_summary:
-    schedule: "0 9 * * *"  # 每天 9:00
+    schedule: "0 9 * * *" # 每天 9:00
     prompt: "Summarize yesterday's work and create a todo list for today"
     toolsets: ["terminal", "file"]
-    
+
   weekly_report:
-    schedule: "0 18 * * 5"  # 每周五 18:00
+    schedule: "0 18 * * 5" # 每周五 18:00
     prompt: "Generate a weekly progress report"
     platform: "telegram"
     channel: "12345678"
@@ -819,15 +830,15 @@ jobs:
 
 ### Cron 命令
 
-| 命令 | 说明 |
-|------|------|
-| `/cron list` | 列出所有任务 |
-| `/cron add <name>` | 创建新任务 |
-| `/cron edit <name>` | 编辑任务 |
-| `/cron pause <name>` | 暂停任务 |
-| `/cron resume <name>` | 恢复任务 |
-| `/cron run <name>` | 手动执行 |
-| `/cron remove <name>` | 删除任务 |
+| 命令                  | 说明         |
+| --------------------- | ------------ |
+| `/cron list`          | 列出所有任务 |
+| `/cron add <name>`    | 创建新任务   |
+| `/cron edit <name>`   | 编辑任务     |
+| `/cron pause <name>`  | 暂停任务     |
+| `/cron resume <name>` | 恢复任务     |
+| `/cron run <name>`    | 手动执行     |
+| `/cron remove <name>` | 删除任务     |
 
 ---
 
@@ -838,6 +849,7 @@ jobs:
 **位置**：`hermes_cli/skin_engine.py`
 
 **内置皮肤**：
+
 - `default` — Hermes 金色/可爱风格
 - `ares` — 战神风格（红色/青铜）
 - `mono` — 灰度单色
@@ -892,15 +904,15 @@ tool_emojis:
 
 **检测模式**（`DANGEROUS_PATTERNS`）：
 
-| 类别 | 模式示例 |
-|------|----------|
-| 文件删除 | `rm -rf /`, `rm --recursive` |
-| 权限修改 | `chmod 777`, `chown -R root` |
-| 系统操作 | `mkfs`, `dd if=`, `> /dev/sd` |
-| SQL 操作 | `DROP TABLE`, `DELETE FROM` (无 WHERE) |
-| Shell 执行 | `curl ... | sh`, `bash <(curl ...)` |
-| 密钥读取 | `cat ~/.env`, `cat ~/.ssh/authorized_keys` |
-| Fork Bomb | `:(){ :|:& };:` |
+| 类别       | 模式示例                                   |
+| ---------- | ------------------------------------------ | ----------------------- |
+| 文件删除   | `rm -rf /`, `rm --recursive`               |
+| 权限修改   | `chmod 777`, `chown -R root`               |
+| 系统操作   | `mkfs`, `dd if=`, `> /dev/sd`              |
+| SQL 操作   | `DROP TABLE`, `DELETE FROM` (无 WHERE)     |
+| Shell 执行 | `curl ...                                  | sh`, `bash <(curl ...)` |
+| 密钥读取   | `cat ~/.env`, `cat ~/.ssh/authorized_keys` |
+| Fork Bomb  | `:(){ :                                    | :& };:`                 |
 
 ### Approval Mode
 
@@ -908,11 +920,12 @@ tool_emojis:
 
 ```yaml
 approvals:
-  mode: "manual"  # manual / smart / off
-  timeout: 60     # 等待审批超时
+  mode: "manual" # manual / smart / off
+  timeout: 60 # 等待审批超时
 ```
 
 **模式说明**：
+
 - `manual`：总是提示用户确认（默认）
 - `smart`：使用辅助 LLM 自动审批低风险命令，高风险仍需确认
 - `off`：跳过所有审批（等同于 `/yolo`）
@@ -959,12 +972,14 @@ _INVISIBLE_CHARS = {'\u200b', '\u200c', '\u200d', '\u2060', '\ufeff', ...}
 ### Fork/修改流程
 
 1. **Clone 源码**：
+
    ```bash
    git clone https://github.com/NousResearch/hermes-agent.git
    cd hermes-agent
    ```
 
 2. **创建虚拟环境**：
+
    ```bash
    python -m venv .venv
    source .venv/bin/activate
@@ -1021,7 +1036,7 @@ def on_session_start(session_id: str, model: str, platform: str) -> None:
     """Session 启动时初始化状态。"""
     pass
 
-def pre_llm_call(session_id: str, user_message: str, 
+def pre_llm_call(session_id: str, user_message: str,
                   conversation_history: list, is_first_turn: bool) -> dict:
     """API 调用前注入上下文。"""
     return {"context": "Additional context for the model"}
@@ -1037,15 +1052,15 @@ def post_llm_call(session_id: str, response: str, tool_calls: list) -> None:
 
 ### 高级问题排查
 
-| 问题 | 排查方法 |
-|------|----------|
-| Agent 卡死不响应 | 检查 `_interrupt_requested` 状态，Ctrl+C 中断 |
-| Cache 命中率低 | 确认 `_cached_system_prompt` 未重建，检查 memory/skills 注入方式 |
-| 工具执行超时 | 检查 `terminal.timeout` 配置，增加超时时间 |
-| 子代理任务失败 | 检查 `MAX_DEPTH` 深度限制，确认 toolset 隔离 |
-| Gateway 内存泄漏 | 检查 Session Store，定期清理旧会话 |
-| Provider 连接失败 | 检查 IPv6 配置，设置 `force_ipv4: true` |
-| MCP Server 不响应 | 检查传输配置（stdio/sse/http），确认进程存活 |
+| 问题              | 排查方法                                                         |
+| ----------------- | ---------------------------------------------------------------- |
+| Agent 卡死不响应  | 检查 `_interrupt_requested` 状态，Ctrl+C 中断                    |
+| Cache 命中率低    | 确认 `_cached_system_prompt` 未重建，检查 memory/skills 注入方式 |
+| 工具执行超时      | 检查 `terminal.timeout` 配置，增加超时时间                       |
+| 子代理任务失败    | 检查 `MAX_DEPTH` 深度限制，确认 toolset 隔离                     |
+| Gateway 内存泄漏  | 检查 Session Store，定期清理旧会话                               |
+| Provider 连接失败 | 检查 IPv6 配置，设置 `force_ipv4: true`                          |
+| MCP Server 不响应 | 检查传输配置（stdio/sse/http），确认进程存活                     |
 
 ### 诊断命令
 
@@ -1059,37 +1074,37 @@ hermes insights 7              # 显示 7 天使用洞察
 
 ### 日志位置
 
-| 日志 | 路径 | 内容 |
-|------|------|------|
-| `agent.log` | `~/.hermes/logs/agent.log` | INFO+ 级别，所有 Agent 活动 |
-| `errors.log` | `~/.hermes/logs/errors.log` | WARNING+ 级别，错误追踪 |
-| `session.log` | `~/.hermes/sessions/<id>.json` | JSON 格式会话历史 |
-| `trajectory.jsonl` | `~/.hermes/trajectory_samples.jsonl` | 成功轨迹采样 |
+| 日志               | 路径                                 | 内容                        |
+| ------------------ | ------------------------------------ | --------------------------- |
+| `agent.log`        | `~/.hermes/logs/agent.log`           | INFO+ 级别，所有 Agent 活动 |
+| `errors.log`       | `~/.hermes/logs/errors.log`          | WARNING+ 级别，错误追踪     |
+| `session.log`      | `~/.hermes/sessions/<id>.json`       | JSON 格式会话历史           |
+| `trajectory.jsonl` | `~/.hermes/trajectory_samples.jsonl` | 成功轨迹采样                |
 
 ---
 
 ## 与 OpenCode 设计对比
 
-| 维度 | Hermes Agent | OpenCode |
-|------|-------------|----------|
-| **品类** | 通用 AI Agent（聊天/自动化/记忆/跨平台） | 终端内代码 IDE |
-| **Agent Loop** | 同步 while 循环，2800 行，20+ 恢复策略 | 流式响应驱动 |
-| **工具系统** | 集中注册 + Toolset 组合，40+ 工具 | Plugin 分散注册，~20 工具 |
-| **并行工具** | 内置（路径冲突检测，8 线程） | 有限支持 |
-| **Context 管理** | 中间压缩 + prompt cache 冻结 | 窗口截断 + 缓存 |
-| **记忆系统** | MEMORY.md + USER.md + Memory Provider 插件 | 上下文注入 |
-| **技能系统** | 自主创建/更新 + hub 搜索 | 无 |
-| **多 Agent** | delegate_task（线程池，深度限制 2） | 无 |
-| **Serve 模式** | ✅ API Server + ACP Server + Gateway 常驻 | ❌ 无 |
-| **前后端分离** | ✅ Gateway 常驻，多前端接入 | 单体 TUI |
-| **OpenAI 兼容** | ✅ `/v1/chat/completions` + `/v1/responses` | ❌ |
-| **Session 存储** | SQLite + FTS5 全文搜索 | 文件系统 |
-| **错误恢复** | 20+ 策略（thinking signature/credential pool/fallback chain） | 基础重试 |
-| **Plugin 系统** | Hook 生命周期 + Context Engine + Memory Provider | Hook-based |
-| **多租户** | Profile 隔离 | 无 |
-| **Token 预算** | IterationBudget（可 refund） | 无显式预算 |
-| **模型灵活性** | 运行时切换，fallback 链，credential pool | 配置切换 |
+| 维度             | Hermes Agent                                                  | OpenCode                  |
+| ---------------- | ------------------------------------------------------------- | ------------------------- |
+| **品类**         | 通用 AI Agent（聊天/自动化/记忆/跨平台）                      | 终端内代码 IDE            |
+| **Agent Loop**   | 同步 while 循环，2800 行，20+ 恢复策略                        | 流式响应驱动              |
+| **工具系统**     | 集中注册 + Toolset 组合，40+ 工具                             | Plugin 分散注册，~20 工具 |
+| **并行工具**     | 内置（路径冲突检测，8 线程）                                  | 有限支持                  |
+| **Context 管理** | 中间压缩 + prompt cache 冻结                                  | 窗口截断 + 缓存           |
+| **记忆系统**     | MEMORY.md + USER.md + Memory Provider 插件                    | 上下文注入                |
+| **技能系统**     | 自主创建/更新 + hub 搜索                                      | 无                        |
+| **多 Agent**     | delegate_task（线程池，深度限制 2）                           | 无                        |
+| **Serve 模式**   | ✅ API Server + ACP Server + Gateway 常驻                     | ❌ 无                     |
+| **前后端分离**   | ✅ Gateway 常驻，多前端接入                                   | 单体 TUI                  |
+| **OpenAI 兼容**  | ✅ `/v1/chat/completions` + `/v1/responses`                   | ❌                        |
+| **Session 存储** | SQLite + FTS5 全文搜索                                        | 文件系统                  |
+| **错误恢复**     | 20+ 策略（thinking signature/credential pool/fallback chain） | 基础重试                  |
+| **Plugin 系统**  | Hook 生命周期 + Context Engine + Memory Provider              | Hook-based                |
+| **多租户**       | Profile 隔离                                                  | 无                        |
+| **Token 预算**   | IterationBudget（可 refund）                                  | 无显式预算                |
+| **模型灵活性**   | 运行时切换，fallback 链，credential pool                      | 配置切换                  |
 
 ---
 
-*(本指南基于 Hermes Agent v0.8.0 源码深度分析编写)*
+_(本指南基于 Hermes Agent v0.8.0 源码深度分析编写)_

@@ -12,7 +12,7 @@ const { bootDshWeb } = await import("@wopal/ellamaka-cordis/dsh-web")
 const host = await bootDshWeb({ port: 0, home: process.env.DSH_probe_HOME ?? undefined })
 console.log("dsh container up at", host.url)
 
-const ctx = (host as unknown as { dispose: () => Promise<void> }) // placeholder to keep types honest
+const ctx = host as unknown as { dispose: () => Promise<void> } // placeholder to keep types honest
 // reach the container ctx through the module internals: bootDshWeb owns it, so
 // re-mount approach instead: use mountDshWeb on our own Context to keep a handle.
 await host.dispose()

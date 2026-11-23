@@ -3,9 +3,13 @@ import { chatTranscriptNavigation, shouldResumeChatOnEnd } from "./panel-chat-re
 
 function dispatchKeydown(target: HTMLElement, init: KeyboardEventInit = {}) {
   let result: ReturnType<typeof chatTranscriptNavigation>
-  target.addEventListener("keydown", (event) => {
-    result = chatTranscriptNavigation(event)
-  }, { once: true })
+  target.addEventListener(
+    "keydown",
+    (event) => {
+      result = chatTranscriptNavigation(event)
+    },
+    { once: true },
+  )
   target.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true, ...init }))
   return result
 }
@@ -56,9 +60,13 @@ describe("chatTranscriptNavigation", () => {
   test("keeps the End helper aligned with the generic navigation guard", () => {
     const target = document.createElement("div")
     let result = false
-    target.addEventListener("keydown", (event) => {
-      result = shouldResumeChatOnEnd(event)
-    }, { once: true })
+    target.addEventListener(
+      "keydown",
+      (event) => {
+        result = shouldResumeChatOnEnd(event)
+      },
+      { once: true },
+    )
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }))
     expect(result).toBe(true)
   })

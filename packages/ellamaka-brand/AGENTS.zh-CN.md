@@ -15,21 +15,21 @@ description: Branding constants, WopalSpace detection, installation guard, and b
 
 此包负责 ellamaka 的品牌标识注入和构建。上游文件通过 `import { BINARY_NAME } from "@ellamaka/build/branding"` 引用品牌常量，不在源码中硬编码品牌值。
 
-| 文件 | 职责 |
-|------|------|
-| `branding.ts` | 品牌常量（BINARY_NAME、CHANNEL_*），修改后需 `bun ../ellamaka-release/src/cli/build.ts` 重新构建 |
-| `detect.ts` | WopalSpace 自动检测：从 cwd 向上查找 `.wopal/.git` worktree marker |
-| `is-wopal-install.ts` | 安装路径判断：检查 `process.execPath` 是否在 `WOPAL_HOME/bin/` 下 |
-| `logo.ts` | ellamaka ASCII 字模 |
-| `test/` | 包级测试 |
+| 文件                  | 职责                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------- |
+| `branding.ts`         | 品牌常量（BINARY*NAME、CHANNEL*\*），修改后需 `bun ../ellamaka-release/src/cli/build.ts` 重新构建 |
+| `detect.ts`           | WopalSpace 自动检测：从 cwd 向上查找 `.wopal/.git` worktree marker                                |
+| `is-wopal-install.ts` | 安装路径判断：检查 `process.execPath` 是否在 `WOPAL_HOME/bin/` 下                                 |
+| `logo.ts`             | ellamaka ASCII 字模                                                                               |
+| `test/`               | 包级测试                                                                                          |
 
 > 构建/发布工具（品牌化 CLI 构建、release identity、manifest、Gitee、cleanup、upstream lock、legacy inventory）已迁移至 `../ellamaka-release`，见 `../ellamaka-release/AGENTS.md`。
 
 ## Development Commands
 
-| 场景 | 命令 |
-|------|------|
-| Test | `bun test` from `packages/ellamaka-brand` |
+| 场景  | 命令                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------- |
+| Test  | `bun test` from `packages/ellamaka-brand`                                                       |
 | Build | `bun ../ellamaka-release/src/cli/build.ts --web-ui ellamaka-app` from `packages/ellamaka-brand` |
 
 ## Implementation Rules

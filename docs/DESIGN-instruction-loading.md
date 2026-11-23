@@ -16,13 +16,13 @@ Agent 在项目内操作文件时，需要先知道该遵守哪些规则。一�
 
 ## Instruction Sources
 
-| 来源 | 位置 | 说明 |
-| --- | --- | --- |
-| 用户全局 | `$WOPAL_HOME/AGENTS.md` | 进程级用户指令 |
-| 用户全局 Claude | `~/.claude/CLAUDE.md` | 只在未启用 WopalSpace 模式的运行里参与 |
-| 项目链 | 会话目录到 worktree 根之间的 `AGENTS.md` | 每个祖先目录命中的文件都进入基线 |
-| 项目链候选 | `CLAUDE.md`、`CONTEXT.md` | 候选顺序为 `AGENTS.md` → `CLAUDE.md` → `CONTEXT.md` |
-| 配置追加 | `ellamaka.instructions` | 支持相对 glob、绝对路径与 `http(s)://` URL |
+| 来源            | 位置                                     | 说明                                                |
+| --------------- | ---------------------------------------- | --------------------------------------------------- |
+| 用户全局        | `$WOPAL_HOME/AGENTS.md`                  | 进程级用户指令                                      |
+| 用户全局 Claude | `~/.claude/CLAUDE.md`                    | 只在未启用 WopalSpace 模式的运行里参与              |
+| 项目链          | 会话目录到 worktree 根之间的 `AGENTS.md` | 每个祖先目录命中的文件都进入基线                    |
+| 项目链候选      | `CLAUDE.md`、`CONTEXT.md`                | 候选顺序为 `AGENTS.md` → `CLAUDE.md` → `CONTEXT.md` |
+| 配置追加        | `ellamaka.instructions`                  | 支持相对 glob、绝对路径与 `http(s)://` URL          |
 
 候选文件族的作用规则：基线按候选顺序逐个探测，第一个在项目链上出现命中的文件族决定整条项目链使用哪个名字，其余候选不再探测。WopalSpace 模式的候选集合是 `AGENTS.md` 与 `CONTEXT.md`，`CLAUDE.md` 由空间自己的规范入口取代。
 
@@ -124,6 +124,6 @@ Ellamaka 的会话层为两种工具后端提供同样的规范加载行为。�
 
 ## Reference Documents
 
-| Document | Purpose |
-| --- | --- |
-| N/A | 本设计没有外部参考资料依赖 |
+| Document | Purpose                    |
+| -------- | -------------------------- |
+| N/A      | 本设计没有外部参考资料依赖 |

@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  authorizeUpdate,
-  authorizeUpdateFromFeed,
-  type UpdateAuthorizationInput,
-} from "./updater-policy"
+import { authorizeUpdate, authorizeUpdateFromFeed, type UpdateAuthorizationInput } from "./updater-policy"
 
 function validInput(overrides: Partial<UpdateAuthorizationInput> = {}): UpdateAuthorizationInput {
   return {
@@ -23,9 +19,7 @@ describe("updater: authorizeUpdate policy gate", () => {
   })
 
   test("rejects downgrade", () => {
-    const result = authorizeUpdate(
-      validInput({ currentVersion: "1.17.0", targetVersion: "1.16.2" }),
-    )
+    const result = authorizeUpdate(validInput({ currentVersion: "1.17.0", targetVersion: "1.16.2" }))
     expect(result.authorized).toBe(false)
     expect(result.reason).toMatch(/downgrade/)
   })
@@ -39,9 +33,7 @@ describe("updater: authorizeUpdate policy gate", () => {
   })
 
   test("rejects when target manifest version mismatches updater version", () => {
-    const result = authorizeUpdate(
-      validInput({ targetVersion: "1.17.0", targetManifestVersion: "1.17.1" }),
-    )
+    const result = authorizeUpdate(validInput({ targetVersion: "1.17.0", targetManifestVersion: "1.17.1" }))
     expect(result.authorized).toBe(false)
     expect(result.reason).toMatch(/manifest/)
   })
@@ -60,9 +52,7 @@ describe("updater: authorizeUpdate policy gate", () => {
   })
 
   test("rejects same version (no-op)", () => {
-    const result = authorizeUpdate(
-      validInput({ currentVersion: "1.17.0", targetVersion: "1.17.0" }),
-    )
+    const result = authorizeUpdate(validInput({ currentVersion: "1.17.0", targetVersion: "1.17.0" }))
     expect(result.authorized).toBe(false)
     expect(result.reason).toMatch(/same|no-op|downgrade/)
   })

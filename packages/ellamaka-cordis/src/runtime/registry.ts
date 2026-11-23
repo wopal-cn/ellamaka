@@ -71,9 +71,7 @@ export async function probeRegistry(
   try {
     const response = (await Promise.race([
       fetchFn(new URL(PROBE_PATH, candidate.url).href),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`probe timeout for ${candidate.name}`)), timeoutMs),
-      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`probe timeout for ${candidate.name}`)), timeoutMs)),
     ])) as { status?: unknown; ok?: unknown }
     // Any HTTP response counts as reachable (metadata endpoints return
     // 404/405 on an unknown path — that still proves the host+latency).
@@ -100,9 +98,7 @@ export async function pickFastestRegistry(
   candidates: readonly RegistryCandidate[] = CANDIDATE_REGISTRIES,
 ): Promise<RegistryProbeResult> {
   const results = await Promise.all(candidates.map((c) => probeRegistry(fetchFn, c)))
-  const reachable = results
-    .filter((r) => Number.isFinite(r.latencyMs))
-    .sort((a, b) => a.latencyMs - b.latencyMs)
+  const reachable = results.filter((r) => Number.isFinite(r.latencyMs)).sort((a, b) => a.latencyMs - b.latencyMs)
   if (reachable.length === 0) {
     const fallback = candidates.find((c) => c.url === DEFAULT_REGISTRY) ?? {
       name: "npm",

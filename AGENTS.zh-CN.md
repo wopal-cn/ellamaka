@@ -43,6 +43,8 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 | Scenario                   | Command                                                                                 | When                                    |
 | -------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
 | Lint                       | bun run lint                                                                            | 修改代码后                              |
+| 格式化检查                 | bun run format:check                                                                    | 修改任何可格式化文件后                  |
+| CSS 检查                   | bun run --cwd packages/ellamaka-app lint:css                                            | 修改 CSS 后                             |
 | Full typecheck             | bun run typecheck                                                                       | TypeScript 改动后                       |
 | Test isolation gate        | bun run check:test-isolation                                                            | 修改任何测试/fixture/preload/测试配置后 |
 | Cross-package unit tests   | bun run test:unit                                                                       | 全仓 unit 编排                          |
@@ -82,7 +84,10 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - 所有测试相关工作统一遵循 WopalSpace 装配的 `testing.md` 规则（**测试最佳实践**），包括 TDD 适用性判定、测试价值、最低成本分层、确定性与隔离、异步同步、资源 owner、并发边界、flaky 根因证明和验证成本。凡 canonical 规则判定适合 RED 循环的行为变更都必须走 TDD；本项目规范只补充 Ellamaka 特有命令与约束。
 - 修改平台宿主、运行时闭包或发布制品时，在对应真实平台/制品路径验证；说明静态检查未覆盖的边界。
 - 手动验证只用于 package/host 自动化检查无法观察的 GUI 或原生宿主行为。
-- 改动涉及的文件必须通过 `bunx oxlint --deny-warnings <文件>`（不得新增 warning）与 `bunx prettier --check`；改 TypeScript 必须 typecheck 通过。包内测试从所属 package 运行；仓库根只运行上表明确列出的跨包编排或全仓门禁。
+- 质量门禁是真实失败，不是打印：`bun run lint` 把每条诊断与 `.ci/oxlint-baseline.json` 逐键比较，出现新键、同键次数上升、已修复却未扣除（stale）或基线文件缺失都失败，详见 `docs/DESIGN-quality-gates.md`。基线只能收缩——修掉一条诊断后运行 `bun run lint:fix` 扣除，禁止手工抬高次数或新增条目。基线文件缺失时从记录它的提交恢复；只有 Git 历史上从未建立过基线的仓库才用 `bun run lint:init` 初始化——工作区或可访问历史中已有该文件时拒绝，浅克隆无法判断时同样拒绝（失败关闭）。迭代局部改动时用 `bun run lint:files <文件>`。
+- 格式化由 `bun run format:check` 门禁，检查集合与 `bun run format` 写入的集合由 `packages/opencode/script/format/files.ts` 从 `git ls-files` 与 `.prettierignore` 推导。上游 `packages/opencode`、`packages/ui`、生成代码与 `poc/` 不在格式化范围；`src/wopal/` 与 `src/workbench/` 只做 lint。需要格式化时运行 `bun run format`，不要手工排版。
+- 提交钩子对暂存文件运行同一套 lint 与格式化判定，并执行密钥扫描；任一项失败时其余检查仍会执行。钩子读工作区内容而非索引：部分暂存的文件可能按与提交内容不同的版本判定。该缺口是已接受的取舍，修复路径是显式运行 `bun run format` / `bun run lint:fix`，不接受改写索引的钩子。
+- 改 TypeScript 必须 typecheck 通过。包内测试从所属 package 运行；仓库根只运行上表明确列出的跨包编排或全仓门禁。
 
 ### 测试隔离铁律
 

@@ -187,7 +187,6 @@ export function createServerSyncContext(
 
   const setBootStore = ((...input: unknown[]) => {
     if (input[0] === "project" && Array.isArray(input[1])) {
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy store setter overload
       setProjects(input[1] as Project[])
       return input[1]
     }
@@ -214,7 +213,6 @@ export function createServerSyncContext(
 
   const set = ((...input: unknown[]) => {
     if (input[0] === "project" && (Array.isArray(input[1]) || typeof input[1] === "function")) {
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- legacy store setter overload
       setProjects(input[1] as Project[] | ((draft: Project[]) => Project[]))
       return input[1]
     }
@@ -507,7 +505,6 @@ export function createServerSyncContext(
   }
 }
 
-// oxlint-disable-next-line typescript-eslint/unbound-method -- context hook does not use this
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
   init: (props: {

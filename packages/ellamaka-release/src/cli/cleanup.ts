@@ -24,12 +24,7 @@ import { execSync } from "child_process"
 import fs from "fs"
 import os from "os"
 import path from "path"
-import {
-  applyRetentionWithRecheck,
-  buildReferenceGraph,
-  planRetention,
-  planWithdraw,
-} from "../cleanup/core"
+import { applyRetentionWithRecheck, buildReferenceGraph, planRetention, planWithdraw } from "../cleanup/core"
 import { executeRetention, sweepOrphanRegistries, type RetentionOps } from "../cleanup/execute"
 import { parseArgs, parseReleaseTag, type Flags } from "../cleanup/parse"
 import { PRODUCTS, type ProductConfig } from "../cleanup/products"
@@ -119,9 +114,7 @@ function readLatestAlias(config: ProductConfig, r2Url: string, latestPrefix: str
     return manifest.version
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    console.warn(
-      `  WARN: cannot read latest alias at ${latestPrefix} (${reason})`,
-    )
+    console.warn(`  WARN: cannot read latest alias at ${latestPrefix} (${reason})`)
     return null
   } finally {
     try {
@@ -153,7 +146,11 @@ function listGithubOntologyReleases(config: ProductConfig, repo: string) {
   // ellamaka-desktop-v* prefix. Product-aware via config (W-01).
   const cmd = `gh api repos/${repo}/releases --paginate --jq '[.[] | select(.tag_name | ${config.githubOntologySelect})] | .[].tag_name'`
   const output = execSync(cmd, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
-  return output.trim().split("\n").filter(Boolean).filter((t) => config.isOntologyTag(t))
+  return output
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .filter((t) => config.isOntologyTag(t))
 }
 
 function deleteGithubRelease(repo: string, tag: string, dryRun: boolean) {
@@ -184,7 +181,11 @@ function deleteGithubRelease(repo: string, tag: string, dryRun: boolean) {
 
 const GITEE_BASE = "https://gitee.com/api/v5"
 
-function listGiteeReleases(config: ProductConfig, token: string, repo: string): Array<{ id: number; tag_name: string }> {
+function listGiteeReleases(
+  config: ProductConfig,
+  token: string,
+  repo: string,
+): Array<{ id: number; tag_name: string }> {
   const [owner, repoName] = repo.split("/")
   const url = `${GITEE_BASE}/repos/${owner}/${repoName}/releases?access_token=${encodeURIComponent(token)}&per_page=100`
   const output = execSync(`curl -fsSL "${url}"`, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
@@ -194,7 +195,11 @@ function listGiteeReleases(config: ProductConfig, token: string, repo: string): 
     .map((r: { id: number; tag_name: string }) => ({ id: r.id, tag_name: r.tag_name }))
 }
 
-function listGiteeOntologyReleases(config: ProductConfig, token: string, repo: string): Array<{ id: number; tag_name: string }> {
+function listGiteeOntologyReleases(
+  config: ProductConfig,
+  token: string,
+  repo: string,
+): Array<{ id: number; tag_name: string }> {
   const [owner, repoName] = repo.split("/")
   const url = `${GITEE_BASE}/repos/${owner}/${repoName}/releases?access_token=${encodeURIComponent(token)}&per_page=100`
   const output = execSync(`curl -fsSL "${url}"`, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] })
@@ -352,9 +357,7 @@ function runRetention({
   // deletion — e.g. GITEE_TOKEN missing — would otherwise never be repaired,
   // because the version no longer appears in any R2 snapshot).
   const r2Versions = new Set(
-    snapshot.versionedPaths
-      .map((p) => config.versionFromPath(p))
-      .filter((v): v is string => v !== null),
+    snapshot.versionedPaths.map((p) => config.versionFromPath(p)).filter((v): v is string => v !== null),
   )
   const { swept } = sweepOrphanRegistries({
     config,
@@ -459,14 +462,15 @@ function runWithdraw({
         const name = key.split("/").pop()
         const src = `${fallbackPrefix}/${name}`
         if (!headR2Object(r2Url, src)) {
-          console.warn(`  WARN: cannot restore ${key} — ${src} missing (fallback predates feed/asset versioning); the next release of this channel self-heals`)
+          console.warn(
+            `  WARN: cannot restore ${key} — ${src} missing (fallback predates feed/asset versioning); the next release of this channel self-heals`,
+          )
           continue
         }
         console.log(`  restoring ${key} ← ${src}`)
-        execSync(
-          `aws s3 cp "s3://${R2_BUCKET}/${src}" "s3://${R2_BUCKET}/${key}" --endpoint-url "${r2Url}"`,
-          { stdio: "inherit" },
-        )
+        execSync(`aws s3 cp "s3://${R2_BUCKET}/${src}" "s3://${R2_BUCKET}/${key}" --endpoint-url "${r2Url}"`, {
+          stdio: "inherit",
+        })
       }
     } else if (step.action === "restore-alias") {
       console.log(`  restoring alias ${step.target} → ${flags.fallback}`)

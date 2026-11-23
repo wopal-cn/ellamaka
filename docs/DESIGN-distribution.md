@@ -614,11 +614,11 @@ Ellamaka monorepo 把 SDK npm release 与 CLI/Desktop product release 分开。
 
 ### 包身份与归属
 
-| Package | Source directory | Contract |
-| --- | --- | --- |
-| `@wopal/wopalspace` | `packages/wopalspace` | private/not published；Setup/Ontology/Space implementation |
-| `@wopal/ellamaka-sdk` | `packages/sdk/js` | 唯一公开 service SDK；Runtime + WopalSpace contract/client，`/http` 与 self-contained `/local` Worker |
-| `@wopal/ellamaka-plugin` | plugin contract workspace | plugin author contract；不是 service SDK |
+| Package                  | Source directory          | Contract                                                                                              |
+| ------------------------ | ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `@wopal/wopalspace`      | `packages/wopalspace`     | private/not published；Setup/Ontology/Space implementation                                            |
+| `@wopal/ellamaka-sdk`    | `packages/sdk/js`         | 唯一公开 service SDK；Runtime + WopalSpace contract/client，`/http` 与 self-contained `/local` Worker |
+| `@wopal/ellamaka-plugin` | plugin contract workspace | plugin author contract；不是 service SDK                                                              |
 
 `@wopal/ellamaka-sdk/local` 构建时组装 WopalSpace local application 所需 private implementation，但 npm runtime dependency 不指向 unpublished private packages。完整 contract 通过 `@wopal/ellamaka-sdk/openapi.json` 发布。
 

@@ -55,9 +55,7 @@ describe("WorkbenchInspector outside-click dismiss (B-02)", () => {
 
     // The listener is registered in the capture phase so an outside press wins
     // over any click that would reopen the panel (e.g. a file-tree selection).
-    expect(source).toMatch(
-      /document\.addEventListener\(["'](?:mousedown|pointerdown)["'], .*?, \{ capture: true \}\)/,
-    )
+    expect(source).toMatch(/document\.addEventListener\(["'](?:mousedown|pointerdown)["'], .*?, \{ capture: true \}\)/)
 
     // A press landing inside the panel must not dismiss: the guard consults the
     // composed path, which includes shadow-DOM nodes below the panel root.
@@ -110,7 +108,9 @@ describe("WorkbenchInspector outside-click dismiss (B-02)", () => {
     // store, exposes visibility from the display flag, and owns the toggle.
     expect(shell).toMatch(/WorkbenchSurfaceProvider/)
     expect(shell).toMatch(/hasTabs=\{\(\) => surfaceTabs\(\)\.length > 0\}/)
-    expect(shell).toMatch(/toggleVisibility=\{\(\) => wb\.setDisplay\("showFileViewer", !wb\.display\(\)\.showFileViewer\)\}/)
+    expect(shell).toMatch(
+      /toggleVisibility=\{\(\) => wb\.setDisplay\("showFileViewer", !wb\.display\(\)\.showFileViewer\)\}/,
+    )
   })
 
   test("pin action keeps the panel immune to outside-click dismissal", async () => {

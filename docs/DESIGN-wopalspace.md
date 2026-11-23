@@ -174,20 +174,20 @@ DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.
 
 ### Space Endpoints
 
-| Operation | Method/path | Contract |
-| --- | --- | --- |
-| `space.resolve` | `POST /wopal-space/spaces/resolve` | 按稳定 name 或可信 directory 上下文解析已注册 Space |
-| `space.list` | `GET /wopal-space/spaces` | 返回已注册 Space |
-| `space.init` | `POST /wopal-space/spaces` | 输入 name/root/ontology/type/displayName；返回注册身份、`materialized` 与 `preparation` 两个独立事实 |
-| `space.projects.list` | `GET /wopal-space/spaces/:name/projects` | 返回 registered root 下项目与 worktree facts |
-| `space.files.list` | `GET /wopal-space/spaces/:name/files` | 输入可选相对 `path`；返回 registered root 内受控目录项，不启动 Runtime |
-| `space.files.read` | `GET /wopal-space/spaces/:name/files/content` | 输入相对 `path`；返回 registered root 内受控文件内容，不启动 Runtime |
-| `space.search` | `GET /wopal-space/spaces/:name/search` | 在 registered root 内按受控条件查找 repo/dir/file |
-| `space.scan` | `POST /wopal-space/spaces/:name/scan` | 扫描 repo/worktree/AGENTS 等只读事实，不启动 Runtime |
-| `space.status` | `GET /wopal-space/spaces/:name/status` | 返回 Git、assembly snapshot、selection、sparse 与 preparation facts |
-| `space.sync` | `POST /wopal-space/spaces/:name/sync` | `confirm:false` preview，`confirm:true` apply；返回 shared/untracked/sparse 与部分结果 |
-| `space.capability.add` | `POST /wopal-space/spaces/:name/capabilities` | 输入 references/local/section/confirm；装配已有能力，或纳管当前 Space worktree 中的新完整能力后装配 |
-| `space.capability.remove` | `DELETE /wopal-space/spaces/:name/capabilities` | 与 add 同一 selection contract；从当前空间或当前类型的默认装配中移除 |
+| Operation                 | Method/path                                     | Contract                                                                                             |
+| ------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `space.resolve`           | `POST /wopal-space/spaces/resolve`              | 按稳定 name 或可信 directory 上下文解析已注册 Space                                                  |
+| `space.list`              | `GET /wopal-space/spaces`                       | 返回已注册 Space                                                                                     |
+| `space.init`              | `POST /wopal-space/spaces`                      | 输入 name/root/ontology/type/displayName；返回注册身份、`materialized` 与 `preparation` 两个独立事实 |
+| `space.projects.list`     | `GET /wopal-space/spaces/:name/projects`        | 返回 registered root 下项目与 worktree facts                                                         |
+| `space.files.list`        | `GET /wopal-space/spaces/:name/files`           | 输入可选相对 `path`；返回 registered root 内受控目录项，不启动 Runtime                               |
+| `space.files.read`        | `GET /wopal-space/spaces/:name/files/content`   | 输入相对 `path`；返回 registered root 内受控文件内容，不启动 Runtime                                 |
+| `space.search`            | `GET /wopal-space/spaces/:name/search`          | 在 registered root 内按受控条件查找 repo/dir/file                                                    |
+| `space.scan`              | `POST /wopal-space/spaces/:name/scan`           | 扫描 repo/worktree/AGENTS 等只读事实，不启动 Runtime                                                 |
+| `space.status`            | `GET /wopal-space/spaces/:name/status`          | 返回 Git、assembly snapshot、selection、sparse 与 preparation facts                                  |
+| `space.sync`              | `POST /wopal-space/spaces/:name/sync`           | `confirm:false` preview，`confirm:true` apply；返回 shared/untracked/sparse 与部分结果               |
+| `space.capability.add`    | `POST /wopal-space/spaces/:name/capabilities`   | 输入 references/local/section/confirm；装配已有能力，或纳管当前 Space worktree 中的新完整能力后装配  |
+| `space.capability.remove` | `DELETE /wopal-space/spaces/:name/capabilities` | 与 add 同一 selection contract；从当前空间或当前类型的默认装配中移除                                 |
 
 `space.capability.*` 的 `section` 保持开放集合，默认 `ellamaka`；只有 plugin selection 接受 section。结果保留 selection、warnings、capabilities 与 state commit 等领域事实。
 

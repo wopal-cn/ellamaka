@@ -2,7 +2,7 @@
 // Required because the main process imports from 'electron' which is only
 // available within the Electron runtime, not in plain bun.
 import { mock } from "bun:test"
-mock.module("electron", () => ({
+void mock.module("electron", () => ({
   app: {
     getPath: () => "/tmp",
     getVersion: () => "41.2.1",
@@ -75,7 +75,7 @@ mock.module("electron", () => ({
   },
 }))
 
-mock.module("electron-log", () => ({
+void mock.module("electron-log", () => ({
   default: {
     log: () => {},
     error: () => {},
@@ -89,7 +89,7 @@ mock.module("electron-log", () => ({
   initialize: () => {},
 }))
 
-mock.module("electron-log/main.js", () => ({
+void mock.module("electron-log/main.js", () => ({
   default: {
     log: () => {},
     error: () => {},
@@ -104,7 +104,7 @@ mock.module("electron-log/main.js", () => ({
 }))
 
 // Mock drizzle required by sidecar.ts (needs node:sqlite)
-mock.module("drizzle-orm/node-sqlite/driver", () => ({
+void mock.module("drizzle-orm/node-sqlite/driver", () => ({
   drizzle: () => ({
     $client: null,
   }),
@@ -122,7 +122,8 @@ mock.module("drizzle-orm/node-sqlite/driver", () => ({
 // regardless of bun's shared module registry (a per-file mock.module override
 // cannot re-patch the specifier once another file has materialized it).
 ;(globalThis as Record<string, unknown>).__mockDshSetLevelCalls = []
-mock.module("virtual:opencode-server", async () => {
+// Async factory: await so the registration resolves before any test imports the specifier.
+await mock.module("virtual:opencode-server", async () => {
   const real = await import("../ellamaka-cordis/src/plugins/install-command")
   return {
     ...real,

@@ -635,7 +635,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "แสดงสรุปการใช้เหตุผล",
   "settings.general.row.reasoningSummaries.description": "แสดงสรุปการใช้เหตุผลของโมเดลในไทม์ไลน์",
   "settings.general.row.shellToolPartsExpanded.title": "ขยายผลลัพธ์การเรียกเครื่องมือ",
-  "settings.general.row.shellToolPartsExpanded.description": "แสดงผลลัพธ์การเรียกเครื่องมือแบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "แสดงผลลัพธ์การเรียกเครื่องมือแบบขยายตามค่าเริ่มต้นในไทม์ไลน์",
   "settings.general.row.editToolPartsExpanded.title": "ขยายผลลัพธ์เครื่องมือแก้ไข",
   "settings.general.row.editToolPartsExpanded.description":
     "แสดงผลลัพธ์เครื่องมือ edit, write และ patch แบบขยายตามค่าเริ่มต้นในไทม์ไลน์",

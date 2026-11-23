@@ -28,7 +28,6 @@ Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wop
 
 ---
 
-
 ### Active Narrow Contract: DSH Web
 
 `wopal.dsh.web.enabled` 是产品层 Web surface 开关，不是 DSH native profile 配置，因此不经过 DshConfigProvider，也不投影到 `cordis.patch.yml`。它只存在于用户全局 `$WOPAL_HOME/config/settings.jsonc`，默认 `true`，Space 层不能覆盖。Tools profile 的进程级启用事实只来自 `ELLAMAKA_DSH_TOOLS`。`GET /config-v2` 返回 Web effective fact；受控 `PATCH /config-v2` 只允许 global scope 写这个键，并返回 `restart-required`。具体正式契约以主 `DESIGN.md#config-surface`、`DESIGN-dsh-web.md#enablement` 与 `DESIGN-wopalspace.md#product-settings` 为准。
@@ -39,12 +38,12 @@ Phase 3 计划把本机 trusted 配置 implementation 放在 private `@wopal/wop
 
 Workbench General 与 WopalSpace Instance 从 Ellamaka 产品默认值和用户全局设置开始；WopalSpace Instance 再叠加空间覆盖（低 → 高）。其它 OpenCode-compatible 非 WopalSpace Instance 继续使用兼容配置链，不自动采用 Workbench 的内部沙箱默认值：
 
-| 层级           | 来源                                        | 性质                                              |
-| -------------- | ------------------------------------------- | ------------------------------------------------- |
-| 产品默认层     | Ellamaka built-in                           | 不落盘，不占来源标签                              |
-| 用户全局层     | `$WOPAL_HOME/config/settings.jsonc`         | Workbench General 与所有 Space 共享的用户默认值   |
-| 空间层（公共） | `<空间>/.wopal/config/settings.jsonc`       | 仅 Space；只读，本体装配物化的默认值，随本体流转  |
-| 空间层（本地） | `<空间>/.wopal/config/settings.local.jsonc` | 仅 Space；共享服务写，本机私有覆盖（Git 忽略）     |
+| 层级           | 来源                                        | 性质                                             |
+| -------------- | ------------------------------------------- | ------------------------------------------------ |
+| 产品默认层     | Ellamaka built-in                           | 不落盘，不占来源标签                             |
+| 用户全局层     | `$WOPAL_HOME/config/settings.jsonc`         | Workbench General 与所有 Space 共享的用户默认值  |
+| 空间层（公共） | `<空间>/.wopal/config/settings.jsonc`       | 仅 Space；只读，本体装配物化的默认值，随本体流转 |
+| 空间层（本地） | `<空间>/.wopal/config/settings.local.jsonc` | 仅 Space；共享服务写，本机私有覆盖（Git 忽略）   |
 
 之后叠加 agent frontmatter 与 `ELLAMAKA_CONFIG_CONTENT` 内联覆盖（现有链路，见本文档 Configuration Contract）。深合并，后加载者覆盖。
 
@@ -259,8 +258,8 @@ DSH Web 是一个明确例外：`wopal.dsh.web.enabled` 只属于用户全局设
 
 ## Reference Documents
 
-| Document                                  | Purpose                                                    |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）                 |
-| `./DESIGN-ellamaka-sdk.md`                | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律         |
+| Document                                  | Purpose                                                 |
+| ----------------------------------------- | ------------------------------------------------------- |
+| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）              |
+| `./DESIGN-ellamaka-sdk.md`                | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律      |
 | `./DESIGN-ellamaka-sdk.md`                | Phase 3 将扩展的统一 Runtime/WopalSpace public contract |

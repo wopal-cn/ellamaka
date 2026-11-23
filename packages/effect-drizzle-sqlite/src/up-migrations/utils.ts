@@ -1,4 +1,3 @@
-/* oxlint-disable */
 export interface UpgradeResult {
   newDb: boolean
 }

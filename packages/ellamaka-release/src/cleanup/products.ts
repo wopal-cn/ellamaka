@@ -37,8 +37,7 @@ export const PRODUCTS: Record<"ellamaka-cli" | "ellamaka-desktop", ProductConfig
     // ellamaka-cli-v*, both prefixes can appear.
     githubOntologySelect: 'test("^ellamaka-(cli-)?v")',
     isOntologyTag: (t) =>
-      (t.startsWith("ellamaka-cli-v") || t.startsWith("ellamaka-v")) &&
-      !t.startsWith("ellamaka-desktop-v"),
+      (t.startsWith("ellamaka-cli-v") || t.startsWith("ellamaka-v")) && !t.startsWith("ellamaka-desktop-v"),
     ontologyVersion: (tag) =>
       tag.startsWith("ellamaka-cli-v") ? tag.slice("ellamaka-cli-v".length) : tag.slice("ellamaka-v".length),
   },

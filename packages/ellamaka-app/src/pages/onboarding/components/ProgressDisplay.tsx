@@ -23,14 +23,9 @@ export function ProgressDisplay(props: ProgressDisplayProps) {
     <div class="ob-progress-container">
       <Show when={props.percent !== undefined}>
         <div class="ob-progress-bar-track">
-          <div
-            class="ob-progress-bar-fill"
-            style={{ width: `${Math.min(100, Math.max(0, props.percent ?? 0))}%` }}
-          />
+          <div class="ob-progress-bar-fill" style={{ width: `${Math.min(100, Math.max(0, props.percent ?? 0))}%` }} />
         </div>
-        <div class="ob-progress-text">
-          {Math.round(props.percent ?? 0)}%
-        </div>
+        <div class="ob-progress-text">{Math.round(props.percent ?? 0)}%</div>
       </Show>
 
       <Show when={props.percent === undefined && (props.showSpinner ?? true)}>

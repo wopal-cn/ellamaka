@@ -156,6 +156,9 @@ run_all() {
   run_step "isolation-gate-tests"   cienv bun run test:isolation-gate || return 0
   run_step "dsh-grep-regression"    dsh_grep_regression || return 0
   run_step "lint"                   cienv bun run lint || return 0
+  run_step "lint-gate-tests"        cienv bun run test:lint-gate || return 0
+  run_step "format-check"           cienv bun run format:check || return 0
+  run_step "css-check"              cienv bun run --cwd packages/ellamaka-app lint:css || return 0
   run_step "test-order-isolation"   cienv bun run --cwd packages/ellamaka-app check:test-order-isolation || return 0
   # --force: CI never has a warm turbo cache; replaying local cache hits would
   # report stale greens.

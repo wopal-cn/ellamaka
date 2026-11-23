@@ -16,9 +16,7 @@ describe("getStatusBarSegments", () => {
     const segments = getStatusBarSegments({
       spaceName: "main",
       activePanelID: "p-missing",
-      panels: [
-        { id: "p-1", slotState: "empty", directory: "/workspace/main" }
-      ],
+      panels: [{ id: "p-1", slotState: "empty", directory: "/workspace/main" }],
       getSessionTitle: () => undefined,
     })
     expect(segments).toEqual([])
@@ -30,13 +28,11 @@ describe("getStatusBarSegments", () => {
       activePanelID: "p-2",
       panels: [
         { id: "p-1", slotState: "empty", directory: "/workspace/main" },
-        { id: "p-2", slotState: "empty", directory: "/workspace/main/sub" }
+        { id: "p-2", slotState: "empty", directory: "/workspace/main/sub" },
       ],
       getSessionTitle: () => undefined,
     })
-    expect(segments).toEqual([
-      { type: "panel", text: "P2/2" }
-    ])
+    expect(segments).toEqual([{ type: "panel", text: "P2/2" }])
   })
 
   test("returns panel and session title segments if bound and session title exists", () => {
@@ -48,14 +44,12 @@ describe("getStatusBarSegments", () => {
     const segments = getStatusBarSegments({
       spaceName: "General",
       activePanelID: "p-1",
-      panels: [
-        { id: "p-1", slotState: "bound", boundSessionId: "ses-1", directory: "/workspace/general" }
-      ],
+      panels: [{ id: "p-1", slotState: "bound", boundSessionId: "ses-1", directory: "/workspace/general" }],
       getSessionTitle,
     })
     expect(segments).toEqual([
       { type: "panel", text: "P1/1" },
-      { type: "session", text: "Fix CSS Bug" }
+      { type: "session", text: "Fix CSS Bug" },
     ])
   })
 
@@ -63,13 +57,9 @@ describe("getStatusBarSegments", () => {
     const segments = getStatusBarSegments({
       spaceName: "General",
       activePanelID: "p-1",
-      panels: [
-        { id: "p-1", slotState: "bound", boundSessionId: "ses-2", directory: "/workspace/general" }
-      ],
+      panels: [{ id: "p-1", slotState: "bound", boundSessionId: "ses-2", directory: "/workspace/general" }],
       getSessionTitle: () => undefined,
     })
-    expect(segments).toEqual([
-      { type: "panel", text: "P1/1" }
-    ])
+    expect(segments).toEqual([{ type: "panel", text: "P1/1" }])
   })
 })

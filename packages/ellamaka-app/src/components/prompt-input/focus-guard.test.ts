@@ -68,7 +68,6 @@ describe("shouldSkipRestoreFocus", () => {
     const editor = document.createElement("div")
     editor.contentEditable = "true"
     document.body.append(editor)
-
     ;(document.activeElement as HTMLElement | null)?.blur?.()
     expect(shouldSkipRestoreFocus(editor)).toBe(false)
 

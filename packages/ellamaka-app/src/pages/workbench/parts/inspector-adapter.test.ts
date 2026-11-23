@@ -147,7 +147,10 @@ describe("viewerTabKey", () => {
     // Regression: Kobalte Tabs.List locates the selected tab with
     // querySelector(`[data-key="${key}"]`). A raw path with a space (e.g.
     // `/Volumes/x/spaces/common .gitignore`) throws "not a valid selector".
-    const key = viewerTabKey({ directory: "/Volumes/U500G/spaces/common", filePath: "/Volumes/U500G/spaces/common .gitignore" })
+    const key = viewerTabKey({
+      directory: "/Volumes/U500G/spaces/common",
+      filePath: "/Volumes/U500G/spaces/common .gitignore",
+    })
     expect(key).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(key).not.toContain("/")
   })
@@ -214,4 +217,3 @@ describe("clampInspectorWidth", () => {
     expect(clampInspectorWidth(9999, 800)).toBe(480)
   })
 })
-

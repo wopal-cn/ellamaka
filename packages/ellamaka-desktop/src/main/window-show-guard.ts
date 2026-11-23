@@ -46,10 +46,7 @@ export function createWindowShowGuard(
 
 // Second-instance recovery: show + focus an existing live window, otherwise
 // create a fresh one via the provided factory. Returns the live window.
-export function recoverMainWindow<T extends WindowLike>(
-  current: T | null,
-  createWindow: () => T,
-): T {
+export function recoverMainWindow<T extends WindowLike>(current: T | null, createWindow: () => T): T {
   if (current && !current.isDestroyed()) {
     current.show()
     current.focus()

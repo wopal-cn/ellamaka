@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test"
 import type { MenuDeps } from "./menu"
 
-mock.module("./desktop-menu-actions", () => ({ runDesktopMenuAction: () => {} }))
+// Registered before the dynamic import below: that import loads ./menu, which
+// resolves the mocked module at load time.
+await mock.module("./desktop-menu-actions", () => ({ runDesktopMenuAction: () => {} }))
 
 const { aboutOptions, buildMenuTemplate, showWindowsMenuBar } = await import("./menu")
 

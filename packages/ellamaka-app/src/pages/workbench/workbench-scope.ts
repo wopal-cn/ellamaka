@@ -4,9 +4,7 @@ export const GENERAL_SPACE_NAME = "General"
 export const GENERAL_SCOPE_NAME = GENERAL_SPACE_NAME
 export const GENERAL_SCOPE_PATH = ""
 
-export type SpaceScope =
-  | { kind: "general" }
-  | { kind: "space"; name: string; path: string }
+export type SpaceScope = { kind: "general" } | { kind: "space"; name: string; path: string }
 
 export type ScopeTab = {
   name: string

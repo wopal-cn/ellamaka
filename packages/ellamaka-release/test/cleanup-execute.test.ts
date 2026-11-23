@@ -155,7 +155,10 @@ describe("cleanup execute — sweepOrphanRegistries", () => {
     const { ops, calls } = makeOps({
       listGithub: () => ["ellamaka-cli-v1.16.0", "ellamaka-cli-v1.15.0"],
       listGithubOntology: () => ["ellamaka-cli-v1.16.0", "ellamaka-v1.15.0"],
-      listGitee: () => [{ id: 1, tag_name: "ellamaka-cli-v1.16.0" }, { id: 3, tag_name: "ellamaka-cli-v1.15.0" }],
+      listGitee: () => [
+        { id: 1, tag_name: "ellamaka-cli-v1.16.0" },
+        { id: 3, tag_name: "ellamaka-cli-v1.15.0" },
+      ],
       listGiteeOntology: () => [{ id: 2, tag_name: "ellamaka-cli-v1.16.0" }],
     })
     const { swept } = sweepOrphanRegistries({

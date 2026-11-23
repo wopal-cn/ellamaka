@@ -316,7 +316,10 @@ export function WorkbenchMarkdown(
     const link = markdownLinkFromTarget(event.target)
     if (!link) return
     event.preventDefault()
-    navigateMarkdownLink(link, link.getAttribute("target") === "_blank" || event.metaKey || event.ctrlKey || event.shiftKey)
+    navigateMarkdownLink(
+      link,
+      link.getAttribute("target") === "_blank" || event.metaKey || event.ctrlKey || event.shiftKey,
+    )
   }
   const handleLinkAuxClick = (event: MouseEvent) => {
     if (event.button !== 1) return
@@ -362,7 +365,7 @@ export function WorkbenchMarkdown(
             return { key, hash, html: cached.html, mode: block.mode }
           }
 
-          const next = renderMathExpressions(String(syncMarked.parse(block.src)))
+          const next = renderMathExpressions(syncMarked.parse(block.src, { async: false }))
           const safe = sanitize(next)
           touch(cacheKey, { hash, html: safe })
           return { key, hash, html: safe, mode: block.mode }

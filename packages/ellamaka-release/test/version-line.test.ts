@@ -24,9 +24,7 @@ describe("inferNextVersion — candidate (rc/beta)", () => {
   })
 
   test("desktop: stable 2.0.4、beta 最高 2.0.4-beta.1（base 已转正）→ 2.0.5-beta.1", () => {
-    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.4-beta.1" }, "beta")).toBe(
-      "2.0.5-beta.1",
-    )
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.4-beta.1" }, "beta")).toBe("2.0.5-beta.1")
   })
 
   test("候选 base 未转正（高于已发 stable）→ 续 N+1；base 已转正则开下一 patch", () => {
@@ -34,18 +32,14 @@ describe("inferNextVersion — candidate (rc/beta)", () => {
     expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.1" }, "rc")).toBe("2.0.5-rc.2")
     // desktop：beta 2.0.5-beta.1 的 base 2.0.5 已被 stable 转正（stable 2.0.5）
     // → 该 base 的 beta 线终结，升下一 patch 开 2.0.6-beta.1
-    expect(
-      inferNextVersion({ stable: "2.0.5", candidate: "2.0.5-beta.1" }, "beta"),
-    ).toBe("2.0.6-beta.1")
+    expect(inferNextVersion({ stable: "2.0.5", candidate: "2.0.5-beta.1" }, "beta")).toBe("2.0.6-beta.1")
   })
 
   test("产品独立非同步：cli 在 2.0.6 序列，desktop 仍在 2.0.5 序列，各自续发", () => {
     // cli 已发 stable 2.0.5 + rc 2.0.6-rc.1 → 续 2.0.6-rc.2
     expect(inferNextVersion({ stable: "2.0.5", candidate: "2.0.6-rc.1" }, "rc")).toBe("2.0.6-rc.2")
     // desktop 独立最高 stable 2.0.4 + beta 2.0.5-beta.1 → 续 2.0.5-beta.2
-    expect(
-      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-beta.1" }, "beta"),
-    ).toBe("2.0.5-beta.2")
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-beta.1" }, "beta")).toBe("2.0.5-beta.2")
   })
 
   test("从未发布任何版本 → 从种子 base 起 -rc.1", () => {
@@ -57,9 +51,7 @@ describe("inferNextVersion — candidate (rc/beta)", () => {
 describe("inferNextVersion — stable (--patch)", () => {
   test("候选 base 未转正 → 转正该 base", () => {
     expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.1" }, "stable")).toBe("2.0.5")
-    expect(
-      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-beta.3" }, "stable"),
-    ).toBe("2.0.5")
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-beta.3" }, "stable")).toBe("2.0.5")
   })
 
   test("已发 stable R 且无未转正候选 → semver patch+1 直接发新正式版", () => {
@@ -91,19 +83,14 @@ describe("inferNextVersion — explicit", () => {
 
 describe("inferNextVersion — withdrawn versions are skipped", () => {
   test("rc 续位跳过已撤回候选", () => {
-    expect(
-      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.3" }, "rc", undefined, [
-        "2.0.5-rc.4",
-      ]),
-    ).toBe("2.0.5-rc.5")
+    expect(inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.3" }, "rc", undefined, ["2.0.5-rc.4"])).toBe(
+      "2.0.5-rc.5",
+    )
   })
 
   test("连续多个已撤回候选逐一跳过", () => {
     expect(
-      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.3" }, "rc", undefined, [
-        "2.0.5-rc.4",
-        "2.0.5-rc.5",
-      ]),
+      inferNextVersion({ stable: "2.0.4", candidate: "2.0.5-rc.3" }, "rc", undefined, ["2.0.5-rc.4", "2.0.5-rc.5"]),
     ).toBe("2.0.5-rc.6")
   })
 
@@ -116,8 +103,6 @@ describe("inferNextVersion — withdrawn versions are skipped", () => {
   })
 
   test("显式版本不做跳过(由调用方 check_withdrawn 拒绝)", () => {
-    expect(inferNextVersion({ stable: "2.0.4" }, "rc", "2.0.5-rc.4", ["2.0.5-rc.4"])).toBe(
-      "2.0.5-rc.4",
-    )
+    expect(inferNextVersion({ stable: "2.0.4" }, "rc", "2.0.5-rc.4", ["2.0.5-rc.4"])).toBe("2.0.5-rc.4")
   })
 })

@@ -53,9 +53,7 @@ export type OpenedFileEntry = {
  */
 export type FileSurfaceTab = { kind: "file" } & OpenedFileEntry
 
-export type SurfaceTab =
-  | FileSurfaceTab
-  | { kind: Exclude<string, "file">; id: string }
+export type SurfaceTab = FileSurfaceTab | { kind: Exclude<string, "file">; id: string }
 
 /**
  * Selector-safe tab identity for an arbitrary surface tab: the kind namespace
@@ -146,9 +144,7 @@ export function viewerTabKey(file: Pick<OpenedFileEntry, "directory" | "filePath
  * activated.
  */
 export function openViewerFile(tabs: OpenedFileEntry[], file: OpenedFileEntry): OpenedFileEntry[] {
-  return tabs.some((tab) => tab.filePath === file.filePath && tab.directory === file.directory)
-    ? tabs
-    : [...tabs, file]
+  return tabs.some((tab) => tab.filePath === file.filePath && tab.directory === file.directory) ? tabs : [...tabs, file]
 }
 
 /**

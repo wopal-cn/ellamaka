@@ -4,4 +4,3 @@ export const VERSION_PREFIX = "ellamaka"
 export const CHANNEL_RELEASE = "stable"
 export const CHANNEL_DEV = "main"
 export const UI_UPSTREAM_URL: string | null = null
-

@@ -10,7 +10,10 @@ export type WmicExec = (command: string, args: string[], options: { timeout: num
 
 const defaultWmicExec: WmicExec = (command, args, options) => execFileSync(command, args, options).toString()
 
-export function isVmwareVirtualGpu(platform: NodeJS.Platform = process.platform, exec: WmicExec = defaultWmicExec): boolean {
+export function isVmwareVirtualGpu(
+  platform: NodeJS.Platform = process.platform,
+  exec: WmicExec = defaultWmicExec,
+): boolean {
   if (platform !== "win32") return false
   try {
     const output = exec("wmic", ["path", "win32_videocontroller", "get", "name"], { timeout: 5000 })

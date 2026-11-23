@@ -20,7 +20,6 @@ const sentry =
     : false
 
 export default defineConfig({
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Vite accepts a heterogeneous plugin tuple
   plugins: [desktopPlugin, sentry] as any,
   // Files carrying a `@jsxImportSource` pragma (the workbench status-bar
   // diagnostics module and virtua's solid entry) are compiled by

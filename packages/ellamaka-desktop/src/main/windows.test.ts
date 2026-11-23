@@ -38,11 +38,16 @@ describe("wireZoom", () => {
     wireZoom(win)
     // A user gesture (pinch / Ctrl-scroll) moves zoom away from 100% first.
     webContents.setZoomFactor(1.4)
-    const preventDefault = { called: false, call() { this.called = true } }
+    const preventDefault = {
+      called: false,
+      call() {
+        this.called = true
+      },
+    }
     const handler = handlers.get("zoom-changed")
     expect(handler).toBeDefined()
 
-    handler?.({ preventDefault: () => preventDefault.called = true })
+    handler?.({ preventDefault: () => (preventDefault.called = true) })
 
     expect(preventDefault.called).toBe(true)
     expect(webContents.getZoomFactor()).toBe(1)

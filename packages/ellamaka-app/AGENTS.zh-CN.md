@@ -17,13 +17,13 @@ description: Ellamaka App 长期有效的 SolidJS 界面、状态、异步与验
 
 ellamaka-app 是 Browser/Desktop 共用的 renderer，通过生成的 SDK 与 Ellamaka Server 通信；Electron 原生壳层、凭证和 sidecar 进程归 ellamaka-desktop。
 
-| 路径 | 职责 |
-|---|---|
-| src/app.tsx、src/entry.tsx | App 入口和路由组合 |
-| src/pages/workbench/ | Workbench 状态、Action、Runtime 健康、Space 查询和 renderer PTY 客户端 |
-| src/pages/session/ | 共用 Session 与聊天呈现 |
-| src/context/ | Server/SDK Provider 和服务端事件同步 |
-| src/components/ | 跨页面复用的 UI 组件 |
+| 路径                       | 职责                                                                   |
+| -------------------------- | ---------------------------------------------------------------------- |
+| src/app.tsx、src/entry.tsx | App 入口和路由组合                                                     |
+| src/pages/workbench/       | Workbench 状态、Action、Runtime 健康、Space 查询和 renderer PTY 客户端 |
+| src/pages/session/         | 共用 Session 与聊天呈现                                                |
+| src/context/               | Server/SDK Provider 和服务端事件同步                                   |
+| src/components/            | 跨页面复用的 UI 组件                                                   |
 
 核心归属事实：
 
@@ -36,17 +36,16 @@ ellamaka-app 是 Browser/Desktop 共用的 renderer，通过生成的 SDK 与 El
 
 ## Development Commands
 
-| Scenario | Command | When |
-|---|---|---|
-| 开发服务 | bun run dev | 本地前端开发；需先启动 backend |
-| 构建 | bun run build | 生产构建 |
-| 类型检查 | bun run typecheck | 修改 TypeScript 后 |
-| 单元测试 | bun run test:unit --force-exit | 修改组件、hook 或工具后 |
-| E2E 测试 | bun run test:e2e | 修改路由或用户流程后 |
-| Workbench 边界检查 | bun run check:workbench-boundaries | 修改 Workbench 后 |
-| Workbench lint | bun run lint:workbench | 修改 Workbench 后 |
-| CSS lint | bun run lint:css | 修改 CSS 后 |
-| 前后端联调帮助 | ../../scripts/dev.sh help | 集成开发 |
+| Scenario           | Command                            | When                           |
+| ------------------ | ---------------------------------- | ------------------------------ |
+| 开发服务           | bun run dev                        | 本地前端开发；需先启动 backend |
+| 构建               | bun run build                      | 生产构建                       |
+| 类型检查           | bun run typecheck                  | 修改 TypeScript 后             |
+| 单元测试           | bun run test:unit --force-exit     | 修改组件、hook 或工具后        |
+| E2E 测试           | bun run test:e2e                   | 修改路由或用户流程后           |
+| Workbench 边界检查 | bun run check:workbench-boundaries | 修改 Workbench 后              |
+| CSS lint           | bun run lint:css                   | 修改 CSS 后                    |
+| 前后端联调帮助     | ../../scripts/dev.sh help          | 集成开发                       |
 
 单元测试必须用包脚本（它设置 browser condition 与 happy-dom preload）；直接跑 `bun test` 会解析到错误的 SolidJS renderer。Typecheck 走 `tsgo -b`，不要直接运行 `tsc`。
 

@@ -26,7 +26,7 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   const all = () => {
     void import("./dialog-select-provider").then((x) => {
-      dialog.show(() => <x.DialogSelectProvider />)
+      void dialog.show(() => <x.DialogSelectProvider />)
     })
   }
 

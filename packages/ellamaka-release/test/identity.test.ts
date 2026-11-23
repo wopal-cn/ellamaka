@@ -145,6 +145,18 @@ describe("release-identity: release kind (discriminated union)", () => {
     expect(() => identity.parseReleaseIdentity(bad)).toThrow(/workflowRunId/)
   })
 
+  test("serializes a numeric workflowRunId without object stringification", () => {
+    const withNumber = { ...baseReleaseInput, build: { ...baseReleaseInput.build, workflowRunId: 123456789 } }
+    const parsed = identity.parseReleaseIdentity(withNumber)
+    if (parsed.kind !== "release") throw new Error("expected a release identity")
+    expect(parsed.build.workflowRunId).toBe("123456789")
+  })
+
+  test("rejects a non-scalar workflowRunId instead of stringifying it to [object Object]", () => {
+    const bad = { ...baseReleaseInput, build: { ...baseReleaseInput.build, workflowRunId: { run: 1 } } }
+    expect(() => identity.parseReleaseIdentity(bad)).toThrow(/workflowRunId/)
+  })
+
   test("rejects release identity with short gitCommit", () => {
     const bad = { ...baseReleaseInput, build: { ...baseReleaseInput.build, gitCommit: "abc123" } }
     expect(() => identity.parseReleaseIdentity(bad)).toThrow(/gitCommit/)
@@ -185,6 +197,69 @@ describe("release-identity: development kind (discriminated union)", () => {
     expect(() => identity.parseReleaseIdentity(bad)).toThrow(/workflowRunId/)
   })
 
+  test("reports a non-string development gitCommit as JSON, not [object Object]", () => {
+    const bad = { ...baseDevInput, build: { ...baseDevInput.build, gitCommit: { sha: "abc" } } }
+    let message = ""
+    try {
+      identity.parseReleaseIdentity(bad)
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain('{"sha":"abc"}')
+    expect(message).not.toContain("[object Object]")
+  })
+
+  test("keeps the ECOMMIT contract for every non-string gitCommit shape", () => {
+    // A cyclic value makes JSON.stringify throw. Serializing it for the message
+    // must not replace the module's typed error with a raw TypeError: callers
+    // branch on the code, and an invalid commit is exactly what this check
+    // exists to report.
+    const cyclic: Record<string, unknown> = { sha: "abc" }
+    cyclic.self = cyclic
+    // A throwing `Symbol.toStringTag` getter defeats the usual rendering
+    // fallbacks: JSON.stringify trips on the cycle, and any conversion-based
+    // fallback would run this getter and throw again.
+    const hostile: Record<string | symbol, unknown> = { sha: "abc" }
+    hostile.self = hostile
+    Object.defineProperty(hostile, Symbol.toStringTag, {
+      get() {
+        throw new Error("tag getter boom")
+      },
+    })
+    const bad = (gitCommit: unknown) => ({ ...baseDevInput, build: { ...baseDevInput.build, gitCommit } })
+
+    for (const value of [cyclic, hostile, 10n, ["abc"], { sha: "abc" }, null]) {
+      let caught: unknown
+      try {
+        identity.parseReleaseIdentity(bad(value))
+      } catch (error) {
+        caught = error
+      }
+      expect(caught).toBeInstanceOf(identity.ReleaseIdentityError)
+      expect((caught as InstanceType<typeof identity.ReleaseIdentityError>).code).toBe("ECOMMIT")
+    }
+  })
+
+  test("renders an unserializable gitCommit with a fixed placeholder instead of running its getters", () => {
+    const cyclic: Record<string, unknown> = { sha: "abc" }
+    cyclic.self = cyclic
+    const bad = { ...baseDevInput, build: { ...baseDevInput.build, gitCommit: cyclic } }
+
+    let message = ""
+    try {
+      identity.parseReleaseIdentity(bad)
+    } catch (error) {
+      message = (error as Error).message
+    }
+    expect(message).toContain("<unserializable>")
+    expect(message).not.toContain("[object Object]")
+  })
+
+  test("keeps the JSON rendering for a plain object gitCommit", () => {
+    const bad = { ...baseDevInput, build: { ...baseDevInput.build, gitCommit: { sha: "abc" } } }
+    expect(() => identity.parseReleaseIdentity(bad)).toThrow('{"sha":"abc"}')
+  })
+
   test("accepts development channel main", () => {
     const dev = { ...baseDevInput, channel: "main" }
     expect(identity.parseReleaseIdentity(dev).channel).toBe("main")
@@ -213,7 +288,9 @@ describe("release-identity: unknown kind", () => {
 
 describe("release-identity: upstream lock", () => {
   test("loads lock fixture with sources.opencode", () => {
-    const lock = identity.validateUpstreamLock(identity.loadUpstreamLock(join(fixturesDir, "upstream-lock", "valid.lock.json")))
+    const lock = identity.validateUpstreamLock(
+      identity.loadUpstreamLock(join(fixturesDir, "upstream-lock", "valid.lock.json")),
+    )
     expect(lock.schemaVersion).toBe(1)
     expect(lock.sources.opencode.version).toBe("1.15.13")
     expect(lock.sources.opencode.gitCommit).toBe(COMMIT_40)

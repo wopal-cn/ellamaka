@@ -33,21 +33,8 @@ export type CoordinateWorkbenchSessionLinkParams = {
   isCurrent?: () => boolean
 }
 
-export async function coordinateWorkbenchSessionLink(
-  params: CoordinateWorkbenchSessionLinkParams,
-): Promise<void> {
-  const {
-    sessionID,
-    groups,
-    spaces,
-    reveal,
-    openTab,
-    showConfirm,
-    setStatusMessage,
-    consume,
-    t,
-    isCurrent,
-  } = params
+export async function coordinateWorkbenchSessionLink(params: CoordinateWorkbenchSessionLinkParams): Promise<void> {
+  const { sessionID, groups, spaces, reveal, openTab, showConfirm, setStatusMessage, consume, t, isCurrent } = params
 
   if (isCurrent && !isCurrent()) return
 
@@ -97,9 +84,7 @@ export async function coordinateWorkbenchSessionLink(
   switch (result.status) {
     case "activated":
       if (result.scopePath !== undefined && result.scopePath !== scopePath(scope)) {
-        const owningSpace = result.scopePath
-          ? spaces.find((s) => s.path === result.scopePath)
-          : undefined
+        const owningSpace = result.scopePath ? spaces.find((s) => s.path === result.scopePath) : undefined
         if (owningSpace) {
           openTab(owningSpace)
         }

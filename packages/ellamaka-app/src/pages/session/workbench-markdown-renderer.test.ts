@@ -76,7 +76,9 @@ describe("WorkbenchMarkdown streaming pipeline", () => {
 
     expect(blocks.map((block) => block.mode)).toEqual(["full", "full", "full"])
     expect(blocks.map((block) => block.src).join("")).toBe(text)
-    expect(blocks.map((block) => String(syncMarked.parse(block.src))).join("")).toBe(String(syncMarked.parse(text)))
+    expect(blocks.map((block) => syncMarked.parse(block.src, { async: false })).join("")).toBe(
+      syncMarked.parse(text, { async: false }),
+    )
   })
 
   test("a closed fenced code block at the tail renders as a full block", () => {
@@ -191,7 +193,7 @@ describe("WorkbenchMarkdown highlight pipeline", () => {
   })
 
   test("the sync parser emits plain pre/code blocks carrying data-lang", () => {
-    const html = String(syncMarked.parse("```js\nconst value = 1\n```"))
+    const html = syncMarked.parse("```js\nconst value = 1\n```", { async: false })
     expect(html).toContain("<pre><code")
     expect(html).toContain('data-lang="js"')
     expect(html).toContain('class="language-js"')

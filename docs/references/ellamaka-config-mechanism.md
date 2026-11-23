@@ -1,4 +1,5 @@
 # Ellamaka 配置机制
+
 > **日期**: 2026-04-26
 > **Updated**: 2026-10-07
 > **文档目标**: 理解 Ellamaka 配置加载链路、provider auth 配置方式、环境变量覆盖机制
@@ -11,10 +12,10 @@
 
 ellamaka 有两种运行模式，配置加载链路完全不同：
 
-| 模式 | 激活方式 | 行为 |
-|------|---------|------|
-| 普通模式（opencode 兼容） | 默认（非 wopal-space 目录） | 加载 opencode 兼容层 + ellamaka 全局配置 |
-| wopal-space 模式 | 自动检测（`.wopal/.git` 文件） | 短路到 wopal-space 配置体系 |
+| 模式                      | 激活方式                       | 行为                                     |
+| ------------------------- | ------------------------------ | ---------------------------------------- |
+| 普通模式（opencode 兼容） | 默认（非 wopal-space 目录）    | 加载 opencode 兼容层 + ellamaka 全局配置 |
+| wopal-space 模式          | 自动检测（`.wopal/.git` 文件） | 短路到 wopal-space 配置体系              |
 
 #### wopal-space 自动检测
 
@@ -28,23 +29,23 @@ ellamaka 有两种运行模式，配置加载链路完全不同：
 
 配置通过 `packages/opencode/src/config/config.ts` 中的 `init()` 加载，多层合并。
 
-| 优先级 | 来源 | 说明 |
-|--------|------|------|
-| 1 | `OPENCODE_CONFIG_CONTENT` | 环境变量直接传入 JSON 字符串，`local` 级别 |
-| 2 | `OPENCODE_CONFIG` | 环境变量指定配置文件路径，`local` 级别 |
-| 3 | `OPENCODE_CONFIG_DIR` | 环境变量指定配置目录，扫描其下 `opencode.json` / `opencode.jsonc` |
-| 4 | `.opencode/` 目录 | 从 cwd 向上逐级查找 `.opencode/`，加载其中的 `opencode.json` / `opencode.jsonc` |
-| 5 | 项目级 `opencode.json` / `opencode.jsonc` | 从 cwd 向上找至 worktree 边界 |
-| 6 | 全局配置 | `~/.wopal/config/settings.jsonc`（`ellamaka` 字段，通过 `WOPAL_HOME` 定制） |
-| 7 | opencode XDG 全局配置 | `~/.config/opencode/config.json` / `opencode.json[c]`（兼容层底配置） |
-| 8 | 远程 `.well-known/opencode` | 若设 `OPENCODE_AUTO_SHARE`，从共享 URL 拉取 |
+| 优先级 | 来源                                      | 说明                                                                            |
+| ------ | ----------------------------------------- | ------------------------------------------------------------------------------- |
+| 1      | `OPENCODE_CONFIG_CONTENT`                 | 环境变量直接传入 JSON 字符串，`local` 级别                                      |
+| 2      | `OPENCODE_CONFIG`                         | 环境变量指定配置文件路径，`local` 级别                                          |
+| 3      | `OPENCODE_CONFIG_DIR`                     | 环境变量指定配置目录，扫描其下 `opencode.json` / `opencode.jsonc`               |
+| 4      | `.opencode/` 目录                         | 从 cwd 向上逐级查找 `.opencode/`，加载其中的 `opencode.json` / `opencode.jsonc` |
+| 5      | 项目级 `opencode.json` / `opencode.jsonc` | 从 cwd 向上找至 worktree 边界                                                   |
+| 6      | 全局配置                                  | `~/.wopal/config/settings.jsonc`（`ellamaka` 字段，通过 `WOPAL_HOME` 定制）     |
+| 7      | opencode XDG 全局配置                     | `~/.config/opencode/config.json` / `opencode.json[c]`（兼容层底配置）           |
+| 8      | 远程 `.well-known/opencode`               | 若设 `OPENCODE_AUTO_SHARE`，从共享 URL 拉取                                     |
 
 **能力加载顺序**（后加载覆盖先加载）：
 
-| 优先级 | 来源 | 说明 |
-|--------|------|------|
-| 1 | `.opencode/`、`~/.opencode/`、`~/.config/opencode/` | opencode 生态能力（原生路径，优先扫描） |
-| 2 | `~/.wopal/`（`WOPAL_HOME`） | ellamaka 全局能力（agents/commands/plugins/skills），最后加载覆盖同名能力 |
+| 优先级 | 来源                                                | 说明                                                                      |
+| ------ | --------------------------------------------------- | ------------------------------------------------------------------------- |
+| 1      | `.opencode/`、`~/.opencode/`、`~/.config/opencode/` | opencode 生态能力（原生路径，优先扫描）                                   |
+| 2      | `~/.wopal/`（`WOPAL_HOME`）                         | ellamaka 全局能力（agents/commands/plugins/skills），最后加载覆盖同名能力 |
 
 > `~/.wopal/config/` 是纯配置目录，不参与能力扫描；能力只来自 `~/.wopal/` 根下的 capability 子目录。
 
@@ -64,20 +65,21 @@ ellamaka 有两种运行模式，配置加载链路完全不同：
 
 自动检测到空间根后，直接短路到 wopal-space 配置体系，不碰任何 opencode 路径。空间根由 `WOPAL_SPACE_ROOT` 定位。
 
-| 优先级 | 来源 | 说明 |
-|--------|------|------|
-| 1 | `OPENCODE_CONFIG_CONTENT` | 同普通模式 |
-| 2 | `~/.wopal/config/settings.jsonc` | 全局配置（`ellamaka` 字段） |
-| 3 | `~/.wopal/` | 全局能力扫描（agents/commands/plugins/skills） |
-| 4 | `<WOPAL_SPACE_ROOT>/.wopal/config/settings.json[c]` | 空间配置（`ellamaka` + `tui` 字段） |
-| 5 | `<WOPAL_SPACE_ROOT>/.wopal/` | 空间能力扫描（agents/commands/plugins/skills） |
-| 6 | `<WOPAL_SPACE_ROOT>/.wopal/agents/{name}.md` | agent frontmatter（permission 最高优先级） |
+| 优先级 | 来源                                                | 说明                                           |
+| ------ | --------------------------------------------------- | ---------------------------------------------- |
+| 1      | `OPENCODE_CONFIG_CONTENT`                           | 同普通模式                                     |
+| 2      | `~/.wopal/config/settings.jsonc`                    | 全局配置（`ellamaka` 字段）                    |
+| 3      | `~/.wopal/`                                         | 全局能力扫描（agents/commands/plugins/skills） |
+| 4      | `<WOPAL_SPACE_ROOT>/.wopal/config/settings.json[c]` | 空间配置（`ellamaka` + `tui` 字段）            |
+| 5      | `<WOPAL_SPACE_ROOT>/.wopal/`                        | 空间能力扫描（agents/commands/plugins/skills） |
+| 6      | `<WOPAL_SPACE_ROOT>/.wopal/agents/{name}.md`        | agent frontmatter（permission 最高优先级）     |
 
 > `~/.wopal/config/` 是纯配置目录，不扫描能力。能力来自 `~/.wopal/`（全局）和 `.wopal/`（空间）。
 >
 > **环境变量 (`.env`) 装载边界**：Core `Global` 模块不装载 `.env` 文件，`process.env` 只表达真实进程启动环境与 shell 临时覆盖。`$WOPAL_HOME/.env` 与 `<wopalSpaceRoot>/.wopal/.env` 由 wopal-plugin 的 per-invocation effective env loader 消费（`PluginInput.wopalSpaceRoot` 定位空间根），优先级为真实 process/shell env > 当前空间 `.env` > 全局 `.env`。
 
 wopal-space 模式**不加载**：
+
 - 项目级 `opencode.jsonc` / `.opencode/`
 - `~/.config/opencode/` 下的 opencode 全局配置
 - `~/.opencode/` 下的 opencode 全局能力
@@ -90,21 +92,21 @@ wopal-space 模式**不加载**：
 
 ### 配置相关
 
-| 变量 | 类型 | 说明 |
-|------|------|------|
-| `OPENCODE_CONFIG` | string | 指定 `opencode.json` **文件路径** |
-| `OPENCODE_CONFIG_CONTENT` | string | 直接传入配置 **JSON 内容** |
-| `OPENCODE_CONFIG_DIR` | string | 指定配置 **目录**（替代 `.opencode/` 行为） |
-| `OPENCODE_TUI_CONFIG` | string | 指定 TUI 配置文件路径 |
-| `OPENCODE_DISABLE_PROJECT_CONFIG` | boolean | 禁用所有项目级配置（cwd 向上扫描） |
+| 变量                              | 类型    | 说明                                        |
+| --------------------------------- | ------- | ------------------------------------------- |
+| `OPENCODE_CONFIG`                 | string  | 指定 `opencode.json` **文件路径**           |
+| `OPENCODE_CONFIG_CONTENT`         | string  | 直接传入配置 **JSON 内容**                  |
+| `OPENCODE_CONFIG_DIR`             | string  | 指定配置 **目录**（替代 `.opencode/` 行为） |
+| `OPENCODE_TUI_CONFIG`             | string  | 指定 TUI 配置文件路径                       |
+| `OPENCODE_DISABLE_PROJECT_CONFIG` | boolean | 禁用所有项目级配置（cwd 向上扫描）          |
 
 ### 认证相关
 
-| 变量 | 说明 |
-|------|------|
-| `ELLAMAKA_SERVER_PASSWORD` | 远程 server 的 basic auth 密码 |
+| 变量                       | 说明                                              |
+| -------------------------- | ------------------------------------------------- |
+| `ELLAMAKA_SERVER_PASSWORD` | 远程 server 的 basic auth 密码                    |
 | `ELLAMAKA_SERVER_USERNAME` | 远程 server 的 basic auth 用户名，默认 `ellamaka` |
-| `OPENCODE_PERMISSION` | 权限默认策略（传给非 TUI 场景） |
+| `OPENCODE_PERMISSION`      | 权限默认策略（传给非 TUI 场景）                   |
 
 ### Provider 特有环境变量
 
@@ -112,18 +114,18 @@ wopal-space 模式**不加载**：
 
 ### 其他关键变量
 
-| 变量 | 说明 |
-|------|------|
-| `WOPAL_SPACE` | 激活 wopal-space 模式（自动检测设置） |
-| `WOPAL_SPACE_ROOT` | 检测到的空间根绝对路径（内部状态，不接受用户环境变量注入） |
-| `WOPAL_HOME` | 覆盖 `~/.wopal/` 根路径 |
-| `ELLAMAKA_MODELS_URL` | 自定义 provider catalog 的 base URL，默认 `https://models.opencode.ai` |
-| `ELLAMAKA_MODELS_PATH` | 显式指定的 provider catalog 文件路径；Ellamaka 只读取，绝不删除或改写该文件 |
-| `ELLAMAKA_MODELS_FALLBACK_PATH` | 仅开发入口注入的只读 fallback snapshot；先请求 URL，失败后才读取它 |
-| `ELLAMAKA_MODELS_API_JSON` | 仅构建期使用的显式 catalog JSON 文件路径；有效时优先于网络与仓库 snapshot |
-| `ELLAMAKA_MODELS_DEV` | 仅构建产物内联使用的已校验 catalog；不应由用户手动设置 |
-| `OPENCODE_DB` | 指定数据库路径 |
-| `OPENCODE_SKIP_MIGRATIONS` | 跳过数据库迁移 |
+| 变量                            | 说明                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| `WOPAL_SPACE`                   | 激活 wopal-space 模式（自动检测设置）                                       |
+| `WOPAL_SPACE_ROOT`              | 检测到的空间根绝对路径（内部状态，不接受用户环境变量注入）                  |
+| `WOPAL_HOME`                    | 覆盖 `~/.wopal/` 根路径                                                     |
+| `ELLAMAKA_MODELS_URL`           | 自定义 provider catalog 的 base URL，默认 `https://models.opencode.ai`      |
+| `ELLAMAKA_MODELS_PATH`          | 显式指定的 provider catalog 文件路径；Ellamaka 只读取，绝不删除或改写该文件 |
+| `ELLAMAKA_MODELS_FALLBACK_PATH` | 仅开发入口注入的只读 fallback snapshot；先请求 URL，失败后才读取它          |
+| `ELLAMAKA_MODELS_API_JSON`      | 仅构建期使用的显式 catalog JSON 文件路径；有效时优先于网络与仓库 snapshot   |
+| `ELLAMAKA_MODELS_DEV`           | 仅构建产物内联使用的已校验 catalog；不应由用户手动设置                      |
+| `OPENCODE_DB`                   | 指定数据库路径                                                              |
+| `OPENCODE_SKIP_MIGRATIONS`      | 跳过数据库迁移                                                              |
 
 > 模型发现不再兼容 `OPENCODE_MODELS_*` 或 `MODELS_DEV_API_JSON`。运行时只接受有效、非空的 provider catalog；默认缓存可自行恢复，而显式路径与仓库 `.ci/models.json` snapshot 始终是只读输入。开发入口以 `ELLAMAKA_MODELS_FALLBACK_PATH` 注入仓库 snapshot，因此正常启动会先请求 catalog URL，网络失败才依次使用本机缓存和该 snapshot。构建不会自动刷新或回写该 snapshot。
 
@@ -174,19 +176,19 @@ wopal-space 模式**不加载**：
 
 **Provider Info 字段**（`packages/opencode/src/config/provider.ts`）：
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `api` | string | OpenAI 兼容端点 URL |
-| `name` | string | UI 显示名 |
-| `env` | string[] | 环境变量名数组（按序取首个有值） |
-| `options.apiKey` | string | 直接配置 API Key（优先级高于 env） |
-| `options.baseURL` | string | 自定义 base URL |
-| `options.timeout` | number \| false | 请求超时（ms），`false` 禁用超时 |
-| `options.chunkTimeout` | number | SSE 流 chunk 间隔超时（ms） |
-| `options.setCacheKey` | boolean | 启用 `promptCacheKey` |
-| `models` | object | 模型覆盖配置，key 为本地盘 ID，value 含远程模型 ID 和特性声明 |
-| `whitelist` | string[] | 允许使用的模型白名单 |
-| `blacklist` | string[] | 禁用的模型黑名单 |
+| 字段                   | 类型            | 说明                                                          |
+| ---------------------- | --------------- | ------------------------------------------------------------- |
+| `api`                  | string          | OpenAI 兼容端点 URL                                           |
+| `name`                 | string          | UI 显示名                                                     |
+| `env`                  | string[]        | 环境变量名数组（按序取首个有值）                              |
+| `options.apiKey`       | string          | 直接配置 API Key（优先级高于 env）                            |
+| `options.baseURL`      | string          | 自定义 base URL                                               |
+| `options.timeout`      | number \| false | 请求超时（ms），`false` 禁用超时                              |
+| `options.chunkTimeout` | number          | SSE 流 chunk 间隔超时（ms）                                   |
+| `options.setCacheKey`  | boolean         | 启用 `promptCacheKey`                                         |
+| `models`               | object          | 模型覆盖配置，key 为本地盘 ID，value 含远程模型 ID 和特性声明 |
+| `whitelist`            | string[]        | 允许使用的模型白名单                                          |
+| `blacklist`            | string[]        | 禁用的模型黑名单                                              |
 
 ### Agent / Mode / Command 配置
 
@@ -228,12 +230,12 @@ wopal-space 模式**不加载**：
 
 ### 其他顶层键
 
-| 键 | 说明 |
-|----|------|
-| `model` | 默认模型（`provider/model` 格式） |
-| `enabled_providers` | 启用的 provider 列表 |
-| `auth_override` | auth 覆盖配置 |
-| `$schema` | JSON Schema URL，`https://opencode.ai/config.json` |
+| 键                  | 说明                                               |
+| ------------------- | -------------------------------------------------- |
+| `model`             | 默认模型（`provider/model` 格式）                  |
+| `enabled_providers` | 启用的 provider 列表                               |
+| `auth_override`     | auth 覆盖配置                                      |
+| `$schema`           | JSON Schema URL，`https://opencode.ai/config.json` |
 
 ---
 
@@ -268,6 +270,7 @@ wopal-space 模式**不加载**：
 ```
 
 `{file:...}` 中：
+
 - 相对路径相对于配置文件所在目录解析
 - `~/` 展开为用户 home
 - 注释行中的 `{file:...}` 不展开（`//` 开头）
@@ -279,15 +282,15 @@ wopal-space 模式**不加载**：
 
 Ellamaka 是 OpenCode 的定制 fork，通过 `WOPAL_HOME` 环境变量覆盖全局数据目录。
 
-| 路径 | 默认值 | 说明 |
-|------|--------|------|
-| `Global.Path.home` | `os.homedir()` | 用户 home（可被 `OPENCODE_TEST_HOME` 覆盖） |
-| `Global.Path.data` | `~/.wopal/ellamaka/data` | 数据目录 |
-| `Global.Path.config` | `~/.wopal/config` | **全局配置目录**（含全局 `settings.jsonc`） |
-| `Global.Path.cache` | `~/.wopal/ellamaka/cache` | 缓存目录 |
-| `Global.Path.state` | `~/.wopal/ellamaka/state` | 状态目录（含 flock） |
-| `Global.Path.log` | `~/.wopal/ellamaka/data/log` | 日志目录 |
-| `Global.Path.bin` | `~/.wopal/ellamaka/cache/bin` | 二进制下载目录 |
+| 路径                 | 默认值                        | 说明                                        |
+| -------------------- | ----------------------------- | ------------------------------------------- |
+| `Global.Path.home`   | `os.homedir()`                | 用户 home（可被 `OPENCODE_TEST_HOME` 覆盖） |
+| `Global.Path.data`   | `~/.wopal/ellamaka/data`      | 数据目录                                    |
+| `Global.Path.config` | `~/.wopal/config`             | **全局配置目录**（含全局 `settings.jsonc`） |
+| `Global.Path.cache`  | `~/.wopal/ellamaka/cache`     | 缓存目录                                    |
+| `Global.Path.state`  | `~/.wopal/ellamaka/state`     | 状态目录（含 flock）                        |
+| `Global.Path.log`    | `~/.wopal/ellamaka/data/log`  | 日志目录                                    |
+| `Global.Path.bin`    | `~/.wopal/ellamaka/cache/bin` | 二进制下载目录                              |
 
 设置 `WOPAL_HOME=/custom/path` → `config` 前缀变为 `/custom/path/config/`，`data`/`cache`/`state` 前缀变为 `/custom/path/ellamaka/`。
 
@@ -301,49 +304,49 @@ Ellamaka 是 OpenCode 的定制 fork，通过 `WOPAL_HOME` 环境变量覆盖全
 
 `run` 命令（`packages/opencode/src/cli/cmd/run.ts`）本身不定义配置参数，通过环境变量间接控制：
 
-| 场景 | 命令 |
-|------|------|
-| 指定配置文件 | `OPENCODE_CONFIG=/path/to/opencode.json ellamaka run "prompt"` |
-| 内联配置 | `OPENCODE_CONFIG_CONTENT='{"provider":{"openai":{"options":{"apiKey":"sk-xxx"}}}}' ellamaka run "prompt"` |
-| 指定配置目录 | `OPENCODE_CONFIG_DIR=/path/to/config-dir ellamaka run "prompt"` |
-| 连接远程 server | `ellamaka run "prompt" --attach http://remote:4096 --password secret` |
-| 跳过权限询问 | `ellamaka run "prompt" --dangerously-skip-permissions` |
-| 指定模型 | `ellamaka run "prompt" --model openai/gpt-4o` |
+| 场景            | 命令                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| 指定配置文件    | `OPENCODE_CONFIG=/path/to/opencode.json ellamaka run "prompt"`                                            |
+| 内联配置        | `OPENCODE_CONFIG_CONTENT='{"provider":{"openai":{"options":{"apiKey":"sk-xxx"}}}}' ellamaka run "prompt"` |
+| 指定配置目录    | `OPENCODE_CONFIG_DIR=/path/to/config-dir ellamaka run "prompt"`                                           |
+| 连接远程 server | `ellamaka run "prompt" --attach http://remote:4096 --password secret`                                     |
+| 跳过权限询问    | `ellamaka run "prompt" --dangerously-skip-permissions`                                                    |
+| 指定模型        | `ellamaka run "prompt" --model openai/gpt-4o`                                                             |
 
 ### run 命令完整参数
 
-| 参数 | 别名 | 类型 | 说明 |
-|------|------|------|------|
-| `--model` | `-m` | string | 模型（`provider/model` 格式） |
-| `--agent` | — | string | 使用的 agent |
-| `--variant` | — | string | 模型 variant（如 `high`, `max`, `minimal`） |
-| `--format` | — | string | 输出格式：`default` 或 `json` |
-| `--file` | `-f` | string[] | 附件文件 |
-| `--command` | — | boolean | 以命令模式执行 |
-| `--title` | — | string | session 标题 |
-| `--dir` | — | string | 工作目录 |
-| `--attach` | — | string | 连接远程 server URL |
-| `--password` | `-p` | string | Basic auth 密码 |
-| `--port` | — | number | 本地 server 端口 |
-| `--share` | — | boolean | 分享 session |
-| `--thinking` | — | boolean | 显示 thinking 块 |
-| `--dangerously-skip-permissions` | — | boolean | 自动批准权限 |
-| `--fork` | — | boolean | 创建 fork 分支 |
-| `--continue` | — | boolean | 继续已有 session |
-| `--session` | — | string | 指定 session ID |
-| `--repo` | — | string | GitHub 仓库 |
+| 参数                             | 别名 | 类型     | 说明                                        |
+| -------------------------------- | ---- | -------- | ------------------------------------------- |
+| `--model`                        | `-m` | string   | 模型（`provider/model` 格式）               |
+| `--agent`                        | —    | string   | 使用的 agent                                |
+| `--variant`                      | —    | string   | 模型 variant（如 `high`, `max`, `minimal`） |
+| `--format`                       | —    | string   | 输出格式：`default` 或 `json`               |
+| `--file`                         | `-f` | string[] | 附件文件                                    |
+| `--command`                      | —    | boolean  | 以命令模式执行                              |
+| `--title`                        | —    | string   | session 标题                                |
+| `--dir`                          | —    | string   | 工作目录                                    |
+| `--attach`                       | —    | string   | 连接远程 server URL                         |
+| `--password`                     | `-p` | string   | Basic auth 密码                             |
+| `--port`                         | —    | number   | 本地 server 端口                            |
+| `--share`                        | —    | boolean  | 分享 session                                |
+| `--thinking`                     | —    | boolean  | 显示 thinking 块                            |
+| `--dangerously-skip-permissions` | —    | boolean  | 自动批准权限                                |
+| `--fork`                         | —    | boolean  | 创建 fork 分支                              |
+| `--continue`                     | —    | boolean  | 继续已有 session                            |
+| `--session`                      | —    | string   | 指定 session ID                             |
+| `--repo`                         | —    | string   | GitHub 仓库                                 |
 
 ---
 
 ## 七、认证方式汇总
 
-| 方式 | 适用场景 | 说明 |
-|------|---------|------|
-| 环境变量 | provider 级别 | 如 `OPENAI_API_KEY`，provider `env` 字段声明 |
-| `opencode.json` `options.apiKey` | provider 级别 | 配置文件中直接指定 |
-| `ellamaka auth login <provider>` | OAuth provider | 交互式登录，凭证存入本地数据库 |
-| `--password` + `--attach` | 远程 server | HTTP Basic Auth 连接已有 server |
-| `ELLAMAKA_SERVER_PASSWORD` | 远程 server | 环境变量替代 `--password` |
+| 方式                             | 适用场景       | 说明                                         |
+| -------------------------------- | -------------- | -------------------------------------------- |
+| 环境变量                         | provider 级别  | 如 `OPENAI_API_KEY`，provider `env` 字段声明 |
+| `opencode.json` `options.apiKey` | provider 级别  | 配置文件中直接指定                           |
+| `ellamaka auth login <provider>` | OAuth provider | 交互式登录，凭证存入本地数据库               |
+| `--password` + `--attach`        | 远程 server    | HTTP Basic Auth 连接已有 server              |
+| `ELLAMAKA_SERVER_PASSWORD`       | 远程 server    | 环境变量替代 `--password`                    |
 
 ---
 
@@ -372,6 +375,7 @@ ellamaka models list
 ### 日志中定位配置问题
 
 搜索日志中 `loaded config` 相关条目：
+
 - `loaded custom config` → `OPENCODE_CONFIG` 生效
 - `loaded custom config from OPENCODE_CONFIG_CONTENT` → 内联配置生效
 - `loading config from OPENCODE_CONFIG_DIR` → 配置目录生效
@@ -381,7 +385,7 @@ ellamaka models list
 
 ## 九、Agent Permission 与 Skill 可见性
 
-### _PERMISSION 评估机制
+### \_PERMISSION 评估机制
 
 Permission 系统通过规则列表（ruleset）评估，核心是 `findLast` — 遍历全部规则，**返回最后一个匹配的规则**。
 
@@ -414,15 +418,19 @@ list.filter((skill) => Permission.evaluate("skill", skill.name, permission).acti
 Agent 的 permission 在配置中支持两种写法：
 
 **简写**（对所有目标生效）：
+
 ```json
 { "skill": "deny" }
 ```
+
 → 转换为 `{ permission: "skill", pattern: "*", action: "deny" }`
 
 **详细写法**（按目标分别指定）：
+
 ```json
 { "skill": { "*": "deny", "git-worktrees": "allow", "fae-collab": "allow" } }
 ```
+
 → 转换为 ruleset，`Object.entries` 按插入序遍历，`findLast` 取最后匹配
 
 ### 配置方式与优先级
@@ -431,12 +439,12 @@ Agent 的 permission 在配置中支持两种写法：
 
 wopal-space 模式下 permission 按以下层级逐层合并（优先级从低到高）：
 
-| 层级 | 来源 | 说明 |
-|------|------|------|
-| 1 | 内置默认 | 硬编码的 allow/ask 规则 |
-| 2 | `WOPAL_HOME/config/settings.jsonc` | 全局配置中的 `ellamaka.permission` |
-| 3 | `.wopal/config/settings.json[c]` | 空间配置中的 `ellamaka.permission` / `ellamaka.agent.<name>.permission` |
-| 4 | `.wopal/agents/{name}.md` | agent frontmatter 中的 `permission` 字段（**最高优先级**） |
+| 层级 | 来源                               | 说明                                                                    |
+| ---- | ---------------------------------- | ----------------------------------------------------------------------- |
+| 1    | 内置默认                           | 硬编码的 allow/ask 规则                                                 |
+| 2    | `WOPAL_HOME/config/settings.jsonc` | 全局配置中的 `ellamaka.permission`                                      |
+| 3    | `.wopal/config/settings.json[c]`   | 空间配置中的 `ellamaka.permission` / `ellamaka.agent.<name>.permission` |
+| 4    | `.wopal/agents/{name}.md`          | agent frontmatter 中的 `permission` 字段（**最高优先级**）              |
 
 合并规则：`Permission.merge` 数组扁平，`findLast` 最后一条匹配生效。
 
@@ -447,10 +455,10 @@ Agent permission 有两种配置入口：
 
 **加载顺序**：先 JSON，后 Markdown。合并使用 `mergeDeep`：
 
-| 场景 | JSON | MD | 合并结果 |
-|------|------|-----|---------|
-| 互补 | `{ "*": "deny", "a": "allow" }` | `{ "b": "allow" }` | `{ "*": "deny", "a": "allow", "b": "allow" }` |
-| 同键覆盖 | `{ "*": "deny", "a": "allow" }` | `{ "*": "ask" }` | `{ "*": "ask", "a": "allow" }` |
+| 场景     | JSON                            | MD                 | 合并结果                                      |
+| -------- | ------------------------------- | ------------------ | --------------------------------------------- |
+| 互补     | `{ "*": "deny", "a": "allow" }` | `{ "b": "allow" }` | `{ "*": "deny", "a": "allow", "b": "allow" }` |
+| 同键覆盖 | `{ "*": "deny", "a": "allow" }` | `{ "*": "ask" }`   | `{ "*": "ask", "a": "allow" }`                |
 
 **结论**：Markdown 配置优先级更高（同键覆盖 JSON），但不会删除 JSON 中独有的键。
 
@@ -484,12 +492,12 @@ Claude Code 技能（`~/.claude/skills/`）和 Claude Code 提示词在 wopal-sp
           "skill": {
             "*": "deny",
             "git-worktrees": "allow",
-            "fae-collab": "allow"
-          }
-        }
-      }
-    }
-  }
+            "fae-collab": "allow",
+          },
+        },
+      },
+    },
+  },
 }
 ```
 
@@ -506,9 +514,11 @@ permission:
     git-worktrees: allow
     fae-collab: allow
 ---
+
 Fae agent prompt...
 ```
 
 **优先级规则**：
+
 - MD 和 JSON 同时配置时，相同键 MD 覆盖 JSON，不同键合并保留
 - 推荐做法：JSON 做统一配置中心，MD 只写 prompt/model 等非 permission 字段

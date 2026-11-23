@@ -1,1 +1,41 @@
+# Formatting scope: docs/DESIGN-quality-gates.md#formatting-scope
+#
+# Prettier runs only on files this repository owns and can parse. `bun run
+# format` and `bun run format:check` derive their file list from `git ls-files`
+# plus this file, so every exclusion lives in exactly one place.
+
+# Upstream-inherited packages: formatting rewrites whole files and would create a
+# merge conflict on every future upstream sync. This also covers
+# `src/wopal/` and `src/workbench/`, which are lint-only by design.
+packages/opencode/
+packages/ui/
+
+# Generated code: a rewrite is lost the next time the generator runs, so the fix
+# belongs in the generator or its source.
+**/gen/
+**/*.gen.ts
+
+# Experimental directory: the lint gate does not check it either, and these
+# HTML pages carry large inline style/script blocks that a whole-file rewrite
+# would churn without a gate to protect them.
+/poc/
+
+# Build output and generated manifests: not hand-written content. The two
+# release manifests below are written by `ellamaka-release` tooling;
+# `release/withdrawn-versions.json` is operator-authored and stays in scope.
+packages/ellamaka-desktop/out/
+/release/legacy-inventory.json
+/release/upstreams.lock.json
+/.ci/models.json
+
+# Dependency and build caches. No tracked files live here today; the entries are
+# stated so an accidental `git add` cannot drag them into the formatting scope.
+node_modules
+dist
+.build
+.sst
+coverage
+test-results
+
+# SST-generated environment declarations.
 sst-env.d.ts

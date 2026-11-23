@@ -44,7 +44,9 @@ export function buildMenuTemplate(platform: DesktopMenuPlatform, deps: MenuDeps)
     if (menu.role) return { role: nativeRole(menu.role) }
     return {
       label: menu.label,
-      submenu: menu.items?.filter((entry) => desktopMenuVisible(entry, platform)).map((entry) => nativeItem(entry, platform, deps)),
+      submenu: menu.items
+        ?.filter((entry) => desktopMenuVisible(entry, platform))
+        .map((entry) => nativeItem(entry, platform, deps)),
     }
   })
 }
@@ -63,7 +65,11 @@ function menuPlatform(platform: NodeJS.Platform): DesktopMenuPlatform | undefine
   if (platform === "win32") return "windows"
 }
 
-function nativeItem(entry: DesktopMenuEntry, platform: DesktopMenuPlatform, deps: MenuDeps): MenuItemConstructorOptions {
+function nativeItem(
+  entry: DesktopMenuEntry,
+  platform: DesktopMenuPlatform,
+  deps: MenuDeps,
+): MenuItemConstructorOptions {
   if (entry.type === "separator") return { type: "separator" }
   if (entry.role) return { label: entry.label, role: nativeRole(entry.role) }
 
@@ -71,7 +77,9 @@ function nativeItem(entry: DesktopMenuEntry, platform: DesktopMenuPlatform, deps
     label: entry.label,
     accelerator: entry.accelerator?.[platform],
     enabled: entry.enabled === "updater" ? UPDATER_ENABLED : undefined,
-    submenu: entry.items?.filter((child) => desktopMenuVisible(child, platform)).map((child) => nativeItem(child, platform, deps)),
+    submenu: entry.items
+      ?.filter((child) => desktopMenuVisible(child, platform))
+      .map((child) => nativeItem(child, platform, deps)),
   }
 
   if (entry.action === "app.toggleDebugLogging") {

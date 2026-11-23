@@ -41,11 +41,11 @@ Compaction 不是子 session，而是同一 session 内的内联处理。它把�
 
 ### 触发条件
 
-| 触发方式 | 入口 | 说明 |
-|----------|------|------|
+| 触发方式 | 入口                                          | 说明               |
+| -------- | --------------------------------------------- | ------------------ |
 | 自动触发 | `prompt.ts:1376-1383` / `prompt.ts:1506-1514` | 见下方详细触发路径 |
-| 手动触发 | TUI `/compact` 命令 → `session.compact` | 用户主动执行 |
-| API 触发 | `POST /session/{id}/compact` | 编程触发 |
+| 手动触发 | TUI `/compact` 命令 → `session.compact`       | 用户主动执行       |
+| API 触发 | `POST /session/{id}/compact`                  | 编程触发           |
 
 ### 自动触发的两条路径
 
@@ -77,8 +77,8 @@ overflow 判定（`overflow.ts`）：
 
 ```typescript
 // 前置检查
-if (cfg.compaction?.auto === false) return false  // 关闭自动压缩
-if (context === 0) return false                   // context 为 0 的模型不触发
+if (cfg.compaction?.auto === false) return false // 关闭自动压缩
+if (context === 0) return false // context 为 0 的模型不触发
 
 // 可用空间 = limit.input - reserved（默认 20K）
 //   或 context - maxOutputTokens
@@ -160,11 +160,11 @@ Provide a detailed prompt for continuing our conversation above.
 
 遍历方向：**从最新到最旧**。
 
-| 遇到什么 | 动作 |
-|----------|------|
+| 遇到什么                                                      | 动作                       |
+| ------------------------------------------------------------- | -------------------------- |
 | assistant message 且 `summary: true` 且 `finish` 且无 `error` | 标记其 `parentID` 为已完成 |
-| user message 且有 `compaction` part 且其 ID 在已完成集合中 | **break — 截断** |
-| 其他 | 继续收集 |
+| user message 且有 `compaction` part 且其 ID 在已完成集合中    | **break — 截断**           |
+| 其他                                                          | 继续收集                   |
 
 ```
 DB 中的完整消息流：
@@ -182,12 +182,12 @@ filterCompacted 返回：
 
 `toModelMessagesEffect`（`message-v2.ts:576-812`）：
 
-| 消息类型 | 转换方式 |
-|----------|---------|
-| compaction user message | 替换为固定文本 `"What did we do so far?"` |
-| summary assistant message | 正常转换 text parts（摘要正文） |
-| compaction 之后的消息 | 正常转换 |
-| subtask user message | 替换为固定文本 `"The following tool was executed by the user"` |
+| 消息类型                  | 转换方式                                                       |
+| ------------------------- | -------------------------------------------------------------- |
+| compaction user message   | 替换为固定文本 `"What did we do so far?"`                      |
+| summary assistant message | 正常转换 text parts（摘要正文）                                |
+| compaction 之后的消息     | 正常转换                                                       |
+| subtask user message      | 替换为固定文本 `"The following tool was executed by the user"` |
 
 ### 工具输出裁剪（prune）
 
@@ -214,20 +214,20 @@ filterCompacted 返回：
 
 **标记 compacted 后的效果**（`message-v2.ts:718-719`）：
 
-| 字段 | 正常值 | compacted 后 |
-|------|--------|-------------|
-| output | 完整工具输出文本 | `"[Old tool result content cleared]"` |
-| attachments | 图片等附件 | `[]`（清空） |
-| input | 工具调用参数 | **保留** |
+| 字段        | 正常值           | compacted 后                          |
+| ----------- | ---------------- | ------------------------------------- |
+| output      | 完整工具输出文本 | `"[Old tool result content cleared]"` |
+| attachments | 图片等附件       | `[]`（清空）                          |
+| input       | 工具调用参数     | **保留**                              |
 
 ### 清理总结
 
-| 层级 | 清理了什么 | 保留了什么 |
-|------|-----------|-----------|
-| **消息级** | compact 边界之前的所有消息 | summary 消息 + 之后的所有消息 |
+| 层级           | 清理了什么                                            | 保留了什么                                        |
+| -------------- | ----------------------------------------------------- | ------------------------------------------------- |
+| **消息级**     | compact 边界之前的所有消息                            | summary 消息 + 之后的所有消息                     |
 | **工具输出级** | 距今 >2 轮且累计 token > 40K 的 output 和 attachments | 工具调用 input、最近 2 轮全部内容、skill 工具输出 |
-| **媒体级** | compact 时 stripMedia=true 去掉所有图片/文件 | 替换为 `[Attached mime: filename]` 占位符 |
-| **指令文件** | 无（每轮从文件系统重新读取） | AGENTS.md / CLAUDE.md 等始终完整 |
+| **媒体级**     | compact 时 stripMedia=true 去掉所有图片/文件          | 替换为 `[Attached mime: filename]` 占位符         |
+| **指令文件**   | 无（每轮从文件系统重新读取）                          | AGENTS.md / CLAUDE.md 等始终完整                  |
 
 ### prune 举例
 
@@ -251,12 +251,14 @@ a3(summary) → u4 → a4(read:2K, bash:3K) → u5 → a5(edit:1K) → u6 → a6
 `prompt.ts:1501-1507`，runLoop 每次迭代固定执行：
 
 ```typescript
-const [skills, env, instructions, modelMsgs] = yield* Effect.all([
-  SystemPrompt.skills(agent),       // 读取 skill 文件
-  SystemPrompt.environment(model),  // 读取环境信息（pwd, date, shell...）
-  instruction.system(),             // 读取 AGENTS.md, CLAUDE.md, config.instructions
-  MessageV2.toModelMessages(msgs),  // 消息转模型格式
-])
+const [skills, env, instructions, modelMsgs] =
+  yield *
+  Effect.all([
+    SystemPrompt.skills(agent), // 读取 skill 文件
+    SystemPrompt.environment(model), // 读取环境信息（pwd, date, shell...）
+    instruction.system(), // 读取 AGENTS.md, CLAUDE.md, config.instructions
+    MessageV2.toModelMessages(msgs), // 消息转模型格式
+  ])
 const system = [...env, ...(skills ? [skills] : []), ...instructions]
 ```
 
@@ -264,11 +266,11 @@ const system = [...env, ...(skills ? [skills] : []), ...instructions]
 
 ### 指令文件发现范围（instruction.ts）
 
-| 来源 | 查找逻辑 |
-|------|---------|
-| 项目级 | 从工作目录向上 findUp AGENTS.md / CLAUDE.md / CONTEXT.md，首个匹配即停 |
-| 全局级 | `~/.config/opencode/AGENTS.md` 或 `~/.claude/CLAUDE.md` |
-| 配置级 | `opencode.jsonc` 的 `instructions` 字段（支持文件路径和 HTTP URL） |
+| 来源   | 查找逻辑                                                                  |
+| ------ | ------------------------------------------------------------------------- |
+| 项目级 | 从工作目录向上 findUp AGENTS.md / CLAUDE.md / CONTEXT.md，首个匹配即停    |
+| 全局级 | `~/.config/opencode/AGENTS.md` 或 `~/.claude/CLAUDE.md`                   |
+| 配置级 | `opencode.jsonc` 的 `instructions` 字段（支持文件路径和 HTTP URL）        |
 | 邻近级 | `Instruction.resolve()` 在 agent 读取文件时，沿目录树向上附带附近指令文件 |
 
 ---
@@ -280,10 +282,10 @@ const system = [...env, ...(skills ? [skills] : []), ...instructions]
 `compaction.ts:179-182`：
 
 ```typescript
-const agent = yield* agents.get("compaction")
+const agent = yield * agents.get("compaction")
 const model = agent.model
-  ? yield* provider.getModel(agent.model.providerID, agent.model.modelID)
-  : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+  ? yield * provider.getModel(agent.model.providerID, agent.model.modelID)
+  : yield * provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
 ```
 
 优先使用 `config.agent.compaction.model`，未配置则回退到触发 compaction 的用户消息所用模型。
@@ -296,9 +298,9 @@ const model = agent.model
 {
   "agent": {
     "compaction": {
-      "model": "openai/gpt-4o-mini"  // provider-id/model-id
-    }
-  }
+      "model": "openai/gpt-4o-mini", // provider-id/model-id
+    },
+  },
 }
 ```
 
@@ -306,12 +308,12 @@ const model = agent.model
 
 ### 其他 compaction 相关配置
 
-| 配置 | 作用 | 方式 |
-|------|------|------|
-| `compaction.auto` | 关闭自动 compact | `opencode.jsonc` 或 `OPENCODE_DISABLE_AUTOCOMPACT=1` |
-| `compaction.prune` | 关闭工具输出裁剪 | `opencode.jsonc` 或 `OPENCODE_DISABLE_PRUNE=1` |
-| `compaction.reserved` | compact 缓冲 token 数 | `opencode.jsonc` |
-| `experimental.session.compacting` | 自定义 compact prompt | 插件 hook |
+| 配置                              | 作用                  | 方式                                                 |
+| --------------------------------- | --------------------- | ---------------------------------------------------- |
+| `compaction.auto`                 | 关闭自动 compact      | `opencode.jsonc` 或 `OPENCODE_DISABLE_AUTOCOMPACT=1` |
+| `compaction.prune`                | 关闭工具输出裁剪      | `opencode.jsonc` 或 `OPENCODE_DISABLE_PRUNE=1`       |
+| `compaction.reserved`             | compact 缓冲 token 数 | `opencode.jsonc`                                     |
+| `experimental.session.compacting` | 自定义 compact prompt | 插件 hook                                            |
 
 **插件 hook 不可更换模型**，只暴露 `context: string[]` 和 `prompt?: string`。
 
@@ -346,15 +348,15 @@ TUI 的上下文占用来自 `assistantMessage.tokens`，由每次 API 调用后
 
 ## 关键源码索引
 
-| 文件 | 关键行 | 职责 |
-|------|--------|------|
-| `compaction.ts` | 1-428 | Compaction 全部逻辑：create / process / prune / isOverflow |
-| `prompt.ts` | 1337-1565 | runLoop 主循环，调度 compaction |
-| `message-v2.ts` | 576-812 | toModelMessagesEffect — 消息转模型格式 |
-| `message-v2.ts` | 903-918 | filterCompacted — 消息级截断 |
-| `message-v2.ts` | 718-719 | compacted 工具输出的占位符替换 |
-| `processor.ts` | 260-312 | token 统计记录和 overflow 检测 |
-| `overflow.ts` | 1-22 | isOverflow 判定 |
-| `instruction.ts` | 37-52 | extract — 跳过 compacted 的已加载文件路径 |
-| `agent.ts` | 188-202 | compaction 内置 agent 定义 |
-| `agent.ts` | 240-263 | config.agent 配置合并到 agent |
+| 文件             | 关键行    | 职责                                                       |
+| ---------------- | --------- | ---------------------------------------------------------- |
+| `compaction.ts`  | 1-428     | Compaction 全部逻辑：create / process / prune / isOverflow |
+| `prompt.ts`      | 1337-1565 | runLoop 主循环，调度 compaction                            |
+| `message-v2.ts`  | 576-812   | toModelMessagesEffect — 消息转模型格式                     |
+| `message-v2.ts`  | 903-918   | filterCompacted — 消息级截断                               |
+| `message-v2.ts`  | 718-719   | compacted 工具输出的占位符替换                             |
+| `processor.ts`   | 260-312   | token 统计记录和 overflow 检测                             |
+| `overflow.ts`    | 1-22      | isOverflow 判定                                            |
+| `instruction.ts` | 37-52     | extract — 跳过 compacted 的已加载文件路径                  |
+| `agent.ts`       | 188-202   | compaction 内置 agent 定义                                 |
+| `agent.ts`       | 240-263   | config.agent 配置合并到 agent                              |

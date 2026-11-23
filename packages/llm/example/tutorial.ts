@@ -243,4 +243,6 @@ const program = Effect.gen(function* () {
   yield* streamWithTools
 }).pipe(Effect.provide(Layer.mergeAll(llmDeps, llmClientLayer)))
 
-Effect.runPromise(program)
+// Await so a failing example surfaces as a non-zero exit instead of an
+// unhandled rejection.
+await Effect.runPromise(program)

@@ -163,16 +163,7 @@ describe("cleanup parse — parseArgs fail-closed (B-02)", () => {
 
   test("parses a valid withdraw invocation", () => {
     const flags = ok(
-      parseArgs([
-        "node",
-        "cleanup.ts",
-        "--product",
-        "ellamaka-cli",
-        "--withdraw",
-        "1.16.0",
-        "--fallback",
-        "1.15.0",
-      ]),
+      parseArgs(["node", "cleanup.ts", "--product", "ellamaka-cli", "--withdraw", "1.16.0", "--fallback", "1.15.0"]),
     )
     expect(flags.mode).toBe("withdraw")
     expect(flags.withdrawVersion).toBe("1.16.0")

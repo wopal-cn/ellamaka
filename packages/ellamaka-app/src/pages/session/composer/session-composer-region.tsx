@@ -278,7 +278,9 @@ export function SessionComposerRegion(props: {
               fallback={
                 <PromptSurfaceGate mode={surface() === "prompt-disabled" ? "prompt-disabled" : "prompt"}>
                   <PromptInput
-                    variant={props.placement === "inline" ? "new-session" : props.placement === "dock" ? "dock" : undefined}
+                    variant={
+                      props.placement === "inline" ? "new-session" : props.placement === "dock" ? "dock" : undefined
+                    }
                     ref={props.inputRef}
                     canRestoreFocus={props.canRestorePromptFocus}
                     newSessionWorktree={props.newSessionWorktree}

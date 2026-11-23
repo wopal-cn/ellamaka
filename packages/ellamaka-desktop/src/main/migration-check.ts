@@ -20,15 +20,7 @@ import { join } from "node:path"
  * WOPAL_HOME resolution mirrors `@wopal/ellamaka-core/global.ts`:
  * `process.env.WOPAL_HOME || ~/.wopal`.
  */
-const LEGACY_SUBDIRS = [
-  "project",
-  "session",
-  "message",
-  "part",
-  "todo",
-  "permission",
-  "session_share",
-] as const
+const LEGACY_SUBDIRS = ["project", "session", "message", "part", "todo", "permission", "session_share"] as const
 
 export function needsJsonMigration(
   env: { OPENCODE_DB?: string; WOPAL_HOME?: string } = process.env,

@@ -32,7 +32,5 @@ function isBuildChannel(raw: string | undefined): raw is BuildChannel {
 export function resolveBuildChannel(raw: string | undefined, fallback?: "local"): BuildChannel {
   if (isBuildChannel(raw)) return raw
   if (fallback === "local") return "local"
-  throw new Error(
-    `invalid build channel ${JSON.stringify(raw)}; expected one of ${VOCABULARY.join(", ")}`,
-  )
+  throw new Error(`invalid build channel ${JSON.stringify(raw)}; expected one of ${VOCABULARY.join(", ")}`)
 }

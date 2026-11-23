@@ -89,14 +89,14 @@ describe("desktop release repair", () => {
     expect(workflow).toContain(".zip.blockmap")
     expect(workflow).toContain(".exe.blockmap")
     // Latest manifest upload
-    expect(workflow).toContain('${LATEST_PREFIX}/manifest.json')
+    expect(workflow).toContain("${LATEST_PREFIX}/manifest.json")
     // TTL: versioned 30-day, latest 60-second, no legacy values
     expect(workflow).toContain("max-age=2592000")
     expect(workflow).toContain("max-age=60")
     expect(workflow).not.toContain("max-age=604800")
     expect(workflow).not.toContain("max-age=300")
     // Purge URL includes latest manifest
-    expect(workflow).toContain('${LATEST_BASE}/manifest.json')
+    expect(workflow).toContain("${LATEST_BASE}/manifest.json")
   })
 
   test("injects release version and ad-hoc signs macOS", async () => {
@@ -133,10 +133,10 @@ describe("desktop release repair", () => {
     // Desktop channel is a single switch: --beta means beta channel + beta
     // bump in one flag. The old --channel flag is rejected explicitly.
     expect(desktopScript).toContain("--beta")
-    expect(desktopScript).toContain('--channel) die')
+    expect(desktopScript).toContain("--channel) die")
     expect(desktopScript).toContain("不接受 --channel")
     // CLI never carries a beta channel: --beta is rejected explicitly.
-    expect(cliScript).toContain('--beta) die')
+    expect(cliScript).toContain("--beta) die")
 
     // push : tags 触发（一步制）；re-release 仍走 gh workflow run
     expect(engine).toContain('push "$REMOTE" "$BRANCH" "$TAG"')

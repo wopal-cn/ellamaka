@@ -15,13 +15,13 @@ description: Ellamaka Desktop 长期有效的 Electron 壳层、IPC、sidecar �
 
 ellamaka-desktop 是共用 ellamaka-app renderer 的 Electron 宿主。Main 拥有原生应用/窗口和 sidecar 进程生命周期；Server sidecar 拥有 Runtime API 与 PTY 进程。
 
-| 路径 | 职责 |
-|---|---|
-| src/main/ | 应用/窗口生命周期、sidecar 监管、IPC 注册、原生凭证和更新 |
-| src/preload/ | 暴露给 renderer 的最小 allowlisted API |
-| src/renderer/ | Desktop 入口、路由、平台 adapter 和共用 App 加载 |
-| packages/ellamaka-app/ | Browser/Desktop 共用 UI 和 renderer 持有的布局状态 |
-| packages/opencode/ | Server sidecar 实现、Session 与 PTY 资源归属 |
+| 路径                   | 职责                                                      |
+| ---------------------- | --------------------------------------------------------- |
+| src/main/              | 应用/窗口生命周期、sidecar 监管、IPC 注册、原生凭证和更新 |
+| src/preload/           | 暴露给 renderer 的最小 allowlisted API                    |
+| src/renderer/          | Desktop 入口、路由、平台 adapter 和共用 App 加载          |
+| packages/ellamaka-app/ | Browser/Desktop 共用 UI 和 renderer 持有的布局状态        |
+| packages/opencode/     | Server sidecar 实现、Session 与 PTY 资源归属              |
 
 请遵守这些归属事实：
 
@@ -37,13 +37,13 @@ ellamaka-desktop 是共用 ellamaka-app renderer 的 Electron 宿主。Main 拥�
 
 从 packages/ellamaka-desktop/ 运行。
 
-| Scenario | Command | When |
-|---|---|---|
-| 测试 | bun test --preload ./electron-mock.ts --force-exit src | Main/preload/renderer 逻辑 |
-| 类型检查 | bun run typecheck | 修改 TypeScript 后 |
-| 构建 | bun run build | 修改 Desktop 后 |
-| macOS 开发包 | bun run package:mac | 检查打包和资源路径 |
-| 联调帮助 | ../../scripts/dev.sh help | 跨包 GUI 验证 |
+| Scenario     | Command                                                | When                       |
+| ------------ | ------------------------------------------------------ | -------------------------- |
+| 测试         | bun test --preload ./electron-mock.ts --force-exit src | Main/preload/renderer 逻辑 |
+| 类型检查     | bun run typecheck                                      | 修改 TypeScript 后         |
+| 构建         | bun run build                                          | 修改 Desktop 后            |
+| macOS 开发包 | bun run package:mac                                    | 检查打包和资源路径         |
+| 联调帮助     | ../../scripts/dev.sh help                              | 跨包 GUI 验证              |
 
 修改 sidecar 代码后，Desktop 构建前先运行 `bun ../opencode/script/build-node.ts` 构建 opencode sidecar。
 

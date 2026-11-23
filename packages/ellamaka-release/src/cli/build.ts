@@ -217,7 +217,6 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Bun's target union narrows at runtime
       target: name.replace(BINARY_NAME, "bun") as any,
       outfile: `${distDir}/${name}/bin/${BINARY_NAME}`,
       execArgv: [`--user-agent=${BINARY_NAME}/${Script.version}`, "--use-system-ca", "--"],

@@ -39,9 +39,7 @@ const http = (url: string): ServerConnection.Http => ({ type: "http", http: { ur
 
 describe("workbench server storage", () => {
   test("isolates HTTP servers while preserving a sidecar across generations", () => {
-    expect(workbenchStorageName(http("http://ellamac:4096"))).not.toBe(
-      workbenchStorageName(http("http://spark:4096")),
-    )
+    expect(workbenchStorageName(http("http://ellamac:4096"))).not.toBe(workbenchStorageName(http("http://spark:4096")))
 
     const first: ServerConnection.Sidecar = {
       type: "sidecar",

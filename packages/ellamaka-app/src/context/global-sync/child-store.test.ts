@@ -41,7 +41,6 @@ const fakePersisted: typeof import("@/utils/persist").persisted = (_target, stor
 
 const storeDependencies = {
   persisted: fakePersisted,
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- injected double stands in for the generic hook
   useQueries: ((options: () => { queries: Array<{ enabled?: boolean }> }) => {
     queryGroups.push(options)
     return [
@@ -50,7 +49,6 @@ const storeDependencies = {
       { isLoading: false, data: provider },
     ]
   }) as unknown as typeof import("@tanstack/solid-query").useQueries,
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- injected double stands in for the generic hook
   useQuery: ((options: () => { enabled?: boolean }) => {
     mcpQueries.push(options)
     return { isLoading: false, data: {} }

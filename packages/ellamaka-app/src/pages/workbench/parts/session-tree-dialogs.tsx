@@ -9,10 +9,7 @@ function createTranslator(language: ReturnType<typeof useLanguage>): typeof lang
   return (key, params) => language.t(key, params)
 }
 
-export function DialogOverwritePanel(props: {
-  panelIndex: number
-  onConfirm: () => void
-}) {
+export function DialogOverwritePanel(props: { panelIndex: number; onConfirm: () => void }) {
   const language = useLanguage()
   const t = createTranslator(language)
   const dialog = useDialog()
@@ -43,10 +40,7 @@ export function DialogOverwritePanel(props: {
   )
 }
 
-export function DialogCrossSpaceWarning(props: {
-  dragSpace: string
-  targetSpace: string
-}) {
+export function DialogCrossSpaceWarning(props: { dragSpace: string; targetSpace: string }) {
   const language = useLanguage()
   const t = createTranslator(language)
   const dialog = useDialog()
@@ -75,10 +69,7 @@ export function DialogCrossSpaceWarning(props: {
   )
 }
 
-export function DialogRenameSession(props: {
-  currentTitle: string
-  onRename: (title: string) => Promise<void>
-}) {
+export function DialogRenameSession(props: { currentTitle: string; onRename: (title: string) => Promise<void> }) {
   const language = useLanguage()
   const t = createTranslator(language)
   const dialog = useDialog()
@@ -128,10 +119,7 @@ export function DialogRenameSession(props: {
   )
 }
 
-export function DialogDeleteSession(props: {
-  sessionTitle: string
-  onDelete: () => Promise<void>
-}) {
+export function DialogDeleteSession(props: { sessionTitle: string; onDelete: () => Promise<void> }) {
   const language = useLanguage()
   const t = createTranslator(language)
   const dialog = useDialog()
@@ -168,10 +156,7 @@ export function DialogDeleteSession(props: {
   )
 }
 
-export function DialogClosePanel(props: {
-  sessionTitle: string
-  onClose: () => Promise<void>
-}) {
+export function DialogClosePanel(props: { sessionTitle: string; onClose: () => Promise<void> }) {
   const language = useLanguage()
   const t = createTranslator(language)
   const dialog = useDialog()
@@ -184,12 +169,8 @@ export function DialogClosePanel(props: {
             {t("workbench.panelClose.confirm", { title: props.sessionTitle })}
           </span>
           <div class="flex flex-col gap-2 rounded-lg border border-v2-border-border-base bg-v2-background-bg-deep p-3 text-12-regular text-v2-text-text-muted">
-            <span class="text-12-medium text-v2-text-text-base mb-1">
-              {t("workbench.panelClose.desc")}
-            </span>
-            <span>
-              {t("workbench.panelClose.consequenceSession")}
-            </span>
+            <span class="text-12-medium text-v2-text-text-base mb-1">{t("workbench.panelClose.desc")}</span>
+            <span>{t("workbench.panelClose.consequenceSession")}</span>
             <span class="text-amber-500/95 dark:text-amber-400/90 font-medium">
               {t("workbench.panelClose.consequenceTerminal")}
             </span>
@@ -224,7 +205,8 @@ function sessionTypeKey(locationKind: SessionTreeLocation["kind"], marker: Group
   if (marker === "directory") return "workbench.tree.detailsTypeDirectory"
   if (locationKind === "project") return "workbench.tree.detailsTypeProject"
   if (locationKind === "space-root") return "workbench.tree.detailsTypeSpaceRoot"
-  if (locationKind === "general-date" || locationKind === "general-directory") return "workbench.tree.detailsTypeGeneral"
+  if (locationKind === "general-date" || locationKind === "general-directory")
+    return "workbench.tree.detailsTypeGeneral"
   return "workbench.tree.detailsTypeGeneral"
 }
 
@@ -237,10 +219,7 @@ function formatTimestamp(value: number): string {
   }
 }
 
-export function DialogSessionDetails(props: {
-  session: GroupSession
-  locationKind: SessionTreeLocation["kind"]
-}) {
+export function DialogSessionDetails(props: { session: GroupSession; locationKind: SessionTreeLocation["kind"] }) {
   const language = useLanguage()
   const t = createTranslator(language)
   const dialog = useDialog()

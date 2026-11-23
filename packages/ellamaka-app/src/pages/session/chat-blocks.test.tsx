@@ -123,6 +123,7 @@ import {
   NarrativeBlock,
   ReasoningBlock,
   TurnOutcome,
+  UnknownPartBlock,
   UserMessageBlock,
 } from "./chat-blocks"
 import {
@@ -1377,6 +1378,35 @@ describe("SubagentActivityBlock sync", () => {
     trigger.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     expect(trigger.getAttribute("aria-expanded")).toBe("true")
     expect(synced).toBe("child_1")
+    host.remove()
+  })
+})
+
+describe("UnknownPartBlock", () => {
+  const part = (payload: Record<string, unknown>) =>
+    ({
+      id: "p1",
+      sessionID: "ses_1",
+      messageID: "a1",
+      type: "mystery",
+      ...payload,
+    }) as unknown as Part
+
+  test("renders the JSON form of an unrecognized payload instead of an object base", () => {
+    const host = mount(() => <UnknownPartBlock part={part({ detail: { step: 2 } })} />)
+    const text = host.querySelector("[data-slot='chat-unknown-text']")?.textContent ?? ""
+    expect(text).toContain('"detail"')
+    expect(text).not.toContain("[object Object]")
+    host.remove()
+  })
+
+  test("labels a circular payload instead of falling back to [object Object]", () => {
+    const circular: Record<string, unknown> = {}
+    circular.self = circular
+    const host = mount(() => <UnknownPartBlock part={part({ circular })} />)
+    const text = host.querySelector("[data-slot='chat-unknown-text']")?.textContent ?? ""
+    expect(text).toBe("[unserializable mystery part]")
+    expect(text).not.toContain("[object Object]")
     host.remove()
   })
 })

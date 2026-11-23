@@ -27,10 +27,8 @@ export const serviceUse = <Identifier, Shape>(tag: Context.Service<Identifier, S
         if (cached) return cached
         const accessor = (...args: unknown[]) =>
           tag.use((service) => {
-            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Proxy keys are checked at runtime.
             const method = service[key as keyof Shape]
             if (typeof method !== "function") return Effect.die(new Error(`Service method not found: ${key}`))
-            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- ServiceUse exposes only Effect-returning methods.
             return (method as (...args: unknown[]) => Effect.Effect<unknown, unknown, unknown>)(...args)
           })
         cache.set(key, accessor)
@@ -38,6 +36,5 @@ export const serviceUse = <Identifier, Shape>(tag: Context.Service<Identifier, S
       },
     },
   )
-  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Proxy implements the mapped accessor surface lazily.
   return access as ServiceUse<Identifier, Shape>
 }

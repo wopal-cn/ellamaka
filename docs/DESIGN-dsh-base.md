@@ -27,15 +27,15 @@ Bridge 就是 `@wopal/ellamaka-cordis` 包。它负责加载本产品固定的 D
 7. DSH 拥有自己的私有数据格式。Ellamaka 不建立兼容图、数据转换器、自动恢复流程或恢复命令。DSH 失败只降级 DSH，原生 Ellamaka 保持可用。
 8. 真正启动 Runtime 的产品只准备自己的 DSH 资源。Setup 不扫描其他已安装产品，也不准备它们的 Home。
 
-| 路径 | 用途 |
-|---|---|
-| `$WOPAL_HOME/dsh/home` | 唯一的活动 Home |
+| 路径                                     | 用途                                                  |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `$WOPAL_HOME/dsh/home`                   | 唯一的活动 Home                                       |
 | `$WOPAL_HOME/dsh/closures/<fingerprint>` | 产品固定的 DSH 运行时，目录名取闭包内容指纹的前 12 位 |
-| `$WOPAL_HOME/dsh/backups/<timestamp>` | 版本切换前生成的副本 |
-| `$WOPAL_HOME/dsh/state/current.json` | 活动 closureVersion |
-| `$WOPAL_HOME/dsh/state/managed` | 最小持久所有权标记，不含历史，也不含 DSH 私有 schema |
-| `$WOPAL_HOME/dsh/state/home.lock` | 共享使用与排他版本切换 |
-| `$WOPAL_HOME/dsh/staging` | 临时物化区 |
+| `$WOPAL_HOME/dsh/backups/<timestamp>`    | 版本切换前生成的副本                                  |
+| `$WOPAL_HOME/dsh/state/current.json`     | 活动 closureVersion                                   |
+| `$WOPAL_HOME/dsh/state/managed`          | 最小持久所有权标记，不含历史，也不含 DSH 私有 schema  |
+| `$WOPAL_HOME/dsh/state/home.lock`        | 共享使用与排他版本切换                                |
+| `$WOPAL_HOME/dsh/staging`                | 临时物化区                                            |
 
 该锁把版本切换与正在运行的 DSH 进程串行化。运行状态只记录活动闭包版本，不描述 DSH 的私有数据 schema。
 
@@ -73,12 +73,12 @@ generation inputs 由 `packages/ellamaka-cordis/src/runtime/home-generation.ts` 
 
 每个 profile 独立使用同一组状态：
 
-| 状态 | 含义 |
-|---|---|
-| disabled | 该 profile 未被当前入口请求 |
-| preparing | 该 profile 所需的共享资源或自身装配仍在准备 |
-| ready | 该 profile 已通过加载与激活检查，可以发布自身能力 |
-| degraded | 该 profile 本次加载不可用；另一个 profile 与原生 Ellamaka 按各自状态继续工作 |
+| 状态      | 含义                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| disabled  | 该 profile 未被当前入口请求                                                  |
+| preparing | 该 profile 所需的共享资源或自身装配仍在准备                                  |
+| ready     | 该 profile 已通过加载与激活检查，可以发布自身能力                            |
+| degraded  | 该 profile 本次加载不可用；另一个 profile 与原生 Ellamaka 按各自状态继续工作 |
 
 Runtime health 分别暴露 `dsh.web` 与 `dsh.tools`，并携带稳定失败原因、当前构建的 closureVersion 与已记录的 Home 版本（可得时）。不要让消费方直接检查 Home 状态。只有在所请求的 profile 通过加载与激活检查之后，才发布对应路由、工具或句柄。
 
@@ -192,15 +192,15 @@ Home 检查与版本变化使用唯一的 Home 锁。进程只要可能访问 Ho
 
 在准备 profile 或激活 DSH 之前，在 Home 锁下比较产品版本与 `state/current.json`。有效的已记录版本始终优先于缺失的 marker：较旧运行时仍然拒绝它，较新运行时仍然需要正常的备份/切代。缺失 marker 不会重置 Home 版本：
 
-| Home 状态 | 处理方式 |
-|---|---|
-| Home、marker 与 state 全都不存在 | 首次准备在激活 DSH 之前记录版本与 managed marker |
-| Home 存在，但既无 marker 也无版本状态 | 在操作员一次性确认旧 DSH 进程已停止、并持有排他锁之后，备份 Home，再记录当前版本与 marker |
-| marker 存在但版本状态缺失，或元数据不可读/无效 | 报告未知状态，保留文件并拒绝写 Home |
-| 版本状态有效但 marker 缺失 | 保留已记录的版本；在激活前于排他锁下补齐 marker，不把 Home 当作无版本处理 |
-| 记录版本等于产品版本 | 在共享锁下使用该 Home |
-| 记录版本新于产品版本 | 拒绝访问；不降级，也不修改 Home |
-| 产品版本更新 | 取得排他锁，备份当前 Home，更新记录版本，再准备产品自有文件并激活 DSH |
+| Home 状态                                      | 处理方式                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Home、marker 与 state 全都不存在               | 首次准备在激活 DSH 之前记录版本与 managed marker                                          |
+| Home 存在，但既无 marker 也无版本状态          | 在操作员一次性确认旧 DSH 进程已停止、并持有排他锁之后，备份 Home，再记录当前版本与 marker |
+| marker 存在但版本状态缺失，或元数据不可读/无效 | 报告未知状态，保留文件并拒绝写 Home                                                       |
+| 版本状态有效但 marker 缺失                     | 保留已记录的版本；在激活前于排他锁下补齐 marker，不把 Home 当作无版本处理                 |
+| 记录版本等于产品版本                           | 在共享锁下使用该 Home                                                                     |
+| 记录版本新于产品版本                           | 拒绝访问；不降级，也不修改 Home                                                           |
+| 产品版本更新                                   | 取得排他锁，备份当前 Home，更新记录版本，再准备产品自有文件并激活 DSH                     |
 
 备份或元数据发布失败时，候选运行时得不到任何 Home 写权限。版本与 marker 使用原子文件写入发布；不完整的元数据会被报告，不会被自动清除或猜测。已有 managed Home 在版本更新失败时保留原有版本。备份是供人工恢复的副本，不是运行时目录；在可知时保留源 closureVersion 与 managed 元数据，无版本的历史来源则明确标为 unknown。Home 只保留最近 3 份切代备份，按备份目录名的时间前缀排序；本次新建立的备份始终保留，命名不符合产品规则的条目不计入也不删除。修剪在版本状态与 managed marker 都发布成功之后进行，修剪失败只记录一条受限诊断，不回滚已经完成的切代。无版本 Home 的首次接管属于离线升级边界：旧构建不持有这把新锁，因此仅取得锁并不能证明那些旧进程已经停止。Ellamaka 不校验也不翻译 DSH 私有数据格式。
 
@@ -220,14 +220,14 @@ DSH 步骤发送 `@wopal/ellamaka-core` 的统一 `CorePreparationEvent`，不�
 
 ### Unified Entry Matrix
 
-| 入口 | Preparation | Runtime Activation |
-| --- | --- | --- |
-| `ellamaka serve` / `web` | Setup 未完成时由 Onboarding 触发 host preparation（Web 启用时同时准备受管理 Node）；Setup 已完成时按当前 CLI build descriptor 和实际启用 profile 检查/补齐 Node 与 DSH | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个 |
-| Desktop | Setup 未完成时由 Onboarding 触发 host preparation；已完成后读取当前 embedded sidecar descriptor，按实际启用的 profile 准备 DSH。Web PTC 直接使用 Electron Node | Web/Tools 独立激活、独立状态；窗口不等待任一 profile |
-| 默认 TUI | 无 Setup presentation，启动时兜底：读取当前 build descriptor，仅在 `ELLAMAKA_DSH_TOOLS` 允许时准备 Tools（不准备 Web） | Tools 加载成功后由 Space adapter 采用；加载失败时 Native Tools 保持可用 |
-| `wopal setup` | 自身不执行 DSH Preparation；它启动/reuse 的 `ellamaka serve` 按 `serve` 行处理当前 build | 打开 Web Onboarding |
-| `ellamaka run` | 永久跳过 DSH 分支 | 纯 Ellamaka Core；不探测、复用或挂载 DSH |
-| `run --attach` | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载 | 使用远端 Runtime |
+| 入口                     | Preparation                                                                                                                                                            | Runtime Activation                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `ellamaka serve` / `web` | Setup 未完成时由 Onboarding 触发 host preparation（Web 启用时同时准备受管理 Node）；Setup 已完成时按当前 CLI build descriptor 和实际启用 profile 检查/补齐 Node 与 DSH | Web/Tools 独立激活、独立状态；任一加载失败不撤销另一个                  |
+| Desktop                  | Setup 未完成时由 Onboarding 触发 host preparation；已完成后读取当前 embedded sidecar descriptor，按实际启用的 profile 准备 DSH。Web PTC 直接使用 Electron Node         | Web/Tools 独立激活、独立状态；窗口不等待任一 profile                    |
+| 默认 TUI                 | 无 Setup presentation，启动时兜底：读取当前 build descriptor，仅在 `ELLAMAKA_DSH_TOOLS` 允许时准备 Tools（不准备 Web）                                                 | Tools 加载成功后由 Space adapter 采用；加载失败时 Native Tools 保持可用 |
+| `wopal setup`            | 自身不执行 DSH Preparation；它启动/reuse 的 `ellamaka serve` 按 `serve` 行处理当前 build                                                                               | 打开 Web Onboarding                                                     |
+| `ellamaka run`           | 永久跳过 DSH 分支                                                                                                                                                      | 纯 Ellamaka Core；不探测、复用或挂载 DSH                                |
+| `run --attach`           | 不创建本机 listener/目录 instance，不执行 CorePreparation 或 DSH 准备/挂载                                                                                             | 使用远端 Runtime                                                        |
 
 Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正运行谁，就由谁自己携带的 closureVersion 进入 Home version check。未运行的产品不参与准备。
 
@@ -247,15 +247,15 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 
 ### Commands and Ownership
 
-| 组件 | 职责 |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Core Preparation | `@wopal/ellamaka-core` 编排 contributors；API、single-flight、readiness、progress 归主 DESIGN 的 Core Readiness contract |
-| closure manager | 固定 lock 的物化与 install-anchor 校验 |
-| Home version guard | 唯一的共享/排他锁、closure 版本检查、较新版本写入前备份 |
-| ProfileRuntime | 产品自有 profile/plugin 的装配、审计、replay/release |
-| Runtime Activator | 在持有共享 Home 锁的前提下激活已准备好的 profile |
-| internal dsh-adapter | Tools profile `ready` 且当前 Space 配置采用时接入 Ellamaka；profile 加载失败时保持 Native Tools，已采用后的调用失败不回退 |
-| Runtime startup caller | 未 READY 时调用 `CorePreparation.prepare(host)` 兜底；不复制 DSH mechanics |
+| 组件                   | 职责                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Core Preparation       | `@wopal/ellamaka-core` 编排 contributors；API、single-flight、readiness、progress 归主 DESIGN 的 Core Readiness contract  |
+| closure manager        | 固定 lock 的物化与 install-anchor 校验                                                                                    |
+| Home version guard     | 唯一的共享/排他锁、closure 版本检查、较新版本写入前备份                                                                   |
+| ProfileRuntime         | 产品自有 profile/plugin 的装配、审计、replay/release                                                                      |
+| Runtime Activator      | 在持有共享 Home 锁的前提下激活已准备好的 profile                                                                          |
+| internal dsh-adapter   | Tools profile `ready` 且当前 Space 配置采用时接入 Ellamaka；profile 加载失败时保持 Native Tools，已采用后的调用失败不回退 |
+| Runtime startup caller | 未 READY 时调用 `CorePreparation.prepare(host)` 兜底；不复制 DSH mechanics                                                |
 
 ## Persistent Data
 
@@ -269,6 +269,6 @@ Active Home 与 closure-change backup 按原敏感级别保存；失败信息只
 
 ## Reference Documents
 
-| 资料 | 用途 |
+| 资料                                                                 | 用途         |
 | -------------------------------------------------------------------- | ------------ |
 | `research/deepseek-harness-architecture-and-integration-research.md` | DSH 机制研究 |

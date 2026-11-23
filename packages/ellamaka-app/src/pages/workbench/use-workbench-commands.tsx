@@ -151,7 +151,7 @@ export const useWorkbenchCommands = () => {
           if (panel?.slotState === "bound") {
             const session = sessionStore.getSession(panel.boundSessionId ?? "")
             const sessionTitle = session?.title ?? language.t("workbench.panelClose.title")
-            dialog.show(() => (
+            void dialog.show(() => (
               <DialogClosePanel
                 sessionTitle={sessionTitle}
                 onClose={async () => {
@@ -168,7 +168,7 @@ export const useWorkbenchCommands = () => {
         if (active.scope.kind === "space") {
           const name = scopeName(active.scope)
           const spacePathVal = path
-          dialog.show(() => <DialogCloseTab name={name} path={spacePathVal} />)
+          void dialog.show(() => <DialogCloseTab name={name} path={spacePathVal} />)
           return
         }
 

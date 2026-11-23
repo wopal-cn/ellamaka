@@ -23,9 +23,9 @@ converges here.
 Conformance-verified dsh plugins ([tool container design](../../docs/DESIGN-ellamaka-tools.md)). Each entry records the
 verified version and the gate that proves it.
 
-| Plugin | Version | Gates |
-|---|---|---|
-| (none currently mounted) | — | — |
+| Plugin                   | Version | Gates |
+| ------------------------ | ------- | ----- |
+| (none currently mounted) | —       | —     |
 
 ## Dependency notes
 

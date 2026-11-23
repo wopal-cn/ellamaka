@@ -1881,24 +1881,6 @@
     },
     {
       "rule": "TISO004",
-      "file": "packages/ellamaka-release/test/precommit-hook.test.ts",
-      "detail": "Bun.spawnSync({\n      cmd: [\"sh\", \"-c\", hook],\n      cwd: repo,\n      env: { ...",
-      "count": 1
-    },
-    {
-      "rule": "TISO004",
-      "file": "packages/ellamaka-release/test/precommit-hook.test.ts",
-      "detail": "Bun.spawnSync({\n    cmd: [\"bash\", join(root, \"scripts\", \"ci\", \"run-gitleaks.sh\")",
-      "count": 1
-    },
-    {
-      "rule": "TISO004",
-      "file": "packages/ellamaka-release/test/precommit-hook.test.ts",
-      "detail": "Bun.spawnSync({ cmd: [\"git\", ...args], cwd, env: { ...cleanGitEnv(), PATH: minim",
-      "count": 1
-    },
-    {
-      "rule": "TISO004",
       "file": "scripts/lib/release.test.ts",
       "detail": "Bun.spawnSync([\"bash\", \"-c\", script])",
       "count": 2

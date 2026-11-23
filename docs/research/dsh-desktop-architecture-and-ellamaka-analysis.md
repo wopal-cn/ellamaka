@@ -575,18 +575,18 @@ Ellamaka sidecar 是产品自己的 Ellamaka Server host，同时承载 Runtime�
 
 ## Ellamaka 与 DSH Desktop 对照
 
-| 维度 | Ellamaka 当前实现 | DSH Desktop 当前实现 | 研究判断 |
-|---|---|---|---|
-| 产品 Renderer | Ellamaka Workbench | DSH Web application | 各自产品层，不应互换 |
-| Desktop Host | Ellamaka Server sidecar | `dsh-desktop-host` | 各自产品 Runtime owner |
-| login-shell env | `shell-env.ts` 简化 probe | 独立成熟 subsystem | DSH 明显更完整，值得移植机制 |
-| Host env ownership | merge 后写回 Main `process.env` | 独立 `hostEnvironment` | DSH 边界更干净 |
-| subprocess env | sidecar/engine 各自消费 `process.env` | canonical scrub + explicit overlay | DSH 分层更统一 |
-| sandbox | 已接 DSH sandbox | DSH native architecture | Ellamaka 不需要另造 sandbox env 初始化 |
-| updater | 已有 channel-aware `electron-updater` | 更完整 coordinator/journal/mandatory flow | 可选择性吸收机制 |
-| packaging | Ellamaka 自己的 build/release identity | DSH 自己的完整 packaging pipeline | 保持 Ellamaka ownership，择优参考 |
-| 品牌 | Ellamaka icon/logo/appId/protocol | DeepSeek Harness branding | 必须保持产品独立 |
-| signing/notarization | Ellamaka 当前有自己的发布路径 | DSH 更深入 | 可作为后续工程参考 |
+| 维度                 | Ellamaka 当前实现                      | DSH Desktop 当前实现                      | 研究判断                               |
+| -------------------- | -------------------------------------- | ----------------------------------------- | -------------------------------------- |
+| 产品 Renderer        | Ellamaka Workbench                     | DSH Web application                       | 各自产品层，不应互换                   |
+| Desktop Host         | Ellamaka Server sidecar                | `dsh-desktop-host`                        | 各自产品 Runtime owner                 |
+| login-shell env      | `shell-env.ts` 简化 probe              | 独立成熟 subsystem                        | DSH 明显更完整，值得移植机制           |
+| Host env ownership   | merge 后写回 Main `process.env`        | 独立 `hostEnvironment`                    | DSH 边界更干净                         |
+| subprocess env       | sidecar/engine 各自消费 `process.env`  | canonical scrub + explicit overlay        | DSH 分层更统一                         |
+| sandbox              | 已接 DSH sandbox                       | DSH native architecture                   | Ellamaka 不需要另造 sandbox env 初始化 |
+| updater              | 已有 channel-aware `electron-updater`  | 更完整 coordinator/journal/mandatory flow | 可选择性吸收机制                       |
+| packaging            | Ellamaka 自己的 build/release identity | DSH 自己的完整 packaging pipeline         | 保持 Ellamaka ownership，择优参考      |
+| 品牌                 | Ellamaka icon/logo/appId/protocol      | DeepSeek Harness branding                 | 必须保持产品独立                       |
+| signing/notarization | Ellamaka 当前有自己的发布路径          | DSH 更深入                                | 可作为后续工程参考                     |
 
 ---
 

@@ -46,20 +46,14 @@ describe("contextTone", () => {
 
 describe("formatContextTooltip", () => {
   test("formats tokens with percentage when limit is known", () => {
-    expect(formatContextTooltip(snapshot(), (n) => n.toLocaleString("en-US"))).toBe(
-      "249,432 tokens (24% of context)",
-    )
+    expect(formatContextTooltip(snapshot(), (n) => n.toLocaleString("en-US"))).toBe("249,432 tokens (24% of context)")
   })
 
   test("formats tokens without percentage when usage is unknown", () => {
-    expect(formatContextTooltip(snapshot({ usage: null }), (n) => n.toLocaleString("en-US"))).toBe(
-      "249,432 tokens",
-    )
+    expect(formatContextTooltip(snapshot({ usage: null }), (n) => n.toLocaleString("en-US"))).toBe("249,432 tokens")
   })
 
   test("uses localized number formatting", () => {
-    expect(formatContextTooltip(snapshot(), (n) => n.toLocaleString("de-DE"))).toBe(
-      "249.432 tokens (24% of context)",
-    )
+    expect(formatContextTooltip(snapshot(), (n) => n.toLocaleString("de-DE"))).toBe("249.432 tokens (24% of context)")
   })
 })

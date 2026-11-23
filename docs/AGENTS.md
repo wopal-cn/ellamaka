@@ -19,8 +19,8 @@ Keep the distinction clear: AGENTS may retain a concise stable ownership map tha
 
 ## Development Commands
 
-| Scenario | Command | When |
-|---|---|---|
+| Scenario                 | Command                                                                                   | When                       |
+| ------------------------ | ----------------------------------------------------------------------------------------- | -------------------------- |
 | DESIGN consistency check | python3 ../../../.wopal/skills/dev-doc-master/scripts/verify-docset.py . --main DESIGN.md | After document-set changes |
 
 ## Implementation Rules

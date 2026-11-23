@@ -218,12 +218,7 @@ describe("appendBundle / setDependency / dropPlugin (pure mutators)", () => {
     appendBundle(m as never, "dshmarket")
     appendBundle(m as never, "another-user-plugin")
     const bundles = (m as { dsh: { profile: { bundles: string[] } } }).dsh.profile.bundles
-    expect(bundles).toEqual([
-      "@deepseek-ai/dsh-base",
-      "@deepseek-ai/dsh-web-app",
-      "dshmarket",
-      "another-user-plugin",
-    ])
+    expect(bundles).toEqual(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dshmarket", "another-user-plugin"])
   })
 
   test("setDependency writes the range and overwrites an existing range", () => {

@@ -186,7 +186,6 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
 
     const projectMatch = requestPath.match(/^\/project\/([^/]+)$/)
     if (projectMatch && route.request().method() === "PATCH") {
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Playwright config fixture is external input
       const project = config.project as { id?: string }
       if (project.id !== decodeURIComponent(projectMatch[1])) return json(route, {})
       return json(route, config.project)

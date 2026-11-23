@@ -132,7 +132,6 @@ describe("OpenAI Responses route", () => {
   it.effect("fails immediately when WebSocket is already closed", () =>
     Effect.gen(function* () {
       const error = yield* WebSocketExecutor.fromWebSocket(
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- fromWebSocket reads readyState before touching WebSocket methods on this branch.
         { readyState: globalThis.WebSocket.CLOSED } as globalThis.WebSocket,
         { url: "wss://api.openai.test/v1/responses", headers: Headers.empty },
       ).pipe(Effect.flip)

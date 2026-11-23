@@ -39,7 +39,64 @@
     // Type-aware: catch unhandled promises
     "typescript/no-floating-promises": "warn",
     // Warn when spreading non-plain objects (Headers, class instances, etc.)
-    "typescript/no-misused-spread": "warn"
+    "typescript/no-misused-spread": "warn",
+
+    // Stopped on purpose — see docs/DESIGN-quality-gates.md#停检规则. Stopping is an
+    // explicit trade-off, not an equivalent replacement of the original protection.
+    // Flags every `as` narrowing; the sampled hits are all explicit boundary assertions
+    // (runtime normalization of external input) and the rule cannot tell necessary
+    // narrowing from a dangerous assertion. Retained protection: TypeScript strict
+    // checking covers type consistency around assertions, and new `as` stays visible in review.
+    "typescript/no-unsafe-type-assertion": "off",
+    // Under strict TS a mixed-return function is already inferred as `T | undefined`;
+    // the rule only demands an extra explicit `return undefined`. Retained protection:
+    // type checking covers return-type consistency (evaluate `noImplicitReturns` if real
+    // missing-return coverage is needed).
+    "typescript/consistent-return": "off",
+    // Sampled 20 hits were all false positives: Effect static method references,
+    // SolidJS `createSimpleContext` destructured `use`, and explicit `.call(this)` captures.
+    // Retained protection: review, plus tests for class instance methods outside
+    // src/wopal and src/workbench. Acknowledged gap: type checking cannot prove this
+    // property, so the hole is admitted rather than claimed to be covered.
+    "typescript/unbound-method": "off"
   },
-  "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts", "**/sdk.gen.ts"]
+  // Scope is ownership-based (docs/DESIGN-quality-gates.md#lint-范围与规则取舍):
+  // upstream-inherited packages and generated/experimental code are not ours to fix, so
+  // they never enter the check. Negated patterns re-include the directories inside the
+  // upstream package that this repository actually develops.
+  "ignorePatterns": [
+    "**/node_modules",
+    "**/dist",
+    "**/.build",
+    "**/.sst",
+    "**/*.d.ts",
+    "**/sdk.gen.ts",
+    "packages/opencode/**",
+    "packages/ui/**",
+    "poc/**",
+    "**/gen/**",
+    "**/*.gen.ts",
+    "!packages/opencode/src/wopal/**",
+    "!packages/opencode/src/workbench/**"
+  ],
+  "overrides": [
+    {
+      // Tests keep real-defect rules (no-floating-promises, no-base-to-string,
+      // restrict-template-expressions, no-unused-vars) enabled; only the nine pure-style
+      // type rules below are off, because they have zero runtime impact and hurt fixture
+      // readability more than they help.
+      "files": ["**/test/**", "**/*.test.*", "**/*.spec.*", "**/e2e/**"],
+      "rules": {
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-unnecessary-type-arguments": "off",
+        "typescript/no-unnecessary-type-conversion": "off",
+        "typescript/no-unnecessary-type-parameters": "off",
+        "typescript/no-unnecessary-boolean-literal-compare": "off",
+        "typescript/no-redundant-type-constituents": "off",
+        "typescript/no-duplicate-type-constituents": "off",
+        "typescript/no-extraneous-class": "off",
+        "typescript/await-thenable": "off"
+      }
+    }
+  ]
 }

@@ -112,8 +112,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     integrations: (integrations) => {
       return integrations.filter(
         (i) =>
-          i.name !== "Breadcrumbs" &&
-          !(import.meta.env.ELLAMAKA_CHANNEL === "stable" && i.name === "GlobalHandlers"),
+          i.name !== "Breadcrumbs" && !(import.meta.env.ELLAMAKA_CHANNEL === "stable" && i.name === "GlobalHandlers"),
       )
     },
   })
@@ -134,10 +133,7 @@ if (root instanceof HTMLElement) {
     () => (
       <PlatformProvider value={platform}>
         <AppBaseProviders>
-          <AppInterface
-            defaultServer={ServerConnection.Key.make(server.http.url)}
-            servers={[server]}
-          />
+          <AppInterface defaultServer={ServerConnection.Key.make(server.http.url)} servers={[server]} />
         </AppBaseProviders>
       </PlatformProvider>
     ),
@@ -148,12 +144,12 @@ if (root instanceof HTMLElement) {
 if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   const registerSW = () => {
     navigator.serviceWorker.register("/sw.js").catch((err) => {
-      console.warn("Service Worker registration failed:", err);
-    });
-  };
+      console.warn("Service Worker registration failed:", err)
+    })
+  }
   if (document.readyState === "complete") {
-    registerSW();
+    registerSW()
   } else {
-    window.addEventListener("load", registerSW);
+    window.addEventListener("load", registerSW)
   }
 }

@@ -98,9 +98,7 @@ describe("resolveInstallCommand", () => {
   })
 
   test("an override with surrounding whitespace is split on runs of whitespace", () => {
-    const result = resolveInstallCommand(
-      probe({ env: { ELLAMAKA_DSH_INSTALL_COMMAND: "  bun   /entry.ts  " } }),
-    )
+    const result = resolveInstallCommand(probe({ env: { ELLAMAKA_DSH_INSTALL_COMMAND: "  bun   /entry.ts  " } }))
     expect(result).toEqual(["bun", "/entry.ts"])
   })
 
@@ -189,7 +187,11 @@ describe("resolveInstallCommand", () => {
     const modes: InstallCommandProbe[] = [
       probe({ argv: ["bun", "/$bunfs/root/ellamaka", "serve"], isBun: true }),
       probe({ argv: ["bun", "B:/~BUN/root/ellamaka.exe", "serve"], isBun: true }),
-      probe({ argv: ["bun", "/$bunfs/root/ellamaka", "serve"], isBun: true, env: { ELLAMAKA_DSH_INSTALL_COMMAND: "bun /x.ts" } }),
+      probe({
+        argv: ["bun", "/$bunfs/root/ellamaka", "serve"],
+        isBun: true,
+        env: { ELLAMAKA_DSH_INSTALL_COMMAND: "bun /x.ts" },
+      }),
     ]
     for (const mode of modes) {
       const resolved = resolveInstallCommand(mode)

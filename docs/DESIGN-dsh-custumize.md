@@ -103,7 +103,6 @@ dsh 前端插件体系与 Workbench 是两套框架，组件经 Web Component �
 
 **信任面**：Web Component 与 Workbench 同页面上下文，可信度等同于 dsh 插件同进程执行。用户显式安装加安装时的风险提示，不新增权限体系。此面不触碰官方闭包，不进入 dsh 界面运行时。
 
-
 ## Open Questions
 
 - 固定 DSH 版本实际提供哪些稳定主题/插槽扩展接口；皮肤配置如何获取、校验和隔离失败？

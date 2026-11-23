@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import type { MigrationConfig } from "drizzle-orm/migrator"
 import { readMigrationFiles } from "drizzle-orm/migrator"
 import type { AnyRelations } from "drizzle-orm/relations"

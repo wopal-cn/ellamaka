@@ -6,11 +6,7 @@ export type CompactSessionModel = {
 export type CompactSessionInput = {
   client: {
     session: {
-      summarize: (params: {
-        sessionID: string
-        modelID?: string
-        providerID?: string
-      }) => Promise<unknown>
+      summarize: (params: { sessionID: string; modelID?: string; providerID?: string }) => Promise<unknown>
     }
   }
   sessionID?: string

@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  parseWorkbenchSessionLink,
-  workbenchSessionHref,
-  WORKBENCH_SESSION_LINK_PARAM,
-} from "./workbench-session-link"
+import { parseWorkbenchSessionLink, workbenchSessionHref, WORKBENCH_SESSION_LINK_PARAM } from "./workbench-session-link"
 
 describe("workbenchSessionHref", () => {
   test("encodes the session ID into a Workbench deep link", () => {

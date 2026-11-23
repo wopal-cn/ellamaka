@@ -8,7 +8,12 @@
   "packageManager": "bun@1.4.4",
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
-    "lint": "oxlint",
+    "lint": "bun run packages/opencode/script/lint-gate/check.ts",
+    "lint:fix": "bun run packages/opencode/script/lint-gate/check.ts --fix",
+    "lint:init": "bun run packages/opencode/script/lint-gate/check.ts --init",
+    "lint:files": "bun run packages/opencode/script/lint-gate/check.ts --files",
+    "format": "set -o pipefail; bun run packages/opencode/script/format/files.ts | xargs -0 -r prettier --write",
+    "format:check": "set -o pipefail; bun run packages/opencode/script/format/files.ts | xargs -0 -r prettier --check",
     "check:test-isolation": "bun run packages/opencode/script/test-isolation/check.ts",
     "ci:local": "bash packages/opencode/script/ci-local.sh",
     "typecheck": "turbo typecheck",
@@ -22,7 +27,8 @@
     "test:integration": "bun run packages/opencode/script/run-tests-root.ts --layer integration --package all",
     "test:e2e": "bun run packages/opencode/script/run-tests-root.ts --layer e2e --package all",
     "dsh:upgrade": "bun packages/ellamaka-cordis/script/upgrade-dsh.ts",
-    "test:isolation-gate": "bun test --config /dev/null packages/opencode/script/test-isolation"
+    "test:isolation-gate": "bun test --config /dev/null packages/opencode/script/test-isolation",
+    "test:lint-gate": "bun test --config /dev/null packages/opencode/script/lint-gate"
   },
   "workspaces": {
     "packages": [

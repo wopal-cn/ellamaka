@@ -9,8 +9,7 @@ const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const SEMVER_BETA_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/
 const SEMVER_RC_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-rc\.(0|[1-9]\d*)$/
 const LEGACY_STABLE_ITERATION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(\d+)$/
-const LEGACY_RC_ITERATION_RE =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(\d+)\.rc(\d+)$/
+const LEGACY_RC_ITERATION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(\d+)\.rc(\d+)$/
 const NAMESPACED_TAG_RE = /^(ellamaka-cli|ellamaka-desktop)-v(.+)$/
 const FEED_TO_CHANNEL = { prod: "stable", beta: "beta" } as const
 
@@ -111,6 +110,28 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>
 }
 
+/**
+ * Render an arbitrary rejected value for a message without ever throwing.
+ *
+ * `JSON.stringify` throws on cyclic structures and bigints, and that would
+ * replace the module's `ReleaseIdentityError`/`ECOMMIT` contract with a raw
+ * TypeError for exactly the inputs this check exists to reject. Non-string
+ * values are always invalid here, so a coarse rendering is enough — the
+ * important part is that the error type and code survive.
+ *
+ * The fallback must not perform any conversion that can run caller code: a
+ * value may carry a throwing `Symbol.toStringTag` getter, which is why a fixed
+ * placeholder is used instead of `Object.prototype.toString` or `String(value)`.
+ */
+function describeValue(value: unknown): string {
+  try {
+    const text = JSON.stringify(value)
+    return text === undefined ? "<unserializable>" : text
+  } catch {
+    return "<unserializable>"
+  }
+}
+
 function isProduct(value: unknown): value is Product {
   return typeof value === "string" && (PRODUCTS as readonly string[]).includes(value)
 }
@@ -192,7 +213,7 @@ export function assertChannelVersionConsistent(channel: string, version: string)
 }
 
 export function buildNamespacedTag(product: Product, version: string): string {
-  if (!isProduct(product)) fail("EPRODUCT", `unknown product ${product}`)
+  if (!isProduct(product)) fail("EPRODUCT", `unknown product ${String(product)}`)
   parseReleaseVersion(version)
   return `${product}-v${version}`
 }
@@ -239,7 +260,7 @@ export function buildReleaseIdentity(input: {
   builtAt: string
   workflowRunId: string | number
 }): Extract<ReleaseIdentity, { kind: "release" }> {
-  if (!isProduct(input.product)) fail("EPRODUCT", `unknown product ${input.product}`)
+  if (!isProduct(input.product)) fail("EPRODUCT", `unknown product ${String(input.product)}`)
   const validated = validateUpstreamLock(input.upstreamLock)
   assertChannelVersionConsistent(input.channel, input.version)
 
@@ -311,8 +332,12 @@ function parseReleaseKind(
   if (rawBuild.workflowRunId === undefined || rawBuild.workflowRunId === null || rawBuild.workflowRunId === "") {
     fail("ERUN", "release identity build.workflowRunId is required")
   }
+  if (typeof rawBuild.workflowRunId !== "string" && typeof rawBuild.workflowRunId !== "number") {
+    fail("ERUN", "release identity build.workflowRunId must be a string or number")
+  }
 
-  const upstream = input.upstream && typeof input.upstream === "object" && !Array.isArray(input.upstream) ? input.upstream : {}
+  const upstream =
+    input.upstream && typeof input.upstream === "object" && !Array.isArray(input.upstream) ? input.upstream : {}
   const rawUpstream = upstream as Record<string, unknown>
   if (rawUpstream.name !== "opencode") fail("EUPSTREAM", "upstream.name must be opencode")
   if (typeof rawUpstream.version !== "string" || !SEMVER_RE.test(rawUpstream.version)) {
@@ -356,8 +381,11 @@ function parseDevelopmentKind(
   if (rawBuild.workflowRunId !== undefined) {
     fail("ERUN", "development identity must not carry build.workflowRunId")
   }
-  if (rawBuild.gitCommit !== undefined && (typeof rawBuild.gitCommit !== "string" || !COMMIT_RE.test(rawBuild.gitCommit))) {
-    fail("ECOMMIT", `development identity build.gitCommit ${String(rawBuild.gitCommit)} is not a 40-char SHA`)
+  if (rawBuild.gitCommit !== undefined && typeof rawBuild.gitCommit !== "string") {
+    fail("ECOMMIT", `development identity build.gitCommit ${describeValue(rawBuild.gitCommit)} is not a 40-char SHA`)
+  }
+  if (rawBuild.gitCommit !== undefined && !COMMIT_RE.test(rawBuild.gitCommit)) {
+    fail("ECOMMIT", `development identity build.gitCommit ${rawBuild.gitCommit} is not a 40-char SHA`)
   }
   if (rawBuild.builtAt !== undefined && (typeof rawBuild.builtAt !== "string" || !ISO8601_RE.test(rawBuild.builtAt))) {
     fail("ETIME", "development identity build.builtAt is not ISO-8601 UTC")
@@ -409,7 +437,9 @@ export function parseLegacyVersion(version: string): LegacyVersion {
 }
 
 export function computeMigrationFloor(inventory: unknown, product: Product): string {
-  const entries = (inventory as { products?: Record<string, { tags?: { name: string }[]; manifests?: { version: string }[] }> })?.products?.[product]
+  const entries = (
+    inventory as { products?: Record<string, { tags?: { name: string }[]; manifests?: { version: string }[] }> }
+  )?.products?.[product]
   if (!entries) return "1.0.0"
 
   let highest: LegacyVersion | undefined

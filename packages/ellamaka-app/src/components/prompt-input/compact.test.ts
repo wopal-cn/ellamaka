@@ -57,8 +57,6 @@ describe("compactSession", () => {
       model: { providerID: "provider-a", modelID: "model-a" },
     })
     expect(result).toBe(true)
-    expect(summarizeCalls).toEqual([
-      { sessionID: "ses_1", modelID: "model-a", providerID: "provider-a" },
-    ])
+    expect(summarizeCalls).toEqual([{ sessionID: "ses_1", modelID: "model-a", providerID: "provider-a" }])
   })
 })

@@ -14,15 +14,17 @@ const snapshot: ActiveWorkbenchSnapshot = {
     },
     "/fixtures/workspaces/space-a": {
       activePanelID: "panel-space-a",
-      panels: [{
-        id: "panel-space-a",
-        slotState: "bound",
-        boundSessionId: "session-space-a",
-        mode: "chat",
-        viewMode: "chat",
-        directory: "/fixtures/workspaces/space-a/project",
-        width: 1,
-      }],
+      panels: [
+        {
+          id: "panel-space-a",
+          slotState: "bound",
+          boundSessionId: "session-space-a",
+          mode: "chat",
+          viewMode: "chat",
+          directory: "/fixtures/workspaces/space-a/project",
+          width: 1,
+        },
+      ],
     },
   },
 }

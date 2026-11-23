@@ -231,7 +231,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
 
   const openFile = () => {
     void import("@/components/dialog-select-file").then((x) => {
-      dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
+      void dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
     })
   }
 
@@ -266,12 +266,12 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
   }
 
   const chooseModel = () => {
-    dialog.show(() => <DialogSelectModel model={local.model} />)
+    void dialog.show(() => <DialogSelectModel model={local.model} />)
   }
 
   const chooseMcp = () => {
     void import("@/components/dialog-select-mcp").then((x) => {
-      dialog.show(() => <x.DialogSelectMcp />)
+      void dialog.show(() => <x.DialogSelectMcp />)
     })
   }
 
@@ -359,7 +359,7 @@ export const useLocalPanelActions = (actions: LocalPanelActionContext) => {
 
   const fork = () => {
     void import("@/components/dialog-fork").then((x) => {
-      dialog.show(() => <x.DialogFork onSuccess={actions.onForked} />)
+      void dialog.show(() => <x.DialogFork onSuccess={actions.onForked} />)
     })
   }
 

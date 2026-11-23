@@ -49,9 +49,4 @@ export const IPC_HANDLE_CHANNELS = [
   "save-recent-model",
 ] as const
 
-export const IPC_EVENT_CHANNELS = [
-  "loading-window-complete",
-  "open-link",
-  "show-notification",
-  "relaunch",
-] as const
+export const IPC_EVENT_CHANNELS = ["loading-window-complete", "open-link", "show-notification", "relaunch"] as const

@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import * as Effect from "effect/Effect"
 import type { SqlError } from "effect/unstable/sql/SqlError"
 import { EffectDrizzleError } from "drizzle-orm/effect-core/errors"

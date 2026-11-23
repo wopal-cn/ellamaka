@@ -128,9 +128,14 @@ type ManifestProbe = {
 
 async function probeManifest(url: string): Promise<ManifestProbe> {
   const out = await new Promise<string | null>((resolve) => {
-    execFile("curl", ["--noproxy", "*", "-sS", "--max-time", "10", "-w", "\n%{http_code}", url], { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 }, (err, stdout) => {
-      resolve(err ? null : stdout)
-    })
+    execFile(
+      "curl",
+      ["--noproxy", "*", "-sS", "--max-time", "10", "-w", "\n%{http_code}", url],
+      { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout) => {
+        resolve(err ? null : stdout)
+      },
+    )
   })
   if (out === null) return { reachable: false }
   const nl = out.lastIndexOf("\n")
@@ -175,10 +180,7 @@ export function classifyTag(name: string) {
 }
 
 export async function mainLive(flags: { dryRun: boolean; output: string | null }) {
-  const inventory = emptyInventory(
-    "live",
-    "Live capture — review and freeze before switching publisher",
-  )
+  const inventory = emptyInventory("live", "Live capture — review and freeze before switching publisher")
 
   process.stdout.write(`[live] fetching tags from GitHub (${GH_REPO})...\n`)
   const tags = await listGhTags()
@@ -203,7 +205,9 @@ export async function mainLive(flags: { dryRun: boolean; output: string | null }
       // by BOTH CLI and Desktop. Desktop-prefixed tags (ellamaka-desktop-*)
       // belong only to Desktop. Record shared tags in both products so each
       // product's migration floor covers every version it ever shipped.
-      const product: "ellamaka-cli" | "ellamaka-desktop" = tag.name.startsWith("ellamaka-desktop-") ? "ellamaka-desktop" : "ellamaka-cli"
+      const product: "ellamaka-cli" | "ellamaka-desktop" = tag.name.startsWith("ellamaka-desktop-")
+        ? "ellamaka-desktop"
+        : "ellamaka-cli"
       inventory.products[product].tags.push({ name: tag.name, sha: tag.sha, shape: cls.shape })
       if (product === "ellamaka-cli" && !tag.name.startsWith("ellamaka-")) {
         inventory.products["ellamaka-desktop"].tags.push({ name: tag.name, sha: tag.sha, shape: cls.shape })
@@ -297,8 +301,9 @@ export async function mainLive(flags: { dryRun: boolean; output: string | null }
   // not covered by the tag loop. Probe the versions referenced by the
   // Desktop aliases so the Desktop inventory records the real CDN objects.
   const desktopAliasVersions = new Set(
-    Object.values(inventory.products["ellamaka-desktop"].channelAliases)
-      .filter((v) => typeof v === "string" && v !== "unknown" && v !== "unreachable"),
+    Object.values(inventory.products["ellamaka-desktop"].channelAliases).filter(
+      (v) => typeof v === "string" && v !== "unknown" && v !== "unreachable",
+    ),
   )
   for (const plain of desktopAliasVersions) {
     const url = `${CDN_BASE}/${DESKTOP_PREFIX}/v${plain}/manifest.json`
@@ -334,5 +339,7 @@ export function main(opts?: { dryRun?: boolean; output?: string | null }) {
   // Live capture: GitHub tags + CDN versioned manifests + channel aliases.
   // Read-only; requires GH_TOKEN (or gh CLI) for the tag list. CDN objects
   // are public and need no R2 credentials.
-  mainLive(flags)
+  // Fire-and-forget by design: `main` is the synchronous CLI seam and the
+  // capture reports its own failures by rejecting, which stays observable.
+  void mainLive(flags)
 }

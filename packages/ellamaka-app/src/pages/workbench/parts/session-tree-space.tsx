@@ -33,7 +33,15 @@ export function SpaceIcon(props: { class?: string }) {
 
 export function ChatIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-3.5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-3.5"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   )
@@ -41,7 +49,15 @@ export function ChatIcon(props: { class?: string }) {
 
 function FolderIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-3.5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-3.5"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
   )
@@ -50,7 +66,15 @@ function FolderIcon(props: { class?: string }) {
 // 日期专用日历图标 (Calendar Icon)
 function CalendarIcon(props: { class?: string }) {
   return (
-    <svg class={props.class ?? "size-3.5"} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class={props.class ?? "size-3.5"}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <line x1="16" y1="2" x2="16" y2="6" />
       <line x1="8" y1="2" x2="8" y2="6" />
@@ -58,7 +82,6 @@ function CalendarIcon(props: { class?: string }) {
     </svg>
   )
 }
-
 
 type DateGroup = {
   key: string
@@ -158,7 +181,13 @@ function DateLocationItem(props: {
   pinnedSessions: () => Set<string>
   onSessionClick: (sessionId: string) => void
   onSessionDblClick?: (sessionId: string) => void
-  onSessionContextMenu: (e: MouseEvent, session: MergedSession, spacePath: string, sessionData: GroupSession, locationKind: SessionTreeLocation["kind"]) => void
+  onSessionContextMenu: (
+    e: MouseEvent,
+    session: MergedSession,
+    spacePath: string,
+    sessionData: GroupSession,
+    locationKind: SessionTreeLocation["kind"],
+  ) => void
   setSelectedSessionId: (id: string) => void
   mergeSessions: (serverSessions: GroupSession[]) => MergedSession[]
   registerRowRef?: (sessionId: string, el: HTMLButtonElement | null) => void
@@ -168,12 +197,7 @@ function DateLocationItem(props: {
   const [expanded, setExpanded] = createSignal(true)
   const groupTitle = () => language.t(`workbench.dateGroup.${props.group.key}` as any)
   const merged = createMemo(() =>
-    sortSessionsByPanelAndPin(
-      props.mergeSessions(props.group.sessions),
-      props.pinnedSessions(),
-      props.space.path,
-      wb,
-    ),
+    sortSessionsByPanelAndPin(props.mergeSessions(props.group.sessions), props.pinnedSessions(), props.space.path, wb),
   )
 
   return (
@@ -217,7 +241,8 @@ function DateLocationItem(props: {
                 onSessionDblClick={props.onSessionDblClick}
                 onContextMenu={(event) => {
                   const sessionData = props.group.sessions.find((candidate) => candidate.id === session.id)
-                  if (sessionData) props.onSessionContextMenu(event, session, props.space.path, sessionData, "general-date")
+                  if (sessionData)
+                    props.onSessionContextMenu(event, session, props.space.path, sessionData, "general-date")
                 }}
                 setSelectedSessionId={props.setSelectedSessionId}
                 registerRowRef={props.registerRowRef}
@@ -249,7 +274,13 @@ function ProjectLocationItem(props: {
   pinnedSessions: () => Set<string>
   onSessionClick: (sessionId: string) => void
   onSessionDblClick?: (sessionId: string) => void
-  onSessionContextMenu: (e: MouseEvent, session: MergedSession, spacePath: string, sessionData: GroupSession, locationKind: SessionTreeLocation["kind"]) => void
+  onSessionContextMenu: (
+    e: MouseEvent,
+    session: MergedSession,
+    spacePath: string,
+    sessionData: GroupSession,
+    locationKind: SessionTreeLocation["kind"],
+  ) => void
   setSelectedSessionId: (id: string) => void
   mergeSessions: (serverSessions: GroupSession[]) => MergedSession[]
   registerRowRef?: (sessionId: string, el: HTMLButtonElement | null) => void
@@ -320,7 +351,8 @@ function ProjectLocationItem(props: {
                 onSessionDblClick={props.onSessionDblClick}
                 onContextMenu={(event) => {
                   const sessionData = props.location.sessions.find((candidate) => candidate.id === session.id)
-                  if (sessionData) props.onSessionContextMenu(event, session, props.space.path, sessionData, props.location.kind)
+                  if (sessionData)
+                    props.onSessionContextMenu(event, session, props.space.path, sessionData, props.location.kind)
                 }}
                 setSelectedSessionId={props.setSelectedSessionId}
                 registerRowRef={props.registerRowRef}
@@ -342,7 +374,13 @@ export function SessionTreeSpace(props: {
   pinnedSessions: () => Set<string>
   onSessionClick: (sessionId: string) => void
   onSessionDblClick?: (sessionId: string) => void
-  onSessionContextMenu: (e: MouseEvent, session: MergedSession, spacePath: string, sessionData: GroupSession, locationKind: SessionTreeLocation["kind"]) => void
+  onSessionContextMenu: (
+    e: MouseEvent,
+    session: MergedSession,
+    spacePath: string,
+    sessionData: GroupSession,
+    locationKind: SessionTreeLocation["kind"],
+  ) => void
   setSelectedSessionId: (id: string) => void
   mergeSessions: (serverSessions: GroupSession[]) => MergedSession[]
   registerRowRef?: (sessionId: string, el: HTMLButtonElement | null) => void
@@ -362,17 +400,11 @@ export function SessionTreeSpace(props: {
     return groupSessionsByDate(props.locations())
   })
 
-  const spaceLocations = createMemo(() =>
-    props.locations().filter((loc) => loc.kind === "space-root"),
-  )
+  const spaceLocations = createMemo(() => props.locations().filter((loc) => loc.kind === "space-root"))
 
-  const projectLocations = createMemo(() =>
-    props.locations().filter((loc) => loc.kind !== "space-root"),
-  )
+  const projectLocations = createMemo(() => props.locations().filter((loc) => loc.kind !== "space-root"))
 
-  const hasSessions = createMemo(() =>
-    props.locations().some((loc) => loc.sessions.length > 0),
-  )
+  const hasSessions = createMemo(() => props.locations().some((loc) => loc.sessions.length > 0))
 
   return (
     <div class="flex flex-col gap-2 py-1">
@@ -464,7 +496,14 @@ export function SessionTreeSpace(props: {
                                 onSessionDblClick={props.onSessionDblClick}
                                 onContextMenu={(event) => {
                                   const sessionData = location.sessions.find((candidate) => candidate.id === session.id)
-                                  if (sessionData) props.onSessionContextMenu(event, session, props.space.path, sessionData, location.kind)
+                                  if (sessionData)
+                                    props.onSessionContextMenu(
+                                      event,
+                                      session,
+                                      props.space.path,
+                                      sessionData,
+                                      location.kind,
+                                    )
                                 }}
                                 setSelectedSessionId={props.setSelectedSessionId}
                                 registerRowRef={props.registerRowRef}

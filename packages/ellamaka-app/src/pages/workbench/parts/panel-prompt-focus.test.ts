@@ -73,21 +73,25 @@ describe("panel prompt focus", () => {
   })
 
   test("skips autofocus only when selectable text activates another panel", () => {
-    expect(shouldSkipPanelPromptFocusForActivation({
-      previousPanelActive: false,
-      panelActive: true,
-      tabActive: true,
-      lastPreservedPointerAt: 1_000,
-      now: 1_100,
-    })).toBe(true)
+    expect(
+      shouldSkipPanelPromptFocusForActivation({
+        previousPanelActive: false,
+        panelActive: true,
+        tabActive: true,
+        lastPreservedPointerAt: 1_000,
+        now: 1_100,
+      }),
+    ).toBe(true)
 
-    expect(shouldSkipPanelPromptFocusForActivation({
-      previousPanelActive: true,
-      panelActive: true,
-      tabActive: true,
-      lastPreservedPointerAt: 1_000,
-      now: 1_100,
-    })).toBe(false)
+    expect(
+      shouldSkipPanelPromptFocusForActivation({
+        previousPanelActive: true,
+        panelActive: true,
+        tabActive: true,
+        lastPreservedPointerAt: 1_000,
+        now: 1_100,
+      }),
+    ).toBe(false)
   })
 
   test("retries when the editor cannot receive focus during the first frame", () => {

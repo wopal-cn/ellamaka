@@ -148,10 +148,10 @@ const DICTIONARIES: Record<Locale, () => Dictionary> = {
   bs: () => ({ ...base, ...i18n.flatten(desktopBs) }),
 }
 
-const state = {
+const state: { locale: Locale; dict: Dictionary; init: Promise<Locale> | undefined } = {
   locale: detectLocale(),
-  dict: base as Dictionary,
-  init: undefined as Promise<Locale> | undefined,
+  dict: base,
+  init: undefined,
 }
 
 state.dict = DICTIONARIES[state.locale]()

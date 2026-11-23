@@ -643,7 +643,8 @@ export const dict = {
   "settings.general.row.reasoningSummaries.title": "Vis resonneringssammendrag",
   "settings.general.row.reasoningSummaries.description": "Vis sammendrag av modellresonnering i tidslinjen",
   "settings.general.row.shellToolPartsExpanded.title": "Utvid resultater av verktøykall",
-  "settings.general.row.shellToolPartsExpanded.description": "Vis resultater av verktøykall utvidet som standard i tidslinjen",
+  "settings.general.row.shellToolPartsExpanded.description":
+    "Vis resultater av verktøykall utvidet som standard i tidslinjen",
   "settings.general.row.editToolPartsExpanded.title": "Utvid resultater av redigeringsverktøy",
   "settings.general.row.editToolPartsExpanded.description":
     "Vis edit-, write- og patch-verktøyresultater utvidet som standard i tidslinjen",

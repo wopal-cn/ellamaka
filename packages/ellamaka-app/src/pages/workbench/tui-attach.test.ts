@@ -34,13 +34,24 @@ describe("createTuiAttachRequest", () => {
   })
 
   test("resolves sidecar credentials only for the desktop sidecar connection", () => {
-    const sidecar = { type: "sidecar" as const, variant: "base" as const, http: { url: "http://127.0.0.1:4096", username: "ellamaka", password: "secret" } }
+    const sidecar = {
+      type: "sidecar" as const,
+      variant: "base" as const,
+      http: { url: "http://127.0.0.1:4096", username: "ellamaka", password: "secret" },
+    }
     expect(resolveTuiAttachAuth(sidecar)).toEqual({ username: "ellamaka", password: "secret" })
 
-    const sidecarWithoutPassword = { type: "sidecar" as const, variant: "base" as const, http: { url: "http://127.0.0.1:4096" } }
+    const sidecarWithoutPassword = {
+      type: "sidecar" as const,
+      variant: "base" as const,
+      http: { url: "http://127.0.0.1:4096" },
+    }
     expect(resolveTuiAttachAuth(sidecarWithoutPassword)).toBeUndefined()
 
-    const httpWithBasicAuth = { type: "http" as const, http: { url: "http://10.0.0.8:4096", username: "admin", password: "hunter2" } }
+    const httpWithBasicAuth = {
+      type: "http" as const,
+      http: { url: "http://10.0.0.8:4096", username: "admin", password: "hunter2" },
+    }
     expect(resolveTuiAttachAuth(httpWithBasicAuth)).toBeUndefined()
 
     expect(resolveTuiAttachAuth(undefined)).toBeUndefined()

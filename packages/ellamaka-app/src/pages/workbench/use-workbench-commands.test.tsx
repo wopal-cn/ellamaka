@@ -17,5 +17,5 @@ describe("fileTree legacy wiring removal", () => {
     expect(source).not.toContain("fileTree.toggle")
     expect(source).not.toContain("showFileTree")
     expect(source).not.toContain("layout.fileTree")
-   })
+  })
 })

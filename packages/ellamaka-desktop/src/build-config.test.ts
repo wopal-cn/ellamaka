@@ -34,7 +34,7 @@ describe("electron-builder.config.ts channel resolution", () => {
     expect(config).toContain('import { resolveBuildChannel } from "@wopal/ellamaka-release/channel-resolve"')
     expect(config).toContain("resolveBuildChannel(process.env.ELLAMAKA_CHANNEL)")
     // Strict mode: no local fallback argument.
-    expect(config).not.toContain("resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, \"local\")")
+    expect(config).not.toContain('resolveBuildChannel(process.env.ELLAMAKA_CHANNEL, "local")')
     expect(config).not.toContain("process.env.OPENCODE_CHANNEL")
   })
 })

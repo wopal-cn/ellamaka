@@ -1,40 +1,131 @@
-#!/bin/sh
-set -eu
-
-# Fast, staged-only checks.
+#!/usr/bin/env bash
+#
+# Pre-commit gate: lint, formatting, and secret scanning over the staged files.
+#
+# Three independent checks run on every commit and each failure is collected
+# instead of aborting the hook, so a lint or formatting failure can never hide
+# the secret scan. Anything that fails here fails the commit.
+#
+# The staged set covers added, copied, modified, renamed, and type-changed paths.
+# A type change (`T`: a symlink replaced by a regular file, or the reverse) has
+# content to check just like a modification; leaving it out would let such a
+# commit skip all three checks.
+#
+# - lint: `bun run lint:files`, which judges only the selected files against
+#   `.ci/oxlint-baseline.json`; upstream, generated and `poc/` paths are outside
+#   the lint scope and are released without diagnostics.
+# - format: the staged files are intersected with the exact file set
+#   `bun run format` / `format:check` use, then handed to `prettier --check`.
+#   `--check` never rewrites a file, so the index is never touched.
+# - secrets: `scripts/ci/run-gitleaks.sh` scans the staged diff with a pinned,
+#   checksum-verified gitleaks binary.
+#
+# Known limitation (accepted in docs/DESIGN-quality-gates.md#business-rules-and-failure-boundaries):
+# the checks read the working tree, not the index. A partially staged file (the
+# index holds a different subset than the working tree) can therefore be checked
+# against content that is not exactly what is being committed, and pass. The fix
+# is an explicit `bun run format` / `bun run lint:fix`; the hook deliberately
+# does not stash or restore anything to inspect the index instead.
+#
+# No lint-staged: the whole gate stays a plain shell script with no extra
+# dependency, and the hook never runs `git add`, `git reset`, `git stash`, or any
+# other command that could rewrite the index or another agent's working tree.
 #
 # Test suites live in .github/workflows/ci.yml (nightly + manual) and in the
 # release gate of the publish workflows. A pre-commit test run is a tax people
-# bypass with --no-verify, so it is gone: this hook only lints the staged code
-# and scans the staged diff for secrets. Anything that fails here fails the
-# commit — there is no escape hatch.
+# bypass with --no-verify, so it is not here.
 
-cd "$(git rev-parse --show-toplevel)"
+# husky runs every hook as `sh -e .husky/pre-commit`, so the shebang never
+# applies and `-e` is already on. That breaks this hook twice over, and both
+# cases are settled here before any bash-only syntax (arrays, `< <(...)`) is
+# parsed:
+# - macOS `/bin/sh` is bash 3.2 in POSIX mode, where `< <(...)` is a syntax
+#   error. Turning POSIX mode off restores bash's own grammar.
+# - Linux `/bin/sh` is often dash, which has no arrays at all, so the file is
+#   re-executed with bash when `$0` is a real path.
+# `-e` is cleared as well: this hook collects every failure instead of aborting.
+set +e
+if [ -n "${BASH_VERSION:-}" ]; then
+  if shopt -qo posix 2>/dev/null; then
+    set +o posix
+  fi
+elif [ -f "$0" ] && command -v bash >/dev/null 2>&1; then
+  exec bash "$0" "$@"
+else
+  echo "pre-commit: this hook needs bash; install it or run with --no-verify" >&2
+  exit 1
+fi
 
-staged=$(git diff --cached --name-only --diff-filter=ACMR)
-if [ -z "$staged" ]; then
+# No `set -e`: each check must run even when an earlier one fails.
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# Staged files as a bash array. NUL separation is what keeps names containing
+# spaces or the letter `n` whole; newline-separated output (and the `IFS=$'\n'`
+# splitting this hook used before) cannot express either reliably. bash 3.2 has
+# no `mapfile`, so the array is filled by an explicit read loop.
+#
+# The filter names the statuses whose *content* must be checked: A/C added or
+# copied, M modified, R renamed, T type-changed (a symlink replaced by a regular
+# file, or the reverse). `T` is not optional: without it the changed file never
+# reaches the array, and a commit that only carries a type change skips lint,
+# formatting, and the secret scan entirely. Deleted paths (`D`) are excluded
+# because there is no content left to read.
+staged=()
+while IFS= read -r -d '' file; do
+  staged+=("$file")
+done < <(git diff --cached --name-only -z --diff-filter=ACMRT)
+
+# Nothing staged (for example an amend that only changes the message).
+if [ "${#staged[@]}" -eq 0 ]; then
   exit 0
 fi
 
-# Static check: the repository's real lint command (oxlint), limited to the
-# staged TypeScript/JavaScript files. Newline splitting keeps paths with
-# spaces intact; globbing is disabled so a path is never expanded.
-set -f
-old_ifs=$IFS
-IFS='
-'
-set --
-for file in $staged; do
+status=0
+
+# --- lint -------------------------------------------------------------------
+lint_files=()
+for file in "${staged[@]}"; do
   case "$file" in
-    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs) set -- "$@" "$file" ;;
+    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs) lint_files+=("$file") ;;
   esac
 done
-IFS=$old_ifs
-set +f
 
-if [ "$#" -gt 0 ]; then
-  bun run lint -- "$@"
+if [ "${#lint_files[@]}" -gt 0 ]; then
+  bun run lint:files -- "${lint_files[@]}" || status=1
 fi
 
-# Secret scan: pinned gitleaks fetched and checksum-verified by the wrapper.
-sh scripts/ci/run-gitleaks.sh
+# --- format -----------------------------------------------------------------
+# `--intersect` filters stdin against the `bun run format` file set, so the hook
+# inherits the ignore and parser rules instead of re-implementing them.
+format_files=()
+staged_scope="$(mktemp "${TMPDIR:-/tmp}/ellamaka-pre-commit.XXXXXX")" || exit 1
+trap 'rm -f "$staged_scope"' EXIT
+
+if printf '%s\0' "${staged[@]}" | bun run packages/opencode/script/format/files.ts --intersect >"$staged_scope"; then
+  while IFS= read -r -d '' file; do
+    format_files+=("$file")
+  done <"$staged_scope"
+else
+  echo "pre-commit: could not resolve the format scope for the staged files" >&2
+  status=1
+fi
+
+if [ "${#format_files[@]}" -gt 0 ]; then
+  if ! bunx prettier --check -- "${format_files[@]}"; then
+    echo 'pre-commit: formatting check failed; run "bun run format" to fix the files above' >&2
+    status=1
+  fi
+fi
+
+# --- secrets ----------------------------------------------------------------
+# Runs last and unconditionally: a lint or formatting failure must not be able
+# to short-circuit the scan.
+sh scripts/ci/run-gitleaks.sh || status=1
+
+if [ "$status" -eq 0 ]; then
+  echo "pre-commit: lint, formatting, and secret scan passed"
+fi
+
+exit "$status"

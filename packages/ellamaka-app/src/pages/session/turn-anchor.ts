@@ -4,10 +4,7 @@
  * turn rendered by another keep-alive panel (hidden Space tab, split panel),
  * scrolling the wrong scroller and leaving the visible one untouched.
  */
-export function resolveTurnAnchor(
-  scopeRoot: HTMLElement | undefined,
-  turnID: string,
-): HTMLElement | undefined {
+export function resolveTurnAnchor(scopeRoot: HTMLElement | undefined, turnID: string): HTMLElement | undefined {
   if (!scopeRoot) return undefined
   return scopeRoot.querySelector<HTMLElement>(`[data-turn-id="${CSS.escape(turnID)}"]`) ?? undefined
 }

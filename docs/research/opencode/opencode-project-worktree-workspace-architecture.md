@@ -12,6 +12,7 @@
 **定义**: Git 仓库的逻辑抽象，代表一个独立的项目。
 
 **核心特征**:
+
 - ID 由 Git root commit hash 生成（唯一标识）
 - 包含主 worktree 和派生 worktree（sandboxes）
 - 作为 Session 的顶层归属容器
@@ -19,30 +20,32 @@
 **源码位置**: `src/project/project.ts`
 
 **数据模型** (`project/project.ts:33-61`):
+
 ```typescript
 const Info = z.object({
-  id: z.string(),           // Git root commit hash
-  worktree: z.string(),     // 主 worktree 物理路径
+  id: z.string(), // Git root commit hash
+  worktree: z.string(), // 主 worktree 物理路径
   vcs: z.literal("git").optional(),
   name: z.string().optional(),
   icon: {
     url: z.string().optional(),
     override: z.string().optional(),
-    color: z.string().optional()
+    color: z.string().optional(),
   }.optional(),
   commands: {
-    start: z.string().optional()  // 启动脚本
+    start: z.string().optional(), // 启动脚本
   }.optional(),
   time: {
     created: z.number(),
     updated: z.number(),
-    initialized: z.number().optional()
+    initialized: z.number().optional(),
   },
-  sandboxes: z.array(z.string()),  // 派生 worktree 路径数组
+  sandboxes: z.array(z.string()), // 派生 worktree 路径数组
 })
 ```
 
 **数据库表** (`project/project.sql.ts`):
+
 ```typescript
 const ProjectTable = sqliteTable("project", {
   id: text().primaryKey(),
@@ -64,6 +67,7 @@ const ProjectTable = sqliteTable("project", {
 **定义**: Git worktree 的物理实现，提供目录隔离机制。
 
 **核心特征**:
+
 - 物理上是 Git worktree（`git worktree add`）
 - 分支命名规范: `opencode/<name>`
 - 存储路径: `<Global.Path.data>/worktree/<project-id>/<name>`
@@ -71,15 +75,17 @@ const ProjectTable = sqliteTable("project", {
 **源码位置**: `src/worktree/index.ts`
 
 **数据模型** (`worktree/index.ts:36-45`):
+
 ```typescript
 const Info = z.object({
-  name: z.string(),      // 如 "brave-comet"
-  branch: z.string(),    // 如 "opencode/brave-comet"
+  name: z.string(), // 如 "brave-comet"
+  branch: z.string(), // 如 "opencode/brave-comet"
   directory: z.string(), // 如 "/data/worktree/abc123/brave-comet"
 })
 ```
 
 **命名规则** (`worktree/index.ts:124-188`):
+
 - 形容词池: brave, calm, clever, cosmic, crisp, curious, eager, gentle, glowing, happy, hidden, jolly, kind, lucky, mighty, misty, neon, nimble, playful, proud, quick, quiet, shiny, silent, stellar, sunny, swift, tidy, witty
 - 名词池: cabin, cactus, canyon, circuit, comet, eagle, engine, falcon, forest, garden, harbor, island, knight, lagoon, meadow, moon, mountain, nebula, orchid, otter, panda, pixel, planet, river, rocket, sailor, squid, star, tiger, wizard, wolf
 - 生成格式: `<adjective>-<noun>` 或 `<base>-<adjective>-<noun>`
@@ -89,34 +95,35 @@ const Info = z.object({
 **定义**: Project 的 `sandboxes` 字段中存储的 Worktree 目录路径。
 
 **核心特征**:
+
 - **不是独立实体**，而是 Project 的字段
 - **本质是 Worktree 的物理路径字符串数组**
 - 用于追踪 Project 下所有派生的 worktree
 
 **数据来源** (`project/project.ts:236-238`):
+
 ```typescript
 // 自动检测并注册
-if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-  result.sandboxes.push(data.sandbox)
+if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox)) result.sandboxes.push(data.sandbox)
 // 过滤不存在的目录
 result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 ```
 
 **Sandbox 与 Worktree 的关系**:
 
-| 术语 | 含义 | 存储位置 |
-|------|------|----------|
-| **主 Worktree** | Git 仓库原始目录 | `Project.worktree` |
-| **Sandbox** | 派生 worktree（通过 `git worktree add` 创建） | `Project.sandboxes[]` |
-| **当前 Sandbox** | 用户启动 opencode 时所在的 worktree | `Instance.worktree` |
+| 术语             | 含义                                          | 存储位置              |
+| ---------------- | --------------------------------------------- | --------------------- |
+| **主 Worktree**  | Git 仓库原始目录                              | `Project.worktree`    |
+| **Sandbox**      | 派生 worktree（通过 `git worktree add` 创建） | `Project.sandboxes[]` |
+| **当前 Sandbox** | 用户启动 opencode 时所在的 worktree           | `Instance.worktree`   |
 
 **命名评价**:
 
 当前命名不够清晰，建议的更优命名：
 
-| 当前命名 | 含义 | 更好的命名 |
-|----------|------|-----------|
-| `Project.worktree` | 主仓库路径 | `repository` / `rootWorktree` |
+| 当前命名            | 含义               | 更好的命名                       |
+| ------------------- | ------------------ | -------------------------------- |
+| `Project.worktree`  | 主仓库路径         | `repository` / `rootWorktree`    |
 | `Project.sandboxes` | 派生 worktree 列表 | `worktrees` / `derivedWorktrees` |
 
 > **结论**: Sandbox = Worktree 的同义词，只是在不同语境下的称呼。主 worktree 存储在 `Project.worktree`，派生的存储在 `Project.sandboxes[]`。
@@ -126,6 +133,7 @@ result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 **定义**: Worktree 的业务抽象层，提供 API 级别的隔离。
 
 **核心特征**:
+
 - **可选层**（不创建时 Session 直接属于 Project）
 - 目前仅支持 `type: "worktree"`，架构预留扩展能力
 - 通过 Adaptor 模式实现底层操作
@@ -133,19 +141,21 @@ result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 **源码位置**: `src/control-plane/workspace.ts`
 
 **数据模型** (`control-plane/types.ts:4-13`):
+
 ```typescript
 const WorkspaceInfo = z.object({
-  id: Identifier.schema("workspace"),  // wrk_xxx
-  type: z.string(),                     // 目前仅 "worktree"
-  branch: z.string().nullable(),        // git 分支名
-  name: z.string().nullable(),          // 显示名
-  directory: z.string().nullable(),     // 物理路径
-  extra: z.unknown().nullable(),        // 扩展字段
-  projectID: z.string(),                // 外键 → Project.id
+  id: Identifier.schema("workspace"), // wrk_xxx
+  type: z.string(), // 目前仅 "worktree"
+  branch: z.string().nullable(), // git 分支名
+  name: z.string().nullable(), // 显示名
+  directory: z.string().nullable(), // 物理路径
+  extra: z.unknown().nullable(), // 扩展字段
+  projectID: z.string(), // 外键 → Project.id
 })
 ```
 
 **数据库表** (`control-plane/workspace.sql.ts`):
+
 ```typescript
 const WorkspaceTable = sqliteTable("workspace", {
   id: text().primaryKey(),
@@ -154,7 +164,9 @@ const WorkspaceTable = sqliteTable("workspace", {
   name: text(),
   directory: text(),
   extra: text({ mode: "json" }),
-  project_id: text().notNull().references(() => ProjectTable.id, { onDelete: "cascade" }),
+  project_id: text()
+    .notNull()
+    .references(() => ProjectTable.id, { onDelete: "cascade" }),
 })
 ```
 
@@ -174,19 +186,20 @@ Project (Git 仓库)
 ```
 
 **核心设计**:
+
 1. **Adaptor 接口** (`control-plane/types.ts:15-20`)：`configure` / `create` / `remove` / `fetch`
 2. **远程同步** (`workspace.ts:114-151`)：`workspaceEventLoop` 通过 SSE 监听远程 workspace 事件
 3. **`type !== "worktree"` 才启动同步**：暗示未来非本地 workspace 需要远程通信
 
 **SDK 成熟度评估**:
 
-| 层面 | 状态 |
-|------|------|
-| **服务端 API** | ✅ 可用 (`/experimental/workspace`) |
-| **SDK 类型** | ✅ 已生成 (`ExperimentalClient.list/create/remove`) |
-| **Adaptor 实现** | ⚠️ 仅 `worktree` 一种 |
-| **文档** | ❌ 无 |
-| **生产使用** | ❌ 未推广 |
+| 层面             | 状态                                                |
+| ---------------- | --------------------------------------------------- |
+| **服务端 API**   | ✅ 可用 (`/experimental/workspace`)                 |
+| **SDK 类型**     | ✅ 已生成 (`ExperimentalClient.list/create/remove`) |
+| **Adaptor 实现** | ⚠️ 仅 `worktree` 一种                               |
+| **文档**         | ❌ 无                                               |
+| **生产使用**     | ❌ 未推广                                           |
 
 > **结论**: Workspace 是半成品架构，API 能用但只有 worktree 一种实现，本质上是对 Worktree 的薄封装。除非未来扩展其他类型（如远程/容器），否则直接用 Worktree API 更简洁。
 
@@ -195,24 +208,26 @@ Project (Git 仓库)
 **定义**: 对话工作单元，可属于 Project 或 Workspace。
 
 **核心特征**:
+
 - 最小工作单元
 - `workspaceID` 字段可选
 - `directory` 字段记录创建时的物理路径
 
 **数据模型** (`session/index.ts:119-161`):
+
 ```typescript
 const Info = z.object({
   id: Identifier.schema("session"),
   slug: z.string(),
   projectID: z.string(),
-  workspaceID: z.string().optional(),  // 可选！
+  workspaceID: z.string().optional(), // 可选！
   directory: z.string(),
   parentID: Identifier.schema("session").optional(),
   summary: {
     additions: z.number(),
     deletions: z.number(),
     files: z.number(),
-    diffs: Snapshot.FileDiff.array().optional()
+    diffs: Snapshot.FileDiff.array().optional(),
   }.optional(),
   share: { url: z.string() }.optional(),
   title: z.string(),
@@ -221,14 +236,14 @@ const Info = z.object({
     created: z.number(),
     updated: z.number(),
     compacting: z.number().optional(),
-    archived: z.number().optional()
+    archived: z.number().optional(),
   },
   permission: PermissionNext.Ruleset.optional(),
   revert: {
     messageID: z.string(),
     partID: z.string().optional(),
     snapshot: z.string().optional(),
-    diff: z.string().optional()
+    diff: z.string().optional(),
   }.optional(),
 })
 ```
@@ -238,25 +253,30 @@ const Info = z.object({
 **定义**: 用户通过 API 请求传入的**物理工作目录**，是 OpenCode 运行时上下文的入口参数。
 
 **来源优先级** (`server.ts:200`):
+
 ```typescript
-const raw = c.req.query("directory")      // 1. URL 查询参数
-  || c.req.header("x-opencode-directory") // 2. HTTP Header
-  || process.cwd()                         // 3. 服务端当前目录（默认值）
-const directory = decodeURIComponent(raw)  // URL 解码
+const raw =
+  c.req.query("directory") || // 1. URL 查询参数
+  c.req.header("x-opencode-directory") || // 2. HTTP Header
+  process.cwd() // 3. 服务端当前目录（默认值）
+const directory = decodeURIComponent(raw) // URL 解码
 ```
 
 **核心特征**:
+
 - **物理属性**：文件系统上的真实路径（如 `/home/user/my-project/src/components`）
 - **运行时确定**：每次 API 调用时通过请求参数传递
 - **可以是子目录**：不一定是 Git 根目录，可能是任意深度的子目录
 - **实例创建基础**：用于创建和标识 OpenCode Instance
 
 **关键作用**:
+
 1. 作为 `Instance.provide()` 的输入参数
 2. 作为 Instance 缓存的 key（相同 directory 共享 Instance）
 3. 触发 `Project.fromDirectory()` 解析 Project 信息
 
 **与 Instance 的关系**:
+
 ```
 HTTP Request (directory: "/workspace/src/components")
     ↓
@@ -275,17 +295,18 @@ Instance 创建完成
 
 ### Directory vs Workspace vs Instance 对照
 
-| 特性 | Directory | Instance | Workspace |
-|------|-----------|----------|-----------|
-| **性质** | 物理路径字符串 | 运行时上下文对象 | 持久化配置实体 |
-| **来源** | HTTP 请求参数 | 内存中创建 | 数据库存储 |
-| **生命周期** | 请求级 | 实例级（缓存） | 持久化 |
-| **唯一标识** | 路径本身 | directory 字符串 | `wrk_xxx` ID |
-| **远程支持** | 不支持 | 不支持 | 支持（通过 SSE 同步） |
-| **多租户** | 单一用户 | 单一用户 | 多用户协作 |
-| **包含关系** | Instance 的输入 | 包含 directory/worktree/project | 独立实体 |
+| 特性         | Directory       | Instance                        | Workspace             |
+| ------------ | --------------- | ------------------------------- | --------------------- |
+| **性质**     | 物理路径字符串  | 运行时上下文对象                | 持久化配置实体        |
+| **来源**     | HTTP 请求参数   | 内存中创建                      | 数据库存储            |
+| **生命周期** | 请求级          | 实例级（缓存）                  | 持久化                |
+| **唯一标识** | 路径本身        | directory 字符串                | `wrk_xxx` ID          |
+| **远程支持** | 不支持          | 不支持                          | 支持（通过 SSE 同步） |
+| **多租户**   | 单一用户        | 单一用户                        | 多用户协作            |
+| **包含关系** | Instance 的输入 | 包含 directory/worktree/project | 独立实体              |
 
 **组合使用场景**:
+
 ```typescript
 // 场景1: 仅使用 directory（本地开发，最常见）
 // 请求: GET /session?directory=/home/user/my-project
@@ -334,15 +355,15 @@ Instance 创建完成
 
 ### 术语关系对照表
 
-| 术语 | 本质 | 层级 | 持久化 | 生命周期 | 示例 |
-|------|------|------|--------|----------|------|
-| **Directory** | 物理路径字符串 | 请求参数 | 无 | 请求级 | `/workspace/src/components` |
-| **Instance** | 运行时上下文对象 | 运行时 | 无 | 实例级（缓存） | `{ directory, worktree, project }` |
-| **Project** | Git 仓库逻辑抽象 | 顶层 | ProjectTable | 持久化 | `id: "abc123"` (root commit) |
-| **Worktree** | Git 物理隔离机制 | 基础设施 | 无独立表 | Git 管理 | `git worktree add ...` |
-| **Sandbox** | Project.sandboxes[] 中的路径 | Project 字段 | ProjectTable.sandboxes | 持久化 | 指向 Worktree 目录 |
-| **Workspace** | Worktree 的 API 抽象层 | 可选业务层 | WorkspaceTable | 持久化 | `type: "worktree"` |
-| **Session** | 对话工作单元 | 最小单元 | SessionTable | 持久化 | 属于 Project 或 Workspace |
+| 术语          | 本质                         | 层级         | 持久化                 | 生命周期       | 示例                               |
+| ------------- | ---------------------------- | ------------ | ---------------------- | -------------- | ---------------------------------- |
+| **Directory** | 物理路径字符串               | 请求参数     | 无                     | 请求级         | `/workspace/src/components`        |
+| **Instance**  | 运行时上下文对象             | 运行时       | 无                     | 实例级（缓存） | `{ directory, worktree, project }` |
+| **Project**   | Git 仓库逻辑抽象             | 顶层         | ProjectTable           | 持久化         | `id: "abc123"` (root commit)       |
+| **Worktree**  | Git 物理隔离机制             | 基础设施     | 无独立表               | Git 管理       | `git worktree add ...`             |
+| **Sandbox**   | Project.sandboxes[] 中的路径 | Project 字段 | ProjectTable.sandboxes | 持久化         | 指向 Worktree 目录                 |
+| **Workspace** | Worktree 的 API 抽象层       | 可选业务层   | WorkspaceTable         | 持久化         | `type: "worktree"`                 |
+| **Session**   | 对话工作单元                 | 最小单元     | SessionTable           | 持久化         | 属于 Project 或 Workspace          |
 
 ---
 
@@ -353,6 +374,7 @@ Instance 创建完成
 **源码位置**: `project/project.ts:90-204`
 
 **算法步骤**:
+
 1. 从当前目录向上搜索 `.git` 目录
 2. 读取 `.git/opencode` 缓存文件（若存在）
 3. 若无缓存，执行 `git rev-list --max-parents=0 --all` 获取所有 root commits
@@ -360,6 +382,7 @@ Instance 创建完成
 5. 写入 `.git/opencode` 文件缓存
 
 **代码片段** (`project/project.ts:117-143`):
+
 ```typescript
 if (!id) {
   const roots = await git(["rev-list", "--max-parents=0", "--all"], { cwd: sandbox })
@@ -389,6 +412,7 @@ if (!id) {
 ```
 
 **关键发现**:
+
 - 同一 Git 仓库的所有 worktree 共享相同的 Project ID（因为共享 `.git` 目录）
 - 无 Git 的目录使用 `"global"` 作为 ID
 - 缓存机制避免重复计算
@@ -398,6 +422,7 @@ if (!id) {
 **源码位置**: `worktree/index.ts:334-429`
 
 **流程步骤**:
+
 1. 调用 `makeWorktreeInfo()` 生成唯一名称和分支
 2. 执行 `git worktree add --no-checkout -b <branch> <directory>`
 3. 调用 `Project.addSandbox()` 注册到 Project.sandboxes[]
@@ -406,6 +431,7 @@ if (!id) {
 6. 执行启动脚本（project.commands.start + extra）
 
 **代码片段** (`worktree/index.ts:346-418`):
+
 ```typescript
 export async function createFromInfo(info: Info, startCommand?: string) {
   const created = await $`git worktree add --no-checkout -b ${info.branch} ${info.directory}`
@@ -436,12 +462,15 @@ export async function createFromInfo(info: Info, startCommand?: string) {
       // ... 事件通知
       await runStartScripts(info.directory, { projectID, extra })
     }
-    void start().catch((error) => { /* ... */ })
+    void start().catch((error) => {
+      /* ... */
+    })
   }
 }
 ```
 
 **关键发现**:
+
 - 创建是两阶段：同步创建 + 异步初始化
 - 使用 `--no-checkout` 避免立即填充文件
 - 启动脚本支持项目级和 worktree 级两级
@@ -451,17 +480,19 @@ export async function createFromInfo(info: Info, startCommand?: string) {
 **源码位置**: `project/project.ts:236-238`
 
 **触发条件**:
+
 - 在 `Project.fromDirectory()` 中自动检测
 - 当 `data.sandbox !== result.worktree` 且未在 `sandboxes[]` 中时注册
 
 **代码片段**:
+
 ```typescript
-if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox))
-  result.sandboxes.push(data.sandbox)
+if (data.sandbox !== result.worktree && !result.sandboxes.includes(data.sandbox)) result.sandboxes.push(data.sandbox)
 result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 ```
 
 **关键发现**:
+
 - 自动过滤不存在的目录
 - 每次调用 `fromDirectory()` 都会更新 sandboxes 列表
 - 主 worktree 不会被添加到 sandboxes（因为条件是 `!==`）
@@ -471,6 +502,7 @@ result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 **源码位置**: `control-plane/workspace.ts:55-87`, `control-plane/adaptors/worktree.ts`
 
 **创建流程**:
+
 1. 调用 `Workspace.create()` 传入 `type` 和 `projectID`
 2. 通过 `getAdaptor(type)` 获取对应适配器
 3. 调用 `adaptor.configure()` 生成配置（如 Worktree 名称/分支/目录）
@@ -478,6 +510,7 @@ result.sandboxes = result.sandboxes.filter((x) => existsSync(x))
 5. 调用 `adaptor.create()` 执行底层创建
 
 **Adaptor 接口** (`control-plane/types.ts:15-20`):
+
 ```typescript
 export type Adaptor = {
   configure(input: WorkspaceInfo): WorkspaceInfo | Promise<WorkspaceInfo>
@@ -488,6 +521,7 @@ export type Adaptor = {
 ```
 
 **WorktreeAdaptor 实现** (`control-plane/adaptors/worktree.ts:13-46`):
+
 ```typescript
 export const WorktreeAdaptor: Adaptor = {
   async configure(info) {
@@ -521,6 +555,7 @@ export const WorktreeAdaptor: Adaptor = {
 ```
 
 **关键发现**:
+
 - Workspace 是 Worktree 的"逻辑包装层"
 - Adaptor 模式预留扩展能力（目前仅 worktree 类型）
 - `fetch()` 方法实现请求路由到实际物理目录
@@ -532,11 +567,13 @@ export const WorktreeAdaptor: Adaptor = {
 ### 本地测试（macOS）
 
 **测试环境**:
+
 - 平台: macOS
 - 项目: wopal-workspace
 - Project ID: `5abd9d34c6299911967441461a52109583124aef`
 
 **创建 Worktree**:
+
 ```bash
 curl -X POST http://localhost:3099/experimental/worktree \
   -H "Content-Type: application/json" \
@@ -544,6 +581,7 @@ curl -X POST http://localhost:3099/experimental/worktree \
 ```
 
 **返回结果**:
+
 ```json
 {
   "name": "test-worktree-123",
@@ -553,6 +591,7 @@ curl -X POST http://localhost:3099/experimental/worktree \
 ```
 
 **验证**:
+
 ```bash
 $ git worktree list
 /Users/sam/coding/wopal/wopal-workspace                                                               73672df [main]
@@ -562,12 +601,14 @@ $ git worktree list
 ### Docker 容器内测试
 
 **测试环境**:
+
 - 容器 ID: `f89d845504d4`
 - 项目路径: `/workspace` (agent-tools)
 - Project ID: `543f6025230cefff449109df38f3febc2899b691`
 - 运行用户: `coder`
 
 **创建 Workspace**:
+
 ```bash
 curl -X POST http://127.0.0.1:20000/experimental/workspace \
   -H "Content-Type: application/json" \
@@ -575,6 +616,7 @@ curl -X POST http://127.0.0.1:20000/experimental/workspace \
 ```
 
 **返回结果**:
+
 ```json
 {
   "id": "wrk_cdb568db5001bkGUh77xOAQDlk",
@@ -588,6 +630,7 @@ curl -X POST http://127.0.0.1:20000/experimental/workspace \
 ```
 
 **容器内验证**:
+
 ```bash
 $ docker exec f89d845504d4 ls /home/coder/.local/share/opencode/worktree/
 543f6025230cefff449109df38f3febc2899b691/
@@ -599,12 +642,12 @@ $ docker exec f89d845504d4 git worktree list
 
 ### 测试结论
 
-| 项目 | 本地测试 | Docker 测试 |
-|------|---------|------------|
+| 项目              | 本地测试                                               | Docker 测试                                                      |
+| ----------------- | ------------------------------------------------------ | ---------------------------------------------------------------- |
 | Worktree 存储路径 | `~/.local/share/opencode/worktree/<project-id>/<name>` | `/home/coder/.local/share/opencode/worktree/<project-id>/<name>` |
-| 分支命名 | `opencode/<name>` | `opencode/<name>` |
-| Git worktree 关联 | ✅ 正常 | ✅ 正常 |
-| API 响应 | ✅ 正常 | ✅ 正常 |
+| 分支命名          | `opencode/<name>`                                      | `opencode/<name>`                                                |
+| Git worktree 关联 | ✅ 正常                                                | ✅ 正常                                                          |
+| API 响应          | ✅ 正常                                                | ✅ 正常                                                          |
 
 **注意**: 容器内 opencode 运行用户是 `coder`，所以数据目录在 `/home/coder/.local/share/opencode/`，而非 `/root/`。
 
@@ -616,42 +659,43 @@ $ docker exec f89d845504d4 git worktree list
 
 **源码位置**: `server/routes/project.ts`
 
-| 端点 | 方法 | 说明 | 返回类型 |
-|------|------|------|---------|
-| `/project` | GET | 列出所有 Project | `Project.Info[]` |
-| `/project/current` | GET | 获取当前 Project | `Project.Info` |
-| `/project/:projectID` | PATCH | 更新 Project | `Project.Info` |
+| 端点                  | 方法  | 说明             | 返回类型         |
+| --------------------- | ----- | ---------------- | ---------------- |
+| `/project`            | GET   | 列出所有 Project | `Project.Info[]` |
+| `/project/current`    | GET   | 获取当前 Project | `Project.Info`   |
+| `/project/:projectID` | PATCH | 更新 Project     | `Project.Info`   |
 
 ### Worktree API (Experimental)
 
 **源码位置**: `server/routes/experimental.ts:92-189`
 
-| 端点 | 方法 | 说明 | 返回类型 |
-|------|------|------|---------|
-| `/experimental/worktree` | POST | 创建 Worktree | `Worktree.Info` |
-| `/experimental/worktree` | GET | 列出 Project.sandboxes | `string[]` |
-| `/experimental/worktree` | DELETE | 删除 Worktree | `boolean` |
-| `/experimental/worktree/reset` | POST | 重置 Worktree 到默认分支 | `boolean` |
+| 端点                           | 方法   | 说明                     | 返回类型        |
+| ------------------------------ | ------ | ------------------------ | --------------- |
+| `/experimental/worktree`       | POST   | 创建 Worktree            | `Worktree.Info` |
+| `/experimental/worktree`       | GET    | 列出 Project.sandboxes   | `string[]`      |
+| `/experimental/worktree`       | DELETE | 删除 Worktree            | `boolean`       |
+| `/experimental/worktree/reset` | POST   | 重置 Worktree 到默认分支 | `boolean`       |
 
 ### Workspace API (Experimental)
 
 **源码位置**: `server/routes/workspace.ts`
 
-| 端点 | 方法 | 说明 | 返回类型 |
-|------|------|------|---------|
-| `/experimental/workspace` | POST | 创建 Workspace | `Workspace.Info` |
-| `/experimental/workspace` | GET | 列出 Workspaces | `Workspace.Info[]` |
-| `/experimental/workspace/:id` | DELETE | 删除 Workspace | `Workspace.Info?` |
+| 端点                          | 方法   | 说明            | 返回类型           |
+| ----------------------------- | ------ | --------------- | ------------------ |
+| `/experimental/workspace`     | POST   | 创建 Workspace  | `Workspace.Info`   |
+| `/experimental/workspace`     | GET    | 列出 Workspaces | `Workspace.Info[]` |
+| `/experimental/workspace/:id` | DELETE | 删除 Workspace  | `Workspace.Info?`  |
 
 ### Session API (Experimental - Global)
 
 **源码位置**: `server/routes/experimental.ts:190-248`
 
-| 端点 | 方法 | 说明 | 返回类型 |
-|------|------|------|---------|
-| `/experimental/session` | GET | 列出全局 Sessions | `Session.GlobalInfo[]` |
+| 端点                    | 方法 | 说明              | 返回类型               |
+| ----------------------- | ---- | ----------------- | ---------------------- |
+| `/experimental/session` | GET  | 列出全局 Sessions | `Session.GlobalInfo[]` |
 
 **查询参数**:
+
 - `directory`: 按项目目录过滤
 - `roots`: 仅返回根 Sessions（无 parentID）
 - `start`: 过滤更新时间 >= 此时间戳
@@ -667,17 +711,17 @@ $ docker exec f89d845504d4 git worktree list
 ### 创建 Worktree
 
 ```typescript
-import { ExperimentalClient } from 'opencode-sdk';
+import { ExperimentalClient } from "opencode-sdk"
 
-const client = new ExperimentalClient({ baseUrl: 'http://localhost:8080' });
+const client = new ExperimentalClient({ baseUrl: "http://localhost:8080" })
 
 // 创建 Worktree
 const worktree = await client.create({
-  name: 'feature-login',
-  directory: '/path/to/your/project'
-});
+  name: "feature-login",
+  directory: "/path/to/your/project",
+})
 
-console.log('Worktree 创建成功:', worktree);
+console.log("Worktree 创建成功:", worktree)
 // {
 //   name: "feature-login",
 //   branch: "opencode/feature-login",
@@ -690,12 +734,12 @@ console.log('Worktree 创建成功:', worktree);
 ```typescript
 // 创建 Workspace（内部是 Worktree）
 const workspace = await client.create({
-  type: 'worktree',
+  type: "worktree",
   branch: null,
-  directory: '/path/to/your/project'
-});
+  directory: "/path/to/your/project",
+})
 
-console.log('Workspace 创建成功:', workspace);
+console.log("Workspace 创建成功:", workspace)
 // {
 //   id: "wrk_xxx",
 //   type: "worktree",
@@ -711,48 +755,48 @@ console.log('Workspace 创建成功:', workspace);
 ```typescript
 // 1. 创建 worktree
 const worktree = await client.create({
-  name: 'new-feature',
-  directory: '/path/to/project'
-});
+  name: "new-feature",
+  directory: "/path/to/project",
+})
 
 // 2. 在新 worktree 中创建会话
 const session = await sessionClient.create({
-  directory: worktree.directory
-});
+  directory: worktree.directory,
+})
 
 // 3. 发送消息
 await sessionClient.prompt(session.id, {
-  parts: [{ type: 'text', text: { content: '帮我开发这个功能' } }]
-});
+  parts: [{ type: "text", text: { content: "帮我开发这个功能" } }],
+})
 ```
 
 ### 并行开发多个功能
 
 ```typescript
 async function developMultipleFeatures() {
-  const projectDir = '/path/to/my-project';
-  
+  const projectDir = "/path/to/my-project"
+
   // 为每个功能创建独立的 worktree
   const [featureA, featureB] = await Promise.all([
-    client.create({ name: 'feature-login', directory: projectDir }),
-    client.create({ name: 'feature-dashboard', directory: projectDir })
-  ]);
-  
+    client.create({ name: "feature-login", directory: projectDir }),
+    client.create({ name: "feature-dashboard", directory: projectDir }),
+  ])
+
   // 同时在两个 worktree 中工作
   const [sessionA, sessionB] = await Promise.all([
     sessionClient.create({ directory: featureA.directory }),
-    sessionClient.create({ directory: featureB.directory })
-  ]);
-  
+    sessionClient.create({ directory: featureB.directory }),
+  ])
+
   // 并行发送消息
   await Promise.all([
     sessionClient.prompt(sessionA.id, {
-      parts: [{ type: 'text', text: { content: '实现登录功能' } }]
+      parts: [{ type: "text", text: { content: "实现登录功能" } }],
     }),
     sessionClient.prompt(sessionB.id, {
-      parts: [{ type: 'text', text: { content: '实现仪表盘' } }]
-    })
-  ]);
+      parts: [{ type: "text", text: { content: "实现仪表盘" } }],
+    }),
+  ])
 }
 ```
 
@@ -807,14 +851,15 @@ const root = path.join(Global.Path.data, "worktree", Instance.project.id)
 **约束**: Worktree 目录统一存储在 `<Global.Path.data>/worktree/<project-id>/` 下
 
 **Global.Path.data 定义** (`src/global/index.ts:9`):
+
 ```typescript
-const data = path.join(xdgData!, app)  // app = "opencode"
+const data = path.join(xdgData!, app) // app = "opencode"
 ```
 
-| 平台 | 路径 |
-|------|------|
+| 平台            | 路径                                                 |
+| --------------- | ---------------------------------------------------- |
 | **macOS/Linux** | `~/.local/share/opencode` (若未设置 `XDG_DATA_HOME`) |
-| **自定义** | `$XDG_DATA_HOME/opencode` (若设置了环境变量) |
+| **自定义**      | `$XDG_DATA_HOME/opencode` (若设置了环境变量)         |
 
 ---
 
@@ -825,60 +870,63 @@ const data = path.join(xdgData!, app)  // app = "opencode"
 **源码位置**: `project/instance.ts`
 
 **核心职责**:
+
 1. **上下文隔离**：基于 Node.js `AsyncLocalStorage` 实现请求级上下文隔离
 2. **实例缓存**：相同 directory 共享 Instance，避免重复初始化
 3. **状态管理**：通过 State 机制管理实例级状态生命周期
 4. **权限边界**：通过 `containsPath()` 判断路径是否在项目边界内
 
 **技术实现**:
+
 ```typescript
 // 基于 AsyncLocalStorage 实现上下文隔离
 import { AsyncLocalStorage } from "async_hooks"
 
 interface Context {
-  directory: string    // 用户指定的原始目录
-  worktree: string     // Git worktree 根目录（通过 git rev-parse 解析）
+  directory: string // 用户指定的原始目录
+  worktree: string // Git worktree 根目录（通过 git rev-parse 解析）
   project: Project.Info // Project 信息
 }
 
-const context = Context.create<Context>("instance")  // AsyncLocalStorage 封装
-const cache = new Map<string, Promise<Context>>()    // 实例缓存
+const context = Context.create<Context>("instance") // AsyncLocalStorage 封装
+const cache = new Map<string, Promise<Context>>() // 实例缓存
 ```
 
 ### Instance 创建流程
 
 **源码** (`instance.ts:22-44`):
+
 ```typescript
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     // 1. 检查缓存
     let existing = cache.get(input.directory)
-    
+
     // 2. 缓存未命中时创建新实例
     if (!existing) {
       Log.Default.info("creating instance", { directory: input.directory })
       existing = iife(async () => {
         // 2.1 解析 Project 信息
         const { project, sandbox } = await Project.fromDirectory(input.directory)
-        
+
         // 2.2 构建上下文
         const ctx = {
-          directory: input.directory,  // 保持原始输入
-          worktree: sandbox,           // Git 解析后的根目录
+          directory: input.directory, // 保持原始输入
+          worktree: sandbox, // Git 解析后的根目录
           project,
         }
-        
+
         // 2.3 执行初始化钩子
         await context.provide(ctx, async () => {
-          await input.init?.()  // 如 InstanceBootstrap
+          await input.init?.() // 如 InstanceBootstrap
         })
         return ctx
       })
-      
+
       // 2.4 写入缓存
       cache.set(input.directory, existing)
     }
-    
+
     // 3. 在上下文中执行用户函数
     const ctx = await existing
     return context.provide(ctx, async () => {
@@ -889,6 +937,7 @@ export const Instance = {
 ```
 
 **流程图**:
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ HTTP Request: GET /session?directory=/workspace/src/components  │
@@ -930,26 +979,29 @@ export const Instance = {
 
 ### directory vs worktree 核心区别
 
-| 字段 | 来源 | 含义 | 典型场景 |
-|------|------|------|----------|
-| `directory` | HTTP 请求参数 | 用户指定的**当前工作目录**（可能是子目录） | `/workspace/src/components` |
-| `worktree` | `git rev-parse --show-toplevel` | 当前 Git worktree 的**根目录** | `/workspace` |
+| 字段        | 来源                            | 含义                                       | 典型场景                    |
+| ----------- | ------------------------------- | ------------------------------------------ | --------------------------- |
+| `directory` | HTTP 请求参数                   | 用户指定的**当前工作目录**（可能是子目录） | `/workspace/src/components` |
+| `worktree`  | `git rev-parse --show-toplevel` | 当前 Git worktree 的**根目录**             | `/workspace`                |
 
 **为什么需要两个字段？**
 
 1. **相对路径解析**：工具参数中的相对路径应基于 `directory` 解析
+
    ```typescript
    // tool/read.ts:34
    filepath = path.resolve(Instance.directory, filepath)
    ```
 
 2. **Git 操作**：Git 命令应在 `worktree` 根目录执行
+
    ```typescript
    // worktree/index.ts:350
    $`git worktree add ...`.cwd(Instance.worktree)
    ```
 
 3. **路径显示**：相对于 `worktree` 显示更友好
+
    ```typescript
    // tool/edit.ts:150
    title: path.relative(Instance.worktree, filePath)
@@ -966,6 +1018,7 @@ export const Instance = {
    ```
 
 **实际示例**:
+
 ```
 用户在 /workspace/src/components 目录下启动 OpenCode
 
@@ -985,29 +1038,30 @@ Instance.worktree = "/workspace"                   ← Git 根目录
 **设计目的**: 为每个 Instance 提供独立的状态存储，支持清理回调。
 
 **核心实现**:
+
 ```typescript
 export namespace State {
   const recordsByKey = new Map<string, Map<any, Entry>>()
-  
+
   interface Entry {
     state: any
     dispose?: (state: any) => Promise<void>
   }
 
   export function create<S>(
-    root: () => string,                           // 获取 key 的函数（通常是 Instance.directory）
-    init: () => S,                                // 初始化函数
-    dispose?: (state: Awaited<S>) => Promise<void> // 清理函数
+    root: () => string, // 获取 key 的函数（通常是 Instance.directory）
+    init: () => S, // 初始化函数
+    dispose?: (state: Awaited<S>) => Promise<void>, // 清理函数
   ) {
     return () => {
-      const key = root()  // 使用 Instance.directory 作为 key
+      const key = root() // 使用 Instance.directory 作为 key
       let entries = recordsByKey.get(key)
       if (!entries) {
         entries = new Map<string, Entry>()
         recordsByKey.set(key, entries)
       }
       const exists = entries.get(init)
-      if (exists) return exists.state as S  // 缓存命中
+      if (exists) return exists.state as S // 缓存命中
       const state = init()
       entries.set(init, { state, dispose })
       return state
@@ -1030,6 +1084,7 @@ export namespace State {
 ```
 
 **使用示例** (`instance.ts:66-67`):
+
 ```typescript
 // 创建实例级状态访问器
 state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
@@ -1064,6 +1119,7 @@ state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S
 ```
 
 **关键 API**:
+
 ```typescript
 // 销毁单个实例
 Instance.dispose()
@@ -1080,10 +1136,10 @@ Instance.disposeAll()
 // 全局中间件：为每个请求创建 Instance 上下文
 .use(async (c, next) => {
   if (c.req.path === "/log") return next()
-  
+
   // 获取 workspaceID（可选）
   const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
-  
+
   // 获取 directory（必需）
   const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
   const directory = decodeURIComponent(raw)
@@ -1105,6 +1161,7 @@ Instance.disposeAll()
 ```
 
 **上下文嵌套关系**:
+
 ```
 HTTP Request
     ↓
@@ -1122,6 +1179,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 ### Q1: Directory 和 Instance 有什么区别？
 
 **答**：
+
 - **Directory** 是字符串，来自 HTTP 请求参数，代表用户指定的物理路径
 - **Instance** 是对象，包含 directory/worktree/project 三要素，提供完整的运行时上下文
 - 一个 Directory 对应一个 Instance（通过缓存机制）
@@ -1129,6 +1187,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 ### Q2: Instance.directory 和 Instance.worktree 有什么区别？
 
 **答**：
+
 - `Instance.directory` = 用户请求时传入的原始路径（可能是子目录）
 - `Instance.worktree` = 通过 `git rev-parse --show-toplevel` 解析的 Git 根目录
 - 例如：用户在 `/workspace/src/components` 启动 OpenCode
@@ -1138,6 +1197,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 ### Q3: 为什么需要缓存 Instance？
 
 **答**：
+
 1. **性能优化**：避免每次请求都解析 Project 信息
 2. **状态共享**：相同 directory 的请求共享状态（如 LSP 客户端）
 3. **资源管理**：统一管理实例生命周期，支持清理
@@ -1145,6 +1205,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 ### Q4: Worktree 和普通目录有什么区别？
 
 **答**：Worktree 是 Git 管理的特殊目录，与主仓库共享 `.git` 目录。优势：
+
 - 不需要克隆完整的仓库
 - 分支切换瞬间完成
 - 磁盘空间占用小
@@ -1160,6 +1221,7 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 ### Q4: Sandbox 是独立概念吗？
 
 **答**：**否**，Sandbox 就是 Worktree 的别名：
+
 - 主 worktree 存储在 `Project.worktree`
 - 派生 worktree 存储在 `Project.sandboxes[]`
 
@@ -1173,29 +1235,29 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 
 ### 核心模块
 
-| 模块 | 路径 | 主要功能 |
-|------|------|---------|
-| Project | `src/project/project.ts` | Project 生命周期管理 |
-| Project SQL | `src/project/project.sql.ts` | Project 数据库表定义 |
-| Instance | `src/project/instance.ts` | 请求级上下文管理（AsyncLocalStorage） |
-| State | `src/project/state.ts` | 实例级状态存储与生命周期管理 |
-| Context | `src/util/context.ts` | AsyncLocalStorage 封装 |
-| Worktree | `src/worktree/index.ts` | Git worktree 操作 |
-| Workspace | `src/control-plane/workspace.ts` | Workspace 生命周期管理 |
-| Workspace SQL | `src/control-plane/workspace.sql.ts` | Workspace 数据库表定义 |
-| WorkspaceContext | `src/control-plane/workspace-context.ts` | Workspace 上下文传递 |
-| Adaptor Index | `src/control-plane/adaptors/index.ts` | Adaptor 注册与获取 |
-| WorktreeAdaptor | `src/control-plane/adaptors/worktree.ts` | Worktree 适配器实现 |
-| Session | `src/session/index.ts` | Session 生命周期管理 |
-| Global | `src/global/index.ts` | 全局路径配置 |
+| 模块             | 路径                                     | 主要功能                              |
+| ---------------- | ---------------------------------------- | ------------------------------------- |
+| Project          | `src/project/project.ts`                 | Project 生命周期管理                  |
+| Project SQL      | `src/project/project.sql.ts`             | Project 数据库表定义                  |
+| Instance         | `src/project/instance.ts`                | 请求级上下文管理（AsyncLocalStorage） |
+| State            | `src/project/state.ts`                   | 实例级状态存储与生命周期管理          |
+| Context          | `src/util/context.ts`                    | AsyncLocalStorage 封装                |
+| Worktree         | `src/worktree/index.ts`                  | Git worktree 操作                     |
+| Workspace        | `src/control-plane/workspace.ts`         | Workspace 生命周期管理                |
+| Workspace SQL    | `src/control-plane/workspace.sql.ts`     | Workspace 数据库表定义                |
+| WorkspaceContext | `src/control-plane/workspace-context.ts` | Workspace 上下文传递                  |
+| Adaptor Index    | `src/control-plane/adaptors/index.ts`    | Adaptor 注册与获取                    |
+| WorktreeAdaptor  | `src/control-plane/adaptors/worktree.ts` | Worktree 适配器实现                   |
+| Session          | `src/session/index.ts`                   | Session 生命周期管理                  |
+| Global           | `src/global/index.ts`                    | 全局路径配置                          |
 
 ### API 路由
 
-| 路由 | 路径 | 端点 |
-|------|------|------|
-| ProjectRoutes | `src/server/routes/project.ts` | `/project/*` |
-| ExperimentalRoutes | `src/server/routes/experimental.ts` | `/experimental/*` |
-| WorkspaceRoutes | `src/server/routes/workspace.ts` | `/experimental/workspace/*` |
+| 路由               | 路径                                | 端点                        |
+| ------------------ | ----------------------------------- | --------------------------- |
+| ProjectRoutes      | `src/server/routes/project.ts`      | `/project/*`                |
+| ExperimentalRoutes | `src/server/routes/experimental.ts` | `/experimental/*`           |
+| WorkspaceRoutes    | `src/server/routes/workspace.ts`    | `/experimental/workspace/*` |
 
 ---
 
@@ -1285,5 +1347,5 @@ Route Handler (可访问 Instance.* 和 WorkspaceContext.*)
 
 ---
 
-*报告完成于 2026-03-11*
-*测试验证: 本地 macOS + Docker 容器*
+_报告完成于 2026-03-11_
+_测试验证: 本地 macOS + Docker 容器_

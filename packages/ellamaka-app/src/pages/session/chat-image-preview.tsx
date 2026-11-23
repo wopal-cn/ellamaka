@@ -115,7 +115,10 @@ export function ChatImagePreview(props: { src: string; alt?: string }) {
   const fittedSize = createMemo(() => {
     const size = naturalSize()
     if (!size) return
-    const maxHeight = Math.max(240, Math.min(imagePreviewZoom.initialMaxHeight, Math.floor(availableHeight() * 0.72) - 64))
+    const maxHeight = Math.max(
+      240,
+      Math.min(imagePreviewZoom.initialMaxHeight, Math.floor(availableHeight() * 0.72) - 64),
+    )
     const fit = Math.min(1, imagePreviewZoom.initialMaxWidth / size.width, maxHeight / size.height)
     return {
       width: Math.round(size.width * fit),

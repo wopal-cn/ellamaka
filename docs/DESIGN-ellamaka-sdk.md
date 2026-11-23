@@ -97,16 +97,16 @@ Official App BFF 使用独立的私有 schema/HttpApi composition，并可为 `e
 
 下表只说明 ownership。WopalSpace 的完整 endpoint catalog、输入输出语义和 operation business semantics 由 `DESIGN-wopalspace.md#public-operations` 定义；SDK 不复制第二份业务合同：
 
-| API family | Owner | 主要职责 |
-| --- | --- | --- |
-| global / health / control | Ellamaka Runtime | Server 与 Runtime 状态、诊断 |
-| session / message / agent | Ellamaka Runtime | Agent 会话与执行 |
-| PTY | Ellamaka Runtime | 终端生命周期与连接 |
-| provider / tool / capability discovery | Ellamaka Runtime | effective Runtime 能力 |
-| event | Ellamaka Runtime | Runtime events / SSE |
-| wopalSpace.setup | private `@wopal/wopalspace` | 初始化计划、执行、状态、进度 |
-| wopalSpace.ontology | private `@wopal/wopalspace` | Ontology lifecycle |
-| wopalSpace.space | private `@wopal/wopalspace` | Space lifecycle、registry、query、selection |
+| API family                             | Owner                       | 主要职责                                    |
+| -------------------------------------- | --------------------------- | ------------------------------------------- |
+| global / health / control              | Ellamaka Runtime            | Server 与 Runtime 状态、诊断                |
+| session / message / agent              | Ellamaka Runtime            | Agent 会话与执行                            |
+| PTY                                    | Ellamaka Runtime            | 终端生命周期与连接                          |
+| provider / tool / capability discovery | Ellamaka Runtime            | effective Runtime 能力                      |
+| event                                  | Ellamaka Runtime            | Runtime events / SSE                        |
+| wopalSpace.setup                       | private `@wopal/wopalspace` | 初始化计划、执行、状态、进度                |
+| wopalSpace.ontology                    | private `@wopal/wopalspace` | Ontology lifecycle                          |
+| wopalSpace.space                       | private `@wopal/wopalspace` | Space lifecycle、registry、query、selection |
 
 Product 安装/更新不进入 WopalSpace API；继续由 Wopal CLI 拥有。Evolution 全部在 Wopal CLI 本机执行，不消费 SDK 的 Ontology/Space operations，也不增加 Evolution 提交或恢复 API。
 
@@ -129,7 +129,6 @@ HTTP client 访问 Server 的 **Public Platform surface**；它不承诺 Server 
 
 `ellamaka-app` 可以从 Official App BFF contract 生成自己的 private client。该 client 的 projection DTO 只服务官方 App，不是 Runtime/WopalSpace domain DTO 的第二份来源。
 
-
 ## Official App BFF Boundary
 
 `@wopal/ellamaka-app` 同时拥有前端体验和为该体验定制的 BFF contract。BFF 与 Public Platform API 挂载在同一个 Ellamaka Server，并共享统一认证/监听器，但 publication boundary 独立。
@@ -149,13 +148,13 @@ App-private HttpApi 可以拥有生成的内部 client 和 build-time contract �
 
 目标公开入口：
 
-| Entrypoint | 用途 |
-| --- | --- |
-| `@wopal/ellamaka-sdk` | generated client/types、无副作用 contract metadata、通用 client factory |
-| `@wopal/ellamaka-sdk/http` | 连接已经存在的 Ellamaka Server，使用 HTTP/SSE/WebSocket |
-| `@wopal/ellamaka-sdk/local` | trusted-local WopalSpace application transport，供 Wopal CLI 等本机 consumer 使用 |
-| `@wopal/ellamaka-sdk/openapi.json` | 当前 SDK 版本完整公开 OpenAPI contract |
-| `@wopal/ellamaka-sdk/openapi` | 程序化读取同一 OpenAPI document |
+| Entrypoint                         | 用途                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| `@wopal/ellamaka-sdk`              | generated client/types、无副作用 contract metadata、通用 client factory           |
+| `@wopal/ellamaka-sdk/http`         | 连接已经存在的 Ellamaka Server，使用 HTTP/SSE/WebSocket                           |
+| `@wopal/ellamaka-sdk/local`        | trusted-local WopalSpace application transport，供 Wopal CLI 等本机 consumer 使用 |
+| `@wopal/ellamaka-sdk/openapi.json` | 当前 SDK 版本完整公开 OpenAPI contract                                            |
+| `@wopal/ellamaka-sdk/openapi`      | 程序化读取同一 OpenAPI document                                                   |
 
 root import 不能因为被 import 就启动 Worker、Server、DSH 或扫描用户目录。
 
@@ -268,11 +267,11 @@ client、transport 和 host process lifecycle 是三件事：
 
 Server 文档展示当前 Server 挂载的 HTTP API。SDK contract 表达其中的公开平台能力：
 
-| Environment | Source |
-| --- | --- |
-| running Server | `GET /doc`：完整 Server API，区分公开平台和 App 专用接口 |
-| installed npm package | `@wopal/ellamaka-sdk/openapi.json`：公开平台 contract |
-| source tree | 无启动副作用的公开 contract 导出及 App contract 定义 |
+| Environment           | Source                                                   |
+| --------------------- | -------------------------------------------------------- |
+| running Server        | `GET /doc`：完整 Server API，区分公开平台和 App 专用接口 |
+| installed npm package | `@wopal/ellamaka-sdk/openapi.json`：公开平台 contract    |
+| source tree           | 无启动副作用的公开 contract 导出及 App contract 定义     |
 
 `/doc` 的公开平台子集与 npm 包内公开 OpenAPI canonicalize 后一致；App 专用接口只存在于完整 Server 文档及 App 内部 contract。完整文档与实际挂载路由保持一致，定义冲突在生成或验证时失败，不能静默覆盖 operation。每个 operation 标明稳定的 operation ID、方法和路径、用途及适用场景、接口归属和兼容承诺、认证要求、参数、请求与响应 schema、错误及适用示例。Agent 据此优先选择满足需求的公开接口；需要 App 专用能力时，可识别其兼容性边界。文档不泄露凭据或运行时敏感数据。
 

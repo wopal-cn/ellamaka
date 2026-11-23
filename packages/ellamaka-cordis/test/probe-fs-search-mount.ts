@@ -27,7 +27,12 @@ console.log("tools before fs-search mount:", tools ? tools.schemas().length : "n
 
 // resolve fs-search through the dsh anchor closure
 const fsSearchMod = await import(dshReq.resolve("@deepseek-ai/dsh-tool-fs-search"))
-console.log("fs-search exports:", Object.keys(fsSearchMod).filter((k) => !k.startsWith("_")).slice(0, 12))
+console.log(
+  "fs-search exports:",
+  Object.keys(fsSearchMod)
+    .filter((k) => !k.startsWith("_"))
+    .slice(0, 12),
+)
 
 // build the resolved config via its schemastery Config (fills defaults)
 const config = fsSearchMod.Config({ sampleOverCapGlobResults: false })
@@ -40,7 +45,10 @@ await Promise.resolve(fiber).catch((e) => {
   throw e
 })
 
-const names = tools.schemas().map((s: { name: string }) => s.name).sort()
+const names = tools
+  .schemas()
+  .map((s: { name: string }) => s.name)
+  .sort()
 console.log("tools after mount:", names)
 
 // execute one real grep through the container runtime

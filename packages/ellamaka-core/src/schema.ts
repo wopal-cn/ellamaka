@@ -45,7 +45,6 @@ export const optionalOmitUndefined = <S extends Schema.Top>(schema: S) =>
  * `readonly [string, Options]`); the general array branch would otherwise
  * widen them to unbounded arrays.
  */
-// eslint-disable-next-line @typescript-eslint/ban-types
 export type DeepMutable<T> = T extends string | number | boolean | bigint | symbol | Function
   ? T
   : T extends readonly [unknown, ...unknown[]]

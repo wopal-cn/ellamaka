@@ -17,7 +17,6 @@ const STEP_GUIDES: Record<StepGuideId, string> = {
   done: doneGuide,
 }
 
-// oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Vite glob returns a URL string map
 const assetModules = import.meta.glob("./zh-CN/assets/**/*.{png,jpg,jpeg,webp,gif,svg}", {
   eager: true,
   query: "?url",

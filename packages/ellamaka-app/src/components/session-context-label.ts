@@ -18,10 +18,7 @@ export function contextTone(percentage: number | undefined): ContextTone {
   return "normal"
 }
 
-export function formatContextTooltip(
-  context: ContextMetricsSnapshot,
-  formatNumber: (value: number) => string,
-): string {
+export function formatContextTooltip(context: ContextMetricsSnapshot, formatNumber: (value: number) => string): string {
   const tokens = formatNumber(context.total)
   if (context.usage === null) return `${tokens} tokens`
   return `${tokens} tokens (${context.usage}% of context)`

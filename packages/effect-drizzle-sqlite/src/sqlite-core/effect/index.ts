@@ -1,4 +1,3 @@
-/* oxlint-disable */
 export * from "./count"
 export * from "./db"
 export * from "./delete"

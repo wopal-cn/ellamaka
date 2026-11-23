@@ -2,7 +2,8 @@
 export function scheduleServerSdkEventStart(
   start: () => Promise<unknown> | undefined,
   schedule: (callback: () => void, delay: number) => ReturnType<typeof setTimeout> | number = setTimeout,
-  cancel: (id: ReturnType<typeof setTimeout> | number) => void = (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
+  cancel: (id: ReturnType<typeof setTimeout> | number) => void = (id) =>
+    clearTimeout(id as ReturnType<typeof setTimeout>),
 ) {
   const timer = schedule(() => void start(), 0)
   return () => cancel(timer)

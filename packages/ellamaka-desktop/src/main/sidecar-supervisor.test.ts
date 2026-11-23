@@ -513,7 +513,8 @@ describe("SidecarSupervisor", () => {
     const supervisor = createSupervisor(mockSpawner)
 
     // Start the supervisor first (initial state is stopped, which now rejects)
-    supervisor.start()
+    // Not awaited: this test drives the spawn step by step through the mock.
+    void supervisor.start()
     await tick()
 
     const readyPromise = supervisor.waitForReady()
@@ -530,7 +531,8 @@ describe("SidecarSupervisor", () => {
     const supervisor = createSupervisor(mockSpawner, { maxAttempts: 1, backoffMs: [5] })
 
     // Start first so state is not "stopped"
-    supervisor.start()
+    // Not awaited: the failure path is driven by the mock below.
+    void supervisor.start()
     await tick()
 
     let rejected = false
@@ -675,7 +677,8 @@ describe("SidecarSupervisor", () => {
     const supervisor = createSupervisor(mockSpawner)
 
     // Start spawn
-    supervisor.start()
+    // Not awaited: the exit/health ordering is driven by the mock below.
+    void supervisor.start()
     await tick()
     const r1 = createSpawnResult()
     mockSpawner.resolve(r1.result)

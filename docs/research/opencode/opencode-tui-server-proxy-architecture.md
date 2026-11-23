@@ -43,11 +43,11 @@ TUI 默认模式启动两个进程：
 
 ### 消息类型
 
-| 消息类型 | 方向 | 含义 |
-|---------|------|------|
+| 消息类型      | 方向        | 含义                                |
+| ------------- | ----------- | ----------------------------------- |
 | `rpc.request` | 主 → Worker | RPC 方法调用（method + input + id） |
-| `rpc.result` | Worker → 主 | RPC 方法返回值（result + id） |
-| `rpc.event` | Worker → 主 | 事件推送（GlobalBus 事件广播） |
+| `rpc.result`  | Worker → 主 | RPC 方法返回值（result + id）       |
+| `rpc.event`   | Worker → 主 | 事件推送（GlobalBus 事件广播）      |
 
 ### RPC 方法注册（Worker 端）
 
@@ -147,14 +147,14 @@ TUI 代码 fetch("http://opencode.internal/session/...")
 
 ### 双模式对比
 
-| 维度 | TUI 默认模式 | serve 模式 (`--port`) | attach 模式 |
-|------|-------------|---------------------|-------------|
-| Server 实例 | Worker 内 `Server.Default()` | Worker 内 `Server.Default()` | 外部进程的远端 Server |
-| 网络端口 | **无** | `Bun.serve()` 绑定 | 远端已有 |
-| API 调用 | Worker RPC 代理 | HTTP (localhost) | HTTP (远端) |
-| 启动命令 | `ellamaka` (默认) | `ellamaka serve --port 4096` | `ellamaka attach <url>` |
-| `Server.listen()` | 不调用 | 调用（绑定端口） | 已运行 |
-| `process_role` | main + worker | main + worker | main only（无 worker） |
+| 维度              | TUI 默认模式                 | serve 模式 (`--port`)        | attach 模式             |
+| ----------------- | ---------------------------- | ---------------------------- | ----------------------- |
+| Server 实例       | Worker 内 `Server.Default()` | Worker 内 `Server.Default()` | 外部进程的远端 Server   |
+| 网络端口          | **无**                       | `Bun.serve()` 绑定           | 远端已有                |
+| API 调用          | Worker RPC 代理              | HTTP (localhost)             | HTTP (远端)             |
+| 启动命令          | `ellamaka` (默认)            | `ellamaka serve --port 4096` | `ellamaka attach <url>` |
+| `Server.listen()` | 不调用                       | 调用（绑定端口）             | 已运行                  |
+| `process_role`    | main + worker                | main + worker                | main only（无 worker）  |
 
 **`external` 判定逻辑** (`thread.ts:191-197`):
 
@@ -216,18 +216,18 @@ function createEventSource(client: RpcClient): EventSource {
 
 ## 七、关键源码索引
 
-| 文件 | 行 | 职责 |
-|------|---|------|
-| `cli/cmd/tui/thread.ts` | 32-48 | fetch 代理：将 HTTP fetch 转为 Worker RPC |
-| `cli/cmd/tui/thread.ts` | 50-58 | 事件代理：将 Worker 事件转为 EventSource 接口 |
-| `cli/cmd/tui/thread.ts` | 60-256 | TUI 主流程：Worker 启动 → RPC 建立 → TUI 渲染 |
-| `cli/cmd/tui/thread.ts` | 74-109 | `$0` 默认命令定义 → 无子命令时命中此命令 |
-| `cli/cmd/tui/thread.ts` | 191-209 | external 判定 + transport 构造 |
-| `cli/cmd/tui/thread.ts` | 199-203 | `--port` 时：启动 HTTP Server + 返回 URL |
-| `cli/cmd/tui/thread.ts` | 205-209 | 无 `--port` 时：Worker fetch + 内部事件 |
-| `cli/cmd/tui/worker.ts` | 1-104 | Worker 完整流程 |
-| `cli/cmd/tui/worker.ts` | 48-95 | RPC 方法注册（fetch/server/snapshot 等） |
-| `cli/cmd/tui/worker.ts` | 60 | Server 请求处理入口：`Server.Default().app.fetch(request)` |
-| `cli/cmd/tui/worker.ts` | 72-76 | `server` RPC：仅在 `--port` 模式下调用 `Server.listen()` |
-| `util/rpc.ts` | 1-64 | RPC 协议实现（request/result/event 三种消息） |
-| `cli/cmd/tui/attach.ts` | - | attach 模式：纯 TUI 客户端（不启动 Worker/Server） |
+| 文件                    | 行      | 职责                                                       |
+| ----------------------- | ------- | ---------------------------------------------------------- |
+| `cli/cmd/tui/thread.ts` | 32-48   | fetch 代理：将 HTTP fetch 转为 Worker RPC                  |
+| `cli/cmd/tui/thread.ts` | 50-58   | 事件代理：将 Worker 事件转为 EventSource 接口              |
+| `cli/cmd/tui/thread.ts` | 60-256  | TUI 主流程：Worker 启动 → RPC 建立 → TUI 渲染              |
+| `cli/cmd/tui/thread.ts` | 74-109  | `$0` 默认命令定义 → 无子命令时命中此命令                   |
+| `cli/cmd/tui/thread.ts` | 191-209 | external 判定 + transport 构造                             |
+| `cli/cmd/tui/thread.ts` | 199-203 | `--port` 时：启动 HTTP Server + 返回 URL                   |
+| `cli/cmd/tui/thread.ts` | 205-209 | 无 `--port` 时：Worker fetch + 内部事件                    |
+| `cli/cmd/tui/worker.ts` | 1-104   | Worker 完整流程                                            |
+| `cli/cmd/tui/worker.ts` | 48-95   | RPC 方法注册（fetch/server/snapshot 等）                   |
+| `cli/cmd/tui/worker.ts` | 60      | Server 请求处理入口：`Server.Default().app.fetch(request)` |
+| `cli/cmd/tui/worker.ts` | 72-76   | `server` RPC：仅在 `--port` 模式下调用 `Server.listen()`   |
+| `util/rpc.ts`           | 1-64    | RPC 协议实现（request/result/event 三种消息）              |
+| `cli/cmd/tui/attach.ts` | -       | attach 模式：纯 TUI 客户端（不启动 Worker/Server）         |

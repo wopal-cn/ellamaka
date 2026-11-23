@@ -6,12 +6,7 @@
 export function isWorkbenchClosePanelShortcut(
   event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">,
 ): boolean {
-  return (
-    event.metaKey !== event.ctrlKey &&
-    !event.altKey &&
-    !event.shiftKey &&
-    event.key.toLowerCase() === "w"
-  )
+  return event.metaKey !== event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "w"
 }
 
 /** General and pinned tabs are intentionally protected from Cmd/Ctrl+W. */

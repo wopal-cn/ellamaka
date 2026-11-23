@@ -95,18 +95,22 @@ export function createSessionProjection() {
   const patch = (id: string, updates: SessionProjectionPatch) => {
     const existing = find(id)
     if (!existing) return false
-    const normUpdates = updates.spacePath !== undefined
-      ? { ...updates, spacePath: normalizeSpacePath(updates.spacePath) }
-      : updates
-    setStore("spaces", existing.spaceName, existing.index, produce((session) => {
-      if (normUpdates.title !== undefined) session.title = normUpdates.title
-      if (normUpdates.type !== undefined) session.type = normUpdates.type
-      if (normUpdates.spacePath !== undefined) session.spacePath = normUpdates.spacePath
-      if (normUpdates.projectPath !== undefined) session.projectPath = normUpdates.projectPath
-      if (normUpdates.directoryHealth !== undefined) session.directoryHealth = normUpdates.directoryHealth
-      if (Object.hasOwn(normUpdates, "timeArchived")) session.timeArchived = normUpdates.timeArchived
-      if (normUpdates.lastActiveAt !== undefined) session.lastActiveAt = normUpdates.lastActiveAt
-    }))
+    const normUpdates =
+      updates.spacePath !== undefined ? { ...updates, spacePath: normalizeSpacePath(updates.spacePath) } : updates
+    setStore(
+      "spaces",
+      existing.spaceName,
+      existing.index,
+      produce((session) => {
+        if (normUpdates.title !== undefined) session.title = normUpdates.title
+        if (normUpdates.type !== undefined) session.type = normUpdates.type
+        if (normUpdates.spacePath !== undefined) session.spacePath = normUpdates.spacePath
+        if (normUpdates.projectPath !== undefined) session.projectPath = normUpdates.projectPath
+        if (normUpdates.directoryHealth !== undefined) session.directoryHealth = normUpdates.directoryHealth
+        if (Object.hasOwn(normUpdates, "timeArchived")) session.timeArchived = normUpdates.timeArchived
+        if (normUpdates.lastActiveAt !== undefined) session.lastActiveAt = normUpdates.lastActiveAt
+      }),
+    )
     return true
   }
 
@@ -121,7 +125,8 @@ export function createSessionProjection() {
   return {
     reader: {
       sessions: createMemo(() => store.spaces),
-      spaceSessions: (spaceName: string) => store.spaces[normalizeSpacePath(spaceName)] ?? store.spaces[spaceName] ?? [],
+      spaceSessions: (spaceName: string) =>
+        store.spaces[normalizeSpacePath(spaceName)] ?? store.spaces[spaceName] ?? [],
       getSession,
       refreshKey,
     },

@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  applyRetentionWithRecheck,
-  buildReferenceGraph,
-  planRetention,
-  planWithdraw,
-} from "../src/cleanup/core"
+import { applyRetentionWithRecheck, buildReferenceGraph, planRetention, planWithdraw } from "../src/cleanup/core"
 import { PRODUCTS } from "../src/cleanup/products"
 
 const cli = PRODUCTS["ellamaka-cli"]
@@ -81,7 +76,14 @@ describe("cleanup core — planRetention", () => {
       "ellamaka-desktop/latest/manifest.json": "1.17.0",
       "ellamaka-desktop/beta/latest/manifest.json": "1.16.0-beta.1",
     }
-    const stable = planRetention({ config: desktop, channel: "stable", snapshot, aliases, keepStable: 2, dryRun: false })
+    const stable = planRetention({
+      config: desktop,
+      channel: "stable",
+      snapshot,
+      aliases,
+      keepStable: 2,
+      dryRun: false,
+    })
     // keepStable=2 counts the newest 2 total (1.17.0 protected + 1.16.0);
     // 1.15.0 is deleted.
     expect(stable.deleteCandidates.map((c) => c.version)).toEqual(["1.15.0"])
@@ -156,11 +158,7 @@ describe("cleanup core — planRetention", () => {
     // stable bucket: 1.17.0, 1.16.0, 1.15.0 → keep 2 → delete 1.15.0
     // rc bucket: 1.17.0-rc.2 (protected, consumes the 1 rc slot), 1.17.0-rc.1,
     // 1.16.0-rc.1 → delete both older rc
-    expect(plan.deleteCandidates.map((c) => c.version).sort()).toEqual([
-      "1.15.0",
-      "1.16.0-rc.1",
-      "1.17.0-rc.1",
-    ])
+    expect(plan.deleteCandidates.map((c) => c.version).sort()).toEqual(["1.15.0", "1.16.0-rc.1", "1.17.0-rc.1"])
   })
 
   test("B-02: a NaN keep throws instead of deleting every unprotected release", () => {
@@ -223,7 +221,14 @@ describe("cleanup core — planWithdraw", () => {
     expect(ok.steps).toContainEqual({ action: "delete-versioned-path", target: "ellamaka/v1.16.0" })
     expect(ok.steps).toContainEqual({ action: "delete-tag", target: "ellamaka-cli-v1.16.0" })
 
-    const missing = planWithdraw({ config: cli, version: "1.16.0", snapshot, aliases, withdrawn, fallbackVersion: "1.99.0" })
+    const missing = planWithdraw({
+      config: cli,
+      version: "1.16.0",
+      snapshot,
+      aliases,
+      withdrawn,
+      fallbackVersion: "1.99.0",
+    })
     expect(missing.allowed).toBe(false)
     expect(missing.reason).toContain("not found in versioned paths")
   })
@@ -232,7 +237,14 @@ describe("cleanup core — planWithdraw", () => {
     const snapshot = { versionedPaths: ["ellamaka/v1.16.0", "ellamaka/v1.15.0"], tags: [] }
     const aliases = { "ellamaka/latest/manifest.json": "1.16.0" }
     const withdrawn = { products: { "ellamaka-cli": ["1.16.0", "1.15.0"] } }
-    const plan = planWithdraw({ config: cli, version: "1.16.0", snapshot, aliases, withdrawn, fallbackVersion: "1.15.0" })
+    const plan = planWithdraw({
+      config: cli,
+      version: "1.16.0",
+      snapshot,
+      aliases,
+      withdrawn,
+      fallbackVersion: "1.15.0",
+    })
 
     expect(plan.allowed).toBe(false)
     expect(plan.reason).toContain("itself withdrawn")
@@ -256,7 +268,10 @@ describe("cleanup core — planWithdraw", () => {
 
     expect(plan.allowed).toBe(true)
     expect(plan.steps).toContainEqual({ action: "restore-latest-channel", target: "ellamaka-desktop/beta/latest" })
-    expect(plan.steps).toContainEqual({ action: "delete-versioned-path", target: "ellamaka-desktop/beta/v1.16.0-beta.1" })
+    expect(plan.steps).toContainEqual({
+      action: "delete-versioned-path",
+      target: "ellamaka-desktop/beta/v1.16.0-beta.1",
+    })
     expect(plan.steps).toContainEqual({ action: "delete-tag", target: "ellamaka-desktop-v1.16.0-beta.1" })
   })
 })

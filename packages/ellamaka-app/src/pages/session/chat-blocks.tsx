@@ -89,7 +89,7 @@ export function UserMessageBlock(props: {
   const dialog = useDialog()
 
   const openImagePreview = (url: string, filename?: string) => {
-    dialog.show(() => <ChatImagePreview src={url} alt={filename} />)
+    void dialog.show(() => <ChatImagePreview src={url} alt={filename} />)
   }
 
   const run = (action: (() => Promise<void> | void) | undefined) => {
@@ -635,7 +635,8 @@ export function UnknownPartBlock(props: { part: Part }) {
     try {
       return JSON.stringify(props.part)
     } catch {
-      return String(props.part)
+      // Circular payload: the type label above is the only meaningful text.
+      return `[unserializable ${props.part.type} part]`
     }
   })
   return (

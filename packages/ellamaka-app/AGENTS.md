@@ -17,13 +17,13 @@ description: Long-lived SolidJS UI, state, async, and verification rules for Ell
 
 ellamaka-app owns the shared Browser/Desktop renderer and the Official App BFF contract/client used by Onboarding/Workbench product projections. Platform capabilities use the published `@wopal/ellamaka-sdk`; app-specific BFF calls use the package's generated private client. Both reach the same Ellamaka Server. The Electron shell, credentials, and sidecar process belong to ellamaka-desktop.
 
-| Path | Responsibility |
-|---|---|
-| src/app.tsx and src/entry.tsx | App entry and route composition |
-| src/pages/workbench/ | Workbench state, actions, runtime health, Space queries, and renderer PTY client |
-| src/pages/session/ | Shared Session and chat presentation |
-| src/context/ | Server/SDK providers and server-event synchronization |
-| src/components/ | Reusable UI components shared by routes |
+| Path                          | Responsibility                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| src/app.tsx and src/entry.tsx | App entry and route composition                                                  |
+| src/pages/workbench/          | Workbench state, actions, runtime health, Space queries, and renderer PTY client |
+| src/pages/session/            | Shared Session and chat presentation                                             |
+| src/context/                  | Server/SDK providers and server-event synchronization                            |
+| src/components/               | Reusable UI components shared by routes                                          |
 
 Core ownership facts:
 
@@ -36,17 +36,16 @@ Core ownership facts:
 
 ## Development Commands
 
-| Scenario | Command | When |
-|---|---|---|
-| Dev server | bun run dev | Local frontend development; backend must be running |
-| Build | bun run build | Production build |
-| Typecheck | bun run typecheck | After TypeScript changes |
-| Unit tests | bun run test:unit --force-exit | After component, hook, or utility changes |
-| E2E tests | bun run test:e2e | After route or user-flow changes |
-| Workbench boundary check | bun run check:workbench-boundaries | After Workbench changes |
-| Workbench lint | bun run lint:workbench | After Workbench changes |
-| CSS lint | bun run lint:css | After CSS changes |
-| Frontend/backend dev help | ../../scripts/dev.sh help | Integrated development |
+| Scenario                  | Command                            | When                                                |
+| ------------------------- | ---------------------------------- | --------------------------------------------------- |
+| Dev server                | bun run dev                        | Local frontend development; backend must be running |
+| Build                     | bun run build                      | Production build                                    |
+| Typecheck                 | bun run typecheck                  | After TypeScript changes                            |
+| Unit tests                | bun run test:unit --force-exit     | After component, hook, or utility changes           |
+| E2E tests                 | bun run test:e2e                   | After route or user-flow changes                    |
+| Workbench boundary check  | bun run check:workbench-boundaries | After Workbench changes                             |
+| CSS lint                  | bun run lint:css                   | After CSS changes                                   |
+| Frontend/backend dev help | ../../scripts/dev.sh help          | Integrated development                              |
 
 Unit tests must use the package script, which sets the browser condition and happy-dom preload; raw bun test resolves the wrong SolidJS renderer for component tests. Typecheck uses `tsgo -b`; never run `tsc` directly.
 

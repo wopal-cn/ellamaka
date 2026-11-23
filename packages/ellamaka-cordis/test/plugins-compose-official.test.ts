@@ -57,12 +57,12 @@ describe("full patch stack: official bundle semantics (no Bridge-owned plugin tr
       ],
     })
     // Composition order: official bundle rows -> user -> (extra/home).
-    expect(
-      layers.indexOf(layers.find((l) => (l as { id?: string }).id === "timer")),
-    ).toBeLessThan(layers.indexOf(layers.find((l) => (l as { id?: string }).id === "sandbox-policy")))
-    expect(
-      layers.indexOf(layers.find((l) => "insert" in (l as object))),
-    ).toBeLessThan(layers.indexOf(layers.find((l) => (l as { id?: string }).id === "dsh-plugin:hello")))
+    expect(layers.indexOf(layers.find((l) => (l as { id?: string }).id === "timer"))).toBeLessThan(
+      layers.indexOf(layers.find((l) => (l as { id?: string }).id === "sandbox-policy")),
+    )
+    expect(layers.indexOf(layers.find((l) => "insert" in (l as object)))).toBeLessThan(
+      layers.indexOf(layers.find((l) => (l as { id?: string }).id === "dsh-plugin:hello")),
+    )
   })
 
   test("composeFullPatchStack no longer accepts a pluginLayers dimension", () => {
@@ -86,7 +86,10 @@ describe("user bundle name resolution (B1 拆雷, official layers)", () => {
     // A fake profile with an installed entity the bare name can resolve to.
     const profileDir = join(home, "home", "profiles", "web", "node_modules", "my-plugin")
     mkdirSync(profileDir, { recursive: true })
-    writeFileSync(join(profileDir, "package.json"), JSON.stringify({ name: "my-plugin", version: "1.0.0", main: "index.js" }))
+    writeFileSync(
+      join(profileDir, "package.json"),
+      JSON.stringify({ name: "my-plugin", version: "1.0.0", main: "index.js" }),
+    )
     writeFileSync(join(profileDir, "index.js"), "export default {}\n")
 
     // Official insert shape (the form real bundles ship): the bare `name`
@@ -96,10 +99,10 @@ describe("user bundle name resolution (B1 拆雷, official layers)", () => {
         insert: [{ id: "entry", name: "my-plugin" }],
       },
     ]
-    const resolved = resolveUserBundleNames(
-      [{ packageName: "my-plugin", patches: userLayer }],
-      { dshRoot: home, profile: "web" },
-    )
+    const resolved = resolveUserBundleNames([{ packageName: "my-plugin", patches: userLayer }], {
+      dshRoot: home,
+      profile: "web",
+    })
     const insertRow = (resolved[0].patches[0] as { insert: { id: string; name: string }[] }).insert[0]
     expect(insertRow.id).toBe("entry")
     expect(insertRow.name).toMatch(/^file:\/\//)
@@ -109,9 +112,16 @@ describe("user bundle name resolution (B1 拆雷, official layers)", () => {
     // Official @deepseek-ai/* layers stay UNTOUCHED: their bare names resolve
     // natively inside the closure, never rewritten.
     const officialResolved = resolveUserBundleNames(
-      [{ packageName: "@deepseek-ai/dsh-base", patches: [{ insert: [{ id: "timer", name: "@deepseek-ai/cordis-plugin-timer" }] }] }],
+      [
+        {
+          packageName: "@deepseek-ai/dsh-base",
+          patches: [{ insert: [{ id: "timer", name: "@deepseek-ai/cordis-plugin-timer" }] }],
+        },
+      ],
       { dshRoot: home, profile: "web" },
     )
-    expect((officialResolved[0].patches[0] as { insert: { name: string }[] }).insert[0].name).toBe("@deepseek-ai/cordis-plugin-timer")
+    expect((officialResolved[0].patches[0] as { insert: { name: string }[] }).insert[0].name).toBe(
+      "@deepseek-ai/cordis-plugin-timer",
+    )
   })
 })

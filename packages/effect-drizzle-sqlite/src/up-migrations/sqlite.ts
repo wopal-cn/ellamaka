@@ -1,4 +1,3 @@
-/* oxlint-disable */
 import type { TablesRelationalConfig } from "drizzle-orm/_relations"
 import type { MigrationMeta } from "drizzle-orm/migrator"
 import type { AnyRelations } from "drizzle-orm/relations"

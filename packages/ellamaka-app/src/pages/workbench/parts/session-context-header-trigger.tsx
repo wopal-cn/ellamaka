@@ -4,11 +4,7 @@ import { useServerSync } from "@/context/server-sync"
 import { useProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
-import {
-  contextPercentage,
-  contextTone,
-  type ContextMetricsSnapshot,
-} from "@/components/session-context-label"
+import { contextPercentage, contextTone, type ContextMetricsSnapshot } from "@/components/session-context-label"
 
 const toneClass: Record<string, string> = {
   normal: "text-v2-text-text-muted",

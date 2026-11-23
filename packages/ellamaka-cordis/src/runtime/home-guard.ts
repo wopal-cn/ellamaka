@@ -75,8 +75,7 @@ const DEFAULT_LOCK_TIMEOUT_MS = 1_000
 const MANAGED_MARKER = "ellamaka-managed-v1\n"
 const MAX_TRANSITION_BACKUPS = 3
 const CLEANUP_WARNING = "DSH Home backup cleanup failed; older backups were left in place."
-const TRANSITION_BACKUP_NAME_RE =
-  /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)-\d+-[0-9a-f]{8}$/
+const TRANSITION_BACKUP_NAME_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)-\d+-[0-9a-f]{8}$/
 
 /** Purely inspect Ellamaka-owned Home metadata; never creates directories. */
 export async function readDshHomeState(wopalHome: string): Promise<DshHomeState> {
@@ -410,8 +409,7 @@ function pruneTransitionBackups(options: PrepareDshHomeOptions, currentBackupDir
       return match ? [{ name: entry.name, timePrefix: match[1] }] : []
     })
     candidates.sort(
-      (left, right) =>
-        right.timePrefix.localeCompare(left.timePrefix) || right.name.localeCompare(left.name),
+      (left, right) => right.timePrefix.localeCompare(left.timePrefix) || right.name.localeCompare(left.name),
     )
 
     const keep = new Set([currentBackupDir])

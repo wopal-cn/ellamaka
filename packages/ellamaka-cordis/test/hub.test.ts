@@ -12,7 +12,10 @@ declare module "@deepseek-ai/cordis" {
 
 class GreetService extends Service {
   static provide = "greet"
-  constructor(ctx: CordisContext, public msg: string) {
+  constructor(
+    ctx: CordisContext,
+    public msg: string,
+  ) {
     super(ctx, "greet")
   }
   greet() {

@@ -141,7 +141,7 @@ function HomeDesign() {
 
   const showEditProjectDialog = (project: LocalProject) => {
     void import("@/components/dialog-edit-project").then((x) => {
-      dialog.show(() => <x.DialogEditProject project={project} />)
+      void dialog.show(() => <x.DialogEditProject project={project} />)
     })
   }
 
@@ -179,7 +179,7 @@ function HomeDesign() {
       return
     }
 
-    dialog.show(
+    void dialog.show(
       () => <DialogSelectDirectory multiple={true} onSelect={resolve} />,
       () => resolve(null),
     )
@@ -187,7 +187,7 @@ function HomeDesign() {
 
   function openSettings() {
     void import("@/components/dialog-settings").then((x) => {
-      dialog.show(() => <x.DialogSettings />)
+      void dialog.show(() => <x.DialogSettings />)
     })
   }
 

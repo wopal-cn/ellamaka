@@ -40,8 +40,10 @@ export const safeText = (value: unknown) => {
   if (value === undefined) return "undefined"
   if (secretFindings(value).length > 0) return JSON.stringify(REDACTED)
   const text = JSON.stringify(value)
-  if (!text) return String(value)
-  return text.length > 300 ? `${text.slice(0, 300)}...` : text
+  if (typeof text === "string") return text.length > 300 ? `${text.slice(0, 300)}...` : text
+  // No JSON form: functions, symbols, and objects whose toJSON returns nothing.
+  if (typeof value === "function" || typeof value === "symbol") return String(value)
+  return "[unserializable value]"
 }
 
 const jsonBody = (body: string) => Option.getOrUndefined(decodeJson(body))

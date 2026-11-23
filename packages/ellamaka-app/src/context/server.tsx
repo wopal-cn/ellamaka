@@ -90,7 +90,10 @@ export function seedStoredServers(input: {
     const { username, password } = conn.http
     if (!password) continue
     // The authToken flag is a per-load marker, never persisted.
-    const entry: StoredServer = { type: "http", http: { url: conn.http.url, ...(username ? { username } : {}), password } }
+    const entry: StoredServer = {
+      type: "http",
+      http: { url: conn.http.url, ...(username ? { username } : {}), password },
+    }
     const key = ServerConnection.key(conn)
     const index = list.findIndex((x) => {
       const normalized: ServerConnection.Http =
@@ -111,7 +114,6 @@ export function seedStoredServers(input: {
 
   return changed ? list : input.stored
 }
-
 
 /**
  * The local sidecar URL changes when the desktop process restarts. Persist the

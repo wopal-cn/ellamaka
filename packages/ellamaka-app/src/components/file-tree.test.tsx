@@ -27,7 +27,6 @@ beforeAll(async () => {
   }))
   mock.module("@/context/file", () => ({
     useFile: () => ({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       normalize: (p: string) => p,
       tree: {
         state: () => undefined,

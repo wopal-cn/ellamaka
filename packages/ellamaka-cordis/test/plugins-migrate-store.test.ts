@@ -19,10 +19,14 @@ function seedStore(
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, "installed.json"),
-    JSON.stringify({
-      schema: "ellamaka.dsh-plugins/v1",
-      plugins: entries.map((e) => ({ ...e, installedAt: "2026-09-01T00:00:00.000Z" })),
-    }, null, 2) + "\n",
+    JSON.stringify(
+      {
+        schema: "ellamaka.dsh-plugins/v1",
+        plugins: entries.map((e) => ({ ...e, installedAt: "2026-09-01T00:00:00.000Z" })),
+      },
+      null,
+      2,
+    ) + "\n",
   )
 }
 
@@ -32,7 +36,13 @@ function seedLegacyEntity(root: string, name: string, version = "1.0.0"): string
   mkdirSync(dir, { recursive: true })
   writeFileSync(
     join(dir, "package.json"),
-    JSON.stringify({ name, version, type: "module", main: "index.js", dsh: { bundle: { patch: "./cordis.patch.yml" } } }),
+    JSON.stringify({
+      name,
+      version,
+      type: "module",
+      main: "index.js",
+      dsh: { bundle: { patch: "./cordis.patch.yml" } },
+    }),
   )
   writeFileSync(join(dir, "index.js"), `export const name = ${JSON.stringify(name)}\n`)
   writeFileSync(join(dir, "cordis.patch.yml"), `- insert:\n    - id: dsh-plugin:${name}\n      name: ${name}\n`)
@@ -79,7 +89,9 @@ describe("migratePluginStore", () => {
 
     // Entities moved into the profiles' node_modules.
     expect(existsSync(join(profileDirOf(root, "web"), "node_modules", "dshmarket", "package.json"))).toBe(true)
-    expect(existsSync(join(profileDirOf(root, "ellamaka-tools"), "node_modules", "hello-plugin", "package.json"))).toBe(true)
+    expect(existsSync(join(profileDirOf(root, "ellamaka-tools"), "node_modules", "hello-plugin", "package.json"))).toBe(
+      true,
+    )
     // The legacy install area no longer holds the entities.
     expect(existsSync(join(root, "plugins", "dshmarket"))).toBe(false)
     expect(existsSync(join(root, "plugins", "hello-plugin"))).toBe(false)
