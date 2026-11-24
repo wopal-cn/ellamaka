@@ -1,36 +1,38 @@
 ---
 name: Ellamaka AGENT RULES
 description: Long-lived architecture boundaries, implementation, logging, release, and verification rules for Ellamaka
+maintenance: Maintain only when a long-lived agent work boundary, command, or gate changes; never record one-off tasks, implementation facts, or incident history. Maintaining this file must follow the agent-rules maintenance specification in space-master.
 ---
 
 # Agent Development Rules
 
 ## Canonical References
 
-- [DESIGN](docs/DESIGN.md) is the authority for target behavior and detailed architecture contracts.
-- Read sub-designs as the task requires: DSH foundation [DESIGN-dsh-base](docs/DESIGN-dsh-base.md), DSH Web [DESIGN-dsh-web](docs/DESIGN-dsh-web.md), tool container [DESIGN-ellamaka-tools](docs/DESIGN-ellamaka-tools.md), unified SDK [DESIGN-ellamaka-sdk](docs/DESIGN-ellamaka-sdk.md), Workbench [DESIGN-workbench](docs/DESIGN-workbench.md), Desktop [DESIGN-desktop](docs/DESIGN-desktop.md), Onboarding [DESIGN-onboarding](docs/DESIGN-onboarding.md), distribution [DESIGN-distribution](docs/DESIGN-distribution.md), logging [DESIGN-logging](docs/DESIGN-logging.md), config [DESIGN-config-engine](docs/DESIGN-config-engine.md).
+- [DESIGN](docs/DESIGN.md) is the authority for target behavior and detailed architecture contracts; read sub-designs as the task requires — the document index lives in DESIGN.md.
+- Docs rules: [docs/AGENTS.md](docs/AGENTS.md).
 - For every changed package or subdirectory, also follow its nearest `AGENTS.md`; local rules refine this project rulebook and never replace the parent Testing/TDD, safety, logging, or review requirements.
 - This file keeps the stable rules an agent must follow while implementing and verifying; detailed data models, flows, and APIs stay in their owning DESIGN, but a rule is not dropped here merely because a DESIGN also describes it.
-- Root `AGENTS.md` and `AGENTS.zh-CN.md` are bilingual mirrors; any rule change updates both in the same commit.
 
 ## Architecture and Directories
 
 Ellamaka combines Runtime, a Server composition host, the private WopalSpace application service, and the official App BFF. The Server may mount Public Platform API and App-private BFF on one host; lower-level Runtime does not depend on either WopalSpace or the App BFF. Browser/Desktop use the public SDK for platform capabilities and an app-private generated client for official App projections, while Wopal CLI owns Product management. The target boundaries are in DESIGN; this filesystem map lists only paths that currently exist.
 
-| Path                                                                                                                         | Module responsibility                                                                                                                                                                                |
-| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| packages/ellamaka-core/                                                                                                      | Shared product primitives for paths, processes, files, and logging                                                                                                                                   |
-| packages/opencode/src/cli/                                                                                                   | Ellamaka CLI entry, command routing, and TUI startup                                                                                                                                                 |
-| packages/opencode/src/config/, packages/opencode/src/plugin/                                                                 | Configuration evaluation and plugin assembly                                                                                                                                                         |
-| packages/opencode/src/server/                                                                                                | Server composition, Root/Instance APIs, HTTP and event connections; WopalSpace handler integration is under routes/instance/httpapi/                                                                 |
-| packages/opencode/src/session/, packages/opencode/src/agent/, packages/opencode/src/permission/, packages/opencode/src/tool/ | Runtime sessions, agents, permission evaluation, and tool execution                                                                                                                                  |
-| packages/opencode/src/workbench/                                                                                             | Server-side Workbench composition of Runtime and Space data                                                                                                                                          |
-| packages/ellamaka-cordis/                                                                                                    | DSH closure loading, Cordis lifecycle, and profile bridge                                                                                                                                            |
-| packages/sdk/js/                                                                                                             | Public Runtime/WopalSpace contracts and generated client                                                                                                                                             |
-| packages/ellamaka-app/                                                                                                       | Shared Browser/Desktop Onboarding and Workbench UI plus ownership of the Official App BFF contract/client                                                                                            |
-| packages/ellamaka-desktop/                                                                                                   | Electron shell and Server sidecar lifecycle                                                                                                                                                          |
-| packages/ellamaka-release/                                                                                                   | CLI/Desktop product builds, identity, and release                                                                                                                                                    |
-| scripts/                                                                                                                     | User-facing convenience scripts only: build, dev, release. Every script must be registered in `scripts/README.md`. CI gates, test harnesses, and other tooling belong to the package that owns them. |
+| Path                                                                                                                         | Module responsibility                                                                                                                                                                                | Local rules                           |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| packages/ellamaka-core/                                                                                                      | Shared product primitives for paths, processes, files, and logging                                                                                                                                   | —                                     |
+| packages/opencode/src/cli/                                                                                                   | Ellamaka CLI entry, command routing, and TUI startup                                                                                                                                                 | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/config/, packages/opencode/src/plugin/                                                                 | Configuration evaluation and plugin assembly                                                                                                                                                         | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/server/                                                                                                | Server composition, Root/Instance APIs, HTTP and event connections; WopalSpace handler integration is under routes/instance/httpapi/                                                                 | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/session/, packages/opencode/src/agent/, packages/opencode/src/permission/, packages/opencode/src/tool/ | Runtime sessions, agents, permission evaluation, and tool execution                                                                                                                                  | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/workbench/                                                                                             | Server-side Workbench composition of Runtime and Space data                                                                                                                                          | ./packages/opencode/AGENTS.md         |
+| packages/ellamaka-cordis/                                                                                                    | DSH closure loading, Cordis lifecycle, and profile bridge                                                                                                                                            | ./packages/ellamaka-cordis/AGENTS.md  |
+| packages/sdk/js/                                                                                                             | Public Runtime/WopalSpace contracts and generated client                                                                                                                                             | —                                     |
+| packages/ellamaka-app/                                                                                                       | Shared Browser/Desktop Onboarding and Workbench UI plus ownership of the Official App BFF contract/client                                                                                            | ./packages/ellamaka-app/AGENTS.md     |
+| packages/ellamaka-desktop/                                                                                                   | Electron shell and Server sidecar lifecycle                                                                                                                                                          | ./packages/ellamaka-desktop/AGENTS.md |
+| packages/ellamaka-release/                                                                                                   | CLI/Desktop product builds, identity, and release                                                                                                                                                    | ./packages/ellamaka-release/AGENTS.md |
+| packages/wopalspace/                                                                                                         | Private WopalSpace application service: Setup, Ontology, and base Space business, exposed only through the Public Platform SDK                                                                       | ./packages/wopalspace/AGENTS.md       |
+| packages/plugin/                                                                                                             | Public plugin contract (`@wopal/ellamaka-plugin`)                                                                                                                                                    | ./packages/plugin/AGENTS.md           |
+| scripts/                                                                                                                     | User-facing convenience scripts only: build, dev, release. Every script must be registered in `scripts/README.md`. CI gates, test harnesses, and other tooling belong to the package that owns them. | —                                     |
 
 Keep these boundaries in mind when choosing an owner:
 
@@ -40,27 +42,41 @@ Keep these boundaries in mind when choosing an owner:
 
 ## Development Commands
 
-| Scenario                   | Command                                                                                  | When                                              |
-| -------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Lint                       | bun run lint                                                                             | After code changes                                |
-| Format check               | bun run format:check                                                                     | After changing any formattable file               |
-| CSS check                  | bun run --cwd packages/ellamaka-app lint:css                                             | After CSS changes                                 |
-| Full typecheck             | bun run typecheck                                                                        | After TypeScript changes                          |
-| Test isolation gate        | bun run check:test-isolation                                                             | After any test/fixture/preload/test-config change |
-| Cross-package unit tests   | bun run test:unit                                                                        | Repo-wide unit orchestration                      |
-| Cross-package integration  | bun run test:integration                                                                 | Repo-wide integration orchestration               |
-| Cross-package e2e          | bun run test:e2e                                                                         | Repo-wide e2e orchestration                       |
-| opencode unit tests        | bun run test:unit (from packages/opencode/)                                              | Runtime unit tests                                |
-| opencode integration tests | bun run test:integration (from packages/opencode/)                                       | Server or cross-module changes                    |
-| App unit tests             | bun run test:unit --force-exit (from packages/ellamaka-app/)                             | Frontend behavior changes                         |
-| App boundary check         | bun run check:workbench-boundaries (from packages/ellamaka-app/)                         | Workbench changes                                 |
-| Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src (from packages/ellamaka-desktop/) | Desktop main/renderer changes                     |
-| Development entry          | ./scripts/dev.sh help                                                                    | GUI, TUI, and Server integration                  |
-| Local CI replica (macOS)   | bun run ci:local                                                                         | Local pre-flight for nightly CI                   |
+| Scenario                   | Command                                                          | When                                              |
+| -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| Lint                       | bun run lint                                                     | After code changes                                |
+| Format check               | bun run format:check                                             | After changing any formattable file               |
+| CSS check                  | bun run --cwd packages/ellamaka-app lint:css                     | After CSS changes                                 |
+| Full typecheck             | bun run typecheck                                                | After TypeScript changes                          |
+| Test isolation gate        | bun run check:test-isolation                                     | After any test/fixture/preload/test-config change |
+| Cross-package unit tests   | bun run test:unit                                                | Repo-wide unit orchestration                      |
+| Cross-package integration  | bun run test:integration                                         | Repo-wide integration orchestration               |
+| Cross-package e2e          | bun run test:e2e                                                 | Repo-wide e2e orchestration                       |
+| opencode unit tests        | bun run test:unit (from packages/opencode/)                      | Runtime unit tests                                |
+| opencode integration tests | bun run test:integration (from packages/opencode/)               | Server or cross-module changes                    |
+| App unit tests             | bun run test:unit --force-exit (from packages/ellamaka-app/)     | Frontend behavior changes                         |
+| App boundary check         | bun run check:workbench-boundaries (from packages/ellamaka-app/) | Workbench changes                                 |
+| Desktop tests              | bun run test (from packages/ellamaka-desktop/)                   | Desktop main/renderer changes                     |
+| Development entry          | ./scripts/dev.sh help                                            | GUI, TUI, and Server integration                  |
+| Local CI replica (macOS)   | bun run ci:local                                                 | Local pre-flight for nightly CI                   |
 
 Run package-local tests from their owning package. Repository-root test commands are reserved for the explicit cross-package orchestration and repository-wide gates listed above; see package rules and script help for the full matrix and artifact checks.
 
+## Quality Gates
+
+| Gate              | Command                                                | Blocks work when                               |
+| ----------------- | ------------------------------------------------------ | ---------------------------------------------- |
+| Format / lint     | `bun run lint`, `bun run format:check`                 | new diagnostic, baseline change, or bad format |
+| Type check        | `bun run typecheck`                                    | type error                                     |
+| Unit tests        | `bun run test:unit`                                    | any failure                                    |
+| Integration tests | `bun run test:integration`                             | any failure                                    |
+| End-to-end tests  | `bun run test:e2e`                                     | any failure                                    |
+| Test isolation    | `bun run check:test-isolation`                         | new violation                                  |
+| Build / package   | `./scripts/build.sh cli`, `./scripts/build.sh desktop` | build or packaging failure                     |
+
 ## Implementation Rules
+
+- Present-state DESIGN sync (unbypassable): read `docs/DESIGN.md` and the owning `docs/DESIGN-<module>.md` before changing module contracts. Whenever observable behavior, public interfaces, config defaults, active business rules, or failure outcomes change, load `dev-doc-master` in the same change, sync the owning sub-DESIGN per `docs/AGENTS.md`, and run the doc consistency check recorded there; skip DESIGN edits on pure internal refactors. During parallel work, edit only authorized module sub-DESIGNs and report cross-module drift to the coordinator instead of touching shared `docs/DESIGN.md`.
 
 - Server handlers adapt transport and invoke domain services; cross-domain composition belongs at the Server boundary. Runtime must not depend upward on WopalSpace. For cross-package work, also follow the nearest AGENT rules in each changed package.
 - Preserve directory-instance scope when passing configuration and plugin context. After permission changes, verify the effective merged result; discovery lists are not authorization results.

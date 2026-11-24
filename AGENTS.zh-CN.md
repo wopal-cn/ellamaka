@@ -1,36 +1,38 @@
 ---
 name: Ellamaka AGENT RULES
 description: Ellamaka 长期有效的架构边界、实施、日志与验证规则
+maintenance: 仅当长期有效的 Agent 工作边界、命令或门禁改变时维护；不记录一次性任务、实现事实或故障记录。本规范维护必须遵循 space-master 中 agent rules 维护规范。
 ---
 
 # Agent Development Rules
 
 ## Canonical References
 
-- [DESIGN](docs/DESIGN.md) 是目标态与详细架构契约的权威来源。
-- 按任务阅读子设计：DSH 基础 [DESIGN-dsh-base](docs/DESIGN-dsh-base.md)、DSH Web [DESIGN-dsh-web](docs/DESIGN-dsh-web.md)、工具容器 [DESIGN-ellamaka-tools](docs/DESIGN-ellamaka-tools.md)、统一 SDK [DESIGN-ellamaka-sdk](docs/DESIGN-ellamaka-sdk.md)、Workbench [DESIGN-workbench](docs/DESIGN-workbench.md)、Desktop [DESIGN-desktop](docs/DESIGN-desktop.md)、Onboarding [DESIGN-onboarding](docs/DESIGN-onboarding.md)、分发 [DESIGN-distribution](docs/DESIGN-distribution.md)、日志 [DESIGN-logging](docs/DESIGN-logging.md)、配置 [DESIGN-config-engine](docs/DESIGN-config-engine.md)。
+- [DESIGN](docs/DESIGN.md) 是目标态与详细架构契约的权威来源；子设计按任务需要阅读，完整索引由 DESIGN.md 维护。
+- 文档规则：[docs/AGENTS.md](docs/AGENTS.md)。
 - 改动任何 package 或子目录时，都必须同时遵循距离该路径最近的 `AGENTS.md`；下级规范只细化本项目规则，不能替代父级 Testing/TDD、安全、日志或评审要求。
 - 本文件保留实施与验证时必须照做的稳定规则；详细数据模型、流程和接口以对应 DESIGN 为准，但本文件的规则不因 DESIGN 有描述而省略。
-- 根 `AGENTS.md` 与 `AGENTS.zh-CN.md` 是双语镜像，任何规则变更必须在同一次提交内同步更新两份。
 
 ## Architecture and Directories
 
 Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和官方 App BFF 组成。Server 可在同一宿主挂载 Public Platform API 与 App-private BFF；底层 Runtime 不依赖 WopalSpace 或 App BFF。Browser/Desktop 的平台能力通过公开 SDK，官方 App 投影通过 app-private generated client；Wopal CLI 拥有 Product 管理。目标边界见 DESIGN；当前 filesystem map 只列已存在路径。
 
-| 路径                                                                                                                         | 模块职责                                                                                                                           |
-| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| packages/ellamaka-core/                                                                                                      | 共享产品原语，包括路径、进程、文件与日志能力                                                                                       |
-| packages/opencode/src/cli/                                                                                                   | Ellamaka CLI 入口、命令路由和 TUI 启动                                                                                             |
-| packages/opencode/src/config/、packages/opencode/src/plugin/                                                                 | 配置求值与插件装配                                                                                                                 |
-| packages/opencode/src/server/                                                                                                | Server 组合、Root/Instance API、HTTP 与事件连接；WopalSpace handler 集成位于 routes/instance/httpapi/                              |
-| packages/opencode/src/session/、packages/opencode/src/agent/、packages/opencode/src/permission/、packages/opencode/src/tool/ | Runtime 会话、Agent、权限评估与工具执行                                                                                            |
-| packages/opencode/src/workbench/                                                                                             | Server 侧 Workbench 组合，连接 Runtime 与 Space 数据                                                                               |
-| packages/ellamaka-cordis/                                                                                                    | DSH 闭包加载、Cordis 生命周期与 profile Bridge                                                                                     |
-| packages/sdk/js/                                                                                                             | 公开 Runtime/WopalSpace contract 与生成 client                                                                                     |
-| packages/ellamaka-app/                                                                                                       | Browser/Desktop 共用的 Onboarding/Workbench 界面，以及 Official App BFF contract/client 的 owner                                   |
-| packages/ellamaka-desktop/                                                                                                   | Electron 原生壳层与 Server sidecar 生命周期                                                                                        |
-| packages/ellamaka-release/                                                                                                   | CLI/Desktop 产品构建、identity 与发布                                                                                              |
-| scripts/                                                                                                                     | 只放面向用户的便利脚本：构建、开发、发布。每个脚本必须在 `scripts/README.md` 登记。CI 门禁、测试工具等代码归属于拥有它的 package。 |
+| 路径                                                                                                                         | 模块职责                                                                                                                           | 本地规则                              |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| packages/ellamaka-core/                                                                                                      | 共享产品原语，包括路径、进程、文件与日志能力                                                                                       | —                                     |
+| packages/opencode/src/cli/                                                                                                   | Ellamaka CLI 入口、命令路由和 TUI 启动                                                                                             | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/config/、packages/opencode/src/plugin/                                                                 | 配置求值与插件装配                                                                                                                 | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/server/                                                                                                | Server 组合、Root/Instance API、HTTP 与事件连接；WopalSpace handler 集成位于 routes/instance/httpapi/                              | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/session/、packages/opencode/src/agent/、packages/opencode/src/permission/、packages/opencode/src/tool/ | Runtime 会话、Agent、权限评估与工具执行                                                                                            | ./packages/opencode/AGENTS.md         |
+| packages/opencode/src/workbench/                                                                                             | Server 侧 Workbench 组合，连接 Runtime 与 Space 数据                                                                               | ./packages/opencode/AGENTS.md         |
+| packages/ellamaka-cordis/                                                                                                    | DSH 闭包加载、Cordis 生命周期与 profile Bridge                                                                                     | ./packages/ellamaka-cordis/AGENTS.md  |
+| packages/sdk/js/                                                                                                             | 公开 Runtime/WopalSpace contract 与生成 client                                                                                     | —                                     |
+| packages/ellamaka-app/                                                                                                       | Browser/Desktop 共用的 Onboarding/Workbench 界面，以及 Official App BFF contract/client 的 owner                                   | ./packages/ellamaka-app/AGENTS.md     |
+| packages/ellamaka-desktop/                                                                                                   | Electron 原生壳层与 Server sidecar 生命周期                                                                                        | ./packages/ellamaka-desktop/AGENTS.md |
+| packages/ellamaka-release/                                                                                                   | CLI/Desktop 产品构建、identity 与发布                                                                                              | ./packages/ellamaka-release/AGENTS.md |
+| packages/wopalspace/                                                                                                         | private WopalSpace 应用服务：Setup、Ontology 与基础 Space 业务，对外只经 Public Platform SDK 暴露                                  | ./packages/wopalspace/AGENTS.md       |
+| packages/plugin/                                                                                                             | 公开插件 contract（`@wopal/ellamaka-plugin`）                                                                                      | ./packages/plugin/AGENTS.md           |
+| scripts/                                                                                                                     | 只放面向用户的便利脚本：构建、开发、发布。每个脚本必须在 `scripts/README.md` 登记。CI 门禁、测试工具等代码归属于拥有它的 package。 | —                                     |
 
 快速判断边界时保留以下事实：
 
@@ -40,28 +42,41 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 
 ## Development Commands
 
-| Scenario                   | Command                                                                                 | When                                    |
-| -------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------- |
-| Lint                       | bun run lint                                                                            | 修改代码后                              |
-| 格式化检查                 | bun run format:check                                                                    | 修改任何可格式化文件后                  |
-| CSS 检查                   | bun run --cwd packages/ellamaka-app lint:css                                            | 修改 CSS 后                             |
-| Full typecheck             | bun run typecheck                                                                       | TypeScript 改动后                       |
-| Test isolation gate        | bun run check:test-isolation                                                            | 修改任何测试/fixture/preload/测试配置后 |
-| Cross-package unit tests   | bun run test:unit                                                                       | 全仓 unit 编排                          |
-| Cross-package integration  | bun run test:integration                                                                | 全仓 integration 编排                   |
-| Cross-package e2e          | bun run test:e2e                                                                        | 全仓 e2e 编排                           |
-| opencode unit tests        | bun run test:unit（在 packages/opencode/）                                              | Runtime 单元测试                        |
-| opencode integration tests | bun run test:integration（在 packages/opencode/）                                       | Server/跨模块集成变化                   |
-| App unit tests             | bun run test:unit --force-exit（在 packages/ellamaka-app/）                             | 前端逻辑变化                            |
-| App boundary check         | bun run check:workbench-boundaries（在 packages/ellamaka-app/）                         | Workbench 目录变化                      |
-| Desktop tests              | bun test --preload ./electron-mock.ts --force-exit src（在 packages/ellamaka-desktop/） | Desktop 主进程/渲染器变化               |
-| Development entry          | ./scripts/dev.sh help                                                                   | GUI、TUI、Server 联调                   |
-| 本地 CI 复刻（macOS）      | bun run ci:local                                                                        | 依赖 nightly CI 前的本地验证            |
+| Scenario                   | Command                                                         | When                                    |
+| -------------------------- | --------------------------------------------------------------- | --------------------------------------- |
+| Lint                       | bun run lint                                                    | 修改代码后                              |
+| 格式化检查                 | bun run format:check                                            | 修改任何可格式化文件后                  |
+| CSS 检查                   | bun run --cwd packages/ellamaka-app lint:css                    | 修改 CSS 后                             |
+| Full typecheck             | bun run typecheck                                               | TypeScript 改动后                       |
+| Test isolation gate        | bun run check:test-isolation                                    | 修改任何测试/fixture/preload/测试配置后 |
+| Cross-package unit tests   | bun run test:unit                                               | 全仓 unit 编排                          |
+| Cross-package integration  | bun run test:integration                                        | 全仓 integration 编排                   |
+| Cross-package e2e          | bun run test:e2e                                                | 全仓 e2e 编排                           |
+| opencode unit tests        | bun run test:unit（在 packages/opencode/）                      | Runtime 单元测试                        |
+| opencode integration tests | bun run test:integration（在 packages/opencode/）               | Server/跨模块集成变化                   |
+| App unit tests             | bun run test:unit --force-exit（在 packages/ellamaka-app/）     | 前端逻辑变化                            |
+| App boundary check         | bun run check:workbench-boundaries（在 packages/ellamaka-app/） | Workbench 目录变化                      |
+| Desktop tests              | bun run test（在 packages/ellamaka-desktop/）                   | Desktop 主进程/渲染器变化               |
+| Development entry          | ./scripts/dev.sh help                                           | GUI、TUI、Server 联调                   |
+| 本地 CI 复刻（macOS）      | bun run ci:local                                                | 依赖 nightly CI 前的本地验证            |
 
 包内测试从所属 package 执行；仓库根只用于上表明确列出的跨包编排与全仓门禁。完整命令和制品验证方式看各包规范与脚本 help。
 
+## Quality Gates
+
+| 门禁        | 命令                                                   | 阻断条件                          |
+| ----------- | ------------------------------------------------------ | --------------------------------- |
+| 格式与 lint | `bun run lint`、`bun run format:check`                 | 新增诊断、baseline 变动或格式不符 |
+| 类型检查    | `bun run typecheck`                                    | 类型错误                          |
+| 单元测试    | `bun run test:unit`                                    | 任一失败                          |
+| 集成测试    | `bun run test:integration`                             | 任一失败                          |
+| 端到端测试  | `bun run test:e2e`                                     | 任一失败                          |
+| 测试隔离    | `bun run check:test-isolation`                         | 新增违规                          |
+| 构建与打包  | `./scripts/build.sh cli`、`./scripts/build.sh desktop` | 构建或打包失败                    |
+
 ## Implementation Rules
 
+- Present-state DESIGN 同步（不可绕过）：改模块契约前先读 `docs/DESIGN.md` 与所属 `docs/DESIGN-<module>.md`。凡可观察行为、公开接口、配置默认值、生效业务规则或失败结果发生变化，必须在同一次变更内加载 `dev-doc-master`、按 `docs/AGENTS.md` 同步所属子设计，并运行其中记录的文档一致性检查；纯内部重构不改 DESIGN。并行开发时只改被授权的模块子设计，跨模块漂移上报协调者，不擅自改共享的 `docs/DESIGN.md`。
 - Server handler 只负责传输适配和领域调用；跨域组合放在 Server composition，不能让 Runtime 向上依赖 WopalSpace。跨包实施同时遵循改动 package 最近的 AGENT 规则。
 - 遵循 directory instance 边界传递配置和插件上下文。变更配置或权限规则后核对实际合并结果，不用能力发现列表代替授权结果。
 - Browser/Desktop 的平台 HTTP contract 由公开 SDK 提供；Official App BFF contract 由 app-private generated client 提供。任一 contract 变化时都必须成组生成对应类型与运行时参数映射，不手改 generated 文件。
@@ -89,7 +104,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - 提交钩子对暂存文件运行同一套 lint 与格式化判定，并执行密钥扫描；任一项失败时其余检查仍会执行。钩子读工作区内容而非索引：部分暂存的文件可能按与提交内容不同的版本判定。该缺口是已接受的取舍，修复路径是显式运行 `bun run format` / `bun run lint:fix`，不接受改写索引的钩子。
 - 改 TypeScript 必须 typecheck 通过。包内测试从所属 package 运行；仓库根只运行上表明确列出的跨包编排或全仓门禁。
 
-### 测试隔离铁律
+### Test Isolation Rules
 
 以下规则全仓适用；`bun run check:test-isolation` 检查其中可静态识别的违规，其余由行为测试与实施评审验证。
 原理、三种隔离模型、规则到门禁的完整对照见
@@ -117,7 +132,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 - 调整测试分层或入口必须核对实际执行文件，保持原有 CI 覆盖。
 - 跨运行时或宿主的子进程测试要覆盖流继承、管道背压及取消回收；小输出命令成功不足以证明进程边界正确。
 
-### 手动验证入口
+### Manual Verification Entry Points
 
 GUI、Onboarding 与 Desktop 壳层行为的验证入口。Agent 可用 CDP 检查 Desktop，只把仍需人工观察的行为交给用户。
 
