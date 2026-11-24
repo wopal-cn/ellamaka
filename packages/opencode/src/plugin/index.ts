@@ -12,6 +12,7 @@ import { Bus } from "../bus"
 import * as Log from "@wopal/ellamaka-core/util/log"
 import { createOpencodeClient } from "@wopal/ellamaka-sdk/v2"
 import { createPluginClient } from "./client-compat"
+import { createPluginServerFetch } from "./server-fetch"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
 import { Session } from "@/session/session"
@@ -187,11 +188,12 @@ export const layer = Layer.effect(
         const { Server } = yield* Effect.promise(() => import("../server/server"))
 
         const serverUrl = Server.url
+        const serverFetch = createPluginServerFetch(serverUrl, (request) => Server.Default().app.fetch(request))
         const client = createOpencodeClient({
-          baseUrl: serverUrl?.toString() ?? "http://localhost:4096",
+          baseUrl: serverUrl?.toString() ?? "http://opencode.internal",
           directory: ctx.directory,
           headers: ServerAuth.headers(),
-          ...(serverUrl ? {} : { fetch: ((request: Request) => Server.Default().app.fetch(request)) as typeof fetch }),
+          ...(serverUrl ? {} : { fetch: serverFetch }),
         })
         const cfg = yield* config.get()
         const pluginConfig = yield* config.getPluginConfig()
@@ -207,8 +209,9 @@ export const layer = Layer.effect(
             },
           },
           get serverUrl(): URL {
-            return Server.url ?? new URL("http://localhost:4096")
+            return Server.url ?? new URL("http://opencode.internal")
           },
+          serverFetch,
           // Plugins that derive their own HTTP clients (e.g. the wopal plugin's
           // v2 SDK client) cannot borrow the auth header from `client`'s config
           // layer; without these every derived request fails with 401.

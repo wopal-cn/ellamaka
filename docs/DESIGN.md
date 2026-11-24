@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-22
+> **Updated**: 2026-11-23
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 
 ## Role
@@ -353,16 +353,17 @@ Onboarding 是 private `@wopal/wopalspace/setup` 的唯一用户形态，通过 
 
 ellamaka 在 OpenCode fork 的 plugin/runtime 契约层之上做了一批增量扩展。Runtime 与 WopalSpace public contract 统一通过 `@wopal/ellamaka-sdk` 分发；private `@wopal/wopalspace` 不发布。SDK 版本不镜像 CLI/Desktop Product SemVer。`@wopal/ellamaka-plugin` 是既有插件 author contract，可复用同一 npm 发布基础设施，但其兼容关系由 plugin contract 自己定义。发布机制与版本策略见 `docs/DESIGN-distribution.md` 的 npm 包发布章节。
 
-fork 的 plugin 契约层在 OpenCode-derived contract 上新增六处可选扩展：
+fork 的 plugin 契约层在 OpenCode-derived contract 上新增七处可选扩展：
 
 - `SystemPromptSectionKind` / `SystemPromptSection` / `SystemPromptMetadata` —— 结构化系统提示词元数据，引擎在 `session/prompt.ts` 构造，经 `chat.params.systemMetadata` 传入插件
 - `PluginInput.wopalSpaceRoot` —— 空间根来源，wopal 空间集成的基础
+- `PluginInput.serverFetch` —— 宿主 API 请求函数，支持无监听器的进程内分发及实际监听端口的 HTTP 请求
 - `Hooks.chat.params` 的 `systemMetadata` 输入 —— 结构化提示词随模型请求透传
 - `Hooks["tool.provider"]` —— 每次模型请求动态提供工具集，支撑运行时挂载/卸载
 - `ToolContext.extra` —— 宿主向工具调用透传附加上下文（如沙箱模式）
 - `Hooks["experimental.permission.rules"]` —— permission ask 前的临时 rules overlay；输入 session/agent/permission/patterns，输出可追加的 `PermissionRule[]`，合并后仍由原 Permission evaluator 求值
 
-六处扩展均为可选字段或新增 hook，是上游类型的超集：上游/旧插件在新引擎上没有对应函数时由 dispatcher 直接跳过，行为保持不变。依赖 `experimental.permission.rules` 的新插件需要与提供该契约的 Ellamaka 版本配套分发；新插件运行在旧引擎上不会获得 runtime permission overlay，因此不属于受支持组合。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、systemMetadata、动态 Skill permission overlay）与 [工具容器设计](./DESIGN-ellamaka-tools.md)（内部 adapter、tool.provider 与沙箱语义）。
+七处扩展均为可选字段或新增 hook，是上游类型的超集：上游/旧插件在新引擎上没有对应函数时由 dispatcher 直接跳过，行为保持不变。依赖 `experimental.permission.rules` 的新插件需要与提供该契约的 Ellamaka 版本配套分发；新插件运行在旧引擎上不会获得 runtime permission overlay，因此不属于受支持组合。扩展的完整契约与消费者矩阵见 `../../../.wopal/docs/DESIGN-wopal-plugin.md`（wopalSpaceRoot、serverFetch、systemMetadata、动态 Skill permission overlay）与 [工具容器设计](./DESIGN-ellamaka-tools.md)（内部 adapter、tool.provider 与沙箱语义）。
 
 SDK/root调用模型的MAJOR变化不自动改变PluginInput.client。现有插件的注入client保留当前调用合同，由引擎薄适配到唯一canonical client；类型、认证刷新、Session/权限/事件调用一起验证，具体边界见 [Plugin Client Compatibility](./DESIGN-ellamaka-sdk.md#plugin-client-compatibility)。
 

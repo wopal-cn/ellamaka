@@ -50,7 +50,8 @@ function serverHeadersPluginFile(mark: string) {
     "export default {",
     `  id: "demo.server-headers",`,
     "  server: async (input) => {",
-    `    await Bun.write(${JSON.stringify(mark)}, JSON.stringify({ serverHeaders: input.serverHeaders ?? null }))`,
+    "    const response = await input.serverFetch(new Request('http://opencode.internal/not-a-real-route'))",
+    `    await Bun.write(${JSON.stringify(mark)}, JSON.stringify({ serverHeaders: input.serverHeaders ?? null, serverUrl: input.serverUrl.href, status: response.status }))`,
     "    return {}",
     "  },",
     "}",
@@ -112,6 +113,8 @@ describe("PluginInput.serverHeaders delivery", () => {
           const record: Record<string, unknown> = isRecord(headers) ? headers : {}
           const expected = `Basic ${Buffer.from(`ellamaka:${AUTH_SECRET}`).toString("base64")}`
           expect(record["Authorization"]).toBe(expected)
+          expect(seen.serverUrl).toBe("http://opencode.internal/")
+          expect(seen.status).toBe(404)
         }),
     ),
   )

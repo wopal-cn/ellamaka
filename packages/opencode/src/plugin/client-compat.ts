@@ -73,6 +73,10 @@ export function createPluginClient(client: OpencodeClient): PluginClient {
       return invoke.call(owner, parameters, options)
     }
   }
+  // Existing installed plugins extract the host's fetch and headers through
+  // `_client.getConfig()`. Keep this private bridge until they consume
+  // PluginInput.serverFetch, without exposing it as an enumerable operation.
+  Object.defineProperty(result, "_client", { value: Reflect.get(client, "client") })
   // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- the nested shape is constructed from the exhaustive descriptor table above.
   return result as PluginClient
 }

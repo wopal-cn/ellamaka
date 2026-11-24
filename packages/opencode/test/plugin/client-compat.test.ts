@@ -36,6 +36,21 @@ function methodAt(value: unknown, path: string): (options?: unknown) => unknown 
 }
 
 describe("plugin client compatibility", () => {
+  test("retains the existing plugin transport for already-installed plugins", () => {
+    const fetch = (async (_request: Request) => Response.json({ ok: true })) as typeof globalThis.fetch
+    const canonical = createOpencodeClient({
+      baseUrl: "http://opencode.internal",
+      headers: { Authorization: "Basic test" },
+      fetch,
+    })
+    const legacy = createPluginClient(canonical) as unknown as {
+      _client?: { getConfig(): { fetch?: typeof globalThis.fetch; headers?: Headers | Record<string, string> } }
+    }
+    expect(legacy._client?.getConfig().fetch).toBe(fetch)
+    expect(new Headers(legacy._client?.getConfig().headers).get("authorization")).toBe("Basic test")
+    expect(Object.keys(legacy)).not.toContain("_client")
+  })
+
   test("maps every supported legacy operation to the same live public method and path", () => {
     const spec = publicOpenApi()
     const canonical = createOpencodeClient({ baseUrl: "http://localhost:4096" })

@@ -1,7 +1,7 @@
 # Ellamaka SDK — Unified Public API and Client Transport
 
 > **Status**: Active
-> **Updated**: 2026-11-09
+> **Updated**: 2026-11-23
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Scope**: `@wopal/ellamaka-sdk` 的统一公开 API、OpenAPI 3.1、generated client、HTTP/local transport、契约发现与发布边界
@@ -70,6 +70,10 @@ Ellamaka 品牌 API 是 canonical surface：`EllamakaClient`、`createEllamakaCl
 公开SDK的root调用形状与引擎注入的 `PluginInput.client` 是两个兼容边界。SDK统一为canonical v2 model时，不能把现有插件接收的client一起改成另一种参数形状。
 
 `PluginInput.client` 保持当前Plugin SDK公开的原生操作调用合同：旧的 path/query/body封装、构造时的directory/认证、自定义选项、取消、data/error结果与事件流行为。引擎在这个既有入口提供薄调用适配，实际请求仍由唯一canonical generated client编码；不保留第二套generated DTO/业务client，不新建HTTP端点或历史SDK框架。Plugin SDK的client类型应描述这个注入合同，不再从可独立发生MAJOR变化的SDK root factory自动推导。
+
+插件宿主同时通过可选 `PluginInput.serverFetch` 提供完整的 API 请求函数：TUI 内嵌 worker 在进程内分发，不要求网络监听器；serve、TUI 外部监听和 Desktop sidecar 使用当前监听器实际绑定的地址，保留 SDK 对长请求和 SSE 连接不设置空闲超时的行为。`serverUrl` 在有监听器时是实际 URL，在无监听器时是仅供进程内请求使用的 `http://opencode.internal`；`serverHeaders` 承载宿主要求的 HTTP 认证头。自行创建 SDK client 的插件必须将 `serverUrl`、`serverFetch` 与 `serverHeaders` 作为同一宿主连接合同使用，不得猜测 4096 或其他固定端口，也不得在内嵌模式调用公网 fetch。
+
+引擎的 `PluginInput.client` 适配器为现有已安装插件保留不可枚举的 `_client.getConfig()` 请求配置入口；新插件应使用正式的 `serverFetch`，不能将该内部兼容入口作为公共 SDK 合同。
 
 例如 auth.set 的 `{path:{id},body}` 转成canonical `{providerID:id,auth:body}`；session.get/messages的path.id转sessionID，query/body按对应operation定义转换。转换依据实际公开operation，不能仅靠方法名或类名猜参数。数据schema仍从同一canonical contract取得。
 

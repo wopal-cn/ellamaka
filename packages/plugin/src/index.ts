@@ -98,6 +98,12 @@ export type PluginInput = {
   }
   serverUrl: URL
   /**
+   * Fetch through this plugin host's API transport. In an embedded TUI this
+   * dispatches in-process without a listening port; with a listener it uses
+   * HTTP. Optional so plugins built against older host contracts still load.
+   */
+  serverFetch?: typeof globalThis.fetch
+  /**
    * Authorization headers for the sidecar HTTP API (`ServerAuth.headers()`).
    * Present only when the server requires credentials; plugins that derive
    * their own HTTP clients from `serverUrl` must attach these, otherwise every
