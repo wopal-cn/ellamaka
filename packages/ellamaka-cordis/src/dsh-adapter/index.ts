@@ -232,6 +232,83 @@ function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
 }
 
+function isConcurrencySafeCall(name: string, converted: Record<string, unknown>): boolean {
+  if (name === "read" || name === "glob" || name === "grep") return true
+  return name === "str_replace_editor" && converted.command === "view"
+}
+
+function waitForTurn(previous: Promise<void>, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted()
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      reject(signal.reason)
+    }
+    signal.addEventListener("abort", onAbort, { once: true })
+    void previous.then(() => {
+      signal.removeEventListener("abort", onAbort)
+      resolve()
+    })
+  })
+}
+
+/** Per-session FIFO mutex preserving DSH's serial execution contract for non-concurrency-safe tools. */
+class SessionExclusiveQueue {
+  private tail: Promise<void> = Promise.resolve()
+  private pending = 0
+
+  get idle(): boolean {
+    return this.pending === 0
+  }
+
+  async run<T>(signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+    this.pending += 1
+    const previous = this.tail
+    let release!: () => void
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // Waiters chain behind `previous` even if this caller aborts early, so a
+    // cancelled waiter never releases the active holder's mutual exclusion.
+    this.tail = previous.then(() => current)
+    try {
+      await waitForTurn(previous, signal)
+      signal.throwIfAborted()
+      return await task()
+    } finally {
+      this.pending -= 1
+      release()
+    }
+  }
+}
+
+/** Per-session exclusive queue registry that prunes idle queues once drained. */
+export class SessionExclusiveQueues {
+  private readonly queues = new Map<string, SessionExclusiveQueue>()
+
+  get size(): number {
+    return this.queues.size
+  }
+
+  async run<T>(sessionID: string, signal: AbortSignal, task: () => Promise<T>): Promise<T> {
+    let queue = this.queues.get(sessionID)
+    if (!queue) {
+      queue = new SessionExclusiveQueue()
+      this.queues.set(sessionID, queue)
+    }
+    try {
+      return await queue.run(signal, task)
+    } finally {
+      if (queue.idle && this.queues.get(sessionID) === queue) {
+        this.queues.delete(sessionID)
+      }
+    }
+  }
+
+  clear(): void {
+    this.queues.clear()
+  }
+}
+
 function trimDiff(patch: string) {
   const content = (line: string) => /^[ +-]/.test(line) && !line.startsWith("---") && !line.startsWith("+++")
   const lines = patch.split("\n")
@@ -327,6 +404,7 @@ export async function dshAdapter(
 function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
   const mode = config.sandbox?.mode ?? "workspace-write"
   const sessions = new Map<string, Facade>()
+  const queues = new SessionExclusiveQueues()
   // The async call scope is shared by nested approval events, not by concurrent
   // executions with the same session id. No retained ask survives a call.
   const calls = new AsyncLocalStorage<{ session: Facade; ctx?: ToolContext }>()
@@ -374,6 +452,7 @@ function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
       disposed = true
       off()
       sessions.clear()
+      queues.clear()
       calls.disable()
     },
     "tool.provider": async (_request, output) => {
@@ -386,82 +465,91 @@ function healthyHooks(container: Container, config: DshAdapterConfig): Hooks {
             description: definition.description,
             args: shape(definition.parameters, true),
             execute: async (args, ctx) => {
-              const { tools } = live()
+              live()
               ctx.abort.throwIfAborted()
               const converted = Object.fromEntries(
                 Object.entries(args).map(([key, value]) => [snake[key] ?? key, value]),
               )
-              await permission(name, converted, ctx)
-              ctx.abort.throwIfAborted()
-              let session = sessions.get(ctx.sessionID)
-              if (!session) {
-                session = facade(ctx.sessionID, ctx.directory, mode, config.escalation ?? "ask")
-                sessions.set(ctx.sessionID, session)
-              }
-              const requested = ctx.extra?.sandboxMode
-              if (requested !== undefined) {
-                if (
-                  typeof requested !== "string" ||
-                  !["read-only", "workspace-write", "full-access"].includes(requested)
-                )
-                  throw new DshAdapterError("invalid message sandbox mode")
-                session.append("sandbox/mode", { mode: requested === "full-access" ? "danger-full-access" : requested })
-              }
-              const effective = [...session.snapshotEvents()]
-                .reverse()
-                .find((event) => event.type === "sandbox/mode")?.data
-              if (record(effective) && converted.sandbox_permissions === effective.mode) {
-                delete converted.sandbox_permissions
-                delete converted.justification
-              }
-              const active = session
-              const call: { session: Facade; ctx?: ToolContext } = { session: active, ctx }
-              return calls.run(call, async () => {
-                if (active.turnDepth++ === 0) active.append("turn/start", {})
-                try {
-                  const callId = (ctx as ToolContext & { callID?: string }).callID ?? `dsh-${crypto.randomUUID()}`
-                  const batch = await tools.execute({
-                    calls: [{ type: "tool-call", id: callId, name: dispatch, arguments: JSON.stringify(converted) }],
-                    signal: ctx.abort,
-                    agent: {
-                      session: active,
-                      // RC.3 working-directory validates the active caller's
-                      // lifetime. This is the existing per-call facade, not
-                      // a DSH Session/Agent lifecycle or PTC bridge.
-                      ctx: {
-                        fiber: {
-                          assertActive: () => {
-                            ctx.abort.throwIfAborted()
-                            if (disposed) throw new DshAdapterError("tool adapter disposed")
+              const runCall = async () => {
+                live()
+                ctx.abort.throwIfAborted()
+                await permission(name, converted, ctx)
+                ctx.abort.throwIfAborted()
+                const { tools } = live()
+                let session = sessions.get(ctx.sessionID)
+                if (!session) {
+                  session = facade(ctx.sessionID, ctx.directory, mode, config.escalation ?? "ask")
+                  sessions.set(ctx.sessionID, session)
+                }
+                const requested = ctx.extra?.sandboxMode
+                if (requested !== undefined) {
+                  if (
+                    typeof requested !== "string" ||
+                    !["read-only", "workspace-write", "full-access"].includes(requested)
+                  )
+                    throw new DshAdapterError("invalid message sandbox mode")
+                  session.append("sandbox/mode", {
+                    mode: requested === "full-access" ? "danger-full-access" : requested,
+                  })
+                }
+                const effective = [...session.snapshotEvents()]
+                  .reverse()
+                  .find((event) => event.type === "sandbox/mode")?.data
+                if (record(effective) && converted.sandbox_permissions === effective.mode) {
+                  delete converted.sandbox_permissions
+                  delete converted.justification
+                }
+                const active = session
+                const call: { session: Facade; ctx?: ToolContext } = { session: active, ctx }
+                return calls.run(call, async () => {
+                  if (active.turnDepth++ === 0) active.append("turn/start", {})
+                  try {
+                    const callId = (ctx as ToolContext & { callID?: string }).callID ?? `dsh-${crypto.randomUUID()}`
+                    const batch = await tools.execute({
+                      calls: [{ type: "tool-call", id: callId, name: dispatch, arguments: JSON.stringify(converted) }],
+                      signal: ctx.abort,
+                      agent: {
+                        session: active,
+                        // RC.3 working-directory validates the active caller's
+                        // lifetime. This is the existing per-call facade, not
+                        // a DSH Session/Agent lifecycle or PTC bridge.
+                        ctx: {
+                          fiber: {
+                            assertActive: () => {
+                              ctx.abort.throwIfAborted()
+                              if (disposed) throw new DshAdapterError("tool adapter disposed")
+                            },
                           },
                         },
                       },
-                    },
-                  })
-                  const settled = batch.results.find((item) => item.callId === callId)
-                  if (!settled) throw new DshAdapterError("native executor returned no matching tool result")
-                  const result = settled.result
-                  const text = (result.content ?? [])
-                    .filter((item) => item.type === "text")
-                    .map((item) => item.text ?? "")
-                    .join("\n")
-                  if (result.isError) {
-                    const message = text || result.error?.message || "DSH tool failed"
-                    const diagnostic = (result.error?.message || text || "DSH tool failed").slice(0, 1024)
-                    const code = result.error?.info?.code
-                    container.logger("dsh-adapter").error("tool execution failed", {
-                      tool: name,
-                      ...(typeof code === "string" && code ? { code } : {}),
-                      error: diagnostic,
                     })
-                    throw new Error(message)
+                    const settled = batch.results.find((item) => item.callId === callId)
+                    if (!settled) throw new DshAdapterError("native executor returned no matching tool result")
+                    const result = settled.result
+                    const text = (result.content ?? [])
+                      .filter((item) => item.type === "text")
+                      .map((item) => item.text ?? "")
+                      .join("\n")
+                    if (result.isError) {
+                      const message = text || result.error?.message || "DSH tool failed"
+                      const diagnostic = (result.error?.message || text || "DSH tool failed").slice(0, 1024)
+                      const code = result.error?.info?.code
+                      container.logger("dsh-adapter").error("tool execution failed", {
+                        tool: name,
+                        ...(typeof code === "string" && code ? { code } : {}),
+                        error: diagnostic,
+                      })
+                      throw new Error(message)
+                    }
+                    return { output: text, title: name, metadata: metadata(name, dispatch, result) }
+                  } finally {
+                    call.ctx = undefined
+                    if (--active.turnDepth === 0) active.append("turn/end", {})
                   }
-                  return { output: text, title: name, metadata: metadata(name, dispatch, result) }
-                } finally {
-                  call.ctx = undefined
-                  if (--active.turnDepth === 0) active.append("turn/end", {})
-                }
-              })
+                })
+              }
+              if (isConcurrencySafeCall(name, converted)) return runCall()
+              return queues.run(ctx.sessionID, ctx.abort, runCall)
             },
           }
           output.tools[name] = projected

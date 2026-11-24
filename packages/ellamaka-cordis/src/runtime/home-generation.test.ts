@@ -605,14 +605,14 @@ local["writeFileSync"]("x", "y")
     }
   })
 
-  it("keeps the known Home writers and indirect payload sources registered", () => {
+  it("keeps the known Home writers registered and excludes code-only layers", () => {
     for (const path of [
       "packages/ellamaka-cordis/src/dsh-web.ts",
       "packages/ellamaka-cordis/src/diagnostics/dump-config.ts",
-      "packages/ellamaka-cordis/src/runtime/tools-profile.ts",
     ]) {
       expect(DSH_HOME_GENERATION_INPUTS).toContain(path)
     }
+    expect(DSH_HOME_GENERATION_INPUTS).not.toContain("packages/ellamaka-cordis/src/runtime/tools-profile.ts")
   })
 
   it("ignores test files that write temporary files", () => {

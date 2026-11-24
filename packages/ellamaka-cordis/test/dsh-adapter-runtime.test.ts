@@ -86,6 +86,17 @@ test("built-in adapter preserves installed schemas and runs the real session-fre
     )
     expect(await readFile(join(workspace, "edit.txt"), "utf8")).toBe("after\n")
     expect(edited).toMatchObject({ metadata: { filediff: { before: "before\n", after: "after\n" } } })
+
+    // Without fs-observation-policy and with per-session write serialization,
+    // parallel edits targeting different lines of an unread file both succeed.
+    await writeFile(join(workspace, "parallel.txt"), "line1\nmiddle\nline2\n")
+    const [parallelOne, parallelTwo] = await Promise.all([
+      output.tools.edit.execute({ filePath: "parallel.txt", oldString: "line1", newString: "LINE1" }, ctx),
+      output.tools.edit.execute({ filePath: "parallel.txt", oldString: "line2", newString: "LINE2" }, ctx),
+    ])
+    expect(parallelOne.output).toContain("updated")
+    expect(parallelTwo.output).toContain("updated")
+    expect(await readFile(join(workspace, "parallel.txt"), "utf8")).toBe("LINE1\nmiddle\nLINE2\n")
     await expect(
       output.tools.write.execute(
         { filePath: "denied.txt", content: "denied" },

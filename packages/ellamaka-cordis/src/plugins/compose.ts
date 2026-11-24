@@ -3,8 +3,9 @@ import { createRequire } from "node:module"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { readProfileManifest } from "./profile-manifest.js"
-import { parseDocument, Schema } from "yaml"
+import { parseDocument } from "yaml"
 import { homeProfilesDirOf } from "../runtime/status.js"
+import { DSH_PATCH_ENTRY_LIST_SCHEMA, stripLegacyToolsProductBlock } from "../runtime/tools-profile.js"
 import { resolveProfileModule } from "./profile-resolution.js"
 
 /**
@@ -31,9 +32,7 @@ import { resolveProfileModule } from "./profile-resolution.js"
  * `{ __jsExpr: string }` — the exact node the official closure produces, so
  * parsed user-patch rows match boot's `loadProfile().patches` byte-for-byte.
  */
-const entryListSchema = new Schema({
-  customTags: [{ tag: "tag:yaml.org,2002:js", resolve: (expression: string) => ({ __jsExpr: expression }) }],
-})
+const entryListSchema = DSH_PATCH_ENTRY_LIST_SCHEMA
 
 /**
  * The per-container patch-stack context captured at boot: every
@@ -192,6 +191,12 @@ export function readUserPatchLayer(dshRoot: string, profile: string): unknown[] 
   } catch (error) {
     if ((error as { code?: string }).code === "ENOENT") return []
     throw error
+  }
+  // Legacy homes still carry the old product block in `cordis.patch.yml`.
+  // Strip it in memory so user rows below it apply over the built-in base
+  // without rewriting disk files or taking an exclusive Home lock.
+  if (profile === "ellamaka-tools") {
+    content = stripLegacyToolsProductBlock(content)
   }
   const document = parseDocument(content, { schema: entryListSchema })
   if (document.errors.length > 0) {

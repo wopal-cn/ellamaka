@@ -26,7 +26,12 @@ import { createCordisLogExporter, type EllamakaLogLevel } from "./log-bridge.js"
 import { createDshLogWriter, dshPluginLogFileName } from "./runtime/log.js"
 import { VirtualWebServer, DSH_MOUNT_PREFIX } from "./dsh-virtual-webserver.js"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "./runtime/loader.js"
-import { composeFullPatchStack, resolveUserBundleNames, type DshPluginStackContext } from "./plugins/compose.js"
+import {
+  composeFullPatchStack,
+  readUserPatchLayer,
+  resolveUserBundleNames,
+  type DshPluginStackContext,
+} from "./plugins/compose.js"
 import { createBunHmr } from "./plugins/bun-hmr.js"
 import { createDesktopWorker } from "./plugins/desktop-worker.js"
 import { installProfileModuleRouting, projectRuntimePackages } from "./plugins/profile-resolution.js"
@@ -38,6 +43,7 @@ import { installBunSubprocessCompatibility } from "./runtime/bun-subprocess.js"
 import { managedNodePaths } from "./runtime/managed-node.js"
 import type { DshPluginContainer } from "./plugins/runtime.js"
 import { dshHomeDirOf } from "./runtime/status.js"
+import { TOOLS_BUILTIN_LAYER_NAME, toolsBasePatches } from "./runtime/tools-profile.js"
 import { TOOLS_PROFILE_NAME, WEB_PROFILE_NAME, assertDshProfileResourcesReady } from "./runtime/profile-resources.js"
 import { applicableHomePatches, webExtraPatches, toolsExtraPatches } from "./diagnostics/dump-config.js"
 import type { Entry } from "@deepseek-ai/cordis-plugin-loader"
@@ -580,12 +586,16 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
 
   // Load the profile (bundle layers + user patch layer).
   const profile = loadProfile("ellamaka", profileName, installAnchor, homeDir)
+  const builtinLayers = (): { packageName: string; patches: unknown[] }[] =>
+    profileName === TOOLS_PROFILE_NAME ? [{ packageName: TOOLS_BUILTIN_LAYER_NAME, patches: toolsBasePatches() }] : []
+  const userPatches = readUserPatchLayer(dshRoot, profileName)
   // Home rows target entries by id. The standalone tools composition contains
   // only the entries it declares, so host rows for dsh-base services are not
   // applied there (official patch loading warns on every absent id).
   const homePatches = applicableHomePatches(homeDir, [
+    ...builtinLayers().flatMap((layer) => layer.patches as Record<string, unknown>[]),
     ...profile.layers.flatMap((layer) => layer.patches as Record<string, unknown>[]),
-    ...(profile.patches as Record<string, unknown>[]),
+    ...(userPatches as Record<string, unknown>[]),
     ...extraPatches,
   ])
   // The plugin layer (D-04): composed from the store — the single source of
@@ -593,7 +603,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   // is layer order; profiles never carry a bundles manifest for plugins.
   // Bare names resolve at this composition point (B1 拆雷): Bridge-owned rows
   // reach the Loader as absolute file:// URLs (closure -> profiles order).
-  // The full patch stack (official bundle layers -> user -> extras -> home),
+  // The full patch stack (built-in base / official bundle layers -> user -> extras -> home),
   // composed by the ONE function the hot replay also calls (rook B-01): boot
   // and hot reload are the same composition. EVERY manifest bundle — official
   // or user plugin — is an official loadProfile layer (full official parse);
@@ -602,15 +612,17 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     // A closure over the official loader: a hot replay recomposes FRESH so a
     // plugin installed after boot mounts on the next replay (official
     // reconcilePlugins semantics); bare names resolve per composition (B1 拆雷).
-    profileLayers: (): { packageName: string; patches: unknown[] }[] =>
-      resolveUserBundleNames(
+    profileLayers: (): { packageName: string; patches: unknown[] }[] => [
+      ...builtinLayers(),
+      ...(resolveUserBundleNames(
         loadProfile("ellamaka", profileName, installAnchor, homeDir).layers.map((layer) => ({
           packageName: layer.packageName,
           patches: layer.patches,
         })),
         { installAnchor, dshRoot, profile: profileName },
-      ) as { packageName: string; patches: unknown[] }[],
-    userPatches: profile.patches,
+      ) as { packageName: string; patches: unknown[] }[]),
+    ],
+    userPatches,
     extraPatches,
     homePatches,
   }
@@ -677,8 +689,9 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
     get overlays() {
       const current = loadProfile("ellamaka", profileName, installAnchor, homeDir)
       const layers = [
+        ...builtinLayers().flatMap((layer) => layer.patches),
         ...current.layers.flatMap((layer) => layer.patches),
-        ...current.patches,
+        ...readUserPatchLayer(dshRoot, profileName),
         ...extraPatches,
         ...homePatches,
       ]
@@ -833,8 +846,7 @@ async function mountProfile(ctx: Context, opts: MountProfileOptions): Promise<Ds
   })
   await bunHmr.mount()
   const refresh = async () => {
-    const profile = loadProfile("ellamaka", profileName, installAnchor, homeDir)
-    const patches = composeFullPatchStack({ ...stackContext, userPatches: profile.patches })
+    const patches = composeFullPatchStack({ ...stackContext, userPatches: readUserPatchLayer(dshRoot, profileName) })
     await runtime.appBoot.reconcileProfilePatches(
       ctx as unknown as Parameters<typeof runtime.appBoot.reconcileProfilePatches>[0],
       patches as Parameters<typeof runtime.appBoot.reconcileProfilePatches>[1],

@@ -4,7 +4,10 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import type { ConfigDumpLayer as OfficialConfigDumpLayer } from "@deepseek-ai/dsh-app-boot"
 import { createPackageDshRuntimeApi, type DshRuntimeApi } from "../runtime/loader.js"
+import { TOOLS_PROFILE_NAME } from "../runtime/profile-resources.js"
 import { dshHomeDirOf } from "../runtime/status.js"
+import { TOOLS_BUILTIN_LAYER_NAME, toolsBasePatches } from "../runtime/tools-profile.js"
+import { readUserPatchLayer } from "../plugins/compose.js"
 
 const require = createRequire(import.meta.url)
 
@@ -252,6 +255,15 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
   const profile = runtime.appBoot.loadProfile("ellamaka", options.profileName, installAnchor, homeDir, {
     userLayer: options.defaultOnly === true ? false : undefined,
   })
+  const bundleLayers =
+    options.profileName === TOOLS_PROFILE_NAME
+      ? [
+          { packageName: TOOLS_BUILTIN_LAYER_NAME, patches: toolsBasePatches() as OfficialPatchOptions[] },
+          ...profile.layers,
+        ]
+      : profile.layers
+  const userPatches =
+    options.defaultOnly === true ? [] : (readUserPatchLayer(dshRoot, options.profileName) as OfficialPatchOptions[])
 
   const rootConfig = join(profile.dir, "cordis.yml")
   // The dump anchors on the same empty root file the boot includes
@@ -289,8 +301,8 @@ export async function composeDshDumpProfileLayers(options: DumpDshConfigOptions)
       patchPath: profile.patchPath,
       // EVERY manifest bundle is an official loadProfile layer (official or
       // user plugin) — the official dump semantics, verbatim.
-      layers: profile.layers,
-      patches: profile.patches,
+      layers: bundleLayers,
+      patches: userPatches,
     },
     extraPatches: extra,
     homePatches: options.defaultOnly === true ? [] : homePatches(homeDir),

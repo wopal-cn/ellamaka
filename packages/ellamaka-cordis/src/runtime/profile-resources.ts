@@ -3,7 +3,7 @@ import { join } from "node:path"
 import { isMap, isSeq, parseDocument } from "yaml"
 import type { DshRuntimeApi } from "./loader.js"
 import { resolveDshLayout } from "./status.js"
-import { TOOLS_PROFILE_BLOCK, TOOLS_PROFILE_BLOCK_BEGIN, TOOLS_PROFILE_BLOCK_END } from "./tools-profile.js"
+import { TOOLS_PROFILE_BLOCK_BEGIN, TOOLS_PROFILE_BLOCK_END } from "./tools-profile.js"
 
 /** Host-owned DSH profile resources and the one-time legacy patch cleanup. */
 
@@ -167,16 +167,15 @@ function planLegacyToolsPatchCleanup(content: string): LegacyCleanupPlan | null 
   if (!selfIdentified && (legacyRows.length === 0 || userRows.length > 0)) return null
 
   // A self-identified file with no user row is the retired template end to
-  // end (its header, sections, comments and rows). Nothing in it is worth
-  // preserving except the product block, so the stale scaffold is replaced
-  // wholesale instead of being line-patched into a comment graveyard.
+  // end (its header, sections, comments and rows). The product composition now
+  // lives in code rather than on disk, so collapse it back to an empty array.
   if (selfIdentified && userRows.length === 0) {
     const removable = legacyRows.every((row) => isMap(row) && row.range !== undefined)
     if (!removable) return { ranges: [], blocked: true }
     return {
       ranges: [],
       blocked: false,
-      replacement: block === null ? "[]\n" : content.slice(block.start, block.end),
+      replacement: "[]\n",
     }
   }
   if (legacyRows.length === 0) return null
@@ -240,18 +239,6 @@ function cleanLegacyToolsPatch(content: string): string | null {
   return applyCleanupRanges(content, plan.ranges)
 }
 
-/** Whether the profile carries the current product composition block. */
-function toolsCompositionCurrent(toolsPatch: string): boolean {
-  if (!existsSync(toolsPatch)) return false
-  try {
-    const content = readFileSync(toolsPatch, "utf8")
-    const block = productBlockSpan(content)
-    return block !== null && content.slice(block.start, block.end) === TOOLS_PROFILE_BLOCK
-  } catch {
-    return false
-  }
-}
-
 /** The official empty home-level patch layer (dsh PROFILE_PATCH_TEMPLATE). */
 export const OFFICIAL_HOME_PATCH_TEMPLATE = `# Your patch layer for this dsh profile, applied after every bundle layer:
 # a top-level YAML array of loader patch entries (id-targeted config
@@ -292,46 +279,6 @@ function baseBackedToolsManifest(file: string) {
   return manifest
 }
 
-/** Replace only the product-owned block; user bytes outside it stay verbatim. */
-function standaloneToolsPatch(content: string): string {
-  const begin = content.indexOf(TOOLS_PROFILE_BLOCK_BEGIN)
-  const end = content.indexOf(TOOLS_PROFILE_BLOCK_END)
-  if (begin !== -1 || end !== -1) {
-    if (begin === -1 || end === -1 || end < begin) {
-      throw new Error(
-        "DSH tools profile composition markers are incomplete; restore both marker lines before preparation",
-      )
-    }
-    const current = content.slice(begin, end + TOOLS_PROFILE_BLOCK_END.length)
-    if (current === TOOLS_PROFILE_BLOCK) return content
-    const next = content.slice(0, begin) + TOOLS_PROFILE_BLOCK + content.slice(end + TOOLS_PROFILE_BLOCK_END.length)
-    const composed = parseDocument(next)
-    if (composed.errors.length || !isSeq(composed.contents)) {
-      throw new Error(
-        "DSH tools profile patch is invalid after refreshing the product composition; preserve it and resolve the YAML conflict",
-      )
-    }
-    return next
-  }
-  const document = parseDocument(content)
-  if (document.errors.length || !isSeq(document.contents)) {
-    throw new Error("DSH tools profile patch must be a valid top-level YAML array before standalone preparation")
-  }
-  const sequence = document.contents
-  const tail =
-    sequence.items.length === 0 && sequence.range
-      ? content.slice(0, sequence.range[0]) + content.slice(sequence.range[1])
-      : content
-  const next = TOOLS_PROFILE_BLOCK + "\n" + tail
-  const composed = parseDocument(next)
-  if (composed.errors.length || !isSeq(composed.contents)) {
-    throw new Error(
-      "DSH tools profile patch cannot be combined with the standalone composition; preserve it and resolve the YAML conflict",
-    )
-  }
-  return next
-}
-
 /** Whether a tools patch still carries rows owned by the retired host template. */
 function needsLegacyToolsPatchCleanup(toolsPatch: string): boolean {
   if (!existsSync(toolsPatch)) return false
@@ -362,15 +309,8 @@ export function inspectDshProfileResources(
   // A retired host-owned patch still needs its one-time cleanup before the
   // profile is ready; that state stays internal (no version-specific field).
   const needsToolsPatchCleanup = tools && needsLegacyToolsPatchCleanup(paths.toolsPatch)
-  // The process only rewrites the block when it is actually stale, so a
-  // matching composition is never re-assembled on an ordinary boot.
-  const toolsCompositionDrifted = tools && !toolsCompositionCurrent(paths.toolsPatch)
   return {
-    ready:
-      missing.length === 0 &&
-      !needsToolsPatchCleanup &&
-      !toolsCompositionDrifted &&
-      (!tools || !baseBackedToolsManifest(paths.toolsManifest)),
+    ready: missing.length === 0 && !needsToolsPatchCleanup && (!tools || !baseBackedToolsManifest(paths.toolsManifest)),
     missing,
   }
 }
@@ -416,18 +356,13 @@ export function prepareDshProfileResourcesAtRoot(
     if (cleaned !== null && cleaned !== current) writeFileSync(paths.toolsPatch, cleaned)
   }
 
-  if (tools) {
-    const current = readFileSync(paths.toolsPatch, "utf8")
-    const next = standaloneToolsPatch(current)
-    if (next !== current) writeFileSync(paths.toolsPatch, next)
-    // Publish the manifest last. If interrupted, the unchanged base selection
-    // causes preparation to retry without inserting the composition twice.
-    if (baseManifest) {
-      baseManifest.dsh.profile.bundles = baseManifest.dsh.profile.bundles.filter(
-        (name: string) => name !== "@deepseek-ai/dsh-base",
-      )
-      writeFileSync(paths.toolsManifest, JSON.stringify(baseManifest, null, 2) + "\n")
-    }
+  if (tools && baseManifest) {
+    // Drop `@deepseek-ai/dsh-base` from legacy base-backed manifests once; the
+    // built-in tools composition now lives in code beneath the user patch layer.
+    baseManifest.dsh.profile.bundles = baseManifest.dsh.profile.bundles.filter(
+      (name: string) => name !== "@deepseek-ai/dsh-base",
+    )
+    writeFileSync(paths.toolsManifest, JSON.stringify(baseManifest, null, 2) + "\n")
   }
 
   // Self-heal a BLANK home-level patch layer: an empty (or whitespace-only)

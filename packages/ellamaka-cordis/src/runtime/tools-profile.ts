@@ -1,3 +1,5 @@
+import { parseDocument, Schema } from "yaml"
+
 /** Standard DSH YAML rows for the session-free tools container. */
 export const TOOLS_PROFILE_ROWS = `# Ellamaka session-free tools composition. Standard DSH profile patch syntax.
 - insert:
@@ -51,6 +53,7 @@ export const TOOLS_PROFILE_ROWS = `# Ellamaka session-free tools composition. St
         enableRunInBackground: false
     - id: fs-observation-policy
       name: '@deepseek-ai/dsh-fs-observation-policy'
+      disabled: true
     - id: tool-fs
       name: '@deepseek-ai/dsh-tool-fs'
     - id: tool-fs-search
@@ -78,9 +81,47 @@ export const TOOLS_PROFILE_ROWS = `# Ellamaka session-free tools composition. St
 
 `
 
+export const TOOLS_BUILTIN_LAYER_NAME = "ellamaka-tools (built-in)"
+
+/**
+ * The entry-list YAML dialect (official `entryListSchema`): default YAML
+ * extended with a `!!js` scalar returning `{ __jsExpr: string }`.
+ */
+export const DSH_PATCH_ENTRY_LIST_SCHEMA = new Schema({
+  customTags: [{ tag: "tag:yaml.org,2002:js", resolve: (expression: string) => ({ __jsExpr: expression }) }],
+})
+
 export const TOOLS_PROFILE_BLOCK_BEGIN =
   "# >>> ellamaka-tools composition (product-owned; refreshed with the DSH closure)\n"
 export const TOOLS_PROFILE_BLOCK_END = "# <<< ellamaka-tools composition\n"
 
-/** The complete product-owned block written into the profile patch layer. */
+/** Legacy delimited block kept for stripping historical disk copies and test fixtures. */
 export const TOOLS_PROFILE_BLOCK = TOOLS_PROFILE_BLOCK_BEGIN + TOOLS_PROFILE_ROWS + TOOLS_PROFILE_BLOCK_END
+
+/** Remove any legacy product-owned block from an existing `cordis.patch.yml` text in memory. */
+export function stripLegacyToolsProductBlock(content: string): string {
+  const start = content.indexOf(TOOLS_PROFILE_BLOCK_BEGIN)
+  const end = content.indexOf(TOOLS_PROFILE_BLOCK_END)
+  if (start === -1 || end === -1 || end < start) return content
+  return content.slice(0, start) + content.slice(end + TOOLS_PROFILE_BLOCK_END.length)
+}
+
+let cachedToolsBasePatches: unknown[] | undefined
+
+/** Parsed built-in product base layer for `ellamaka-tools`, injected in memory beneath user patches. */
+export function toolsBasePatches(): unknown[] {
+  if (!cachedToolsBasePatches) {
+    const document = parseDocument(TOOLS_PROFILE_ROWS, { schema: DSH_PATCH_ENTRY_LIST_SCHEMA })
+    if (document.errors.length > 0) {
+      throw new Error(
+        `ellamaka-cordis: invalid built-in tools composition: ${document.errors.map((e) => e.message).join("; ")}`,
+      )
+    }
+    const items = (document.contents as { items?: unknown } | null)?.items
+    if (!Array.isArray(items)) {
+      throw new Error("ellamaka-cordis: built-in tools composition must be a YAML sequence")
+    }
+    cachedToolsBasePatches = items.map((row) => (row as { toJSON?: () => unknown }).toJSON?.() ?? row)
+  }
+  return structuredClone(cachedToolsBasePatches)
+}

@@ -31,30 +31,30 @@ Ellamaka Session 继续拥有普通工具的执行授权、消息和工具调用
 
 ProfileRuntime、依赖解析、完整补丁与 mutation queue 遵循 [DSH 基础设计](./DESIGN-dsh-base.md)。
 
-`ellamaka-tools` 是从空 Cordis 根独立装配的无会话工具 profile。它使用官方 profile、bundle 与 YAML `insert` 格式，直接声明所需工具和基础服务；`dsh.profile.bundles` 的初始选择不包含 `@deepseek-ai/dsh-base`。产品维护最小工具装配声明，用户在标准 profile 补丁中配置插件，并通过官方插件安装流程添加外部包与 bundle。
+`ellamaka-tools` 是从空 Cordis 根独立装配的无会话工具 profile。它使用代码内置的只读基础声明，加上官方 profile、bundle 与用户补丁层进行装配；`dsh.profile.bundles` 的初始选择不包含 `@deepseek-ai/dsh-base`。产品基础声明保留在代码层中随发布同步，不在用户共享的 `cordis.patch.yml` 中来回落盘；用户在标准 profile 补丁中配置插件与覆盖项，并通过官方插件安装流程添加外部包与 bundle。
 
-装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端，后台 shell 执行关闭。DSH `@deepseek-ai/dsh-tools` 提供工具注册表，`@deepseek-ai/dsh-tool-executor-native` 负责普通工具调用。Tools profile 不加载 PTC Runtime 或 PTC Executor。`session-projection` 提供策略折叠，`approval` 承接单次提权。`tool-fs` 沿用默认的 `applyPatch: false`，并且 adapter 不投影 `apply_patch`。容器保持无持久 DSH Session 的边界。
+装配内容以本文的能力采用表和实际依赖为准。工具消费的基础服务在声明中明确列出；插件自身提供的默认配置直接复用，产品只声明必要的行为参数。文件与平台 shell 采用沙箱后端，后台 shell 执行关闭。DSH `@deepseek-ai/dsh-tools` 提供工具注册表，`@deepseek-ai/dsh-tool-executor-native` 负责普通工具调用。`fs-observation-policy` 沿用 DSH 默认的 `disabled: true`（不强制以内存读取表阻断 `edit`/`write`，用户可在 `cordis.patch.yml` 中以 `disabled: false` 启用）。Tools profile 不加载 PTC Runtime 或 PTC Executor。`session-projection` 提供策略折叠，`approval` 承接单次提权。`tool-fs` 沿用默认的 `applyPatch: false`，并且 adapter 不投影 `apply_patch`。容器保持无持久 DSH Session 的边界。
 
 插件包与服务的选择由标准配置表达。宿主按官方声明加载、解析并报告激活结果；不增加 `adopt` 字段、整棵 `dsh-base` 的禁用表，或通过扫描上游源码推导并改写装配的机制。必要的 Bun/Electron 宿主接线归基础设计。
 
-产品在 tools 补丁中维护一个有明确首尾注释边界的装配块，块后为用户内容。准备阶段比较该块与产品声明：一致即整步跳过，普通启动不重写补丁层；当 closureVersion、产品装配或宿主布局与当前声明不一致时，只刷新该装配块，块外用户字节原样保留。这是产品装配与用户覆盖的唯一交界。宿主模板中的无效注释骨架与指向不存在上游条目的失效行属于宿主文本，由规范化刷新清理，不与用户内容混同。用户插件、bundle 与配置继续使用官方 profile 声明。`cordis.yml` 仍为每次准备与挂载前重置的空合成根。
+产品基础装配保留在代码中（与 `web` 的只读 bundle 底座一致），不再往 `ellamaka-tools/cordis.patch.yml` 写入托管块或因更新产品默认配置而抢占 Home 排他锁；对于历史上已写入过 `# >>> ellamaka-tools composition ... # <<<` 托管块的旧 `cordis.patch.yml`，读取用户补丁层时在内存中自动跳过该旧块、仅保留其后的用户配置，不改写磁盘文件。宿主仅确保空 `cordis.yml` 根锚点与一次性清理更早期的退役静态禁用模板。
 
 ### 补丁层的顺序规则与插件安装
 
-tools profile 的补丁层按固定顺序合成：bundle 层的 patch → 产品装配块 → 块后的用户行。Loader 的 patch 只能作用于**本层之前已经存在**的行，因此这条顺序决定了插件该怎么装：
+tools profile 的补丁层按固定顺序合成：代码内置产品基础层 → bundle 层的 patch → 用户 `cordis.patch.yml` → bridge extra/home patches。Loader 的 patch 只能作用于**本层之前已经存在**的行，因此这条顺序决定了插件该怎么装：
 
-- **产品装配块**（首尾注释之间）声明工具容器必需的插件行。升级时整块刷新，块内内容不承载用户意图。
-- **块后的用户行**在上游之后应用，可以按 id 覆盖产品行的 config、或 `disabled: true` 关掉产品行。升级刷新产品块时这些行逐字保留，顺序也不变。
-- **bundle 层**位于两者之前，所以 bundle 自带的 disable 行**无法**关闭产品块插入的行；把替换型插件的 bundle 选进 `dsh.profile.bundles` 只会让替换行与产品行同时存在，造成服务重复注册。
+- **代码内置产品基础层**声明工具容器必需的插件与默认开关。跟随产品构建生效，不占用用户文件，也允许同机不同版本实例共用同一个 Home 并各自采用自身内置声明。
+- **用户 `cordis.patch.yml`** 位于产品基础层之后，纯粹承载用户意图（可按 id 覆盖产品行的 config，或 `disabled: true/false` 开关产品行）；修改后通过热重载动态应用到运行中的实例。
+- **bundle 层**位于用户层之前、内置基础层之后，因此一般无需也不能在 bundle 中替代产品内置行；替换型插件应在安装后由用户补丁禁用被替换行。
 
 据此，tools profile 的插件装配分两类：
 
-| 情形                                       | 做法                                                                                                                          |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| 追加型插件（新增独立能力，不替换产品行）   | `ellamaka dsh plugin --profile ellamaka-tools add <包目录或包名>`，bundle 层正常生效                                          |
-| 替换型插件（替换产品已声明的行，如沙箱链） | 同样用 `ellamaka dsh plugin add` 安装包，但把 `dsh.profile.bundles` 保持为空，并在**块后**手写 disable 产品行 + insert 插件行 |
+| 情形                                       | 做法                                                                                                                                      |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 追加型插件（新增独立能力，不替换产品行）   | `ellamaka dsh plugin --profile ellamaka-tools add <包目录或包名>`，bundle 层正常生效                                                      |
+| 替换型插件（替换产品已声明的行，如沙箱链） | 同样用 `ellamaka dsh plugin add` 安装包，但把 `dsh.profile.bundles` 保持为空，并在 `cordis.patch.yml` 手写 disable 产品行 + insert 插件行 |
 
-替换型的典型例子是 `@wopal/dsh-sandbox-roots`：它在 tools 中替换 `sandbox`、`sandbox-policy`、`fs-sandbox` 三条 stock 行。装配写在块后，`writableRoots` 也写在该行 config 中，因此该列表归用户所有——产品块刷新不会覆盖它。
+替换型的典型例子是 `@wopal/dsh-sandbox-roots`：它在 tools 中替换 `sandbox`、`sandbox-policy`、`fs-sandbox` 三条 stock 行。该配置保存在用户的 `cordis.patch.yml` 中，`writableRoots` 也写在该行 config 中，产品更新永远不会覆盖或锁住它。
 
 补丁覆盖是**整块替换 config**，不做深合并：覆盖 `sandbox-roots-policy` 时需同时重述 `mode` 与 `workspaceRoot`。缺少被引用的插件包时容器按 fail-closed 拒绝启动并报出条目名，不会静默降级。
 
@@ -105,14 +105,14 @@ adapter 只依赖公开 Plugin SDK，不导入 opencode 内部模块。配置、
 
 Ellamaka 内部的 dsh-adapter 通过 tool.provider 在每次模型请求读取容器的 live schemas，确定性投影、排序并覆盖采用的同名工具。schema 随实际插件状态变化，参数转换与工具结果映射由 adapter 拥有。
 
-| 消费面         | 契约                                                                      |
-| -------------- | ------------------------------------------------------------------------- |
-| schema         | 动态读取 registry，保留所需参数与描述；Bash 的 description 随 schema 投影 |
-| 参数           | 固定的参数名转换，执行时反向转换；其余参数保持原名                        |
-| Shell 平台映射 | Windows 将 pwsh 的实际 schema/dispatch 映射到现有逻辑 shell 工具名        |
-| 结果           | content 为模型输出，value 为完整文件结果，meta 为补充差异与执行信息       |
-| 权限           | 执行前复用 Ellamaka 读写与外部目录门禁；平台映射使用逻辑工具权限          |
-| 生命周期       | 实际执行交由 registry，取消、超时与清理由 provider 拥有                   |
+| 消费面         | 契约                                                                                                                                                                                                                                   |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| schema         | 动态读取 registry，保留所需参数与描述；Bash 的 description 随 schema 投影                                                                                                                                                              |
+| 参数           | 固定的参数名转换，执行时反向转换；其余参数保持原名                                                                                                                                                                                     |
+| Shell 平台映射 | Windows 将 pwsh 的实际 schema/dispatch 映射到现有逻辑 shell 工具名                                                                                                                                                                     |
+| 结果           | content 为模型输出，value 为完整文件结果，meta 为补充差异与执行信息                                                                                                                                                                    |
+| 权限           | 执行前复用 Ellamaka 读写与外部目录门禁；平台映射使用逻辑工具权限                                                                                                                                                                       |
+| 生命周期       | 实际执行交由 registry，取消、超时与清理由 provider 拥有；`dsh-adapter` 对同会话内的非并发安全调用（`edit`、`write`、`str_replace_editor` 非 `view` 命令、`bash`）串行排队，保持 `read`、`glob`、`grep`、`str_replace_editor view` 并发 |
 
 文件能力整套采用，读取观测与后续编辑共享同一后端。这里严格区分 **profile 加载失败** 与 **工具调用失败**：
 

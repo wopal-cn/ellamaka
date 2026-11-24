@@ -22,6 +22,7 @@ import {
   healPluginsModuleFallback,
   removePluginSymlink,
 } from "../src/plugins/compose"
+import { TOOLS_PROFILE_BLOCK, toolsBasePatches } from "../src/runtime/tools-profile"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 
 function tempRoot(): string {
@@ -120,6 +121,27 @@ describe("readUserPatchLayer (fresh user patch replay)", () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].id).toBe("settings")
     expect(rows[0].config.mode).toEqual({ __jsExpr: "process.env.MODE ?? 'a'" })
+  })
+
+  test("strips a legacy ellamaka-tools product block in memory while keeping trailing user overrides", () => {
+    const root = tempRoot()
+    const toolsDir = profileDirOf(root, "ellamaka-tools")
+    mkdirSync(toolsDir, { recursive: true })
+    const patchFile = join(toolsDir, "cordis.patch.yml")
+
+    writeFileSync(patchFile, TOOLS_PROFILE_BLOCK)
+    expect(readUserPatchLayer(root, "ellamaka-tools")).toEqual([])
+
+    const swap = "\n- id: sandbox\n  disabled: true\n"
+    writeFileSync(patchFile, TOOLS_PROFILE_BLOCK + swap)
+    expect(readUserPatchLayer(root, "ellamaka-tools")).toEqual([{ id: "sandbox", disabled: true }])
+  })
+
+  test("toolsBasePatches supplies the built-in tools composition with fs-observation-policy disabled", () => {
+    const patches = toolsBasePatches() as { insert?: { id?: string; disabled?: unknown }[] }[]
+    const insertRows = patches.flatMap((row) => row.insert ?? [])
+    const policy = insertRows.find((row) => row.id === "fs-observation-policy")
+    expect(policy).toMatchObject({ id: "fs-observation-policy", disabled: true })
   })
 })
 

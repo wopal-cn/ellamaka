@@ -19,6 +19,8 @@ import { connect } from "node:net"
 import { Context } from "@deepseek-ai/cordis"
 import { bootDshWeb, mountDshWeb, mountDshTools, verifyDshPtcBinding } from "../src/dsh-web"
 import { createDshRuntimeApi, createPackageDshRuntimeApi, type DshRuntimeApi } from "../src/runtime/loader"
+import { inspectDshProfileResources } from "../src/runtime/profile-resources"
+import { TOOLS_PROFILE_BLOCK } from "../src/runtime/tools-profile"
 import { appendBundle, readProfileManifest, withProfileManifestWrite } from "../src/plugins/profile-manifest"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
 import { scopedEnv } from "./fixture/process-env"
@@ -982,15 +984,13 @@ describe("dsh tools profile", () => {
       expect((await execute("read", { file_path: "created.txt" })).isError).toBe(false)
 
       writeFileSync(join(workspace, "edit.txt"), "before")
-      const unreadEdit = await execute("edit", { file_path: "edit.txt", old_string: "before", new_string: "after" })
-      expect(unreadEdit.isError).toBe(true)
-      expect(unreadEdit.error?.info?.code).toBe("FS_NOT_OBSERVED")
-
-      expect((await execute("read", { file_path: "edit.txt" })).isError).toBe(false)
       expect(
         (await execute("edit", { file_path: "edit.txt", old_string: "before", new_string: "after" })).isError,
       ).toBe(false)
       expect(readFileSync(join(workspace, "edit.txt"), "utf-8")).toBe("after")
+      const mismatch = await execute("edit", { file_path: "edit.txt", old_string: "missing", new_string: "other" })
+      expect(mismatch.isError).toBe(true)
+      expect(mismatch.error?.info?.code).toBe("FS_EDIT_NOT_FOUND")
 
       const denied = await execute("write", {
         file_path: join(homedir(), `.dsh-tools-denied-${Date.now()}.txt`),
@@ -1001,6 +1001,46 @@ describe("dsh tools profile", () => {
     } finally {
       await host.dispose()
       await ctx.fiber.dispose()
+    }
+  }, 60_000)
+
+  test("ignores a stale legacy tools composition block on disk without rewriting or enabling fs-observation-policy", async () => {
+    const wopalHome = mkdtempSync(join(tmpdir(), "dsh-tools-legacy-block-"))
+    const home = join(wopalHome, "dsh")
+    const workspace = mkdtempSync(join(tmpdir(), "dsh-tools-legacy-ws-"))
+    prepareDshProfiles(home)
+    const patchPath = join(home, "home", "profiles", "ellamaka-tools", "cordis.patch.yml")
+    // Simulate an older persisted cordis.patch.yml whose product block did not disable fs-observation-policy.
+    const oldBlock = TOOLS_PROFILE_BLOCK.replace(
+      "    - id: fs-observation-policy\n      name: '@deepseek-ai/dsh-fs-observation-policy'\n      disabled: true\n",
+      "    - id: fs-observation-policy\n      name: '@deepseek-ai/dsh-fs-observation-policy'\n",
+    )
+    expect(oldBlock).not.toBe(TOOLS_PROFILE_BLOCK)
+    const legacyContent = oldBlock + "\n# user customization kept intact\n- { id: custom-noop, disabled: true }\n"
+    writeFileSync(patchPath, legacyContent)
+
+    expect(inspectDshProfileResources(wopalHome)).toEqual({ ready: true, missing: [] })
+
+    const ctx = new Context()
+    const host = await mountDshTools(ctx, { home, port: 0 })
+    try {
+      expect(readFileSync(patchPath, "utf8")).toBe(legacyContent)
+      writeFileSync(join(workspace, "unread.txt"), "before")
+      const session = makeSessionFake("tools-legacy-block", workspace)
+      const edited = await executeNativeTool(
+        ctx,
+        "tools-legacy-edit",
+        "edit",
+        { file_path: "unread.txt", old_string: "before", new_string: "after" },
+        { session },
+      )
+      expect(edited.isError).toBe(false)
+      expect(readFileSync(join(workspace, "unread.txt"), "utf-8")).toBe("after")
+    } finally {
+      await host.dispose()
+      await ctx.fiber.dispose()
+      rmSync(wopalHome, { recursive: true, force: true })
+      rmSync(workspace, { recursive: true, force: true })
     }
   }, 60_000)
 
@@ -1066,8 +1106,8 @@ describe("dsh tools profile", () => {
         old_str: "before",
         new_str: "after",
       })
-      expect(unseen.isError).toBe(true)
-      expect(unseen.error?.info?.code).toBe("FS_NOT_OBSERVED")
+      expect(unseen.isError).toBe(false)
+      expect(readFileSync(join(workspace, "unseen.txt"), "utf-8")).toBe("after")
       expect((await execute({ command: "view", path: "relative.txt" })).isError).toBe(true)
 
       const denied = await execute({

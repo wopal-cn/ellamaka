@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { tool, type ToolContext, type ToolDefinition } from "@wopal/ellamaka-plugin"
-import { dshAdapter, DshAdapterError, trackDshToolsInitialization } from "../src/dsh-adapter/index"
+import {
+  dshAdapter,
+  DshAdapterError,
+  SessionExclusiveQueues,
+  trackDshToolsInitialization,
+} from "../src/dsh-adapter/index"
 import { scopedEnv } from "./fixture/process-env"
 
 const globals = globalThis as Record<string, unknown>
@@ -474,5 +479,324 @@ describe("built-in dsh adapter", () => {
       ),
     ).rejects.toThrow("cancelled")
     await hook.dispose?.()
+  })
+
+  test("serializes mutating and shell calls on the same session while leaving view/search calls concurrent", async () => {
+    const pool = container()
+    const hook = await dshAdapter(input())
+    const tools = await projected(hook)
+
+    const firstEntered = Promise.withResolvers<void>()
+    const releaseFirst = Promise.withResolvers<void>()
+    const events: string[] = []
+    let activeMutating = 0
+    let maxConcurrentMutating = 0
+
+    pool.run(async (call) => {
+      activeMutating += 1
+      maxConcurrentMutating = Math.max(maxConcurrentMutating, activeMutating)
+      const label = call.arguments.file_path
+      events.push(`enter:${label}`)
+      try {
+        if (label === "first") {
+          firstEntered.resolve()
+          await releaseFirst.promise
+        }
+        return { isError: false, content: [{ type: "text", text: "ok" }] }
+      } finally {
+        events.push(`exit:${label}`)
+        activeMutating -= 1
+      }
+    })
+
+    // Parallel edits on the same session must run strictly sequentially.
+    const edit1 = tools.edit.execute({ filePath: "first", oldString: "a", newString: "b" }, context())
+    await firstEntered.promise
+    const edit2 = tools.edit.execute({ filePath: "second", oldString: "a", newString: "b" }, context())
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toEqual(["enter:first"])
+    releaseFirst.resolve()
+    await Promise.all([edit1, edit2])
+    expect(events).toEqual(["enter:first", "exit:first", "enter:second", "exit:second"])
+    expect(maxConcurrentMutating).toBe(1)
+
+    // A failure in the first queued mutation does not stall the second queued call.
+    const eFirst = Promise.withResolvers<void>()
+    const rFirst = Promise.withResolvers<void>()
+    events.length = 0
+    pool.run(async (call) => {
+      events.push(`seq:${call.arguments.file_path}`)
+      if (call.arguments.file_path === "fail-first") {
+        eFirst.resolve()
+        await rFirst.promise
+        return { isError: true, content: [{ type: "text", text: "boom" }], error: { message: "boom" } }
+      }
+      return { isError: false, content: [{ type: "text", text: "recovered" }] }
+    })
+    const failing = tools.edit.execute({ filePath: "fail-first", oldString: "a", newString: "b" }, context())
+    await eFirst.promise
+    const recovered = tools.edit.execute({ filePath: "after-fail", oldString: "a", newString: "b" }, context())
+    rFirst.resolve()
+    await expect(failing).rejects.toThrow("boom")
+    await expect(recovered).resolves.toMatchObject({ output: "recovered" })
+    expect(events).toEqual(["seq:fail-first", "seq:after-fail"])
+
+    // Non-view str_replace_editor calls serialize on the same session; view stays concurrent.
+    const sreEntered = Promise.withResolvers<void>()
+    const sreRelease = Promise.withResolvers<void>()
+    let sreSecondStarted = false
+    pool.run(async (call) => {
+      if (call.arguments.path === "s1") {
+        sreEntered.resolve()
+        await sreRelease.promise
+      } else {
+        sreSecondStarted = true
+      }
+      return { isError: false, content: [{ type: "text", text: "ok" }] }
+    })
+    const sre1 = tools.str_replace_editor.execute({ command: "str_replace", path: "s1" }, context())
+    await sreEntered.promise
+    const sre2 = tools.str_replace_editor.execute({ command: "str_replace", path: "s2" }, context())
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(sreSecondStarted).toBe(false)
+    sreRelease.resolve()
+    await Promise.all([sre1, sre2])
+    expect(sreSecondStarted).toBe(true)
+
+    const viewEntered = Promise.withResolvers<void>()
+    const viewRelease = Promise.withResolvers<void>()
+    let concurrentViewRan = false
+    pool.run(async (call) => {
+      if (call.arguments.path === "v1") {
+        viewEntered.resolve()
+        await viewRelease.promise
+      } else {
+        concurrentViewRan = true
+      }
+      return { isError: false, content: [{ type: "text", text: "ok" }] }
+    })
+    const view1 = tools.str_replace_editor.execute({ command: "view", path: "v1" }, context())
+    await viewEntered.promise
+    await tools.str_replace_editor.execute({ command: "view", path: "v2" }, context())
+    expect(concurrentViewRan).toBe(true)
+    viewRelease.resolve()
+    await view1
+
+    // Different sessions do not block each other's edits.
+    const diffSessEntered = Promise.withResolvers<void>()
+    const diffSessRelease = Promise.withResolvers<void>()
+    let diffSessConcurrent = false
+    pool.run(async (call) => {
+      if (call.arguments.file_path === "sa") {
+        diffSessEntered.resolve()
+        await diffSessRelease.promise
+      } else {
+        diffSessConcurrent = true
+      }
+      return { isError: false, content: [{ type: "text", text: "ok" }] }
+    })
+    const editSessA = tools.edit.execute(
+      { filePath: "sa", oldString: "a", newString: "b" },
+      context({ sessionID: "s-a" }),
+    )
+    await diffSessEntered.promise
+    await tools.edit.execute({ filePath: "sb", oldString: "a", newString: "b" }, context({ sessionID: "s-b" }))
+    expect(diffSessConcurrent).toBe(true)
+    diffSessRelease.resolve()
+    await editSessA
+
+    await hook.dispose?.()
+  })
+
+  test("cancels a queued mutating call on abort without letting later calls bypass the active holder", async () => {
+    const pool = container()
+    const hook = await dshAdapter(input())
+    const tools = await projected(hook)
+
+    const entered1 = Promise.withResolvers<void>()
+    const release1 = Promise.withResolvers<void>()
+    const order: string[] = []
+    let thirdEnteredBeforeFirstDone = false
+    let firstDone = false
+
+    pool.run(async (call) => {
+      order.push(`enter:${call.arguments.file_path}`)
+      if (call.arguments.file_path === "first") {
+        entered1.resolve()
+        await release1.promise
+        firstDone = true
+      } else if (call.arguments.file_path === "third" && !firstDone) {
+        thirdEnteredBeforeFirstDone = true
+      }
+      order.push(`exit:${call.arguments.file_path}`)
+      return { isError: false, content: [{ type: "text", text: call.arguments.file_path }] }
+    })
+
+    const abort2 = new AbortController()
+    const call1 = tools.edit.execute({ filePath: "first", oldString: "a", newString: "b" }, context())
+    await entered1.promise
+    const call2 = tools.edit.execute(
+      { filePath: "second", oldString: "a", newString: "b" },
+      context({ abort: abort2.signal }),
+    )
+    const call3 = tools.edit.execute({ filePath: "third", oldString: "a", newString: "b" }, context())
+
+    abort2.abort(new Error("user cancelled queued edit"))
+    await expect(call2).rejects.toThrow("user cancelled queued edit")
+
+    // Releasing the event loop while call1 is still active must NOT allow call3 to enter.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(thirdEnteredBeforeFirstDone).toBe(false)
+
+    release1.resolve()
+    await Promise.all([call1, call3])
+    expect(thirdEnteredBeforeFirstDone).toBe(false)
+    expect(order).toEqual(["enter:first", "exit:first", "enter:third", "exit:third"])
+
+    await hook.dispose?.()
+  })
+
+  test("preserves original dispatch order across queued mutating calls even when a later permission resolves first", async () => {
+    const pool = container()
+    const hook = await dshAdapter(input())
+    const tools = await projected(hook)
+
+    const bashAskStarted = Promise.withResolvers<void>()
+    const bashAskRelease = Promise.withResolvers<void>()
+    const events: string[] = []
+
+    pool.run(async (call) => {
+      events.push(`exec:${call.name}`)
+      return { isError: false, content: [{ type: "text", text: call.name }] }
+    })
+
+    const bashCall = tools.bash.execute(
+      { command: "echo hi > target.txt" },
+      context({
+        ask: async (req) => {
+          events.push(`ask:${req.permission}`)
+          bashAskStarted.resolve()
+          await bashAskRelease.promise
+        },
+      }),
+    )
+    await bashAskStarted.promise
+
+    const editCall = tools.edit.execute(
+      { filePath: "target.txt", oldString: "a", newString: "b" },
+      context({
+        ask: async (req) => {
+          events.push(`ask:${req.permission}`)
+        },
+      }),
+    )
+
+    // Allow microtasks to flush; edit's immediate permission must wait behind bash in the session queue.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(events).toEqual(["ask:bash"])
+
+    bashAskRelease.resolve()
+    await Promise.all([bashCall, editCall])
+    expect(events).toEqual(["ask:bash", "exec:bash", "ask:edit", "exec:edit"])
+
+    // A rejected permission on the earlier queued call must not block later calls on the same session.
+    events.length = 0
+    const rejectBashGate = Promise.withResolvers<void>()
+    const rejectStarted = Promise.withResolvers<void>()
+    const rejectedBash = tools.bash.execute(
+      { command: "rm -rf /" },
+      context({
+        ask: async () => {
+          events.push("ask:denied-bash")
+          rejectStarted.resolve()
+          await rejectBashGate.promise
+          throw new Error("permission denied")
+        },
+      }),
+    )
+    await rejectStarted.promise
+    const recoveredEdit = tools.edit.execute(
+      { filePath: "target.txt", oldString: "b", newString: "c" },
+      context({
+        ask: async () => {
+          events.push("ask:recovered-edit")
+        },
+      }),
+    )
+    rejectBashGate.resolve()
+    await expect(rejectedBash).rejects.toThrow("permission denied")
+    await expect(recoveredEdit).resolves.toMatchObject({ output: "edit" })
+    expect(events).toEqual(["ask:denied-bash", "ask:recovered-edit", "exec:edit"])
+
+    await hook.dispose?.()
+  })
+
+  test("prunes idle SessionExclusiveQueues entries and prevents stale cleanup after clear", async () => {
+    const queues = new SessionExclusiveQueues()
+    const abort = new AbortController()
+    const gate1 = Promise.withResolvers<void>()
+    const entered1 = Promise.withResolvers<void>()
+
+    expect(queues.size).toBe(0)
+    const task1 = queues.run("s-1", abort.signal, async () => {
+      entered1.resolve()
+      await gate1.promise
+      return "done-1"
+    })
+    await entered1.promise
+    expect(queues.size).toBe(1)
+
+    gate1.resolve()
+    expect(await task1).toBe("done-1")
+    expect(queues.size).toBe(0)
+
+    // Failures and aborts also prune idle queues.
+    await expect(
+      queues.run("s-err", abort.signal, async () => {
+        throw new Error("boom")
+      }),
+    ).rejects.toThrow("boom")
+    expect(queues.size).toBe(0)
+
+    const cancelled = new AbortController()
+    cancelled.abort(new Error("aborted"))
+    await expect(queues.run("s-abort", cancelled.signal, async () => "never")).rejects.toThrow("aborted")
+    expect(queues.size).toBe(0)
+
+    // Old task cleanup after clear() must not delete a newly registered queue for the same sessionID.
+    const oldEntered = Promise.withResolvers<void>()
+    const oldRelease = Promise.withResolvers<void>()
+    const oldTask = queues.run("s-reuse", abort.signal, async () => {
+      oldEntered.resolve()
+      await oldRelease.promise
+      return "old"
+    })
+    await oldEntered.promise
+    expect(queues.size).toBe(1)
+
+    queues.clear()
+    expect(queues.size).toBe(0)
+
+    const newEntered = Promise.withResolvers<void>()
+    const newRelease = Promise.withResolvers<void>()
+    const newTask = queues.run("s-reuse", abort.signal, async () => {
+      newEntered.resolve()
+      await newRelease.promise
+      return "new"
+    })
+    await newEntered.promise
+    expect(queues.size).toBe(1)
+
+    oldRelease.resolve()
+    expect(await oldTask).toBe("old")
+    expect(queues.size).toBe(1)
+
+    newRelease.resolve()
+    expect(await newTask).toBe("new")
+    expect(queues.size).toBe(0)
   })
 })

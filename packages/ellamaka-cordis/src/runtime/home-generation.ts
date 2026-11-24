@@ -47,8 +47,6 @@ export const DSH_HOME_GENERATION_INPUTS: readonly string[] = [
   "packages/ellamaka-cordis/src/runtime/home-guard.ts",
   // Profile scaffolding written into home/profiles/<profile>.
   "packages/ellamaka-cordis/src/runtime/profile-resources.ts",
-  // Indirect payload: the tools profile rows rendered into the profile patch layer.
-  "packages/ellamaka-cordis/src/runtime/tools-profile.ts",
   // Root include reset before every mount (home/profiles/<profile>/cordis.yml).
   "packages/ellamaka-cordis/src/dsh-web.ts",
   // Same root include reset on the diagnostics path.

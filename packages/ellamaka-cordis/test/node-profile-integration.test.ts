@@ -15,9 +15,12 @@ test("Node mounts profile-local plugin exports and replays their configuration",
       .flatMap((file) => Object.keys(JSON.parse(readFileSync(join(import.meta.dir, file), "utf8")).dependencies))
       .filter((name) => !name.startsWith("@wopal/") && name !== "@npmcli/config")
     const build = await Bun.build({
-      entrypoints: ["../src/dsh-web.ts", "../src/runtime/loader.ts", "../src/runtime/profile-resources.ts"].map(
-        (file) => join(import.meta.dir, file),
-      ),
+      entrypoints: [
+        "../src/dsh-web.ts",
+        "../src/plugins/compose.ts",
+        "../src/runtime/loader.ts",
+        "../src/runtime/profile-resources.ts",
+      ].map((file) => join(import.meta.dir, file)),
       target: "node",
       format: "esm",
       external,
@@ -54,13 +57,14 @@ test("Node mounts profile-local plugin exports and replays their configuration",
       import { readFileSync, writeFileSync } from 'node:fs';
       import { createDshRuntimeApi } from ${JSON.stringify(pathToFileURL(join(root, "runtime/loader.js")).href)};
       import { prepareDshProfileResourcesAtRoot } from './runtime/profile-resources.js';
+      import { composeFullPatchStack, readUserPatchLayer } from './plugins/compose.js';
       import { bootDshTools, verifyDshToolsRegistered } from './dsh-web.js';
       const home = ${JSON.stringify(home)};
       const anchor = ${JSON.stringify(anchor)};
       const runtime = createDshRuntimeApi(anchor);
       prepareDshProfileResourcesAtRoot(home, runtime);
       const patch = ${JSON.stringify(join(dir, "cordis.patch.yml"))};
-      writeFileSync(patch, readFileSync(patch, 'utf8') + '\\n- insert:\\n    - id: node-extension\\n      name: fixture-node-plugin\\n      config:\\n        value: first\\n    - id: node-subpath\\n      name: fixture-node-plugin/sub\\n');
+      writeFileSync(patch, readFileSync(patch, 'utf8').replace(/^\\[\\]\\s*$/m, '') + '\\n- insert:\\n    - id: node-extension\\n      name: fixture-node-plugin\\n      config:\\n        value: first\\n    - id: node-subpath\\n      name: fixture-node-plugin/sub\\n');
       const host = await bootDshTools({ home, port: 0, installAnchor: anchor, runtime, disablePtcRuntime: true });
       try {
         assert.equal(host.ctx.get('nodeProfileValue'), 'first');
@@ -68,8 +72,8 @@ test("Node mounts profile-local plugin exports and replays their configuration",
         assert.ok(host.ctx.get('loader').internal, 'must exercise the real Node internal loader');
         verifyDshToolsRegistered(name => host.ctx.get(name, false));
         writeFileSync(patch, readFileSync(patch, 'utf8').replace('value: first', 'value: second'));
-        const profile = runtime.appBoot.loadProfile('ellamaka', 'ellamaka-tools', anchor, home + '/home');
-        await runtime.appBoot.reconcileProfilePatches(host.ctx, [...profile.layers.flatMap(layer => layer.patches), ...profile.patches], 'ellamaka');
+        const patches = composeFullPatchStack({ ...host.stackContext, userPatches: readUserPatchLayer(home, 'ellamaka-tools') });
+        await runtime.appBoot.reconcileProfilePatches(host.ctx, patches, 'ellamaka');
         assert.equal(host.ctx.get('nodeProfileValue'), 'second');
         console.log('NODE_PROFILE_OK');
       } finally { await host.dispose(); }

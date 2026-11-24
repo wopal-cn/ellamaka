@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { Context } from "@deepseek-ai/cordis"
+import { composeFullPatchStack, readUserPatchLayer } from "../src/plugins/compose"
 import { createPackageDshRuntimeApi } from "../src/runtime/loader"
 import { bootDshTools, bootDshWeb, mountDshTools, verifyDshToolsRegistered } from "../src/dsh-web"
 import { prepareDshProfiles } from "./fixture/prepare-dsh-profiles"
@@ -54,7 +55,7 @@ describe("tools container activation gate", () => {
     const patch = join(profile, "cordis.patch.yml")
     writeFileSync(
       patch,
-      readFileSync(patch, "utf8") +
+      readFileSync(patch, "utf8").replace(/^\[\]\s*$/m, "") +
         "\n- insert:\n    - id: fixture-extension\n      name: fixture-tools-extension\n      config:\n        value: first\n",
     )
     const host = await bootDshTools({ home, port: 0, disablePtcRuntime: true })
@@ -65,17 +66,11 @@ describe("tools container activation gate", () => {
       const source = readFileSync(join(profile, "cordis.patch.yml"), "utf8")
       writeFileSync(join(profile, "cordis.patch.yml"), source.replace("value: first", "value: second"))
       await host.ctx.get("hmr").runExclusive(async () => {
-        const current = createPackageDshRuntimeApi().appBoot.loadProfile(
-          "ellamaka",
-          "ellamaka-tools",
-          require.resolve("@deepseek-ai/dsh/package.json"),
-          join(home, "home"),
-        )
-        await createPackageDshRuntimeApi().appBoot.reconcileProfilePatches(
-          host.ctx,
-          [...current.layers.flatMap((layer) => layer.patches), ...current.patches],
-          "ellamaka",
-        )
+        const patches = composeFullPatchStack({
+          ...host.stackContext,
+          userPatches: readUserPatchLayer(home, "ellamaka-tools"),
+        })
+        await createPackageDshRuntimeApi().appBoot.reconcileProfilePatches(host.ctx, patches, "ellamaka")
       })
       expect(host.ctx.get("fixtureToolsValue")).toBe("second")
       verifyDshToolsRegistered((name) => host.ctx.get(name, false))

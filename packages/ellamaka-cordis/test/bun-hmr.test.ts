@@ -206,7 +206,7 @@ describe("bun-hmr: composition-file replay (generation candidate replacement)", 
       const patchFile = join(profileDirOf(root, "ellamaka-tools"), "cordis.patch.yml")
       const hmr = ctx.get("hmr") as { registerConfig(filename: string, refresh: () => Promise<void>): Promise<unknown> }
       await expect(hmr.registerConfig(patchFile, async () => {})).rejects.toThrow(/already registered/)
-      const source = readFileSync(patchFile, "utf8")
+      const source = readFileSync(patchFile, "utf8").replace(/^\[\]\s*$/m, "")
       writeFileSync(patchFile, source + `\n- id: ${name}\n  disabled: true\n`)
 
       await waitFor(() => ctx.get(`${name}.marker`, false) === undefined)
