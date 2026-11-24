@@ -114,40 +114,61 @@ report_failure() {
 # install_app <source.app> <app-name>
 #
 # Replaces <install-root>/<name>.app without ever leaving a half-written bundle
-# behind: copy to a sibling staging path, then rename it into place, keeping the
-# old bundle until the new one has landed. A failure at any step leaves the
-# installed app untouched.
+# behind: copy into a staging directory, rename it into place, and keep the old
+# bundle until the new one has landed. A failure at any step leaves the installed
+# app untouched.
+#
+# The workspace is a fresh mktemp directory under the install root (same
+# filesystem, so the renames stay atomic) rather than a fixed sibling name. A
+# fixed name breaks both ways: `cp -R` onto a leftover directory nests the
+# bundle one level deeper, and a leftover that cannot be deleted blocks every
+# later install.
+#
+# Discarding the old bundle is housekeeping that runs after the new one has
+# landed, so it is reported and never fatal. Under `set -e` an unguarded
+# `rm -rf` there killed the build after a successful install, which is why the
+# install step printed no result.
 #
 # The install root is overridable so the swap can be exercised in a temp dir.
 install_app() {
   local source="$1" app_name="$2"
   local root="${ELLAMAKA_INSTALL_ROOT:-/Applications}"
   local dest="${root}/${app_name}.app"
-  local staging="${root}/.${app_name}.app.new"
-  local previous="${root}/.${app_name}.app.previous"
 
-  rm -rf "$staging" "$previous"
+  local work staging previous
+  if ! work="$(mktemp -d "${root}/.${app_name}.XXXXXX" 2>/dev/null)"; then
+    printf "✗ install failed: cannot create a staging directory under %s\n" "$root" >&2
+    return 1
+  fi
+  staging="${work}/new"
+  previous="${work}/old"
+
   if ! cp -R "$source" "$staging"; then
-    rm -rf "$staging"
-    printf "  ✗ install failed while copying; %s is unchanged\n" "$dest" >&2
+    rm -rf "$work" 2>/dev/null || true
+    printf "✗ install failed while copying; %s is unchanged\n" "$dest" >&2
     return 1
   fi
 
   # Keep the previous bundle until the new one is in place: a failed rename
   # must not leave the user with no app at all.
   if [ -e "$dest" ] && ! mv "$dest" "$previous"; then
-    rm -rf "$staging"
-    printf "  ✗ install failed while moving the old bundle; %s is unchanged\n" "$dest" >&2
+    rm -rf "$work" 2>/dev/null || true
+    printf "✗ install failed while moving the old bundle; %s is unchanged\n" "$dest" >&2
     return 1
   fi
   if ! mv "$staging" "$dest"; then
-    [ -e "$previous" ] && mv "$previous" "$dest"
-    rm -rf "$staging"
-    printf "  ✗ install failed while placing the new bundle; %s was restored\n" "$dest" >&2
+    if [ -e "$previous" ]; then mv "$previous" "$dest" 2>/dev/null || true; fi
+    rm -rf "$work" 2>/dev/null || true
+    printf "✗ install failed while placing the new bundle; %s was restored\n" "$dest" >&2
     return 1
   fi
 
-  rm -rf "$previous"
+  # `rm`'s own complaint about what it could not delete is noise here: the line
+  # below names the directory that was kept.
+  if ! rm -rf "$work" 2>/dev/null; then
+    printf "⚠ could not remove the previous bundle: %s (the new install is in place)\n" \
+      "$previous" >&2
+  fi
 }
 
 # ── DSH runtime manifest freshness ────────────────────────────────
@@ -327,7 +348,11 @@ function build_cli() {
     NEW_VER=$("$SRC" --version 2>/dev/null || echo "unknown")
     OLD_VER=$([[ -L "$SYMLINK" ]] && "$SYMLINK" --version 2>/dev/null || echo "none")
 
-    rm -f "$SYMLINK" && ln -s "$SRC" "$SYMLINK"
+    if ! { rm -f "$SYMLINK" && ln -s "$SRC" "$SYMLINK"; }; then
+      if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+      printf "  %d/%d  install       ✗ failed to link %s\n" "$total" "$total" "$SYMLINK" >&2
+      exit 1
+    fi
     if [ -t 2 ]; then printf "\r\033[K" >&2; fi
     printf "  %d/%d  install       ✓ %s → %s\n" "$total" "$total" "$OLD_VER" "$NEW_VER" >&2
   fi
@@ -530,9 +555,22 @@ function build_desktop() {
 
   if $INSTALL; then
     if [ -t 2 ]; then printf "  3/%d  install       copying...\r" "$total" >&2; fi
-    install_app "$APP_PATH" "$APP_NAME"
+    # Capture the step's own diagnostics so a warning (a previous bundle that
+    # could not be discarded) lands after the progress line is cleared instead
+    # of overwriting it.
+    local install_err
+    install_err="$(mktemp)"
+    STEP_OUTS+=("$install_err")
+    if ! install_app "$APP_PATH" "$APP_NAME" 2>"$install_err"; then
+      if [ -t 2 ]; then printf "\r\033[K" >&2; fi
+      printf "  3/%d  install       ✗ failed\n" "$total" >&2
+      sed 's/^/      /' "$install_err" >&2
+      exit 1
+    fi
     if [ -t 2 ]; then printf "\r\033[K" >&2; fi
-    printf "  3/%d  install       ✓ /Applications/%s\n" "$total" "${APP_NAME}.app" >&2
+    printf "  3/%d  install       ✓ %s/%s\n" "$total" "${ELLAMAKA_INSTALL_ROOT:-/Applications}" "${APP_NAME}.app" >&2
+    sed 's/^/      /' "$install_err" >&2
+    rm -f "$install_err"
     if $APP_RUNNING; then
       printf "      ℹ %s was running; the old window stays in front until you restart it.\n" "$APP_NAME" >&2
       printf "        Restart with: osascript -e 'quit app \"%s\"' && open -a \"%s\"\n" "$APP_NAME" "$APP_NAME" >&2

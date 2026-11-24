@@ -51,6 +51,8 @@ Desktop 平台策略：本机 mac + `--platform mac`（默认）→ 本地构建
 
 每个 step 只报告真实诊断，不报告进度日志：`build` 只读 vite 的 stderr（`--logLevel warn`，stdout 的 prebuild/sidecar 进度不计入）；`package` 的 electron-builder 把各级别都写 stdout，因此以 `FORCE_COLOR=1` 运行并按颜色只取 warn/error。一个干净的构建不打印任何告警段落。默认最多列 20 条，`--verbose` 展开该步骤的完整原始输出。DSH 生成器通过 `--quiet` 静默成功消息，失败时仍打印错误到 stderr。
 
+每个 step 无论成功还是失败都必须打印自己的结果行（`✓` / `✗ failed`），失败一律以非零退出码结束，不允许静默中断。`install` 的旧包清理属于收尾工作，失败时只打印 `⚠` 提示并保留结果行，不影响安装成功的判定。
+
 ### `release-cli.sh` / `release-desktop.sh` — 一步发布 CLI / Desktop 版本
 
 ```bash
