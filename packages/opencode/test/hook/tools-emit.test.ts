@@ -1014,7 +1014,7 @@ describe("session-tools modification preflight", () => {
       expect(withoutBody).toHaveLength(1)
       expect(withBody[0].metadata).toMatchObject({ loaded: [rule] })
       expect(withoutBody[0].metadata).toMatchObject({ loaded: [] })
-      expect(withoutBody[0].output).toContain("already attached to another tool result in this batch")
+      expect(withoutBody[0].output).toContain("already attached in this batch (no read needed)")
     }),
   )
 

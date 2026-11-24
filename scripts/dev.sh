@@ -40,7 +40,7 @@ find_space_root() {
 # /Volumes/U500G/coding, so a logical $PWD yields a different scope hash, a
 # different registry entry, and an $root that matches no process argv — the
 # same worktree becomes two buckets and live instances go unrecognized.
-root="$(cd "$(dirname "$(resolve "$0")")/.." && pwd -P)"
+root="$(cd "$(dirname "$(resolve "${BASH_SOURCE[0]}")")/.." && pwd -P)"
 source "$root/scripts/lib/version.sh"
 source "$root/scripts/lib/desktop-cdp.sh"
 space="$(find_space_root "$root")"
@@ -142,28 +142,59 @@ space_rel_path() {
 is_running() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
 # In `dev.sh serve` the app UI is served by the Vite dev server, NOT by
-# the backend: the backend prints a `workbench: <backend-url>` line for its own
-# standalone serve mode, where the embedded UI exists. Relaying that line
-# verbatim (or pointing at the backend port at all) hands the user a 404. The
-# only part worth reusing is the credential token — the backend knows whether a
-# server password is configured, and the `?auth_token=` it prints is the
-# credential exchange the SPA already understands. Port the token onto the Vite
-# origin, which is the origin the user's browser actually talks to in dev.
-# WOPAL_DEV treats the launch Home as an editable candidate, so every new dev
-# Host lifecycle enters Onboarding first and lets that flow lock the effective
-# Home before Workbench starts reading Runtime configuration.
+# the backend: the backend prints a `workbench: <backend-url>` or
+# `onboarding: <backend-url>` line for its own standalone serve mode, where the
+# embedded UI exists. Relaying that line verbatim (or pointing at the backend
+# port at all) hands the user a 404. Query the live backend setup endpoint first
+# so `restart frontend` reflects onboarding completion after boot, fall back to
+# the backend log when unreachable, and default to `/startup` (never guessing
+# `/workbench`) when neither confirms an entry.
 dev_entry_url() {
   local port="$1"
-  local url="http://127.0.0.1:$port/onboarding"
-  local line token
-  line="$(grep -m1 '^workbench: ' "$BACKEND_LOG" 2>/dev/null)"
+  local backend_port="${2:-}"
+  local line entry="" url token="" inspect_json=""
+  if [ -n "$backend_port" ]; then
+    inspect_json="$(backend_curl "http://127.0.0.1:$backend_port/wopal-space/setup/inspect" 2>/dev/null || true)"
+    if [ -n "$inspect_json" ]; then
+      entry="$(
+        INSPECT_JSON="$inspect_json" bun -e '
+          try {
+            const d = JSON.parse(process.env.INSPECT_JSON ?? "");
+            if (typeof d?.home?.binding?.locked === "boolean" && typeof d?.state?.completed === "boolean") {
+              process.stdout.write(d.home.binding.locked && d.state.completed ? "workbench" : "onboarding");
+            }
+          } catch {}
+        ' 2>/dev/null || true
+      )"
+    fi
+  fi
+  line="$(grep -m1 -E '^(workbench|onboarding): ' "$BACKEND_LOG" 2>/dev/null || true)"
+  if [ -z "$entry" ]; then
+    case "$line" in
+      workbench:*) entry="workbench" ;;
+      onboarding:*) entry="onboarding" ;;
+      *) entry="startup" ;;
+    esac
+  fi
+  url="http://127.0.0.1:$port/$entry"
   case "$line" in
     *auth_token=*)
       token="${line#*auth_token=}"
       token="${token%%[&[:space:]]*}"
-      url="$url?auth_token=$token"
       ;;
   esac
+  if [ -z "$token" ] && [ -n "${ELLAMAKA_SERVER_PASSWORD:-}" ]; then
+    token="$(
+      bun -e '
+        const user = process.env.ELLAMAKA_SERVER_USERNAME || "ellamaka";
+        const pass = process.env.ELLAMAKA_SERVER_PASSWORD ?? "";
+        process.stdout.write(Buffer.from(`${user}:${pass}`).toString("base64"));
+      ' 2>/dev/null || true
+    )"
+  fi
+  if [ -n "$token" ]; then
+    url="$url?auth_token=$token"
+  fi
   printf '%s' "$url"
 }
 
@@ -173,7 +204,7 @@ dev_entry_url() {
 # The username defaults to the engine default (ellamaka); ELLAMAKA_SERVER_USERNAME
 # overrides it exactly like the backend reads it.
 backend_curl() {
-  if [ -n "$ELLAMAKA_SERVER_PASSWORD" ]; then
+  if [ -n "${ELLAMAKA_SERVER_PASSWORD:-}" ]; then
     curl -sf --max-time 1 -u "${ELLAMAKA_SERVER_USERNAME:-ellamaka}:$ELLAMAKA_SERVER_PASSWORD" "$@"
   else
     curl -sf --max-time 1 "$@"
@@ -1050,7 +1081,7 @@ cmd_tui() {
     fi
     start_frontend "$APP_PORT" "$PORT" || { stop_keep_logs backend; return 1; }
     echo "  backend :$PORT, workbench :$APP_PORT"
-    echo "  → $(dev_entry_url "$APP_PORT")"
+    echo "  → $(dev_entry_url "$APP_PORT" "$PORT")"
     cd "$opencode_dir"
     write_record tui - "$$" "$(pgid_of "$$")"
     exec env "${attach_env[@]}" bun --preload "$dsh_diagnostic_preload" --preload "$opencode_preload" "$opencode_entry" "${attach_args[@]}" "${ns_arg[@]}" attach "http://localhost:$PORT" --dir "$caller_pwd"
@@ -1144,7 +1175,7 @@ cmd_serve() {
   echo "  backend :$PORT, workbench :$APP_PORT"
   echo "  pidfile $(space_rel_path "$PIDFILE")"
   echo "  logs    $(space_rel_path "$BACKEND_LOG") / $(space_rel_path "$FRONTEND_LOG")"
-  echo "  → $(dev_entry_url "$APP_PORT")"
+  echo "  → $(dev_entry_url "$APP_PORT" "$PORT")"
   if $with_doc; then
     choose_free_port doc 4100
     local doc_port="$SELECTED_PORT"
@@ -1216,7 +1247,7 @@ EOF
       claim_port "$frontend_backend_port"
       choose_free_port workbench "$frontend_port"; local new_frontend_port="$SELECTED_PORT"
       start_frontend "$new_frontend_port" "$frontend_backend_port" || return 1
-      echo "  workbench :$new_frontend_port restarted  → $(dev_entry_url "$new_frontend_port")"
+      echo "  workbench :$new_frontend_port restarted  → $(dev_entry_url "$new_frontend_port" "$frontend_backend_port")"
       ;;
     doc)
       read_record doc && service_running doc || { echo "restart: doc not running"; return 1; }
@@ -1253,7 +1284,7 @@ EOF
         claim_port "$backend_port"
         choose_free_port workbench "$frontend_port"; frontend_port="$SELECTED_PORT"
         start_frontend "$frontend_port" "$backend_port" || return 1
-        echo "  workbench :$frontend_port restarted  → $(dev_entry_url "$frontend_port")"
+        echo "  workbench :$frontend_port restarted  → $(dev_entry_url "$frontend_port" "$backend_port")"
       fi
       if $restart_doc; then
         $restart_backend || { echo "restart: backend not running"; return 1; }

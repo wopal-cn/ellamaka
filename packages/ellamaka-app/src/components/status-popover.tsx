@@ -14,6 +14,7 @@ import { useSync } from "@/context/sync"
 import { useServers } from "@/context/servers"
 import { resolveServerHealthKey } from "@/utils/server-health"
 import { pathKey } from "@/utils/path-key"
+import { resolveStatusPopoverIssue } from "./status-plugins"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
@@ -25,17 +26,13 @@ export function StatusPopover() {
   const sync = useSync()
   const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
-  const ready = createMemo(() => servers.health[healthKey()]?.healthy === false || sync.data.mcp_ready)
-  const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync.data.mcp ?? {})
-    const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
-    const warn = mcp.some((item) => item.status === "needs_auth")
-    if (failed) return "critical" as const
-    if (warn) return "warning" as const
-    return undefined
-  })
+  const dshTools = () => servers.health[healthKey()]?.dsh?.tools
+  const ready = createMemo(
+    () => servers.health[healthKey()]?.healthy === false || sync.data.mcp_ready || dshTools() === "degraded",
+  )
+  const issue = createMemo(() => resolveStatusPopoverIssue(sync.data.mcp, dshTools()))
   const serverHealthy = () => servers.health[healthKey()]?.healthy === true
-  const healthy = createMemo(() => servers.health[healthKey()]?.healthy === true && !mcpIssue())
+  const healthy = createMemo(() => serverHealthy() && !issue())
 
   return (
     <Popover
@@ -57,8 +54,8 @@ export function StatusPopover() {
             classList={{
               "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": ready() && healthy(),
-              "bg-icon-warning-base": ready() && serverHealthy() && mcpIssue() === "warning",
-              "bg-icon-critical-base": serverHealthy() || (ready() && serverHealthy() && mcpIssue() === "critical"),
+              "bg-icon-warning-base": ready() && serverHealthy() && issue() === "warning",
+              "bg-icon-critical-base": serverHealthy() || (ready() && serverHealthy() && issue() === "critical"),
               "bg-border-weak-base": serverHealthy() || !ready(),
             }}
           />
@@ -95,22 +92,16 @@ function DirectoryStatusPopover() {
   const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => servers.health[healthKey()]?.healthy
-  const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready)
-  const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync.data.mcp ?? {})
-    const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
-    const warn = mcp.some((item) => item.status === "needs_auth")
-    if (failed) return "critical" as const
-    if (warn) return "warning" as const
-    return undefined
-  })
-  const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
+  const dshTools = () => servers.health[healthKey()]?.dsh?.tools
+  const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready || dshTools() === "degraded")
+  const issue = createMemo(() => resolveStatusPopoverIssue(sync.data.mcp, dshTools()))
+  const healthy = createMemo(() => serverHealth() === true && !issue())
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),
     ready: ready(),
     healthy: healthy(),
     serverHealth: serverHealth(),
-    issue: mcpIssue(),
+    issue: issue(),
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (
@@ -130,11 +121,15 @@ function ServerStatusPopover(props: { statusBar?: boolean }) {
   const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => servers.health[healthKey()]?.healthy
+  const issue = createMemo(() =>
+    servers.health[healthKey()]?.dsh?.tools === "degraded" ? ("warning" as const) : undefined,
+  )
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),
     ready: serverHealth() !== undefined,
-    healthy: serverHealth() === true,
+    healthy: serverHealth() === true && !issue(),
     serverHealth: serverHealth(),
+    ...(issue() ? { issue: issue() } : {}),
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (
@@ -233,16 +228,10 @@ export function StatusBarStatusPopover(props: { spaceRoot?: string }) {
   const healthKey = () => resolveServerHealthKey(server.key, server.current)
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => servers.health[healthKey()]?.healthy
-  const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready)
-  const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync.data.mcp ?? {})
-    const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
-    const warn = mcp.some((item) => item.status === "needs_auth")
-    if (failed) return "critical" as const
-    if (warn) return "warning" as const
-    return undefined
-  })
-  const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
+  const dshTools = () => servers.health[healthKey()]?.dsh?.tools
+  const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready || dshTools() === "degraded")
+  const issue = createMemo(() => resolveStatusPopoverIssue(sync.data.mcp, dshTools()))
+  const healthy = createMemo(() => serverHealth() === true && !issue())
 
   createEffect(() => {
     const directory = sdk.directory
@@ -265,7 +254,7 @@ export function StatusBarStatusPopover(props: { spaceRoot?: string }) {
     ready: ready(),
     healthy: healthy(),
     serverHealth: serverHealth(),
-    issue: mcpIssue(),
+    issue: issue(),
     label: language.t("status.popover.trigger"),
     onOpenChange: setShown,
     body: () => (

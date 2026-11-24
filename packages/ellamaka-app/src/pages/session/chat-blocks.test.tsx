@@ -1047,6 +1047,65 @@ describe("FileChangeBlock", () => {
     expect(host.querySelector("[data-slot='chat-tool-trigger']")?.getAttribute("aria-expanded")).toBe("true")
     host.remove()
   })
+
+  test("marks instruction-blocked edits and writes as not-modified without rendering a synthetic diff", () => {
+    const a = assistantMessage("a-blocked", "u1")
+    const blockedEdit = toolPart("t-blocked-edit", "a-blocked", "edit", "c-blocked-edit", {
+      title: "Instructions required",
+      input: { filePath: "/repo/src/check.ts", oldString: "old", newString: "new" },
+      output:
+        "File not modified. Instructions loaded below (no read needed); follow them and retry.\n\n<system-reminder>\nInstructions from: /repo/AGENTS.md\n# Secret Rule Body\n</system-reminder>",
+      metadata: { loaded: ["/repo/AGENTS.md"] },
+    })
+    const blockedWrite = toolPart("t-blocked-write", "a-blocked", "write", "c-blocked-write", {
+      title: "Instructions unavailable",
+      input: { filePath: "/repo/src/new.ts", content: "export const x = 1" },
+      output:
+        "File not modified. Instructions for this location exist but could not be read, so the change was not applied.",
+      metadata: { loaded: [] },
+    })
+    const host = mount(() => (
+      <div>
+        <FileChangeBlock
+          part={blockedEdit}
+          message={a}
+          defaultOpen={true}
+          directory="/repo"
+          editRenderer={OpenCodeMessagePartStub}
+        />
+        <FileChangeBlock
+          part={blockedWrite}
+          message={a}
+          defaultOpen={true}
+          directory="/repo"
+          editRenderer={OpenCodeMessagePartStub}
+        />
+      </div>
+    ))
+
+    const triggers = host.querySelectorAll("[data-slot='chat-tool-trigger']")
+    expect(triggers).toHaveLength(2)
+    expect(triggers[0].getAttribute("aria-expanded")).toBe("false")
+    expect(triggers[1].getAttribute("aria-expanded")).toBe("false")
+
+    const statuses = host.querySelectorAll("[data-slot='chat-tool-status'][data-status='not-modified']")
+    expect(statuses).toHaveLength(2)
+    expect(statuses[0].textContent).toBe("未修改")
+    expect(statuses[1].textContent).toBe("未修改")
+
+    expect(host.querySelector("[data-renderer='opencode-message-part']")).toBeNull()
+    expect(host.querySelector("[data-component='chat-file-change-wrapper']")).toBeNull()
+
+    const outputs = host.querySelectorAll("[data-slot='chat-generic-output']")
+    expect(outputs).toHaveLength(2)
+    expect(outputs[0].textContent).toBe(
+      "File not modified. Instructions loaded below (no read needed); follow them and retry.",
+    )
+    expect(outputs[1].textContent).toContain("could not be read")
+    expect(host.textContent).not.toContain("<system-reminder>")
+    expect(host.textContent).not.toContain("# Secret Rule Body")
+    host.remove()
+  })
 })
 
 describe("StrReplaceEditorBlock", () => {
@@ -1160,6 +1219,33 @@ describe("StrReplaceEditorBlock", () => {
       <StrReplaceEditorBlock part={part} message={a} defaultOpen={true} editRenderer={OpenCodeMessagePartStub} />
     ))
     expect(host.querySelector("[data-slot='chat-tool-trigger']")?.getAttribute("aria-expanded")).toBe("true")
+    host.remove()
+  })
+
+  test("marks instruction-blocked str_replace_editor mutations as not-modified and hides reminder body", () => {
+    const a = assistantMessage("a-sre-blocked", "u1")
+    const part = toolPart("t-sre-blocked", "a-sre-blocked", "str_replace_editor", "c-sre-blocked", {
+      input: { command: "str_replace", path: "/repo/src/a.ts" },
+      title: "Instructions required",
+      output:
+        "File not modified. Instructions loaded below (no read needed); follow them and retry.\n\n<system-reminder>\nInstructions from: /repo/AGENTS.md\n# Rule Text\n</system-reminder>",
+      metadata: {
+        source: "dsh-container",
+        containerTool: "str_replace_editor",
+        filediff: { file: "/repo/src/a.ts", before: "old\n", after: "new\n", additions: 1, deletions: 1 },
+      },
+    })
+    const host = mount(() => (
+      <StrReplaceEditorBlock part={part} message={a} defaultOpen={true} editRenderer={OpenCodeMessagePartStub} />
+    ))
+    expect(host.querySelector("[data-slot='chat-tool-trigger']")?.getAttribute("aria-expanded")).toBe("false")
+    expect(host.querySelector("[data-slot='chat-tool-status'][data-status='not-modified']")?.textContent).toBe("未修改")
+    expect(host.querySelector("[data-slot='chat-file-additions']")).toBeNull()
+    expect(host.querySelector("[data-renderer='opencode-message-part']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-str-replace-output']")?.textContent).toBe(
+      "File not modified. Instructions loaded below (no read needed); follow them and retry.",
+    )
+    expect(host.textContent).not.toContain("# Rule Text")
     host.remove()
   })
 })

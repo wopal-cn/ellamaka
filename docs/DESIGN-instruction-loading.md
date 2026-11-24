@@ -118,7 +118,7 @@ Agent 在项目内操作文件时，需要先知道该遵守哪些规则。一�
 
 DSH 用 `@deepseek-ai/dsh-agent-instructions` 提供目录规则，在成功的 `read`、`write`、`edit` 后发现相关目录，并在后续模型请求中提供或更新规则。
 
-Ellamaka 的 DSH Tools 配置另外启用了 `dsh-fs-observation-policy`，要求编辑已有文件前先读取，写入已有文件也受到读取状态保护。这项保护属于文件修改安全，不负责确保压缩后的模型仍看得到 `AGENTS.md`。原生工具也不依赖这项 DSH 策略。
+Ellamaka 的 DSH Tools 配置沿用 DSH 默认值，保持 `dsh-fs-observation-policy` 为 `disabled: true`（如需“编辑前先读取”的强制运行期门禁，可在用户 `ellamaka-tools/cordis.patch.yml` 中覆盖该插件的 `disabled` 配置为 `false` 恢复）。文件修改前的 `AGENTS.md` 检查与压缩后恢复由 Ellamaka 会话层独立保证，不依赖这项 DSH 策略，原生工具也同样遵循会话层约束。
 
 Ellamaka 的会话层为两种工具后端提供同样的规范加载行为。修改前检查和上下文压缩后的恢复由 Ellamaka 自己负责，不依赖 DSH 工具容器运行指令插件。
 

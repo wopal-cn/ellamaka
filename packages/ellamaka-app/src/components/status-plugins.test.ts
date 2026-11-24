@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { describeStatusPlugin, statusPlugins } from "./status-plugins"
+import {
+  describeStatusPlugin,
+  formatDshToolsDisabledMessage,
+  resolveStatusPopoverIssue,
+  statusPlugins,
+  type DshTranslate,
+} from "./status-plugins"
 
 describe("status plugin list", () => {
   const external = ["file:///workspace/plugins/wopal-plugin"]
@@ -13,12 +19,21 @@ describe("status plugin list", () => {
   })
 
   test("reports the built-in adapter as not enabled without a ready sandbox", () => {
-    for (const status of [undefined, "disabled", "preparing", "degraded"] as const) {
+    for (const status of [undefined, "disabled", "preparing"] as const) {
       expect(statusPlugins(external, sandbox, status)).toEqual([
         { name: "dsh-adapter", source: "internal", enabled: false },
         { name: external[0] },
       ])
     }
+    expect(statusPlugins(external, sandbox, "degraded", "DSH_HOME_BUSY")).toEqual([
+      { name: "dsh-adapter", source: "internal", enabled: false, degraded: true, reason: "DSH_HOME_BUSY" },
+      { name: external[0] },
+    ])
+    expect(statusPlugins(external, { enabled: false }, "degraded", "DSH_HOME_BUSY")[0]).toEqual({
+      name: "dsh-adapter",
+      source: "internal",
+      enabled: false,
+    })
     expect(statusPlugins(external, { enabled: false }, "ready")[0]).toEqual({
       name: "dsh-adapter",
       source: "internal",
@@ -88,5 +103,23 @@ describe("plugin names and sources", () => {
       name: "fixture",
       source: "user",
     })
+  })
+})
+
+describe("DSH status bar issue and message formatting", () => {
+  test("resolveStatusPopoverIssue surfaces degraded dsh tools as warning while keeping critical MCP precedence", () => {
+    expect(resolveStatusPopoverIssue({}, "ready")).toBeUndefined()
+    expect(resolveStatusPopoverIssue({}, "disabled")).toBeUndefined()
+    expect(resolveStatusPopoverIssue({}, "degraded")).toBe("warning")
+    expect(resolveStatusPopoverIssue({ broken: { status: "failed" } }, "degraded")).toBe("critical")
+  })
+
+  test("formatDshToolsDisabledMessage maps known reason codes and falls back cleanly", () => {
+    const t: DshTranslate = (key, params) => `${key}${params?.reason ? `:${params.reason}` : ""}`
+    expect(formatDshToolsDisabledMessage(t)).toBe("workbench.dsh.toolsDisabled.generic")
+    expect(formatDshToolsDisabledMessage(t, "DSH_HOME_BUSY")).toBe(
+      "workbench.dsh.toolsDisabled.withReason:workbench.dsh.reason.homeBusy",
+    )
+    expect(formatDshToolsDisabledMessage(t, "custom error")).toBe("workbench.dsh.toolsDisabled.withReason:custom error")
   })
 })

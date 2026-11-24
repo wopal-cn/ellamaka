@@ -5,7 +5,7 @@ import { join } from "node:path"
 import type { CorePreparationEvent } from "@wopal/ellamaka-core/preparation"
 import { getCorePreparationHealth, prepareDshHost, prepareDshProfiles } from "@/core/preparation"
 import { GlobalBus } from "@/bus/global"
-import { getDshStatus, setDshStatus } from "@/workbench/dsh-status"
+import { getDshStatus, getDshStatusReason, setDshStatus } from "@/workbench/dsh-status"
 import { seedDshClosure } from "../fixture/dsh-closure"
 
 const dirs: string[] = []
@@ -85,6 +85,20 @@ describe("product CorePreparation host wiring", () => {
       expect(existsSync(join(wopalHome, "logs"))).toBe(false)
     } finally {
       GlobalBus.off("event", listener)
+    }
+  })
+
+  test("records and clears profile degradation reason across status transitions", () => {
+    try {
+      setDshStatus("tools", "degraded", "DSH_HOME_BUSY")
+      expect(getDshStatus().tools).toBe("degraded")
+      expect(getDshStatusReason("tools")).toBe("DSH_HOME_BUSY")
+
+      setDshStatus("tools", "ready")
+      expect(getDshStatus().tools).toBe("ready")
+      expect(getDshStatusReason("tools")).toBeUndefined()
+    } finally {
+      setDshStatus("tools", "disabled")
     }
   })
 })

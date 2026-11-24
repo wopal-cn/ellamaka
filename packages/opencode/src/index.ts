@@ -127,13 +127,16 @@ const cli = yargs(args)
     if (command === "generate" || command === "dsh") return
 
     const serverCommand = SERVER_COMMANDS.has(command)
-    // A server may trust Setup state only when this Host lifecycle starts with
-    // an explicitly persisted Home. Development mode and the normal-mode
-    // default path are both editable first-page candidates.
-    const startupHomeLocked = serverCommand && isWopalHomeLockedAtStartup()
-    const setupState = startupHomeLocked ? readSetupState(Global.Path.wopalHome) : undefined
-    const initializeRuntime =
-      !serverCommand || (startupHomeLocked && setupState?.status === "ok" && setupState.state.completed)
+    // A server trusts Setup state only when an explicit WOPAL_HOME is present:
+    // normal mode locks that Home immediately, while development mode (WOPAL_DEV=1)
+    // locks it at startup only if onboarding is already completed — otherwise the
+    // launch Home stays an editable first-page candidate so onboarding can still be
+    // debugged against an alternate Home without touching the user's shell profile.
+    const explicitHome = Boolean(process.env.WOPAL_HOME?.trim())
+    const setupState = serverCommand && explicitHome ? readSetupState(Global.Path.wopalHome) : undefined
+    const completed = setupState?.status === "ok" && setupState.state.completed
+    const startupHomeLocked = serverCommand && isWopalHomeLockedAtStartup(process.env, { completed })
+    const initializeRuntime = !serverCommand || (startupHomeLocked && completed)
     if (serverCommand && !initializeRuntime) useBootstrapDatabase()
     if (initializeRuntime) await Global.ensure()
 

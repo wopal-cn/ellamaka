@@ -52,9 +52,10 @@ export const WebCommand = effectCmd({
     UI.println(UI.logo("  "))
     UI.empty()
 
-    // Same lifecycle as `serve`: an unfinished Setup (and every development
-    // bootstrap) must not mount DSH from the launch Home candidate. Workbench
-    // mounts on first use after the Host has locked its effective Home.
+    // Same lifecycle as `serve`: an unfinished Setup (or an uncompleted
+    // development bootstrap) must not mount DSH from the launch Home
+    // candidate. Workbench mounts on first use after the Host has locked its
+    // effective Home.
     const controller = createDshMountController({
       server,
       cors: opts.cors,
@@ -63,7 +64,8 @@ export const WebCommand = effectCmd({
           mountDshEngine(server, { entry: "web", cors: opts.cors, wopalHome }),
         ),
     })
-    const setupReady = isWopalHomeLockedAtStartup() && setupCompleted()
+    const completed = setupCompleted()
+    const setupReady = isWopalHomeLockedAtStartup(process.env, { completed }) && completed
     installDshMountController(controller, setupReady)
     if (setupReady) {
       yield* Effect.promise(() => controller.ensure())

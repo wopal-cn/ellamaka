@@ -34,15 +34,53 @@ describe("checkServerHealth", () => {
   test("preserves the dsh runtime status when the server reports it", async () => {
     const fetch = mockFetch(
       async () =>
-        new Response(JSON.stringify({ healthy: true, version: "1.2.3", dsh: { web: "ready", tools: "degraded" } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+        new Response(
+          JSON.stringify({
+            healthy: true,
+            version: "1.2.3",
+            dsh: { web: "ready", tools: "degraded" },
+            dshRuntime: { closureVersion: 4, reasonCode: "DSH_HOME_BUSY" },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
     )
 
     const result = await checkServerHealth(server, fetch)
 
-    expect(result).toEqual({ healthy: true, version: "1.2.3", dsh: { web: "ready", tools: "degraded" } })
+    expect(result).toEqual({
+      healthy: true,
+      version: "1.2.3",
+      dsh: { web: "ready", tools: "degraded" },
+      dshReasonCode: "DSH_HOME_BUSY",
+    })
+  })
+
+  test("falls back to non-ready preparation step code when dshRuntime reasonCode is absent", async () => {
+    const fetch = mockFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            healthy: true,
+            version: "1.2.3",
+            dsh: { web: "ready", tools: "degraded" },
+            preparation: {
+              state: "BUSY",
+              steps: [{ step: "dsh.profiles", state: "BUSY", code: "DSH_HOME_BUSY" }],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    )
+
+    const result = await checkServerHealth(server, fetch)
+
+    expect(result.dshReasonCode).toBe("DSH_HOME_BUSY")
   })
 
   test("omits the dsh flag when the server does not report it", async () => {

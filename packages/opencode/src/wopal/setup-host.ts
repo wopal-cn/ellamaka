@@ -5,6 +5,7 @@ import { isWopalHomeLockedAtStartup, persistWopalHomeEnv } from "@wopal/ellamaka
 import {
   createSetupHomeBinding,
   createSetupService,
+  readSetupState,
   SETUP_ERROR,
   SetupServiceError,
   type SetupHomeBinding,
@@ -116,11 +117,13 @@ function normalizeHomePath(value: string): string {
 function productionHomeBinding(wopal: WopalSpaceHostService.WopalSpaceHost): SetupHomeBinding {
   const explicitHome = process.env.WOPAL_HOME?.trim()
   const mode = process.env.WOPAL_DEV === "1" ? "development" : "normal"
+  const setupState = explicitHome ? readSetupState(wopal.host.wopalHome) : undefined
+  const completed = setupState?.status === "ok" && setupState.state.completed
   return createSetupHomeBinding({
     mode,
     initialPath: wopal.host.wopalHome,
     source: explicitHome ? "shell" : "default",
-    locked: isWopalHomeLockedAtStartup(),
+    locked: isWopalHomeLockedAtStartup(process.env, { completed }),
     normalizePath: normalizeHomePath,
     persist: async (path) => {
       const result = persistWopalHomeEnv(path)

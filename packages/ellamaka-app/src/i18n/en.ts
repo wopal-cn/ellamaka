@@ -628,6 +628,7 @@ export const dict = {
   "status.popover.plugin.user": "User plugin",
   "status.popover.plugin.space": "Space plugin",
   "status.popover.plugin.notEnabled": "Not enabled",
+  "status.popover.plugin.disabled": "Disabled",
   "status.popover.action.manageServers": "Manage servers",
 
   "session.share.popover.title": "Publish on web",
@@ -1089,6 +1090,13 @@ export const dict = {
   "workbench.dsh.starting": "Starting DSH…",
   "workbench.dsh.unavailable": "DSH unavailable",
   "workbench.dsh.diagnosticsHint": "Check the status center for diagnostics.",
+  "workbench.dsh.toolsDisabled.generic": "Sandbox plugin dsh-adapter is disabled; falling back to native tools",
+  "workbench.dsh.toolsDisabled.withReason":
+    "Sandbox plugin dsh-adapter is disabled ({{reason}}); falling back to native tools",
+  "workbench.dsh.reason.homeBusy": "Another Ellamaka process is using DSH Home (DSH_HOME_BUSY)",
+  "workbench.dsh.reason.homeNewer": "DSH Home version is newer than this runtime (DSH_HOME_NEWER_THAN_RUNTIME)",
+  "workbench.dsh.reason.legacyAdoption":
+    "DSH Home requires one-time adoption confirmation (DSH_HOME_LEGACY_ADOPTION_REQUIRED)",
   "workbench.runtime.unauthorizedTitle": "Authentication failed",
   "workbench.runtime.unauthorizedHint":
     "The stored credentials for this server were rejected. Update them to reconnect.",

@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { createRoot, createSignal } from "solid-js"
+import type { DshRuntimeStatus } from "@/utils/server-health"
+import { initWorkbenchState } from "../view-store"
+import { createDshToolsDiagnosticRetry } from "./status-bar"
+import { executeDiagnosticRetry } from "./status-bar-diagnostics"
 import { getStatusBarSegments } from "./status-bar-segments"
 
 describe("getStatusBarSegments", () => {
@@ -61,5 +66,53 @@ describe("getStatusBarSegments", () => {
       getSessionTitle: () => undefined,
     })
     expect(segments).toEqual([{ type: "panel", text: "P1/1" }])
+  })
+})
+
+describe("dsh tools diagnostic retry", () => {
+  test("keeps the degraded warning when server retry succeeds while dshTools remains degraded, and clears once ready", async () => {
+    let dispose!: () => void
+    const wb = createRoot((d) => {
+      dispose = d
+      return initWorkbenchState()
+    })
+
+    try {
+      const [dshTools, setDshTools] = createSignal<DshRuntimeStatus>("degraded")
+      let retryTarget: DshRuntimeStatus = "degraded"
+      const runtime = {
+        get dshTools() {
+          return dshTools()
+        },
+        retry: async () => {
+          setDshTools(retryTarget)
+          return true
+        },
+      }
+
+      const warningText = "沙箱插件 dsh-adapter 已禁用（DSH_HOME_BUSY），当前使用原生工具"
+      wb.pushDiagnostic("warning", warningText, {
+        id: "dsh-tools-status",
+        autoDismiss: false,
+        onRetry: createDshToolsDiagnosticRetry(runtime),
+        source: "dsh-adapter",
+      })
+
+      const item = () => wb.diagnostics.find((entry) => entry.id === "dsh-tools-status")
+      expect(item()?.text).toBe(warningText)
+
+      // Server healthcheck returns true, but dshTools stays degraded -> alert must remain visible.
+      const resolvedWhileDegraded = await executeDiagnosticRetry(item()!, wb.removeDiagnostic)
+      expect(resolvedWhileDegraded).toBe(false)
+      expect(item()?.text).toBe(warningText)
+
+      // Once a subsequent retry recovers dshTools to ready -> alert clears immediately.
+      retryTarget = "ready"
+      const resolvedWhenReady = await executeDiagnosticRetry(item()!, wb.removeDiagnostic)
+      expect(resolvedWhenReady).toBe(true)
+      expect(item()).toBeUndefined()
+    } finally {
+      dispose()
+    }
   })
 })

@@ -448,6 +448,8 @@ describe("WorkbenchChatTimeline", () => {
           directory: "/repo/projects/example",
           spaceRoot: "/repo",
           virtualize: false,
+          editToolPartsExpanded: true,
+          editRenderer: () => <div data-renderer="opencode-message-part" />,
         })}
       />
     ))
@@ -456,6 +458,8 @@ describe("WorkbenchChatTimeline", () => {
       "workbench.chat.instructionNotModified",
     )
     expect(host.querySelector("[data-slot='chat-instruction-paths']")).toBeNull()
+    expect(host.querySelector("[data-component='chat-file-change-wrapper']")).toBeNull()
+    expect(host.querySelector("[data-slot='chat-tool-status'][data-status='not-modified']")?.textContent).toBe("未修改")
     host.remove()
   })
 

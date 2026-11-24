@@ -246,8 +246,10 @@ async function mountDshEngineImpl(
     onProgress: writeCorePreparationProgress,
     profiles: intent.profiles,
   })
-  if (intent.web && preparation.web.status !== "prepared") setDshStatus("web", "degraded")
-  if (intent.tools && preparation.tools.status !== "prepared") setDshStatus("tools", "degraded")
+  if (intent.web && preparation.web.status !== "prepared")
+    setDshStatus("web", "degraded", preparation.web.preparation?.reason)
+  if (intent.tools && preparation.tools.status !== "prepared")
+    setDshStatus("tools", "degraded", preparation.tools.preparation?.reason)
   if (preparation.web.status !== "prepared" && preparation.tools.status !== "prepared") return undefined
 
   const homeAccess = await acquireDshHomeRuntimeAccess({
@@ -255,8 +257,8 @@ async function mountDshEngineImpl(
     closureVersion: manifest.closureVersion,
   })
   if (!homeAccess.ok) {
-    if (intent.web) setDshStatus("web", "degraded")
-    if (intent.tools) setDshStatus("tools", "degraded")
+    if (intent.web) setDshStatus("web", "degraded", homeAccess.reason)
+    if (intent.tools) setDshStatus("tools", "degraded", homeAccess.reason)
     Log.Default.error("dsh home access denied", {
       reason: homeAccess.reason,
       homeVersion: homeAccess.homeVersion,
@@ -279,8 +281,9 @@ async function mountDshEngineImpl(
   try {
     runtime = createDshRuntimeApi(anchor.path)
   } catch (error) {
-    if (intent.web) setDshStatus("web", "degraded")
-    if (intent.tools) setDshStatus("tools", "degraded")
+    const message = error instanceof Error ? error.message : String(error)
+    if (intent.web) setDshStatus("web", "degraded", message)
+    if (intent.tools) setDshStatus("tools", "degraded", message)
     restoreDshHome()
     await homeAccess.lease.release()
     Log.Default.error("dsh runtime load failed", { error: error instanceof Error ? error.message : String(error) })
@@ -370,14 +373,15 @@ async function mountDshEngineImpl(
       setDshStatus("web", "ready")
       Log.Default.info("dsh web engine mounted", { mountPath, revision: reloader.revision })
     } catch (error) {
-      setDshStatus("web", "degraded")
+      const message = error instanceof Error ? error.message : String(error)
+      setDshStatus("web", "degraded", message)
       setDshUrlGetter(() => undefined)
       unmountDsh?.()
       await webReloader?.dispose().catch(() => {})
       webReloader = undefined
       unmountDsh = undefined
       Log.Default.error("dsh web profile load failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       })
     }
   }
@@ -400,14 +404,15 @@ async function mountDshEngineImpl(
       setDshStatus("tools", "ready")
       toolsHub.ctx.logger("dsh-tools").info("tool container mounted")
     } catch (error) {
-      setDshStatus("tools", "degraded")
+      const message = error instanceof Error ? error.message : String(error)
+      setDshStatus("tools", "degraded", message)
       delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
       await toolsHost?.dispose().catch(() => {})
       await toolsHub?.dispose().catch(() => {})
       toolsHost = undefined
       toolsHub = undefined
       Log.Default.error("dsh tools profile load failed; native tools remain available", {
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
       })
     }
   }

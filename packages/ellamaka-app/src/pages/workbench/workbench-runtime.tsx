@@ -26,6 +26,7 @@ const WorkbenchRuntimeContext = createSimpleContext({
     const [unauthorized, setUnauthorized] = createSignal(false)
     const [dshWeb, setDshWeb] = createSignal<DshRuntimeStatus>()
     const [dshTools, setDshTools] = createSignal<DshRuntimeStatus>()
+    const [dshToolsReason, setDshToolsReason] = createSignal<string>()
     const [dshWebReady, setDshWebReady] = createSignal(false)
     const [dshToolsReady, setDshToolsReady] = createSignal(false)
     let request = 0
@@ -39,6 +40,9 @@ const WorkbenchRuntimeContext = createSimpleContext({
       if (!current) {
         setStatus("offline")
         setUnauthorized(false)
+        setDshWeb(undefined)
+        setDshTools(undefined)
+        setDshToolsReason(undefined)
         setDshWebReady(false)
         setDshToolsReady(false)
         lastHealthy = false
@@ -59,6 +63,7 @@ const WorkbenchRuntimeContext = createSimpleContext({
         if (health.healthy && health.dsh) {
           setDshWeb(health.dsh.web)
           setDshTools(health.dsh.tools)
+          setDshToolsReason(health.dsh.tools === "degraded" ? health.dshReasonCode : undefined)
           setDshWebReady(health.dsh.web === "ready")
           setDshToolsReady(health.dsh.tools === "ready")
         }
@@ -82,6 +87,9 @@ const WorkbenchRuntimeContext = createSimpleContext({
       request += 1
       generationAbort?.abort()
       generationAbort = new AbortController()
+      setDshWeb(undefined)
+      setDshTools(undefined)
+      setDshToolsReason(undefined)
       setDshWebReady(false)
       setDshToolsReady(false)
       void refresh()
@@ -122,6 +130,9 @@ const WorkbenchRuntimeContext = createSimpleContext({
       },
       get dshTools() {
         return dshTools()
+      },
+      get dshToolsReason() {
+        return dshToolsReason()
       },
       get dshWebReady() {
         return dshWebReady()

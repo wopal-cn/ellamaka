@@ -40,10 +40,22 @@ describe("persistWopalHomeEnv", () => {
 })
 
 describe("isWopalHomeLockedAtStartup", () => {
-  test("only an explicit normal-mode WOPAL_HOME starts locked", () => {
+  test("locks an explicit normal-mode WOPAL_HOME regardless of completion state", () => {
     expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "/tmp/home" })).toBe(true)
+    expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "/tmp/home" }, { completed: false })).toBe(true)
+    expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "/tmp/home" }, { completed: true })).toBe(true)
+  })
+
+  test("never locks when WOPAL_HOME is absent or empty", () => {
     expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "" })).toBe(false)
     expect(isWopalHomeLockedAtStartup({})).toBe(false)
+    expect(isWopalHomeLockedAtStartup({}, { completed: true })).toBe(false)
+    expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "", WOPAL_DEV: "1" }, { completed: true })).toBe(false)
+  })
+
+  test("locks an explicit development-mode WOPAL_HOME only when onboarding is completed", () => {
     expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "/tmp/home", WOPAL_DEV: "1" })).toBe(false)
+    expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "/tmp/home", WOPAL_DEV: "1" }, { completed: false })).toBe(false)
+    expect(isWopalHomeLockedAtStartup({ WOPAL_HOME: "/tmp/home", WOPAL_DEV: "1" }, { completed: true })).toBe(true)
   })
 })

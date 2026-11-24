@@ -75,10 +75,10 @@ describe("opencode serve (subprocess)", () => {
   )
 
   cliIt.live(
-    "treats a completed launch Home as an editable candidate in development mode",
+    "treats an incomplete launch Home as an editable candidate in development mode",
     ({ home, opencode }) =>
       Effect.gen(function* () {
-        const candidateHome = path.join(home, "completed-candidate-home")
+        const candidateHome = path.join(home, "incomplete-candidate-home")
         const stateDir = path.join(candidateHome, ".setup")
         const candidateConfigDir = path.join(candidateHome, "config")
         mkdirSync(stateDir, { recursive: true })
@@ -87,10 +87,10 @@ describe("opencode serve (subprocess)", () => {
           path.join(stateDir, "ellamaka.json"),
           JSON.stringify({
             version: 1,
-            currentStep: "complete",
+            currentStep: "ai-provider",
             steps: {},
             errors: {},
-            completed: true,
+            completed: false,
             startedAt: null,
             updatedAt: null,
           }),
@@ -116,10 +116,15 @@ describe("opencode serve (subprocess)", () => {
           env: { WOPAL_HOME: candidateHome, WOPAL_DEV: "1", OPENCODE_DB: "", ELLAMAKA_DSH_TOOLS: "0" },
         })
 
-        // In development mode the launch Home is only the first-page candidate.
-        // Its previous completion state must not boot Runtime storage before the
-        // user confirms the effective Home for this Host lifecycle.
+        // In development mode an incomplete launch Home stays editable on step 1
+        // and must not boot Runtime storage before the user confirms the Home.
         expect(existsSync(path.join(candidateHome, "ellamaka"))).toBe(false)
+        const inspected = yield* Effect.promise(() => fetch(`${server.url}/wopal-space/setup/inspect`))
+        expect(inspected.status).toBe(200)
+        const initialFacts = yield* Effect.promise(() => inspected.json())
+        expect(initialFacts).toMatchObject({
+          home: { binding: { mode: "development", locked: false, selectable: true } },
+        })
 
         // A stray pre-selection read is stateless: selecting another Home must
         // make the next read resolve from that effective Home, not old memory.
@@ -174,6 +179,54 @@ describe("opencode serve (subprocess)", () => {
         expect(tree.status).toBe(200)
         const entries = readdirSync(dataDir)
         expect(entries.some((name) => /^ellamaka(?:-[^.]+)?\.db$/.test(name))).toBe(true)
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "locks a completed launch Home at startup in development mode",
+    ({ home, opencode }) =>
+      Effect.gen(function* () {
+        const candidateHome = path.join(home, "completed-dev-home")
+        const stateDir = path.join(candidateHome, ".setup")
+        const configDir = path.join(candidateHome, "config")
+        mkdirSync(stateDir, { recursive: true })
+        mkdirSync(configDir, { recursive: true })
+        writeFileSync(
+          path.join(stateDir, "ellamaka.json"),
+          JSON.stringify({
+            version: 1,
+            currentStep: "done",
+            steps: {},
+            errors: {},
+            completed: true,
+            startedAt: null,
+            updatedAt: null,
+          }),
+        )
+        writeFileSync(
+          path.join(configDir, "settings.jsonc"),
+          JSON.stringify({ wopal: { dsh: { web: { enabled: false } } } }),
+        )
+
+        const server = yield* opencode.serve({
+          env: { WOPAL_HOME: candidateHome, WOPAL_DEV: "1", OPENCODE_DB: "", ELLAMAKA_DSH_TOOLS: "0" },
+        })
+        const inspected = yield* Effect.promise(() => fetch(`${server.url}/wopal-space/setup/inspect`))
+        expect(inspected.status).toBe(200)
+        const facts = yield* Effect.promise(() => inspected.json())
+        expect(facts).toMatchObject({
+          home: {
+            binding: {
+              mode: "development",
+              locked: true,
+              selectable: false,
+              path: candidateHome,
+            },
+          },
+          state: { completed: true },
+        })
+        expect(existsSync(path.join(candidateHome, "ellamaka"))).toBe(true)
       }),
     60_000,
   )

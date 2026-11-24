@@ -206,7 +206,7 @@ declare module "virtual:opencode-server" {
     stop(): Promise<void>
   }
   /** Publish the DSH runtime terminal status for `/global/health`. */
-  export const setDshStatus: (profile: "web" | "tools", status: DshRuntimeStatus) => void
+  export const setDshStatus: (profile: "web" | "tools", status: DshRuntimeStatus, reason?: string) => void
   /** Publish (or clear with `() => undefined`) the authenticated entry getter. */
   export const setDshUrlGetter: (get: () => string | undefined) => void
 }

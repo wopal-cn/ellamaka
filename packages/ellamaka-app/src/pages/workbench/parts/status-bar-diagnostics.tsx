@@ -13,6 +13,17 @@ function formatTime(timestamp: number): string {
   })
 }
 
+/** Run a diagnostic item's retry handler and remove it only when retry resolves true. */
+export async function executeDiagnosticRetry(
+  item: Pick<DiagnosticMessage, "id" | "onRetry">,
+  removeDiagnostic: (id: string) => void,
+): Promise<boolean> {
+  if (!item.onRetry) return false
+  const resolved = await item.onRetry()
+  if (resolved) removeDiagnostic(item.id)
+  return resolved
+}
+
 export function StatusBarDiagnosticsCenter() {
   const wb = useWorkbenchState()
   const language = useLanguage()
@@ -51,7 +62,7 @@ export function StatusBarDiagnosticsCenter() {
     if (!item.onRetry || retryingID()) return
     setRetryingID(item.id)
     try {
-      if (await item.onRetry()) wb.removeDiagnostic(item.id)
+      await executeDiagnosticRetry(item, wb.removeDiagnostic)
     } catch {
       return
     } finally {

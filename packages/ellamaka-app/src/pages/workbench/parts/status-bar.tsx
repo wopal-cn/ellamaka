@@ -4,10 +4,23 @@ import { useLanguage } from "@/context/language"
 import { useWorkbenchState } from "../view-store"
 import { useSessionStore } from "../session-store"
 import { StatusBarStatusPopover, StatusBarServerStatusPopover } from "@/components/status-popover"
+import { formatDshToolsDisabledMessage } from "@/components/status-plugins"
 import { getStatusBarSegments } from "./status-bar-segments"
 import { WorkbenchActiveDirectoryProvider } from "../workbench-directory-provider"
 import { useWorkbenchRuntime } from "../workbench-runtime"
 import { StatusBarDiagnosticsCenter } from "./status-bar-diagnostics"
+import type { DshRuntimeStatus } from "@/utils/server-health"
+
+/** Only dismiss the DSH tools diagnostic when a retry leaves `dshTools` ready. */
+export function createDshToolsDiagnosticRetry(runtime: {
+  retry: () => Promise<boolean>
+  readonly dshTools?: DshRuntimeStatus
+}): () => Promise<boolean> {
+  return async () => {
+    await runtime.retry()
+    return runtime.dshTools === "ready"
+  }
+}
 
 export function StatusBar() {
   const wb = useWorkbenchState()
@@ -57,6 +70,19 @@ export function StatusBar() {
         onRetry: runtime.retry,
         source: "Connection",
       })
+    }
+  })
+
+  createEffect(() => {
+    if (runtime.dshTools === "degraded") {
+      wb.pushDiagnostic("warning", formatDshToolsDisabledMessage(language.t, runtime.dshToolsReason), {
+        id: "dsh-tools-status",
+        autoDismiss: false,
+        onRetry: createDshToolsDiagnosticRetry(runtime),
+        source: "dsh-adapter",
+      })
+    } else {
+      wb.removeDiagnostic("dsh-tools-status")
     }
   })
 

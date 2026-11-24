@@ -95,7 +95,8 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
   })
   reportDshPreparationFailure(preparation)
   if (preparation.status !== "prepared") {
-    setDshStatus("tools", preparation.status === "disabled" ? "disabled" : "degraded")
+    const status = preparation.status === "disabled" ? "disabled" : "degraded"
+    setDshStatus("tools", status, status === "degraded" ? preparation.preparation?.reason : undefined)
     return undefined
   }
 
@@ -107,7 +108,7 @@ async function mountDshIfEnabledImpl(opts: DshMountOptions): Promise<DshMountHan
     closureVersion: manifest.closureVersion,
   })
   if (!homeAccess.ok) {
-    setDshStatus("tools", "degraded")
+    setDshStatus("tools", "degraded", homeAccess.reason)
     Log.Default.error("dsh home access denied", {
       reason: homeAccess.reason,
       homeVersion: homeAccess.homeVersion,

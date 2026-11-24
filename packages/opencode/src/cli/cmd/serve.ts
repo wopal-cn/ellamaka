@@ -45,7 +45,8 @@ export const ServeCommand = effectCmd({
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => Server.listen(opts))
     const origin = `http://${server.hostname}:${server.port}`
-    const setupReady = isWopalHomeLockedAtStartup() && setupCompleted()
+    const completed = setupCompleted()
+    const setupReady = isWopalHomeLockedAtStartup(process.env, { completed }) && completed
     const entry = setupReady ? "workbench" : "onboarding"
     console.log(`${BINARY_NAME} server listening on ${origin}`)
     console.log(`${entry}: ${applicationAuthUrl(origin, entry, Flag.ELLAMAKA_SERVER_PASSWORD)}`)

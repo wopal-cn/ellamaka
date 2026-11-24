@@ -11,8 +11,20 @@ export interface PersistWopalHomeEnvDeps {
   platform?: NodeJS.Platform
 }
 
-export function isWopalHomeLockedAtStartup(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.WOPAL_DEV !== "1" && Boolean(env.WOPAL_HOME?.trim())
+/**
+ * Whether `WOPAL_HOME` should be treated as locked immediately at Host startup.
+ *
+ * Normal mode locks any explicit `WOPAL_HOME`; development mode (`WOPAL_DEV=1`)
+ * locks an explicit `WOPAL_HOME` once its onboarding is completed, keeping an
+ * uncompleted or absent launch Home selectable on the first onboarding step.
+ */
+export function isWopalHomeLockedAtStartup(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { completed?: boolean } = {},
+): boolean {
+  if (!env.WOPAL_HOME?.trim()) return false
+  if (env.WOPAL_DEV === "1") return options.completed === true
+  return true
 }
 
 function getUserShell() {

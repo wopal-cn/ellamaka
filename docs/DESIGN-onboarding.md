@@ -93,9 +93,9 @@ wopal setup [host/port/password options]
 
 正常使用模式下，Ellamaka Host 启动时读取当前用户的 `WOPAL_HOME`。Desktop 从 Finder/Dock 冷启动而没有继承 shell rc 时，宿主读取用户 login shell 环境补齐该值。若 `WOPAL_HOME` 已存在，Host 从启动起锁定该 Home；Onboarding 第一页显示路径但不允许改选。若变量不存在，Host 进入 Home 尚未确认的 bootstrap 状态：第一步允许用户输入或选择路径，确认成功后把该值持久化到当前用户的 shell/user environment，同时立即作为本次 Host 的 effective Home。持久化失败时 Home 保持未确认，后续 Setup 不开始。
 
-开发测试模式由 `WOPAL_DEV=1` 明确标识。`scripts/dev.sh` 的 `serve`、`desktop`、`tui` 入口都设置该标识。此模式下 shell 中已有的 `WOPAL_HOME` 或平台默认路径只作为第一步的初始候选，用户可以选择不同路径；确认只更新当前开发进程树的 effective `WOPAL_HOME`，不修改用户 shell profile 或 user environment。
+开发测试模式由 `WOPAL_DEV=1` 明确标识。`scripts/dev.sh` 的 `serve`、`desktop`、`tui` 入口都设置该标识。此模式下，若已有显式 `WOPAL_HOME` 且该 Home 已完成 Onboarding（`completed === true`），Host 启动时直接锁定该 Home 并按正常流程进入 Workbench；若 `WOPAL_HOME` 缺失或对应 Home 尚未完成 Onboarding（例如指向新目录或手动重置了 `.setup/ellamaka.json` 状态），则仍将其作为第一步的可编辑候选路径，用户选定/确认只更新当前开发进程树的 effective `WOPAL_HOME`，不修改用户 shell profile 或 user environment。
 
-`scripts/dev.sh` 的 Web 开发入口在 Home 确认前只执行健康检查并进入 Onboarding。Global Config bootstrap 从 Home 锁定后开始，由 Workbench 与 Runtime 按需读取该 Home 的配置。
+`scripts/dev.sh` 的 Web 开发入口按后端实际启动状态输出 `/workbench` 或 `/onboarding` 入口；在 Home 未锁定前只执行健康检查并进入 Onboarding。Global Config bootstrap 从 Home 锁定后开始，由 Workbench 与 Runtime 按需读取该 Home 的配置。
 
 Home 一旦确认，在当前 Ellamaka Host 生命周期内不可切换。Foundation、GitHub、Ontology、Space、Core Preparation、Workbench 以及 Host 启动的子进程都消费同一个锁定值；页面刷新、重复 inspect、shell 环境变化或后续请求都不能重新解析 Home。需要改变正常使用模式的 Home 时，用户先修改持久 `WOPAL_HOME`，再重启 Host。
 

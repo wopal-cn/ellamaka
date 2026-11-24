@@ -28,7 +28,7 @@ import { useServers } from "@/context/servers"
 import { resolveServerHealthKey } from "@/utils/server-health"
 import { serverSwitchRedirect } from "@/utils/server-switch-route"
 import { sandboxControlConfig } from "./prompt-input/sandbox-control"
-import { describeStatusPlugin, statusPlugins } from "./status-plugins"
+import { describeStatusPlugin, formatDshReason, statusPlugins } from "./status-plugins"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -294,6 +294,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?:
           : undefined,
       ).sandbox,
       server.key ? servers.health[healthKey()]?.dsh?.tools : undefined,
+      server.key ? servers.health[healthKey()]?.dshReasonCode : undefined,
     ).map((plugin) => ({
       specifier: plugin.name,
       ...describeStatusPlugin(plugin, {
@@ -491,31 +492,48 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean>; spaceRoot?:
                 fallback={<div class="text-14-regular text-text-base text-center my-auto">{pluginEmpty()}</div>}
               >
                 <For each={plugins()}>
-                  {(plugin) => (
-                    <div
-                      class="flex min-w-0 items-center gap-2 w-full px-2 py-1.5"
-                      data-status-plugin={plugin.name}
-                      data-source={plugin.source}
-                      title={plugin.specifier}
-                    >
+                  {(plugin) => {
+                    const degradedReason = () =>
+                      plugin.degraded && plugin.reason ? formatDshReason(language.t, plugin.reason) : undefined
+                    return (
                       <div
-                        classList={{
-                          "size-1.5 rounded-full shrink-0": true,
-                          "bg-icon-success-base": plugin.enabled !== false,
-                          "bg-border-weak-base": plugin.enabled === false,
-                        }}
-                      />
-                      <span class="min-w-0 flex-1 truncate text-14-regular text-text-base">{plugin.name}</span>
-                      <Show when={plugin.enabled === false}>
-                        <span class="shrink-0 text-12-regular text-text-weak">
-                          {language.t("status.popover.plugin.notEnabled")}
-                        </span>
-                      </Show>
-                      <span class="shrink-0 rounded-sm border border-border-weak-base bg-surface-raised-base px-1.5 py-0.5 text-12-regular text-text-weak">
-                        {language.t(`status.popover.plugin.${plugin.source}`)}
-                      </span>
-                    </div>
-                  )}
+                        class="flex flex-col w-full px-2 py-1.5"
+                        data-status-plugin={plugin.name}
+                        data-source={plugin.source}
+                        title={degradedReason() ?? plugin.specifier}
+                      >
+                        <div class="flex min-w-0 items-center gap-2 w-full">
+                          <div
+                            classList={{
+                              "size-1.5 rounded-full shrink-0": true,
+                              "bg-icon-success-base": plugin.enabled !== false,
+                              "bg-icon-warning-base": plugin.enabled === false && plugin.degraded === true,
+                              "bg-border-weak-base": plugin.enabled === false && plugin.degraded !== true,
+                            }}
+                          />
+                          <span class="min-w-0 flex-1 truncate text-14-regular text-text-base">{plugin.name}</span>
+                          <Show when={plugin.enabled === false}>
+                            <span class="shrink-0 text-12-regular text-text-weak" data-slot="status-plugin-disabled">
+                              {language.t("status.popover.plugin.disabled")}
+                            </span>
+                          </Show>
+                          <span class="shrink-0 rounded-sm border border-border-weak-base bg-surface-raised-base px-1.5 py-0.5 text-12-regular text-text-weak">
+                            {language.t(`status.popover.plugin.${plugin.source}`)}
+                          </span>
+                        </div>
+                        <Show when={degradedReason()}>
+                          {(reasonText) => (
+                            <div
+                              class="pl-3.5 pt-0.5 text-12-regular text-text-weak truncate"
+                              data-slot="status-plugin-reason"
+                            >
+                              {reasonText()}
+                            </div>
+                          )}
+                        </Show>
+                      </div>
+                    )
+                  }}
                 </For>
               </Show>
             </div>

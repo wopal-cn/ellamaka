@@ -210,7 +210,8 @@ async function start(command: StartCommand) {
     currentStartCommand = command
     const { installDshMountController, setupCompleted, isWopalHomeLockedAtStartup, Global, setDshStatus } =
       await import("virtual:opencode-server")
-    const setupReady = isWopalHomeLockedAtStartup() && setupCompleted()
+    const completed = setupCompleted()
+    const setupReady = isWopalHomeLockedAtStartup(process.env, { completed }) && completed
     setDshStatus("web", "disabled")
     setDshStatus("tools", "disabled")
     installDshMountController(
@@ -388,7 +389,7 @@ async function mountDshIfPresent(command: StartCommand, legacyAdoptionConfirmed 
     sidecarLog.info("dsh.desktop.web.mounted", { mountPath: host.mountPath })
   } catch (error) {
     const { setDshStatus } = await import("virtual:opencode-server")
-    setDshStatus("web", "degraded")
+    setDshStatus("web", "degraded", error instanceof Error ? error.message : String(error))
     // A broken closure must never exit the sidecar (B-06).
     sidecarLog.error("dsh.desktop.web.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
@@ -439,7 +440,7 @@ async function mountDshToolsIfPresent(command: StartCommand, legacyAdoptionConfi
     sidecarLog.info("dsh.desktop.tools.mounted")
   } catch (error) {
     const { setDshStatus } = await import("virtual:opencode-server")
-    setDshStatus("tools", "degraded")
+    setDshStatus("tools", "degraded", error instanceof Error ? error.message : String(error))
     delete (globalThis as Record<string, unknown>).__ellamakaDshContainer
     // A broken closure must never exit the sidecar (B-06).
     sidecarLog.error("dsh.desktop.tools.failed", {
@@ -492,8 +493,8 @@ async function initDshLaunch(
     ...(reason ? { reason } : {}),
   })
   const { setDshStatus } = await import("virtual:opencode-server")
-  if (webStatus === "degraded") setDshStatus("web", "degraded")
-  if (toolsStatus === "degraded") setDshStatus("tools", "degraded")
+  if (webStatus === "degraded") setDshStatus("web", "degraded", preparation.web.preparation?.reason)
+  if (toolsStatus === "degraded") setDshStatus("tools", "degraded", preparation.tools.preparation?.reason)
   if (webStatus !== "ready" && toolsStatus !== "ready") {
     dshLaunchState = { webStatus, toolsStatus, ...intent, ...(reason ? { reason } : {}) }
     return dshLaunchState
@@ -509,8 +510,8 @@ async function initDshLaunch(
       closureVersion: manifest.closureVersion,
     })
     const { setDshStatus } = await import("virtual:opencode-server")
-    if (intent.web) setDshStatus("web", "degraded")
-    if (intent.tools) setDshStatus("tools", "degraded")
+    if (intent.web) setDshStatus("web", "degraded", homeAccess.reason)
+    if (intent.tools) setDshStatus("tools", "degraded", homeAccess.reason)
     dshLaunchState = {
       webStatus: intent.web ? "degraded" : "disabled",
       toolsStatus: intent.tools ? "degraded" : "disabled",
@@ -528,12 +529,13 @@ async function initDshLaunch(
   } catch (error) {
     await dshHomeAccess.lease.release()
     dshHomeAccess = undefined
+    const message = error instanceof Error ? error.message : String(error)
     sidecarLog.error("dsh.desktop.init.load.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
     })
     const { setDshStatus } = await import("virtual:opencode-server")
-    if (intent.web) setDshStatus("web", "degraded")
-    if (intent.tools) setDshStatus("tools", "degraded")
+    if (intent.web) setDshStatus("web", "degraded", message)
+    if (intent.tools) setDshStatus("tools", "degraded", message)
     dshLaunchState = {
       webStatus: intent.web ? "degraded" : "disabled",
       toolsStatus: intent.tools ? "degraded" : "disabled",
@@ -565,8 +567,9 @@ async function initializeDsh(command: StartCommand, legacyAdoptionConfirmed = fa
       parentPort.postMessage({ type: "dshLegacyAdoptionRequired" })
   } catch (error) {
     const { Log, setDshStatus } = await import("virtual:opencode-server")
-    if (dshIntent?.web) setDshStatus("web", "degraded")
-    if (dshIntent?.tools) setDshStatus("tools", "degraded")
+    const message = error instanceof Error ? error.message : String(error)
+    if (dshIntent?.web) setDshStatus("web", "degraded", message)
+    if (dshIntent?.tools) setDshStatus("tools", "degraded", message)
     Log.create({ service: "dsh-desktop" }).error("dsh.desktop.initialize.failed", {
       error: error instanceof Error ? (error.stack ?? error.message) : String(error),
     })

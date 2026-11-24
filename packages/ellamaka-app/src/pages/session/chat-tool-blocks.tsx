@@ -25,7 +25,20 @@ function toolStatusLabel(status: string) {
   if (status === "pending") return "等待执行"
   if (status === "running") return "正在运行"
   if (status === "error") return "失败"
+  if (status === "not-modified") return "未修改"
   return status
+}
+
+function isInstructionBlockedModification(part: ToolPart): boolean {
+  if (part.state.status !== "completed") return false
+  return part.state.title === "Instructions required" || part.state.title === "Instructions unavailable"
+}
+
+function instructionBlockedSummary(part: ToolPart): string {
+  if (part.state.status !== "completed" || typeof part.state.output !== "string") return ""
+  const reminderIndex = part.state.output.indexOf("\n\n<system-reminder>")
+  const summary = reminderIndex >= 0 ? part.state.output.slice(0, reminderIndex) : part.state.output
+  return summary.trim()
 }
 
 /**
@@ -330,9 +343,11 @@ export function FileChangeBlock(props: {
   directory?: string
   editRenderer?: Component<OpenCodeEditRendererProps>
 }) {
+  const blocked = createMemo(() => isInstructionBlockedModification(props.part))
+  const blockedSummary = createMemo(() => (blocked() ? instructionBlockedSummary(props.part) : ""))
   const { open, setOpen } = useToolOpen(
     props.part,
-    () => props.part.state.status === "error" || (props.defaultOpen ?? isToolRunning(props.part)),
+    () => props.part.state.status === "error" || (!blocked() && (props.defaultOpen ?? isToolRunning(props.part))),
   )
 
   const input = () => (props.part.state.input ?? {}) as Record<string, any>
@@ -381,34 +396,45 @@ export function FileChangeBlock(props: {
           icon="code-lines"
           title={title()}
           subtitle={subtitle()}
-          status={props.part.state.status}
+          status={blocked() ? "not-modified" : props.part.state.status}
           open={open()}
           toggle={(_event: MouseEvent) => setOpen(!open())}
           actions={
-            <Show when={props.part.state.status === "completed" && (additions() > 0 || deletions() > 0)}>
+            <Show when={!blocked() && props.part.state.status === "completed" && (additions() > 0 || deletions() > 0)}>
               <span data-slot="chat-file-additions">+{additions()}</span>
               <span data-slot="chat-file-deletions">-{deletions()}</span>
             </Show>
           }
         />
         <Collapsible.Content>
-          <Show when={props.editRenderer}>
-            {(renderer) => {
-              const Renderer = renderer()
-              return (
-                <div data-component="chat-file-change-wrapper" data-scrollable="">
-                  <Renderer
-                    part={props.part}
-                    message={props.message}
-                    defaultOpen={props.defaultOpen}
-                    toolOpen={open()}
-                    onToolOpenChange={setOpen}
-                    deferToolContent={false}
-                    virtualizeDiff={false}
-                  />
-                </div>
-              )
-            }}
+          <Show
+            when={!blocked()}
+            fallback={
+              <Show when={blockedSummary()}>
+                <pre data-slot="chat-generic-output" data-scrollable="">
+                  {blockedSummary()}
+                </pre>
+              </Show>
+            }
+          >
+            <Show when={props.editRenderer}>
+              {(renderer) => {
+                const Renderer = renderer()
+                return (
+                  <div data-component="chat-file-change-wrapper" data-scrollable="">
+                    <Renderer
+                      part={props.part}
+                      message={props.message}
+                      defaultOpen={props.defaultOpen}
+                      toolOpen={open()}
+                      onToolOpenChange={setOpen}
+                      deferToolContent={false}
+                      virtualizeDiff={false}
+                    />
+                  </div>
+                )
+              }}
+            </Show>
           </Show>
         </Collapsible.Content>
       </Collapsible>
@@ -473,9 +499,10 @@ export function StrReplaceEditorBlock(props: {
   directory?: string
   editRenderer?: Component<OpenCodeEditRendererProps>
 }) {
+  const blocked = createMemo(() => isInstructionBlockedModification(props.part))
   const { open, setOpen } = useToolOpen(
     props.part,
-    () => props.part.state.status === "error" || (props.defaultOpen ?? isToolRunning(props.part)),
+    () => props.part.state.status === "error" || (!blocked() && (props.defaultOpen ?? isToolRunning(props.part))),
   )
 
   const input = () => props.part.state.input ?? {}
@@ -492,6 +519,7 @@ export function StrReplaceEditorBlock(props: {
     return typeof value === "string" && value.trim() ? value : undefined
   })
   const output = createMemo(() => {
+    if (blocked()) return instructionBlockedSummary(props.part)
     const state = props.part.state
     return state.status === "completed" && typeof state.output === "string" ? state.output : ""
   })
@@ -522,11 +550,11 @@ export function StrReplaceEditorBlock(props: {
           title={props.part.tool}
           subtitle={filePath() ? relativizeProjectPath(filePath()!, props.directory) : undefined}
           args={command() ? [command()!] : []}
-          status={props.part.state.status}
+          status={blocked() ? "not-modified" : props.part.state.status}
           open={open()}
           toggle={(_event: MouseEvent) => setOpen(!open())}
           actions={
-            <Show when={props.part.state.status === "completed" && (additions() > 0 || deletions() > 0)}>
+            <Show when={!blocked() && props.part.state.status === "completed" && (additions() > 0 || deletions() > 0)}>
               <span data-slot="chat-file-additions">+{additions()}</span>
               <span data-slot="chat-file-deletions">-{deletions()}</span>
             </Show>
@@ -534,7 +562,7 @@ export function StrReplaceEditorBlock(props: {
         />
         <Collapsible.Content>
           <Show
-            when={fileDiff() ? props.editRenderer : undefined}
+            when={!blocked() && fileDiff() ? props.editRenderer : undefined}
             fallback={
               <Show when={output()}>
                 <pre data-slot="chat-str-replace-output" data-scrollable="">

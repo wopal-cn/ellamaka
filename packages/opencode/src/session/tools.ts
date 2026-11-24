@@ -207,9 +207,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       metadata: { ...result.metadata, loaded: fresh.map((item) => item.filepath) },
       output:
         fresh.length > 0
-          ? "File not modified. The following instructions apply to this file; read them and repeat the same tool call to apply the change.\n\n" +
+          ? "File not modified. Instructions loaded below (no read needed); follow them and retry.\n\n" +
             fresh.map((item) => item.reminder).join("\n\n")
-          : "File not modified. Applicable instructions for this file were already attached to another tool result in this batch; read them and repeat the same tool call to apply the change.",
+          : "File not modified. Instructions already attached in this batch (no read needed); follow them and retry.",
     }
   }
 

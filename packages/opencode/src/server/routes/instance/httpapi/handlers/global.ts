@@ -8,7 +8,7 @@ import { SessionStatus } from "@/session/status"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
 import { InstallationVersion } from "@wopal/ellamaka-core/installation/version"
 import { NodeHttpServerRequest } from "@effect/platform-node"
-import { getDshStatus } from "@/workbench/dsh-status"
+import { getDshStatus, getDshStatusReason } from "@/workbench/dsh-status"
 import { getCorePreparationHealth } from "@/core/preparation"
 import { prepareOnboardingRuntime } from "@/core/onboarding-preparation"
 import { Effect, Queue, Schema } from "effect"
@@ -133,12 +133,19 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
       const readiness = yield* Effect.promise(() => getCorePreparationHealth())
       const managedInstanceId = process.env.ELLAMAKA_MANAGED_INSTANCE_ID
+      const dsh = getDshStatus()
+      const reason =
+        dsh.tools === "degraded" || dsh.web === "degraded"
+          ? (getDshStatusReason("tools") ?? readiness.dshRuntime?.reasonCode ?? getDshStatusReason("web"))
+          : readiness.dshRuntime?.reasonCode
+      const dshRuntime = reason ? { ...readiness.dshRuntime, reasonCode: reason } : readiness.dshRuntime
       return {
         healthy: true as const,
         version: InstallationVersion,
         ...(managedInstanceId ? { managedInstanceId } : {}),
-        dsh: getDshStatus(),
+        dsh,
         ...readiness,
+        dshRuntime,
       }
     })
 

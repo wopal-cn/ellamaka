@@ -41,6 +41,7 @@ export type ServerHealth = {
   healthy: boolean
   version?: string
   dsh?: DshRuntimeHealth
+  dshReasonCode?: string
   preparation?: CorePreparationHealth
   /** The server rejected the stored credentials (HTTP 401). */
   unauthorized?: boolean
@@ -187,18 +188,23 @@ export async function checkServerHealth(
       signal,
     })
       .global.health()
-      .then((x) =>
-        x.error
-          ? next(count, x.error, x.response)
-          : {
-              healthy: x.data?.healthy ?? false,
-              version: x.data?.version,
-              ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
-              ...(readPreparation(x.data?.preparation) !== undefined
-                ? { preparation: readPreparation(x.data.preparation) }
-                : {}),
-            },
-      )
+      .then((x) => {
+        if (x.error) return next(count, x.error, x.response)
+        const preparation = readPreparation(x.data?.preparation)
+        const runtimeReason =
+          typeof x.data?.dshRuntime?.reasonCode === "string" && x.data.dshRuntime.reasonCode
+            ? x.data.dshRuntime.reasonCode
+            : undefined
+        const stepReason = preparation?.steps.find((step) => step.state !== "READY" && step.code)?.code
+        const dshReasonCode = runtimeReason ?? stepReason
+        return {
+          healthy: x.data?.healthy ?? false,
+          version: x.data?.version,
+          ...(x.data?.dsh !== undefined ? { dsh: x.data.dsh } : {}),
+          ...(dshReasonCode !== undefined ? { dshReasonCode } : {}),
+          ...(preparation !== undefined ? { preparation } : {}),
+        }
+      })
       .catch((error) => next(count, error))
   return attempt(0).finally(() => timeout?.clear?.())
 }
