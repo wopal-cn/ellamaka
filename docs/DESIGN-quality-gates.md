@@ -1,9 +1,10 @@
 # DESIGN — Static Quality Gates
 
 > **Status**: Active
-> **Updated**: 2026-11-22
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Scope**: 全仓已跟踪源文件的 lint、格式化与 CSS 检查；三者范围分别定义
 
 本文件定义 Ellamaka 静态质量门禁的现时契约：哪些代码进入检查、哪些规则停检、存量债务如何记账、门禁从哪里触发。
@@ -17,7 +18,7 @@ Ellamaka 的静态检查覆盖三类互相独立的检查：lint（`oxlint`）�
 **Owned Here**：检查范围、规则停检取舍、存量债务的基线契约、门禁入口与它们在 CI 和提交钩子中的归属。
 
 **Handled Elsewhere**：通用编码规范与 TDD 判定由 WopalSpace 装配的 `testing.md` 拥有；测试隔离门禁由
-[Test Isolation](./testing-isolation.md) 拥有；构建与发布流程由 [Distribution](./DESIGN-distribution.md) 拥有。
+[Test Isolation](./DESIGN-testing-isolation.md) 拥有；构建与发布流程由 [Distribution](./DESIGN-distribution.md) 拥有。
 
 **Source Carrier**：lint 配置在仓库根 `.oxlintrc.json`，门禁检查器在 `packages/opencode/script/lint-gate/`，
 提交钩子在 `.husky/pre-commit`，CI 定义在 `.github/workflows/ci.yml`，本地 CI 副本在
@@ -55,7 +56,7 @@ bun run format:check               # 对同一范围执行 prettier --check
   只能往上抬，且从报告里看不出债务分布。
 - **`may`**：提交钩子可以在被排除路径上放行，因为那些文件不进入检查范围。
 
-## Lint 范围与规则取舍
+## Lint Scope and Rule Trade-offs
 
 范围按「归属」划定，不按「是否容易修」划定。
 
@@ -183,7 +184,7 @@ stale 提示运行 `lint:fix`。`lint:fix` 在检测到放大时拒绝写入，�
 
 ## Reference Documents
 
-| Document                                 | Purpose                                                       |
-| ---------------------------------------- | ------------------------------------------------------------- |
-| [Test Isolation](./testing-isolation.md) | 测试隔离的同形门禁契约：四元组基线与 stale 判定语义的既有实现 |
-| [Distribution](./DESIGN-distribution.md) | 发布流程与 CI 触发策略的产品约束来源                          |
+| Document                                        | Purpose                                                       |
+| ----------------------------------------------- | ------------------------------------------------------------- |
+| [Test Isolation](./DESIGN-testing-isolation.md) | 测试隔离的同形门禁契约：四元组基线与 stale 判定语义的既有实现 |
+| [Distribution](./DESIGN-distribution.md)        | 发布流程与 CI 触发策略的产品约束来源                          |

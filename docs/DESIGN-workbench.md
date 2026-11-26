@@ -1,14 +1,16 @@
 # Ellamaka Workbench 设计规范
 
 > **Status**: Active
-> **Updated**: 2026-11-09
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 >
 > 本文是 Workbench 的核心设计文档，描述架构选择、状态模型与交互流程。Electron 桌面承载与共享 PTY 生命周期见 [`./DESIGN-desktop.md`](./DESIGN-desktop.md)，开发规则（状态所有权边界、事务一致性、effect 竞态防护等）见 `packages/ellamaka-app/AGENTS.md`。
 
 ---
 
-## 方向与核心理念
+## Overview and Core Concepts
 
 Ellamaka Workbench 是 `packages/ellamaka-app` 的运行阶段界面；同一个前端 package 还承载配置阶段 `/onboarding`。该包从上游 `packages/app` 独立复制而来，是 Ellamaka 自有的应用副本。
 
@@ -30,7 +32,7 @@ Ellamaka Workbench 是 `packages/ellamaka-app` 的运行阶段界面；同一个
 
 ---
 
-## 目标架构模型
+## Target Architecture Model
 
 ```
 Ellamaka App
@@ -126,7 +128,7 @@ DSH Web 的全局设置、默认值和 `restart-required` 生效语义由 [Web p
 
 ---
 
-## 壳与路由设计
+## Shell and Routing
 
 ### 路由定义
 
@@ -174,7 +176,7 @@ bun packages/ellamaka-release/src/cli/build.ts --web-ui none          # 不嵌�
 
 ---
 
-## 面板工作区与视图隔离
+## Panel Workspace and View Isolation
 
 ### 面板状态定义
 
@@ -601,7 +603,7 @@ PromptNavigator 不依赖新的后端目录接口。初始目录使用当前已�
 
 ---
 
-## 状态管理与持久化设计
+## State Management and Persistence
 
 Workbench 状态管理的核心目标：
 
@@ -728,7 +730,7 @@ WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确�
 - **原子状态回退**：确认 PTY 已退出后，前端先清 PTY Manager 缓存，再通过 SolidJS `batch` 提交布局守卫与 PTY ID。TUI 必须先切 `viewMode=chat` 再清 `tuiPtyId`；Split Terminal 必须先设 `splitTerminal=false` 再清 `splitPtyId`，避免创建 effect 观察到中间状态并抢跑创建新 PTY。
 - **组件 Keyed 实例化隔离**：终端 `<Show>` 使用 `keyed`。PTY ID 变化时卸载旧 Terminal 实例并创建新实例，防止 WebSocket 与终端对象跨 PTY 复用。
 
-> **开发规则**：effect 守卫、action 顺序、DELETE 幂等性等实现约束见 [`packages/ellamaka-app/AGENTS.md` 事务、异步竞态与 PTY 生命周期](../packages/ellamaka-app/AGENTS.md#transactions-async-races-and-pty-lifecycle)。
+> **开发规则**：effect 守卫、action 顺序、DELETE 幂等性等实现约束见 [`packages/ellamaka-app/AGENTS.md`](../packages/ellamaka-app/AGENTS.md#implementation-rules)。
 
 ### Session 状态收敛
 
@@ -741,7 +743,7 @@ WebSocket 连接关闭与 PTY 进程退出是两个独立事件。前端先确�
 - Session `status`（bound / idle / archived）——从 Panel 布局绑定和服务端归档字段派生。
 - Session `boundPanelId`——从 Panel 布局反向查找。
 - Session title、副本、目录、时间戳和状态——由服务端投影提供，UI 不做 optimistic 伪造。
-- Session 列表——由 SessionTree 的服务端加载和 Shell SSE 对账写入内存 Projection。`GET /workbench/session-groups` 只返回 `time_archived IS NULL` 且 `parent_id IS NULL` 的未归档根会话；归档会话和子会话不得进入列表、`sessionCount` 或客户端 Projection。
+- Session 列表——由 SessionTree 的服务端加载和 Shell SSE 对账写入内存 Projection。`GET /workbench/session-tree` 只返回未归档根会话；归档会话和子会话不得进入列表、`sessionCount` 或客户端 Projection。
 
 **事件处理规则**：
 
@@ -835,7 +837,7 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 ---
 
-## 关键交互流程
+## Key Interaction Flows
 
 ### 开启新会话（以 Empty 槽位为例）
 
@@ -890,9 +892,12 @@ Statusbar 实现集中于 `status-bar.tsx`、`status-bar-segments.ts` 与 `statu
 
 ---
 
-## 异常处理与健壮自愈机制
+## Business Rules and Failure Boundaries
 
-Workbench 在运行状况异常（网络抖动、服务或环境配置损坏）下的异常防御与诊断设计。
+- **状态所有权与单事务边界**：仅 `WorkbenchStore` 持久化布局，`WorkbenchActions` 是唯一跨所有者事务入口；视图组件 `onCleanup` 与零散 helper 禁止直接调用 `pty.remove` 或改写 Store。
+- **SpaceScope 判别约束**：General 空间固定以 Tagged Union `scope.kind === "general"` 判定，禁止依赖空字符串真假值判断分支。
+- **隐藏容器与被动查询边界**：未激活 Keep-Alive Space 必须使用 `position: absolute; visibility: hidden; inert` 隐藏（禁止 `display: none`）；Session Tree、通知与文件浏览等被动查询不得隐式创建 directory instance 或重连隐藏 Space 的 PTY。
+- **单 Tab 互斥与钉住保护**：浏览器通过 Web Locks API 强制单标签互斥；General Tab 与 DSH Tab 固定钉住不可关闭，物理 Space Tab 须先解除 Pin 后才可关闭。
 
 ### 异常分类与应对原则
 
@@ -916,3 +921,11 @@ Workbench 在运行状况异常（网络抖动、服务或环境配置损坏）�
 Workbench 从宿主健康和共享管理服务判断可用性。服务端版本与 DSH 状态反映实际宿主；空间列表、目录准备和配置消费通过同源 SDK/服务完成，不检查 Wopal CLI 的安装或版本。
 
 诊断中心显示真实的服务、DSH 或空间准备错误，并提供对应 setup 操作；没有自动安装/更新 Wopal CLI 的核心修复弹窗。用户显式使用的可选外部工具诊断由该工具入口承接，不阻断 Session、PTY、空间或向导。
+
+## Reference Documents
+
+| Document                                                           | Purpose                                                   |
+| ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md` | 未落地的 Workbench 图形化设置面板与完整 Config Plane 提案 |
+| `./proposals/proposed/feature/2026-10-14-dsh-customization.md`     | 未落地的实验 Profile Tab 与 Web Component 插槽提案        |
+| `../packages/ellamaka-app/AGENTS.md`                               | Workbench 前端开发、effect 竞态与样式规则                 |

@@ -2,7 +2,7 @@
 
 > **文档定位**：记录 WorkBuddy 5.11.3 内置浏览器（IAB）与 Browser Use 插件 1.2.2 的现有实现证据、逆向结果及候选复现路径。本文是技术研究报告，不构成 Ellamaka 的架构选型、DESIGN 修订或实施授权。
 > **研究日期**：2026-11-14
-> **设计真相源**：Ellamaka 的正式设计以 [`../DESIGN.md`](../../DESIGN.md)、[`../DESIGN-desktop.md`](../../DESIGN-desktop.md)、[`../DESIGN-dsh-web.md`](../../DESIGN-dsh-web.md) 为准。
+> **设计真相源**：Ellamaka 的正式设计以 [DESIGN.md](../../DESIGN.md)、[DESIGN-desktop.md](../../DESIGN-desktop.md)、[DESIGN-dsh-web.md](../../DESIGN-dsh-web.md) 为准。
 > **结构化证据**：[`./workbuddy-browser-mcp-provider-evidence.json`](./workbuddy-browser-mcp-provider-evidence.json)（保留 MCP 实际工具 Schema、Ghidra 字符串引用和函数反编译状态；不包含第三方二进制或完整反编译代码）。
 > **状态**：研究中；路径 A/B 均保留，尚未作产品决策。
 

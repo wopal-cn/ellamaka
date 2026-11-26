@@ -108,7 +108,7 @@ Ellamaka 由 Runtime、Server 组合宿主、private WopalSpace 应用服务和�
 
 以下规则全仓适用；`bun run check:test-isolation` 检查其中可静态识别的违规，其余由行为测试与实施评审验证。
 原理、三种隔离模型、规则到门禁的完整对照见
-[docs/testing-isolation.md](docs/testing-isolation.md)。
+[docs/DESIGN-testing-isolation.md](docs/DESIGN-testing-isolation.md)。
 
 - 临时文件不许落在仓库目录里。测试需要临时文件或目录时，写到 `.wopal-space/.tmp/` 或所属 package 自带的
   scoped 临时目录 fixture，并在 `finally` 里删除；禁止对 `<package>/.tmp`（或 package 内任何路径）执行 `mkdir`。

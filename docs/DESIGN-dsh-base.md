@@ -1,8 +1,10 @@
 # DSH 集成基础设计
 
 > **Status**: Active
-> **Updated**: 2026-11-15
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-wopalspace.md` — WopalSpace Setup 对 CorePreparation 的上层消费边界
@@ -148,7 +150,7 @@ Bridge 按固定 DSH 闭包检查 Bun 与 Node 的公开宿主 API。Bun 已提�
 
 DSH Web 的 PTC 子进程使用符合所选 DSH 版本要求的 Node 24。CLI 不在 Bun 可执行文件中内置 Node；当 Web profile 启用时，现有 `CorePreparation.prepare(host)` 在 Onboarding 的可见准备阶段下载、校验并安置受管理 Node，已有安装则验证后复用。Setup 已完成的机器在启动 Web 的 host preparation 中执行同一检查。Desktop 使用 Electron 已携带的 Node 24，不另行下载。Bridge 通过官方 `launch: { kind: 'node-script', executable, bootstrapPath? }` 指向经验证的绝对路径与官方 bootstrap；不使用系统 PATH 或用户全局 Node 版本。
 
-DSH subprocess 负责 fd7 控制通道、`createProcessRpc`、沙箱、超时、取消、输出预算与子进程清理。Bridge 只提供可信 Node 路径、运行时验证和 Electron 启动接线。此前 Bun 对 PTC `process.js` 的源码改写、fd7→stdin/stdout 替代通信以及 CLI 自身充当 PTC 子进程的入口均不属于目标态，按本 Plan 从代码及对应测试中移除；通用 Bun subprocess 能力继续保留。Node 缺失或运行校验失败时仅标记 Web PTC 不可用，普通 Native Agent 和 Tools profile 保持独立。
+DSH subprocess 负责 fd7 控制通道、`createProcessRpc`、沙箱、超时、取消、输出预算与子进程清理。Bridge 只提供可信 Node 路径、运行时验证和 Electron 启动接线。Web PTC 仅通过受控的官方 `node-script` Node Worker 协议执行，不在 Bun 中模拟或改写 PTC 子进程；通用 Bun subprocess 能力继续保留。Node 缺失或运行校验失败时仅标记 Web PTC 不可用，普通 Native Agent 和 Tools profile 保持独立。
 
 ## Configuration Lifecycle
 
@@ -259,7 +261,7 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 
 ## Persistent Data
 
-当前 DSH native 配置仍落在 `$WOPAL_HOME/dsh/home/profiles/<profile>/cordis.patch.yml`；Settings/ConfigEditor/HMR/Loader 拥有字段校验、revision 与 native apply lifecycle。Phase 3 Config Draft 计划把用户可管理的 DSH authored facts 提升到统一 `settings.jsonc`/`settings.local.jsonc`，再通过 DSH provider 投影回 native lifecycle；该方向不属于当前 Runtime Foundation 实施。closure-change backup 只保存恢复副本和最小元数据，不成为配置读写来源。
+当前 DSH native 配置落在 `$WOPAL_HOME/dsh/home/profiles/<profile>/cordis.patch.yml`；Settings/ConfigEditor/HMR/Loader 拥有字段校验、revision 与 native apply lifecycle（未来将受控配置提升至统一 `settings.jsonc` 投影的方向见参考提案 [2026-09-17-config-plane-settings.md](./proposals/proposed/feature/2026-09-17-config-plane-settings.md)）。closure-change backup 只保存恢复副本和最小元数据，不成为配置读写来源。
 
 用户 preset 采用目标 DSH 的标准 bundle 声明与官方 YAML 方言；来源的生成文件和实际配置都保留。用户插件使用 profile 的固定依赖声明；官方解析层按当前 closure 重建，第三方兼容性按实际包声明和 Loader 诊断检查。不兼容实体不能通过沿用 revision/source 链接继续执行。closure-change backup 不冻结用户自行修改的外部插件源码或外部服务；内部 adapter 的匹配由产品制品保证。
 
@@ -267,8 +269,16 @@ Ellamaka 的 `settings.jsonc` 和三层 `wopal.pluginConfig` 仍是内部 adapte
 
 Active Home 与 closure-change backup 按原敏感级别保存；失败信息只记录 backup 标识、相对路径和错误 code。用户编辑、复制配置或外部工具副作用不自动重放。
 
+## Business Rules and Failure Boundaries
+
+- **Home 代际门禁与备份前提**：切换到更高 `closureVersion` 必须取得排他 Home 锁并先完成备份；备份或状态写入失败时拒绝启动 DSH。记录版本新于当前产品版本时严格拒绝打开，无版本历史 Home 必须经交互入口人工确认一次后才可接管。
+- **元数据异常失败关闭**：`managed` marker 与 `state/current.json` 状态冲突、损坏或不可读时必须报告未知状态并拒绝写入 Home，禁止猜测或自动恢复 DSH 私有数据。
+- **配置激活回滚与故障隔离**：Profile 配置重放失败时恢复上一份成功补丁并校验原状态，恢复失败则使该挂载进入 `degraded`；DSH 准备或激活失败只降级对应 profile，不阻断原生 Ellamaka 会话；`ellamaka run` 永久跳过 DSH。
+
 ## Reference Documents
 
-| 资料                                                                 | 用途         |
-| -------------------------------------------------------------------- | ------------ |
-| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 机制研究 |
+| 资料                                                                 | 用途                              |
+| -------------------------------------------------------------------- | --------------------------------- |
+| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 机制研究                      |
+| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`   | 未落地的 DSH 配置投影提案         |
+| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的 DSH 版本升级能力门禁提案 |

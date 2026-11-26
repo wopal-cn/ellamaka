@@ -1,16 +1,16 @@
 # Ellamaka SDK — Unified Public API and Client Transport
 
 > **Status**: Active
-> **Updated**: 2026-11-23
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Scope**: `@wopal/ellamaka-sdk` 的统一公开 API、OpenAPI 3.1、generated client、HTTP/local transport、契约发现与发布边界
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-wopalspace.md` — private `@wopal/wopalspace` application implementation
 > - `./DESIGN-onboarding.md` — Setup/Onboarding 如何消费统一 SDK
 > - `./DESIGN-distribution.md` — SDK npm 发布与产品分发
-> - `./DESIGN-auth.md` — Phase 3 统一认证方向（Draft）
 
 ## Purpose
 
@@ -287,7 +287,7 @@ Developer Reference 按 Runtime、WopalSpace、Official App 等用途分组，�
 
 `/local` 是 trusted-local transport。HTTP caller 获得 Server credential 后视为该 host 的受信管理者；各业务 operation 仍必须自己保证 path confinement、目标合法性和 secret redaction。
 
-Phase 3 将把 Browser 登录向 DSH 已采用的 launch-token + signed-cookie 思路收敛，见 `DESIGN-auth.md`。
+后续 Browser 登录向 launch-token + signed-cookie 收敛的设计提案见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
 
 ## Errors and Streaming
 
@@ -338,16 +338,22 @@ Ellamaka source
 - 临时 overlay 不成为 package.json/lockfile 中永久的 `file:`/`link:` 依赖；
 - 正常 install 后回到固定的已发布 SDK version。
 
-## Invariants
+## Business Rules and Failure Boundaries
 
-1. 对外只有 `@wopal/ellamaka-sdk` 一个 platform service SDK。
-2. Runtime 与 WopalSpace application 的内部 owner 保持分离。
-3. Public Platform API 只有一份 schema/OpenAPI 来源；Official App BFF 使用独立私有 contract。
-4. HTTP 与 local WopalSpace transport 复用同一 public generated operation/DTO/error 定义。
-5. `/local` 不启动 localhost Server，也不形成私有业务协议。
-6. `/local` 发布物不能要求消费者安装 unpublished private packages。
+1. 对外只有 `@wopal/ellamaka-sdk` 一个 platform service SDK；root import 禁止在导入期启动 Worker、Server、DSH 或扫描用户目录。
+2. Runtime 与 WopalSpace application 的内部 owner 保持分离，底层 Runtime domain 不得反向依赖 WopalSpace。
+3. Public Platform API 只有一份 schema/OpenAPI 来源；Official App BFF 使用独立私有 contract，`GET /doc` 中标明其 App 专用归属且绝不导出进公开 SDK 或 SDK SemVer。
+4. HTTP 与 local WopalSpace transport 复用同一 public generated operation/DTO/error 定义；definition 冲突在生成或校验期直接失败，禁止静默覆盖。
+5. `/local` 不启动 localhost Server，只注册 Ontology/Space handlers，在进入业务前拒绝 Setup 与 Runtime 请求。
+6. `/local` 发布物自包含执行所需实现，不得要求消费者安装 unpublished private packages，且必须通过独立 clean-install / SEA 验证。
 7. Wopal CLI 不直接依赖 `@wopal/wopalspace`，也不通过 Ellamaka CLI subprocess 复用业务。
-8. Server composition 内部直接调用 private WopalSpace service，不通过 SDK/HTTP loopback。
-9. `GET /doc` 包含标明归属的 Official App BFF；BFF 不进入公开 SDK 或 SDK SemVer。
-10. Product 安装/update 不进入 WopalSpace SDK surface。
-11. SDK 不拥有 Desktop/Server/Wopal CLI 的产品生命周期。
+8. Server composition 内部直接调用 private WopalSpace service，不通过 SDK/HTTP loopback；`/http` 远端请求不能替换 Server 锁定的 `WOPAL_HOME` 或 DSH closure。
+9. Product 安装/update 不进入 WopalSpace SDK surface，SDK 也不拥有 Desktop/Server/Wopal CLI 的产品生命周期。
+10. `PluginInput.client` 适配器保持旧调用边界且仅以实际公开 operation 转换参数；无当前 Runtime 对应的陈旧声明必须显式诊断或升级，禁止伪造成功。
+
+## Reference Documents
+
+| Document                                                            | Purpose                                                    |
+| ------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md` | 未落地的 Phase 3 统一 Host Auth 与 DSH SSO Bridge 提案     |
+| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`  | 未落地的完整 Config Plane `/http` 与 `/local` 接口扩展提案 |

@@ -3,7 +3,7 @@
  *
  * Every rule has a stable id, a machine-detectable pattern, and a message that
  * says what to do instead. The rules are the executable half of
- * docs/testing-isolation.md; the prose half lives in the root AGENTS.md.
+ * docs/DESIGN-testing-isolation.md; the prose half lives in the root AGENTS.md.
  */
 
 export type RuleId =

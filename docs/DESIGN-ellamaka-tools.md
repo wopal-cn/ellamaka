@@ -1,8 +1,10 @@
 # 工具容器 profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-16
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-dsh-base.md` — DSH 集成基础、依赖闭包与 Profile 生命周期
@@ -167,3 +169,16 @@ Workbench 的 Plugins 状态页始终用当前 General / Space Instance 的真�
 enforcing backend 不可用时返回 sandbox-unavailable，不能把受限请求转为无沙箱执行。运行结果区分执行结果、拒绝与实际 enforcement。
 
 `ellamaka-tools` 只装配 DSH Native Executor 和普通工具，不装配 Node PTC Runtime、`run_code` 或 PTC SDK；现有 Ellamaka Agent 工具的名称、权限与调用方式保持不变。DSH Web 的官方 `run_code` 由独立 Web profile 拥有。
+
+## Business Rules and Failure Boundaries
+
+- **Profile 启停与依赖隔离**：`ellamaka-tools` 仅由进程级 `ELLAMAKA_DSH_TOOLS` 控制（`0` 表示禁用），独立于 `wopal.dsh.web.enabled`；不加载 `dsh-base` 或 PTC，缺少必需工具或等待服务时拒绝发布 `ready`。
+- **已采用后 Fail-Closed**：Tools profile 加载失败或被禁用时保持 Native Tools；一旦 `dsh.tools=ready` 且当前 Instance 的 `sandbox.enabled=true`，单次沙箱拒绝、审批拒绝、超时或执行错误必须原样返回，严禁回退 Native Tools 重试。
+- **配置覆盖与并发串行**：用户 `cordis.patch.yml` 采用整块 config 替换（不做深合并），缺失引用包时启动失败；`dsh-adapter` 对同会话非并发安全写操作（`edit`、`write`、`str_replace_editor` 非 `view` 命令、`bash`）串行排队，保持只读工具并发。
+- **单次提权不跨范围复用**：`sandbox_escalation` 审批答复与当前 Ellamaka Session 绑定，`escalation=never` 在询问前直接拒绝；禁止跨 Space、跨会话或跨调用复用提权决策。
+
+## Reference Documents
+
+| Document                                                                    | Purpose                                                               |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `./proposals/proposed/architecture/2026-11-25-mcp-runtime-modernization.md` | 未落地的原生 MCP v2 升级提案（明确外接 MCP 独立于本工具容器沙箱边界） |

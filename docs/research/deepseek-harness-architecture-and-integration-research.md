@@ -488,43 +488,43 @@ cordis.patch.yml（声明式 entry 树）
 ### DeepSeek Harness (`dsh`) 官方源码与子系统规范
 
 - **微内核与架构总览**：
-  - [Cordis 微内核入门规范](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/cordis-primer.zh.md)
-  - [dsh 全景架构定义](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/architecture.zh.md)
-  - [核心 Core 服务与事件声明](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/core.zh.md)
+  - [Cordis 微内核入门规范](../../../../labs/ref-repos/deepseek-harness/docs/cordis-primer.zh.md)
+  - [dsh 全景架构定义](../../../../labs/ref-repos/deepseek-harness/docs/architecture.zh.md)
+  - [核心 Core 服务与事件声明](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/core.zh.md)
 - **能力缝隙与工具系统**：
-  - [System Prompt 提示词分段组装机制](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/system-prompt.zh.md)
-  - [Scope 作用域分层与物理隔离机制](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/scope.zh.md)
-  - [Agent Presets 智能体常驻组装机制](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/packages/preset/agent-presets/README.zh.md)
-  - [Ripgrep 全文搜索插件实现](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/packages/fs/tool-fs-search/src/index.ts)
-  - [MCP 客户端插件实现与 Supervisor](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/packages/mcp/mcp-client/src/index.ts)
+  - [System Prompt 提示词分段组装机制](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/system-prompt.zh.md)
+  - [Scope 作用域分层与物理隔离机制](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/scope.zh.md)
+  - Agent Presets 智能体常驻组装机制：`labs/ref-repos/deepseek-harness/packages/preset/agent-presets/`
+  - [Ripgrep 全文搜索插件实现](../../../../labs/ref-repos/deepseek-harness/packages/fs/tool-fs-search/src/index.ts)
+  - [MCP 客户端插件实现与 Supervisor](../../../../labs/ref-repos/deepseek-harness/packages/mcp/mcp-client/src/index.ts)
 - **多智能体与会话系统**：
-  - [Subagent 多后端委派与能力协商规范](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/subagent.zh.md)
-  - [Session Query 历史与决策血缘检索规范](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/session-query.zh.md)
-  - [Schedule 会话内定时任务与 Cron 规范](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/schedule.zh.md)
-  - [Goal 同会话多轮次目标状态机规范](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/goal.zh.md)
-  - [Extensions 运行时动态自拓展规范](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/docs/subsystems/extensions.zh.md)
+  - [Subagent 多后端委派与能力协商规范](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/subagent.zh.md)
+  - [Session Query 历史与决策血缘检索规范](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/session-query.zh.md)
+  - [Schedule 会话内定时任务与 Cron 规范](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/schedule.zh.md)
+  - [Goal 同会话多轮次目标状态机规范](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/goal.zh.md)
+  - [Extensions 运行时动态自拓展规范](../../../../labs/ref-repos/deepseek-harness/docs/subsystems/extensions.zh.md)
 - **官方架构演进笔记 (Agent Notes)**：
-  - [异构 Subagent 机制设计笔记](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/.agents/notes/implemented/feature/2026-08-04-claude-code-and-codex-subagent-backends.md)
-  - [Subagent 动态 ToolFilter 与 Persona 隔离设计](file:///Volumes/U500G/coding/wopal-workspace/labs/ref-repos/deepseek-harness/.agents/notes/implemented/feature/2026-07-12-subagent-persona-tool-filter-and-depth.md)
+  - 异构 Subagent 机制设计笔记：`labs/ref-repos/deepseek-harness/.agents/notes/implemented/feature/2026-08-04-claude-code-and-codex-subagent-backends.md`
+  - [Subagent 动态 ToolFilter 与 Persona 隔离设计](../../../../labs/ref-repos/deepseek-harness/.agents/notes/implemented/feature/2026-07-12-subagent-persona-tool-filter-and-depth.md)
 
 ---
 
 ### Ellamaka / Wopal 空间核心源码真相源
 
 - **存储与数据层**：
-  - [全局单例 SQLite 存储定义 (db.ts)](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/storage/db.ts)
-  - [Session 与 Part 关系模型 Schema](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/storage/schema.ts)
+  - [全局单例 SQLite 存储定义 (db.ts)](../../packages/opencode/src/storage/db.ts)
+  - [Session 与 Part 关系模型 Schema](../../packages/opencode/src/storage/schema.ts)
 - **多实例与配置层**：
-  - [多 Instance 实例管理器 (instance-store.ts)](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/project/instance-store.ts)
-  - [Instance 上下文边界 (instance-context.ts)](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/project/instance-context.ts)
-  - [多层级配置合并算法 (config.ts)](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/config/config.ts)
+  - [多 Instance 实例管理器 (instance-store.ts)](../../packages/opencode/src/project/instance-store.ts)
+  - [Instance 上下文边界 (instance-context.ts)](../../packages/opencode/src/project/instance-context.ts)
+  - [多层级配置合并算法 (config.ts)](../../packages/opencode/src/config/config.ts)
 - **执行与调度层**：
-  - [原生 Agent Loop 核心处理器 (processor.ts)](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/session/processor.ts)
-  - [事件总线服务 (bus.ts)](file:///Volumes/U500G/coding/wopal-workspace/projects/ellamaka/packages/opencode/src/bus/bus.ts)
+  - [原生 Agent Loop 核心处理器 (processor.ts)](../../packages/opencode/src/session/processor.ts)
+  - [事件总线服务 (index.ts)](../../packages/opencode/src/bus/index.ts)
 - **空间法规与规则源**：
-  - [Wopal 空间结构真相源 (STRUCTURE.md)](file:///Volumes/U500G/coding/wopal-workspace/.wopal-space/STRUCTURE.md)
-  - [Wopal Agents 空间守则 (REGULATIONS.md)](file:///Volumes/U500G/coding/wopal-workspace/.wopal-space/REGULATIONS.md)
-  - [本体论 Agent 规则定义 (.wopal/AGENTS.md)](file:///Volumes/U500G/coding/wopal-workspace/.wopal/AGENTS.md)
+  - [Wopal 空间结构真相源 (STRUCTURE.md)](../../../../.wopal-space/STRUCTURE.md)
+  - [Wopal Agents 空间守则 (REGULATIONS.md)](../../../../.wopal-space/REGULATIONS.md)
+  - [本体论 Agent 规则定义 (.wopal/AGENTS.md)](../../../../.wopal/AGENTS.md)
 
 ---
 

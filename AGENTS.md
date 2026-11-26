@@ -109,7 +109,7 @@ Run package-local tests from their owning package. Repository-root test commands
 These rules apply repository-wide. `bun run check:test-isolation` checks statically detectable violations;
 behavioral tests and implementation review verify the remaining obligations.
 The reasoning, the three isolation models, and the full rule-to-gate map live in
-[docs/testing-isolation.md](docs/testing-isolation.md).
+[docs/DESIGN-testing-isolation.md](docs/DESIGN-testing-isolation.md).
 
 - Keep scratch files out of the repository tree. A test that needs a throwaway file or directory writes it to
   `.wopal-space/.tmp/` or the owning package's scoped temp fixture and removes it in a `finally` block; never call

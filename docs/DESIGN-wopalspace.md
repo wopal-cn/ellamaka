@@ -1,8 +1,10 @@
 # WopalSpace Application Domain
 
 > **Status**: Active
-> **Updated**: 2026-11-03
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Scope**: private `@wopal/wopalspace` 的目标态架构、能力范围、公开契约、核心流程与状态归属
 > **Sibling DESIGNs**:
 >
@@ -10,7 +12,6 @@
 > - `./DESIGN-wopalspace-ontology-sync.md` — Ontology source-chain 状态、同步事务、reconciliation 与正式 Git 历史契约
 > - `./DESIGN-onboarding.md` — 唯一 Web Onboarding 初始化流程与 `wopal setup` launcher
 > - `./DESIGN-dsh-base.md` — DSH closure、Home、profile 与运行时激活
-> - `./DESIGN-auth.md` — Phase 3 认证加固方向（Draft）
 > - `../../../.wopal/docs/DESIGN-assembly.md` — Ontology 装配、Space 物化与能力选择规则
 
 ## Purpose
@@ -98,11 +99,9 @@ Ellamaka Server API composition
 
 WopalSpace 的长期公开协议由本节与后续各领域章节共同定义。`DESIGN-ellamaka-sdk.md` 定义 contract 如何进入 HttpApi/OpenAPI/generated client；本文件是 WopalSpace operation 路径、输入输出语义与业务行为的真相源。
 
-### Refactor Compatibility Contract
+### Compatibility Contract
 
-本轮 WopalSpace 重构改变业务 owner、调用边界和 transport，不重新定义已经由现有 Wopal CLI、Onboarding、Workbench 与 OpenCode-compatible Runtime 验证过的领域行为。除本设计明确声明的目标变化外，现有可观察业务语义构成兼容基线。
-
-必须保持的兼容维度包括：
+WopalSpace 统一应用层在共享业务归属、HTTP/local 同源 schema、`ontology.inspect` 与显式 `refresh` 分离、以及 Web Onboarding launcher 边界之上，保持下列已验证领域语义作为兼容基线：
 
 - 输入的既有默认值、合法组合和稳定拒绝条件；
 - 领域结果字段及其含义、partial-success 表达和稳定错误语义；
@@ -111,11 +110,7 @@ WopalSpace 的长期公开协议由本节与后续各领域章节共同定义。
 - 用户文件、Git history、无关 dirty change 和已有本地状态的保护边界；
 - 幂等、重复调用、并发、取消、重试和失败恢复的可观察结果；
 - Workbench/Onboarding 已验证的 Session、PTY、文件浏览、导航、重连和 Space 使用流程；
-- OpenCode-compatible Runtime 与 `PluginInput.client` 的既有兼容边界，由 Runtime/SDK owner 保持，不因 WopalSpace 重构而改变。
-
-允许改变的只有本设计明确列出的目标合同，例如：共享业务 owner 变为 private `@wopal/wopalspace`、HTTP/local 共用 canonical schema、`ontology.inspect` 与显式 `refresh` 分离、Terminal Setup 收敛为 Web Onboarding launcher、产品安装仍归 Wopal CLI。架构变化本身不能被解释为业务语义变化。
-
-实施时，旧 Wopal CLI/Onboarding/Workbench 代码不是新的设计真相源，但它们与现有测试是兼容基线证据。对迁移的 operation，应先用 characterization 测试固定当前可观察行为，再让新 service 在相同 fixture 上得到等价领域结果和副作用；只有本设计明确改变的字段或流程允许形成有意差异。
+- OpenCode-compatible Runtime 与 `PluginInput.client` 的既有兼容边界，由 Runtime/SDK owner 保持。
 
 ### Contract Rules
 
@@ -142,7 +137,7 @@ private `@wopal/wopalspace` 提供受控的 canonical settings writer，供 Serv
 
 DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.web.enabled`，Tools 只认当前进程的 `ELLAMAKA_DSH_TOOLS`。
 
-产品级 `wopal.execution.shellEnv` 与 `wopal.execution.execWritableRoots` 也以 `$WOPAL_HOME/config/settings.jsonc` 为唯一 authored source，并由各宿主启动入口按产品 DESIGN 直接消费。当前受控 settings writer 不负责修改这两个键；Desktop #263 只读取 `shellEnv`，不因此扩大本 writer 的 mutation surface。
+产品级 `wopal.execution.shellEnv` 与 `wopal.execution.execWritableRoots` 也以 `$WOPAL_HOME/config/settings.jsonc` 为唯一 authored source，并由各宿主启动入口按产品 DESIGN 直接消费。当前受控 settings writer 不负责修改这两个键；Desktop 启动环境聚合只读取 `shellEnv`，不因此扩大本 writer 的 mutation surface。
 
 更广泛的 global/space 配置编辑、来源解释、reset-key、schema catalog 与 DSH native projection 属于统一 Config Plane 的后续范围，不由这个窄 writer 推断或提前实现。
 
@@ -174,20 +169,20 @@ DSH profile 的启用边界由不同 owner 分开提供：Web 只认 `wopal.dsh.
 
 ### Space Endpoints
 
-| Operation                 | Method/path                                     | Contract                                                                                             |
-| ------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `space.resolve`           | `POST /wopal-space/spaces/resolve`              | 按稳定 name 或可信 directory 上下文解析已注册 Space                                                  |
-| `space.list`              | `GET /wopal-space/spaces`                       | 返回已注册 Space                                                                                     |
-| `space.init`              | `POST /wopal-space/spaces`                      | 输入 name/root/ontology/type/displayName；返回注册身份、`materialized` 与 `preparation` 两个独立事实 |
-| `space.projects.list`     | `GET /wopal-space/spaces/:name/projects`        | 返回 registered root 下项目与 worktree facts                                                         |
-| `space.files.list`        | `GET /wopal-space/spaces/:name/files`           | 输入可选相对 `path`；返回 registered root 内受控目录项，不启动 Runtime                               |
-| `space.files.read`        | `GET /wopal-space/spaces/:name/files/content`   | 输入相对 `path`；返回 registered root 内受控文件内容，不启动 Runtime                                 |
-| `space.search`            | `GET /wopal-space/spaces/:name/search`          | 在 registered root 内按受控条件查找 repo/dir/file                                                    |
-| `space.scan`              | `POST /wopal-space/spaces/:name/scan`           | 扫描 repo/worktree/AGENTS 等只读事实，不启动 Runtime                                                 |
-| `space.status`            | `GET /wopal-space/spaces/:name/status`          | 返回 Git、assembly snapshot、selection、sparse 与 preparation facts                                  |
-| `space.sync`              | `POST /wopal-space/spaces/:name/sync`           | `confirm:false` preview，`confirm:true` apply；返回 shared/untracked/sparse 与部分结果               |
-| `space.capability.add`    | `POST /wopal-space/spaces/:name/capabilities`   | 输入 references/local/section/confirm；装配已有能力，或纳管当前 Space worktree 中的新完整能力后装配  |
-| `space.capability.remove` | `DELETE /wopal-space/spaces/:name/capabilities` | 与 add 同一 selection contract；从当前空间或当前类型的默认装配中移除                                 |
+| Operation                 | Method/path                                     | Contract                                                                                                           |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `space.resolve`           | `POST /wopal-space/spaces/resolve`              | 按稳定 name 或可信 directory 上下文解析已注册 Space                                                                |
+| `space.list`              | `GET /wopal-space/spaces`                       | 返回已注册 Space                                                                                                   |
+| `space.init`              | `POST /wopal-space/spaces`                      | 输入 `name`、`root`、`ontology`、`type`、`displayName`；返回注册身份、`materialized` 与 `preparation` 两个独立事实 |
+| `space.projects.list`     | `GET /wopal-space/spaces/:name/projects`        | 返回 registered root 下项目与 worktree facts                                                                       |
+| `space.files.list`        | `GET /wopal-space/spaces/:name/files`           | 输入可选相对 `path`；返回 registered root 内受控目录项，不启动 Runtime                                             |
+| `space.files.read`        | `GET /wopal-space/spaces/:name/files/content`   | 输入相对 `path`；返回 registered root 内受控文件内容，不启动 Runtime                                               |
+| `space.search`            | `GET /wopal-space/spaces/:name/search`          | 在 registered root 内按受控条件查找 repo/dir/file                                                                  |
+| `space.scan`              | `POST /wopal-space/spaces/:name/scan`           | 扫描 repo/worktree/AGENTS 等只读事实，不启动 Runtime                                                               |
+| `space.status`            | `GET /wopal-space/spaces/:name/status`          | 返回 Git、assembly snapshot、selection、sparse 与 preparation facts                                                |
+| `space.sync`              | `POST /wopal-space/spaces/:name/sync`           | `confirm:false` preview，`confirm:true` apply；返回 shared/untracked/sparse 与部分结果                             |
+| `space.capability.add`    | `POST /wopal-space/spaces/:name/capabilities`   | 输入 references/local/section/confirm；装配已有能力，或纳管当前 Space worktree 中的新完整能力后装配                |
+| `space.capability.remove` | `DELETE /wopal-space/spaces/:name/capabilities` | 与 add 同一 selection contract；从当前空间或当前类型的默认装配中移除                                               |
 
 `space.capability.*` 的 `section` 保持开放集合，默认 `ellamaka`；只有 plugin selection 接受 section。结果保留 selection、warnings、capabilities 与 state commit 等领域事实。
 
@@ -482,7 +477,7 @@ Official App BFF 可以直接调用 private WopalSpace query service 与 Runtime
 
 当前阶段不建设 WopalSpace 细粒度 operation/resource IAM。WopalSpace API 使用 Ellamaka Server 统一认证边界；持有有效 Server credential 的调用方视为该 host 的受信管理者。
 
-所有 path-bearing operation 仍必须执行自身业务边界检查，例如 Space root confinement、Git target validation 和 secret redaction。Phase 3 的统一 Host Auth 方向见 `DESIGN-auth.md`。
+所有 path-bearing operation 仍必须执行自身业务边界检查，例如 Space root confinement、Git target validation 和 secret redaction。后续统一 Host Auth 演进方向见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
 
 ## State Ownership
 
@@ -499,19 +494,21 @@ Official App BFF 可以直接调用 private WopalSpace query service 与 Runtime
 | Runtime Session/Agent/PTY/Tool             | Ellamaka Runtime                 |
 | GUI Onboarding / Workbench view state      | `@wopal/ellamaka-app`            |
 
-## Invariants
+## Business Rules and Failure Boundaries
 
-1. Setup、Ontology、Space 的共享业务只在 `@wopal/wopalspace` 实现一份。
-2. Product 安装/update 继续由 Wopal CLI 拥有，不迁入 WopalSpace。
-3. `@wopal/ellamaka-sdk` 是唯一公开 service SDK，承载 Runtime 与 WopalSpace public contract。
-4. GUI Onboarding 与 Workbench 都属于 `@wopal/ellamaka-app`。
-5. WopalSpace 不通过 spawn Ellamaka CLI 执行 Core Preparation。
-6. Core Preparation 内部 readiness、锁、DSH/plugin/preflight 步骤归 `@wopal/ellamaka-core`。
-7. 产品启动只准备当前产品/build 真正需要的运行资源；`wopal setup` 只负责拉起 Server Onboarding，不执行跨产品 preparation。
-8. Space plugin dependency 只在 `.wopal` 物化后准备；失败不回滚已经成功物化的 Space。
-9. `ellamaka run` 永久保持 DSH-disabled，除非 Runtime/DSH 设计被显式修改。
-10. `ellamaka dsh init` 不属于目标态。
-11. Workbench integration 可以直接组合 private WopalSpace service；底层 Runtime domain 不能反向依赖 WopalSpace。
-12. 当前阶段不引入细粒度远程授权体系；业务 path/resource safety 仍必须由各 operation 保证。
-13. Ontology fork sync 成功后，`upstream/main` 必须进入 `local main` ancestry，`origin/main` 必须与 `local main` 指向同一 commit；内容等价不能替代这个 history invariant。
-14. Ontology sync 只在 ancestry 需要闭合时产生 merge/reconciliation commit，并使用稳定业务 commit subject；临时 worktree/branch identity 不进入正式 Git history。
+1. Setup、Ontology、Space 的共享业务只在 `@wopal/wopalspace` 实现一份；Product 安装/update 由 Wopal CLI 拥有，不迁入 WopalSpace。
+2. `@wopal/ellamaka-sdk` 是唯一公开 service SDK；Workbench integration 可直接组合 private WopalSpace service，底层 Runtime domain 禁止反向依赖 WopalSpace。
+3. GUI Onboarding 与 Workbench 都属于 `@wopal/ellamaka-app`；WopalSpace 不通过 spawn Ellamaka CLI 执行 Core Preparation，独立 `ellamaka dsh init` 不属于目标态。
+4. Core Preparation 内部 readiness、锁、DSH/plugin/preflight 步骤归 `@wopal/ellamaka-core`；产品启动只准备当前 build 所需资源，`wopal setup` 不执行跨产品 preparation。
+5. Space plugin dependency 只在 `.wopal` 物化后准备；准备失败保留已物化 Space 不回滚删除，交由首次激活 fallback 补齐。
+6. `ellamaka run` 永久保持 DSH-disabled。
+7. 当前阶段不引入细粒度远程授权体系；所有 path-bearing operation 必须执行 `realpath` 越界防护与 Git target 校验，secret 不得写入 plan、持久状态、事件或错误详情。
+8. 只读 inspect/list/scan/preview 不得触发网络 fetch 或本地写入；写操作提交前重验 facts，跨仓库提交部分失败时如实报告各自提交状态。
+9. Ontology fork sync 成功后，`upstream/main` 必须进入 `local main` ancestry，`origin/main` 必须与 `local main` 指向同一 commit；只在 ancestry 需要闭合时生成稳定 subject 的 merge/reconciliation commit。
+
+## Reference Documents
+
+| Document                                                            | Purpose                                  |
+| ------------------------------------------------------------------- | ---------------------------------------- |
+| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md` | 未落地的 Phase 3 统一 Host Auth 方向提案 |
+| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`  | 未落地的完整 Config Plane 扩展提案       |

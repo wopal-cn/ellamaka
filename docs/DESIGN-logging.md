@@ -1,9 +1,10 @@
 # Ellamaka — Logging Architecture
 
 > **Status**: Active
-> **Updated**: 2026-10-30
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`（产品架构；空间运行态 `logs/` 的归属）
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Sibling DESIGNs**:
 >
 > - `../../../projects/wopal-cli/docs/DESIGN.md` — CLI 侧日志架构：空间感知路由的参照模型，以及 CLI 与引擎的日志边界
@@ -64,7 +65,7 @@ Verbosity 与路径正交：`--log-level`、`--trace`、`--print-logs` 只控制
 - **dev 文件**：dev 通道使用稳定的角色前缀文件名 `ellamaka-dev-<role>.log`（`ellamaka-dev-tui.log`、`ellamaka-dev-serve.log`、`ellamaka-dev-sidecar.log`），便于跟踪。同角色进程共享该文件。
 - **独立落盘**：常规通道下每个进程各自成文件（TUI 主进程与 worker 分别落盘），进程间不共享。
 - **惰性创建**：进程没有实际写入时不产生日志文件。
-- **保留上限**：同一目录保留最新的 10 个时间戳文件（跨角色共享上限，按文件名排序修剪）；dev 稳定文件不参与修剪。
+- **保留上限**：同一目录保留最新的 10 个时间戳文件（跨角色共享上限，按文件名排序修剪）；当前进程正在写入的活跃文件计入上限数量，但在修剪时永不删除；dev 稳定文件不参与修剪。
 - **目录创建**：目标目录不存在时按需创建。
 
 ## Output Channels
@@ -177,6 +178,13 @@ wopal-plugin 随宿主进程运行，其记录与引擎记录同目录同级别�
 - 生效级别按优先级解析：`WOPAL_PLUGIN_LOG_LEVEL`（显式覆盖，用户或 dev 工具链注入）> `wopal.pluginConfig["wopal-plugin"].logLevel`（插件配置）> `ELLAMAKA_LOG_LEVEL`（宿主生效级别）> `INFO`。前两层是插件自身显式接口，后两层来自统一机制。
 - 模块过滤（`logModules`）是插件的诊断筛选维度，与级别独立，保持插件配置。
 - 插件日志文件由宿主的 `WOPAL_PLUGIN_LOG_FILE` 指定调试目标，缺省落在日志目录下的 `wopal-plugin.log`；目录路由与引擎一致。
+
+## Business Rules and Failure Boundaries
+
+- **启动时锁定目录与级别**：日志目录与生效级别在进程入口初始化时确定一次；运行期目录切换不改变日志目录，显式 `--log-level` 覆盖 `--trace` 提升，非法级别或不可读配置回落 `INFO` 而不阻断启动。
+- **Trace 类别封闭失败**：`--log-level TRACE` 不带 `--trace` 被拒绝，`--trace` 出现未注册类别时直接报错并列出合法类别，禁止静默放宽或全开。
+- **敏感数据零落盘与有界截断**：凭据、请求/响应体、prompt、消息正文、工具参数、Shell/Home 绝对路径及无界子进程输出严禁写入日志；单值超过 4096 字符或单行超过 16 KiB 时截断为 `…[truncated]`。
+- **最小化噪音与禁吞异常**：高频总线抖动、消息流或枚举清单禁止写入文件日志；`catch` 块不得吞掉异常；DSH profile 未被请求时不创建对应 DSH 日志文件。
 
 ## Reference Documents
 

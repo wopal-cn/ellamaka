@@ -1,8 +1,10 @@
 # Web profile 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-15
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-dsh-base.md` — DSH 集成基础、依赖闭包与 Profile 生命周期
@@ -197,7 +199,7 @@ DSH iframe 在 [Workbench](./DESIGN-workbench.md) 中拥有独立的固定 DSH T
 - iframe 只在当前 sidecar generation 的 `dsh.web=ready` 后请求受控入口并设置有效 `src`。新 generation 未 ready 前不请求新的入口，也不通过 `/dsh/` fallback 抢跑。
 - iframe 首次成功加载后保持 keep-alive；Tab 切换不重载 DSH 会话。sidecar generation 变化后，等新 generation `ready` 再更新入口。
 - iframe 覆盖内容区，DSH 自带侧栏。
-- 实验 profile、空间皮肤与跨框架插件定制归 [Proposed 定制方向](./DESIGN-dsh-custumize.md)。
+- 实验 profile、空间皮肤与跨框架插件定制归参考提案 [2026-10-14-dsh-customization.md](./proposals/proposed/feature/2026-10-14-dsh-customization.md)。
 
 ### Iframe Origin Derivation
 
@@ -205,8 +207,16 @@ iframe 的来源地址优先取认证入口，回落 `<server url>/dsh/` 派生�
 
 原因是开发模式下前端与后端分别监听不同端口，相对 `/dsh/` 在开发页面会解析到前端来源。开发下经代理指向页面来源的 `/dsh/`，Desktop 与生产指向后端来源，两侧都命中挂载点。
 
+## Business Rules and Failure Boundaries
+
+- **核心内置 Bundle 与服务门禁**：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 缺失或版本不兼容跳过时，`web` 容器挂载直接失败进入 `degraded`；第三方扩展不兼容时保留磁盘声明与诊断并跳过该插件，不阻断核心 Web 启动。
+- **单一闭合依赖来源**：`web/pnpm-workspace.yaml` 固定 `autoInstallPeers: false`，禁止把 `@deepseek-ai/*` 写入 `web/node_modules`；`pnpm` 缺失时在安装入口直接报错。
+- **Web Tab 与 iframe 稳定边界**：`wopal.dsh.web.enabled` 仅从用户全局配置读取且修改后需重启生效；sidecar 未 `ready` 前不请求 `dshEntry` 或抢跑加载 `/dsh/`，子进程异常退出时有界收集 stderr 并标为 `degraded`。
+
 ## Reference Documents
 
-| 文档                                                                 | 引用目的     |
-| -------------------------------------------------------------------- | ------------ |
-| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 全景调研 |
+| 文档                                                                 | 引用目的                                           |
+| -------------------------------------------------------------------- | -------------------------------------------------- |
+| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 全景调研                                       |
+| `./proposals/proposed/feature/2026-10-14-dsh-customization.md`       | 未落地的 DSH 空间皮肤、实验 profile 与插件插槽提案 |
+| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的官方 Web 能力选配提案                      |

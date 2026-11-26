@@ -1,12 +1,14 @@
 # Ellamaka — Distribution
 
 > **Status**: Active
-> **Updated**: 2026-11-14
-> **Parent Architecture**:
+> **Updated**: 2026-11-25
+> **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
+> **Sibling DESIGNs**:
 >
-> - `../../../docs/products/wopal-space/DESIGN-distribution.md`（产品级分发总设计）
-> - `../../../docs/products/wopal-space/DESIGN-onboarding.md`
->   **Parent**: `./DESIGN.md`
+> - `../../../docs/products/wopal-space/DESIGN-distribution.md` — 产品级分发总设计
+> - `../../../docs/products/wopal-space/DESIGN-onboarding.md` — 统一配置入口与产品初始化边界
 
 本文件是 Ellamaka 产品分发与版本身份的唯一真相源。它定义 Ellamaka CLI 与 Desktop 的 release backbone、产品 SemVer、构建身份、manifest 契约、兼容规则、不可变发布与更新授权。产品级通用规则（WOPAL_HOME、R2 bucket/URL/缓存、归档格式、跨产品协调总则）见 `../../../docs/products/wopal-space/DESIGN-distribution.md`，本文只保留 ellamaka 特有语义。
 
@@ -82,7 +84,7 @@ Node 下载源、精确版本、完整性校验与操作系统最低要求由产
 
 ### 构建接口
 
-`@wopal/ellamaka-release` 的 `build-env` 模块（原 `@wopal/ellamaka-script` 的 `Script`，2026-09-01 收编）仍作为 CLI 构建接口使用，但注入的是已经由 release context 验证的 Ellamaka CLI 产品版本：
+`@wopal/ellamaka-release` 的 `build-env` 模块仍作为 CLI 构建接口使用，注入已经由 release context 验证的 Ellamaka CLI 产品版本：
 
 | 环境变量            | 作用             | 约束                                                                                                              |
 | ------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -554,7 +556,7 @@ P1 使用 ad-hoc 签名。该签名保证 macOS app bundle 结构完整并通过
 
 ## Install Contract
 
-所有用户级路径都解析到 `WOPAL_HOME`（默认值见产品级文档 [`安装路径与 WOPAL_HOME`](../../../docs/products/wopal-space/DESIGN-distribution.md#13-安装路径与-wopal_home)）。
+所有用户级路径都解析到 `WOPAL_HOME`（默认值见产品级文档 [`安装路径与 WOPAL_HOME`](../../../docs/products/wopal-space/DESIGN-distribution.md#install-path-and-wopal_home)）。
 
 | Platform      | Binary path                    | Runtime roots                                    |
 | ------------- | ------------------------------ | ------------------------------------------------ |
@@ -608,7 +610,7 @@ Wopal CLI Product 可以在一次用户明确请求中处理多个 targets；每
 
 CLI/Desktop SemVer 不作为 DSH Home gate。实际启动的产品携带自己的 closureVersion；若 Home 记录更高版本则拒绝访问，若目标版本更高则先备份再切换。
 
-## NPM 包发布机制
+## NPM Package Publication
 
 Ellamaka monorepo 把 SDK npm release 与 CLI/Desktop product release 分开。
 
@@ -648,10 +650,17 @@ Ellamaka monorepo 把 SDK npm release 与 CLI/Desktop product release 分开。
 3. Cleanup 对归档格式 fail closed：保留对象，不与标准 SemVer 混排删除。
 4. 当前 manifest 可以保留 reader 仍需要的兼容字段，但这些字段不是第二份版本真相源。
 
-## Related Documents
+## Business Rules and Failure Boundaries
 
-| 文档                                                      | 说明                                             |
-| --------------------------------------------------------- | ------------------------------------------------ |
-| `../../../docs/products/wopal-space/DESIGN.md`            | 产品级架构与版本体系                             |
-| `../../../projects/wopal-cli/docs/DESIGN-distribution.md` | wopal-cli 对 ellamaka release 的消费契约         |
-| `../../../.wopal/docs/DESIGN-distribution.md`             | ontology materialization 与 runtime handoff 边界 |
+- **已提交发布不可变**：valid versioned manifest 一旦落盘即为正式提交点，禁止同版本覆盖 R2 对象或 retag；源码或产物变化必须推进更高 PATCH 或 prerelease，缺陷版本只能按 `withdrawn-versions.json` 与同渠道 fallback 整版撤回。
+- **分支渠道与单调门禁**：非 `main` 分支仅允许构建 prerelease（`-rc.N` / `-beta.N`），拒绝稳定版发布；目标版本不得低于已有更高版本或命中撤回列表。
+- **串行发布与代际冲突失败关闭**：CLI 与 Desktop 发布共享单一 repository concurrency group；`closureVersion` 不匹配、同一正数代际出现不同指纹（`DSH_HOME_GENERATION_CONFLICT`）或 anchor 校验不一致时立即中止发布。
+- **Cleanup 保守守卫**：任何未知目录、schema 异常、hash 不一致或仍被 `latest`/updater 引用的版本一律保留并使 cleanup 失败，不以猜测删除破坏现网可用性。
+
+## Reference Documents
+
+| 文档                                                                 | 说明                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------ |
+| `../../../projects/wopal-cli/docs/DESIGN-distribution.md`            | wopal-cli 对 ellamaka release 的消费契约         |
+| `../../../.wopal/docs/DESIGN-distribution.md`                        | ontology materialization 与 runtime handoff 边界 |
+| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的 Desktop 更新协调与打包加固候选提案      |

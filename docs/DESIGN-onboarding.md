@@ -1,15 +1,16 @@
 # Onboarding & Setup
 
 > **Status**: Active
-> **Updated**: 2026-11-02
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-wopalspace.md` — Setup、Ontology、Space 业务边界
 > - `./DESIGN-ellamaka-sdk.md` — 统一公开 SDK 与 Server API
 > - `./DESIGN-desktop.md` — Desktop sidecar 与 Renderer 生命周期
 > - `./DESIGN-dsh-base.md` — DSH Preparation / Activation 与 Home 安全协议
-> - `./DESIGN-auth.md` — Phase 3 Host Auth 方向（Draft）
 
 ## Purpose
 
@@ -29,7 +30,7 @@ Onboarding 与 Workbench 都属于同一个前端 package：
 
 它们不是两个独立前端产品。应用根据 Setup state 和当前机器事实决定进入哪个页面；完成 Onboarding 后通过同一 SPA router 进入 Workbench。
 
-目标态不存在独立的 `@wopal/ellamaka-onboarding` backend package。当前 package 中仍有价值的 Setup state、single-flight、progress、cancel 等能力归 private `@wopal/wopalspace/setup`；HTTP/SSE contract 进入统一 Ellamaka Server API；GUI 只使用 generated `@wopal/ellamaka-sdk` client。
+Setup 的状态机、single-flight、progress 与 cancel 能力全部由 private `@wopal/wopalspace/setup` 拥有；HTTP/SSE contract 进入统一 Ellamaka Server API；GUI 只使用 generated `@wopal/ellamaka-sdk` client（仓库内无独立 `@wopal/ellamaka-onboarding` 后端包）。
 
 ## Application Startup Gate
 
@@ -85,7 +86,7 @@ wopal setup [host/port/password options]
 
 复用 Server 前核验管理身份、可连接的 endpoint、认证和用户显式指定的启动参数。参数不匹配时报告冲突，不静默忽略、不修改或终止已有 Server。无图形环境时输出可访问的 `/onboarding` URL；监听地址与浏览器地址分开，wildcard host 不能直接作为本机浏览器地址。
 
-`wopal setup` 传递的 host/port/password 只配置它启动的 Server。浏览器通过现有 Server credential 连接，launcher 打开的 URL 不携带真实密码或其可逆编码；当前认证行为遵循现有 Server auth，Phase 3 的收敛方向见 `DESIGN-auth.md`。
+`wopal setup` 传递的 host/port/password 只配置它启动的 Server。浏览器通过现有 Server credential 连接，launcher 打开的 URL 不携带真实密码或其可逆编码；当前认证行为遵循现有 Server auth 基线，后续统一 Host Auth 演进见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
 
 ## Home Selection and Lifecycle
 
@@ -265,16 +266,22 @@ GUI 页面负责展示进度、收集输入和导航，不负责定义哪些底�
 
 Onboarding API 不维护独立认证实现。它与 Workbench、Runtime、WopalSpace API 共用 Ellamaka Server 认证。
 
-当前阶段保持现有 Server auth 机制；Phase 3 统一 Host Auth 方向见 `DESIGN-auth.md`。
+当前阶段保持现有 Server auth 机制；后续统一 Host Auth 演进方向见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
 
-## Invariants
+## Business Rules and Failure Boundaries
 
 1. Onboarding 是唯一 Setup 用户形态；不存在 Terminal Setup 向导。
 2. `wopal setup` 只是 `ellamaka serve + /onboarding` 的便利入口，不实现 Setup 业务。
 3. Onboarding 与 Workbench 是同一个 `@wopal/ellamaka-app` 的不同阶段页面。
 4. Onboarding backend 业务归 `@wopal/wopalspace/setup` 与统一 Server API，不形成独立 backend domain。
-5. Setup 不负责产品安装/update，也不枚举或预热其他产品。
-6. 哪个 Runtime 产品启动，就由哪个产品准备自己的 Core Runtime。
-7. Setup completion 与 Core readiness 分离。
-8. Space plugin dependencies 在 `.wopal` 物化后准备，不提前猜测。
+5. Setup 不负责产品安装/update，也不枚举或预热其他产品；`ellamaka serve` 不可用时只给出明确缺失诊断。
+6. 哪个 Runtime 产品启动，就由哪个产品准备自己的 Core Runtime；Setup completion 与 Core readiness 严格分离，Setup facts 不可读时阻止进入 Workbench。
+7. Home 未确认锁定前禁止创建 `$WOPAL_HOME`、Runtime 私有目录或 Setup 状态；正常模式环境持久化失败保持未锁定并失败关闭。
+8. Space plugin dependencies 在 `.wopal` 物化后准备，不提前猜测；失败保留已物化 Space 并交由首次激活 fallback 补齐。
 9. DSH Home 版本检查与备份不属于 Setup，所有入口都必须遵守 Runtime 保护。
+
+## Reference Documents
+
+| Document                                                            | Purpose                                                |
+| ------------------------------------------------------------------- | ------------------------------------------------------ |
+| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md` | 未落地的 Phase 3 统一 Host Auth 与 DSH SSO Bridge 提案 |

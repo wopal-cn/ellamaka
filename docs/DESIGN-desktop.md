@@ -1,8 +1,10 @@
 # ellamaka-desktop 设计
 
 > **Status**: Active
-> **Updated**: 2026-11-13
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Sibling DESIGNs**:
 >
 > - `./DESIGN-wopalspace.md` — WopalSpace Setup 与 CorePreparation integration boundary
@@ -12,7 +14,7 @@
 
 本文档描述 `packages/ellamaka-desktop` 的目标架构。桌面应用承载 `ellamaka-app` Workbench。Electron 主进程管理窗口和本地 sidecar，sidecar 统一管理 Web 与 Desktop 的 PTY 生命周期。
 
-## 设计目标
+## Design Goals
 
 `ellamaka-desktop` 提供稳定的本地桌面运行环境，使 Workbench 的界面生命周期与后台进程生命周期相互独立。Web 与 Desktop 共用 sidecar 的 PTY 断连宽限机制。
 
@@ -22,7 +24,7 @@
 - `ellamaka-app` 同时服务浏览器和桌面端，两种环境共享产品能力与 PTY 生命周期，并分别接入浏览器和 Electron 系统能力。
 - 一次 Desktop build 内的桌面包、Engine sidecar、SDK 和 app 使用同一 Ellamaka source commit；OpenCode 只作为选择性 fix/功能的参考来源，不参与 Desktop release identity。
 
-## 包定位与版本基线
+## Package Positioning and Version Baseline
 
 ### 包定位
 
@@ -51,7 +53,7 @@
 
 Electron 安全修复、生命周期修复和平台兼容修复可以只发布 Desktop patch。共享 Engine/API 变化可能需要协调发布 CLI 与 Desktop；component 版本仍独立。External CLI 与 Desktop 没有 runtime 配对门禁。Host 即使一次选择 CLI + Desktop，也分别验证和提交两个 component；Dormant peer 不参与 Desktop runtime。
 
-## 系统架构
+## System Architecture
 
 ```text
 Electron Main Process
@@ -159,13 +161,13 @@ Desktop 消费 WopalSpace 的全局本机执行配置域中的 shell 环境导�
 
 `list` 支持精确变量名和结尾为 `*` 的前缀匹配。空列表在 `allowlist` 下表示不额外导入 shell 变量，在 `denylist` 下等同于 `inherit`。被导入的 shell 变量覆盖 inherited 同名值；未导入的普通变量保持 inherited 值。`WOPAL_HOME` 始终使用本次确定的产品根，包括 allowlist=[] 或 denylist 包含 WOPAL_HOME 的情况。
 
-`wopal.execution.shellEnv` 定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。`wopal.execution` 中的其他执行设置由需要它们的产品入口消费；#263 不因此扩大为 sandbox 改造。这个配置不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
+`wopal.execution.shellEnv` 定义本机产品从 login shell 导入宿主变量的共同规则。Desktop 只消费这份规则，不定义第二套 Desktop 私有语义。`wopal.execution` 中的其他执行设置由需要它们的产品入口消费；Desktop 启动环境聚合只消费 `wopal.execution.shellEnv`。这个配置不改变项目 `.env` 的既有加载语义，也不替各 Runtime owner 定义 child-process credential policy。
 
 完整 Host Environment 只存在于当前 Desktop 进程内存中，不序列化为 userData cache 或其他持久文件。若未来需要持久化某个恢复值，其设计使用明确 allowlist，并把该值作为独立配置处理，而不是保存完整环境快照。
 
 Main 启动编排显式持有有效产品根和 Host Environment，并在每次 sidecar 创建或重启时传入。`createSidecarEnv` 的 `DSH_HOME`、Main 的 DSH bootstrap/诊断日志目录和 `registerIpcHandlers.homePath` 都从同一产品根派生。DSH_HOME 为绝对目录。Main 中已初始化的产品路径视图遵守现有 Home 绑定接口与生命周期约束，在相关消费方运行前与该根保持一致。普通 shell 环境保持显式输入，内部函数和参数组织由实现选择。
 
-Native Ellamaka Runtime 与 DSH/Cordis 都运行在这个 sidecar 的父环境之上，因此 #263 不为两个核心分别执行第二套 login-shell probe，也不维护两份 Host Environment。Native PTY、Shell、MCP 与 LSP 从 sidecar 宿主环境按各自 Runtime 契约派生子进程；DSH Web 与 Tools profile 同样从该 sidecar 环境起步，并继续使用 DSH 官方 subprocess/environment 契约。DSH 当前的 `subprocess-local` 会在启动 Browser Terminal、shell/tool 子进程前应用自己的 `scrubbedParentEnv()`，再叠加调用方显式 env；其中 `PATH`、Home、locale 与 proxy 类环境继续传递，DSH 自己定义的 credential-shaped 与 `DSH_*` ambient 过滤语义保持由 DSH 拥有。Ellamaka Desktop 不在 #263 中复制、绕过或重写这套 DSH child-env policy。
+Native Ellamaka Runtime 与 DSH/Cordis 都运行在这个 sidecar 的父环境之上，因此 Desktop 不为两个核心分别执行第二套 login-shell probe，也不维护两份 Host Environment。Native PTY、Shell、MCP 与 LSP 从 sidecar 宿主环境按各自 Runtime 契约派生子进程；DSH Web 与 Tools profile 同样从该 sidecar 环境起步，并继续使用 DSH 官方 subprocess/environment 契约。DSH 当前的 `subprocess-local` 会在启动 Browser Terminal、shell/tool 子进程前应用自己的 `scrubbedParentEnv()`，再叠加调用方显式 env；其中 `PATH`、Home、locale 与 proxy 类环境继续传递，DSH 自己定义的 credential-shaped 与 `DSH_*` ambient 过滤语义保持由 DSH 拥有。Ellamaka Desktop 不在自身边界内复制、绕过或重写这套 DSH child-env policy。
 
 Sandbox 只负责执行边界和资源限制；它消费调用方交给它的环境，不负责重新读取 login shell、构造 PATH 或初始化用户环境。Desktop Host Environment 因而只定义 Desktop → sidecar 的共同宿主基础环境。Native 与 DSH 下游的 child-env 差异由各自 Runtime owner 保持。
 
@@ -248,7 +250,7 @@ DSH 的准备进度通过 `core.preparation` 送达 Renderer，profile 终态通
 
 无版本 Home 的接管由 Desktop 入口在窗口可用之后确认一次。确认面是 Desktop 的窗口级对话框，不是 Onboarding 步骤；Setup 不驱动 CorePreparation。确认后由 sidecar 在排他锁下接管 Home，再挂载 DSH。拒绝则保持 DSH degraded，应用继续可用；Home 未被接管期间，下次启动会再次出现同一确认。
 
-Core readiness 不是是否展示 Onboarding 的唯一条件。Renderer 依据 Setup state 和 machine facts 进入配置阶段或运行阶段。Desktop Main 不读取 `onboarding.json` 推断 Core，也不实现 closure materializer、Home backup 或 plugin dependency installer。
+Core readiness 不是是否展示 Onboarding 的唯一条件。Renderer 依据 Setup state 和 machine facts 进入配置阶段或运行阶段。Desktop Main 不读取 `$WOPAL_HOME/.setup/ellamaka.json` 推断 Core，也不实现 closure materializer、Home backup 或 plugin dependency installer。
 
 Desktop build 自己的 embedded Core Runtime Descriptor 决定 DSH manifest/fingerprint 与可用 resources；启动时的全局 Web setting 与 Tools 环境变量只决定本次需要激活哪些 profile。Renderer/request 不能覆盖 descriptor，也不能用 Space 配置启停进程级 profile。
 
@@ -260,7 +262,7 @@ Desktop Main 只证明自身 embedded ReleaseIdentity、appId/channel、sidecar 
 
 Desktop 自动更新只更新当前 Desktop/channel。
 
-## 状态所有权
+## State Ownership
 
 桌面应用将持久化界面状态、临时运行时状态和后台进程分层管理。
 
@@ -275,7 +277,7 @@ Desktop 自动更新只更新当前 Desktop/channel。
 
 `localStorage` 继续负责 Workbench 布局，并将 PTY ID 作为重连提示保存。Sidecar 的 PTY Session Registry 是进程存活状态的真相源。Renderer 每次使用持久化 PTY ID 前都通过 `ptyManager.ensure()` 探测；2xx 表示存活并复用，明确 404 表示已回收并清除旧 ID，传输失败或非权威响应表示状态未知并保留旧 ID。只有 `dead` 结果才能触发 PTY 重建。
 
-## PTY 断连宽限模型
+## PTY Disconnect Grace Model
 
 每个 PTY Session 维护当前 WebSocket subscribers 和一个可取消的回收任务。默认断连宽限期为 10 秒。
 
@@ -291,7 +293,7 @@ Workbench 对需要继续运行的隐藏 TUI 和收起的 Split Terminal 保持 
 
 `directory` 与 Workbench `spacePath` 保持独立。所有 PTY 探测和显式删除请求使用 PTY 创建时的真实 directory。
 
-## 生命周期行为
+## Lifecycle Behavior
 
 ### 创建 PTY
 
@@ -347,7 +349,7 @@ Sidecar 停止是应用级兜底，确保未完成单项清理的进程随应用
 
 Renderer 崩溃不会立即终止 PTY。Sidecar 将断开的 PTY 置为 Grace，使 Renderer 在宽限期内恢复并重新连接。超过宽限期仍未恢复的 PTY 自动回收。
 
-## Web 与 Desktop 生命周期
+## Web and Desktop Lifecycle
 
 | 场景              | 浏览器 Workbench       | ellamaka-desktop        |
 | ----------------- | ---------------------- | ----------------------- |
@@ -359,7 +361,7 @@ Renderer 崩溃不会立即终止 PTY。Sidecar 将断开的 PTY 置为 Grace，
 
 两种环境共享 `PtyManager` 的创建、探测、重连和显式删除能力，也共享 sidecar 的断连宽限机制。Electron 只提供桌面外壳和 sidecar 生命周期。
 
-## Sidecar 集成
+## Sidecar Integration
 
 桌面构建通过 `packages/opencode/script/build-node.ts` 生成 node runtime。Electron 构建将该 runtime 作为 Main Process 可加载的 sidecar 模块。
 
@@ -376,9 +378,9 @@ Sidecar 启动环境遵循 Ellamaka 路径和配置体系：
 
 Main Process 只检查 sidecar 的 Server health，确认 listener/认证可连接。Renderer 通过公开 SDK 读取 Setup plan 与 Runtime/Core 状态，并通过 app-private BFF client 取得 Workbench 产品投影，据此显示 GUI Onboarding 或 Workbench。
 
-Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sidecarsupervisor-状态机)）管理，提供自动重启、退避策略和状态广播。Main Process 不再直接调用 `spawnLocalServer`，而是通过 Supervisor 的 `start()`/`stop()`/`restart()` 接口控制 sidecar。
+Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor State Machine](#sidecarsupervisor-state-machine)）管理，提供自动重启、退避策略和状态广播。Main Process 不再直接调用 `spawnLocalServer`，而是通过 Supervisor 的 `start()`/`stop()`/`restart()` 接口控制 sidecar。
 
-## 安全边界
+## Security Boundaries
 
 - BrowserWindow 启用 context isolation，Renderer 不启用 Node integration。
 - Preload 只暴露明确允许的 IPC 方法。
@@ -387,7 +389,7 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 - PTY 探测、重连和删除继续经过现有认证与 directory 路由边界。
 - 应用退出由 Main Process 统一终止 sidecar 和子进程组。
 
-## 品牌与桌面身份
+## Brand and Desktop Identity
 
 桌面应用使用 Ellamaka 独立身份：
 
@@ -399,7 +401,7 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 
 品牌值集中定义并由构建层消费，Renderer 和 Main Process 不分散硬编码用户可见品牌。
 
-## 验证契约
+## Verification Contract
 
 桌面实现满足以下行为：
 
@@ -420,7 +422,7 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 15. PTY 创建后始终在宽限期内建立第一个 subscriber；连接未建立时自动回收。
 16. TUI 视图隐藏或 Split Terminal 收起超过宽限期后，PTY 仍保持运行。
 
-## 上游关系
+## Upstream Relationship
 
 参考实现从 `labs/ref-repos/opencode/packages/desktop` 读取，按人工 review 选择性 cherry-pick 或移植：
 
@@ -428,9 +430,9 @@ Sidecar 生命周期由 `SidecarSupervisor`（[SidecarSupervisor 状态机](#sid
 - bug fix 按依赖、接口和行为逐项移植。
 - 需要的功能先按 Ellamaka Desktop/Engine contract 评估，再吸收必要部分，不进行整体上游合并。
 
-包级 `AGENTS.md` 维护开发命令、测试方式、生命周期规则和上游参考规则。品牌差异与分发身份见 `DESIGN.md` 品牌身份与 `DESIGN-distribution.md`，本文件维护桌面架构和运行时行为。
+包级 `AGENTS.md` 维护开发命令、测试方式、生命周期规则和上游参考规则。品牌差异与分发身份见 [Brand Identity](./DESIGN.md#brand-identity) 与 [Distribution](./DESIGN-distribution.md)，本文件维护桌面架构和运行时行为。
 
-## SidecarSupervisor 状态机
+## SidecarSupervisor State Machine
 
 `SidecarSupervisor`（`packages/ellamaka-desktop/src/main/sidecar-supervisor.ts`）是 Main Process 中 sidecar 运行时的真相源。它替代了 `server.ts` 中 `spawnLocalServer` 的一次性 Promise，提供完整的 sidecar 生命周期管理。
 
@@ -480,7 +482,7 @@ class SidecarSupervisor {
 }
 ```
 
-## IPC allowlist 与 Preload
+## IPC Allowlist and Preload
 
 ### 新增 IPC 通道
 
@@ -509,7 +511,7 @@ restartSidecar: () => Promise<void>
 
 `SidecarRuntimeState.connection` 包含 `password`。Preload 不写 `localStorage`，凭据只在 Main/Preload/Renderer 内存中传递。
 
-## 重启策略与退避
+## Restart Policy and Backoff
 
 ### 退避参数
 
@@ -532,7 +534,7 @@ restartSidecar: () => Promise<void>
 
 `failed` 状态下用户可通过 `restartSidecar()` 手动重试。手动重试重置 attempt 计数器，清除 terminal reason。
 
-## sidecar generation 与 PTY 恢复
+## Sidecar Generation and PTY Recovery
 
 ### generation 概念
 
@@ -562,7 +564,7 @@ Desktop 的选择键保持稳定别名 `sidecar`，不能用于判断 sidecar �
 
 PTY 清理后不自动创建 Session 或 PTY 伪装恢复。用户点击 TUI/Terminal 后按正常 Action 创建新 PTY。Session 绑定和草稿保留。
 
-## Onboarding 启动行为
+## Onboarding Startup Behavior
 
 Desktop 没有独立 Onboarding lifecycle，也没有独立 Onboarding backend。`ellamaka-app` 同时包含 `/onboarding` 与 `/workbench`。
 
@@ -576,7 +578,7 @@ Desktop cold start
   -> Setup complete: sidecar prepares and activates requested profiles
 ```
 
-`$WOPAL_HOME/ellamaka/state/onboarding.json` 由 private `@wopal/wopalspace/setup` 管理。Desktop Main 不拥有或清除该状态。某个 Space 的 plugin dependency 变化只影响该 instance。
+`$WOPAL_HOME/.setup/ellamaka.json` 由 private `@wopal/wopalspace/setup` 管理。Desktop Main 不拥有或清除该状态。某个 Space 的 plugin dependency 变化只影响该 instance。
 
 ### Startup Product Identity
 
@@ -585,3 +587,16 @@ Desktop 在 sidecar 前校验自身 `resources/release-identity.json` 的 produc
 启动 DSH 前，packaged sidecar 的 Core Preparation 从自身 embedded build identity 读取 closureVersion；Renderer/Desktop Main 不传也不能覆盖它。其他 CLI/Desktop 安装只有在自己真正启动时才参与 Home version check。多个 release 可以留在同一台机器上，旧版本不会在较新版本已接管 Home 后继续打开它。
 
 自动更新继续校验当前 Desktop channel 的 target identity/平台/SemVer。更新后的 DSH Home 版本检查与备份由 Runtime 独立执行。
+
+## Business Rules and Failure Boundaries
+
+- **Host Environment 降级与零持久化**：POSIX login-shell 全部候选失败时，普通变量降级为 Electron 继承环境、`WOPAL_HOME` 按继承值或默认路径确定，应用正常启动且不持久化完整环境变量快照到磁盘。
+- **Sidecar 启动与连续失败止损**：`SidecarSupervisor` 对 `start()`、`restart()`、`stop()` 串行排队；连续 3 次重启失败进入 `failed` 终态停止自动重试，必须由用户显式触发 `restartSidecar()` 重置计数；设置了 `user`/`update`/`quit` 终态原因后退出不触发重启。
+- **Transport 异常不误杀 PTY**：`ptyManager.ensure()` 遇到网络超时或传输失败时保持 `unknown` 状态并保留原 PTY ID；仅收到明确 404 或观测到新 sidecar `generation` 变化后才清除旧 PTY 绑定并触发状态复位提示。
+- **桌面窗口关闭保护**：处于钉住（Pinned）状态的 Tab 禁止通过 `Cmd + W` 关闭。
+
+## Reference Documents
+
+| Document                                                             | Purpose                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的 Desktop 更新协调、崩溃恢复、打包加固与原生宿主适配候选提案 |

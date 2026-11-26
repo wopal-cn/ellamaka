@@ -1,8 +1,10 @@
 # WopalSpace Ontology Synchronization
 
 > **Status**: Active
-> **Updated**: 2026-10-29
+> **Updated**: 2026-11-25
 > **Parent**: `./DESIGN.md`
+> **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
+> **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 > **Scope**: private `@wopal/wopalspace` 的 Ontology source-chain 状态模型、同步事务、history reconciliation、状态输出与正式 Git 历史合同
 > **Sibling DESIGNs**:
 >
@@ -327,15 +329,21 @@ upstream/main:  `------ U -------'
 - push 因 origin 并发推进而拒绝：不 force；下一次 sync 把新的 origin history 先纳入 local，再重新 push。
 - cleanup failure 只影响 sync 自己创建的 candidate resources；不得删除或修改 contribution worktree/branch。
 
-## Invariants
+## Business Rules and Failure Boundaries
 
-1. Content alignment 与 history alignment 是两个独立事实；公开状态同时表达两者。
+1. Content alignment 与 history alignment 是两个独立事实；公开状态同时表达两者，不可用 tree 一致折叠或跳过 `reconcile-history`。
 2. Fork sync 的完整成功条件是 `upstream/main` 为 `local main` ancestor 且 `origin/main == local main`。
 3. Squash/rebase 后 tree 相同但 ancestry diverged 时，history reconciliation 是必需同步动作。
-4. Contribution pending diff 只在 upstream baseline 已进入 local ancestry 后计算并对外宣称权威。
-5. Sync 不通过 force push、reset 或 rewrite existing history 达成对齐。
-6. Preview 与 inspect 对真实 repository 保持零写入。
+4. Contribution pending diff 只在 upstream baseline 已进入 local ancestry 后计算并对外宣称权威，否则返回 `contentState=unknown` 与 `sync-first`。
+5. Sync 禁止通过 force push、reset 或 rewrite existing history 达成对齐。
+6. Preview 与 inspect 对真实 repository 保持零写入；apply 在写前发现 dirty worktree 或进行中的 Git 操作时直接拒绝。
 7. 每个 diverged source stage 最多产生一条必要 merge/reconciliation commit；其他阶段不写 record commit。
 8. 正式 sync commit subject 稳定、可读，不包含临时执行 identity。
-9. 任一 conflict 不得留下半完成 local main；remote push failure 与 local success 必须分开报告。
+9. 任一 stage conflict 时整个 candidate 丢弃，不得留下半完成 `local main`；`local main` 成功而 `origin/main` push 失败时分开报告 partial success，且清理失败不得触碰贡献 worktree/branch。
 10. Contribution branch/worktree lifecycle 与删除授权不属于 sync。
+
+## Reference Documents
+
+| Document                                  | Purpose                    |
+| ----------------------------------------- | -------------------------- |
+| `../../../.wopal/docs/DESIGN-assembly.md` | 本体仓库结构与空间装配规则 |
