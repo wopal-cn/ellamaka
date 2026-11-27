@@ -79,7 +79,8 @@ describe("development Home bootstrap isolation", () => {
     const dev = await Bun.file(join(root, "..", "..", "scripts", "dev.sh")).text()
     expect(dev).not.toContain("warmup_config")
     expect(dev).not.toContain("/global/config")
-    expect(dev).toContain('local url="http://127.0.0.1:$port/onboarding"')
+    // Live dev_entry_url routing (/workbench, /onboarding, /startup, and auth_token)
+    // is verified by executing bash in scripts/lib/dev-entry-url-integration.test.ts.
   })
 
   test("Onboarding keeps global config bootstrap disabled until it leaves that surface", async () => {
