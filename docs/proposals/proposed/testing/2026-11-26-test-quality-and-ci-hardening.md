@@ -1,9 +1,12 @@
 # Test Quality, Gate Enforcement, and CI Coverage Hardening
 
-Status: proposed
+Status: approved
 
 - **Class**: testing
 - **Created**: 2026-11-26
+- **Approved**: 2026-11-27 — Sam (愚佛)
+- **Authorized scope**: Decisions 1–4 (`TISO010` static gate with `--seed-rule` and `--files` pre-commit hook, closing non-E2E CI coverage blind spots and reordering CI steps, unifying `home-preload` harness after clearing `ellamaka-core` env leaks, and zeroing out the `TISO010` baseline); excludes clearing legacy 615 isolation debt, running `bun test` in pre-commit, changing nightly/manual CI trigger policy, and cross-repo `.wopal` rule updates (tracked separately via `ontology-evolution`).
+- **Delivery**: plan
 
 ## Problem
 
