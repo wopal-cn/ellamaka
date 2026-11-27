@@ -659,8 +659,7 @@ Ellamaka monorepo 把 SDK npm release 与 CLI/Desktop product release 分开。
 
 ## Reference Documents
 
-| 文档                                                                 | 说明                                             |
-| -------------------------------------------------------------------- | ------------------------------------------------ |
-| `../../../projects/wopal-cli/docs/DESIGN-distribution.md`            | wopal-cli 对 ellamaka release 的消费契约         |
-| `../../../.wopal/docs/DESIGN-distribution.md`                        | ontology materialization 与 runtime handoff 边界 |
-| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的 Desktop 更新协调与打包加固候选提案      |
+| 文档                                                      | 说明                                             |
+| --------------------------------------------------------- | ------------------------------------------------ |
+| `../../../projects/wopal-cli/docs/DESIGN-distribution.md` | wopal-cli 对 ellamaka release 的消费契约         |
+| `../../../.wopal/docs/DESIGN-distribution.md`             | ontology materialization 与 runtime handoff 边界 |

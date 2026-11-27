@@ -924,8 +924,6 @@ Workbench 从宿主健康和共享管理服务判断可用性。服务端版本�
 
 ## Reference Documents
 
-| Document                                                           | Purpose                                                   |
-| ------------------------------------------------------------------ | --------------------------------------------------------- |
-| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md` | 未落地的 Workbench 图形化设置面板与完整 Config Plane 提案 |
-| `./proposals/proposed/feature/2026-10-14-dsh-customization.md`     | 未落地的实验 Profile Tab 与 Web Component 插槽提案        |
-| `../packages/ellamaka-app/AGENTS.md`                               | Workbench 前端开发、effect 竞态与样式规则                 |
+| Document                             | Purpose                                   |
+| ------------------------------------ | ----------------------------------------- |
+| `../packages/ellamaka-app/AGENTS.md` | Workbench 前端开发、effect 竞态与样式规则 |

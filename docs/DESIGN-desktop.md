@@ -594,9 +594,3 @@ Desktop 在 sidecar 前校验自身 `resources/release-identity.json` 的 produc
 - **Sidecar 启动与连续失败止损**：`SidecarSupervisor` 对 `start()`、`restart()`、`stop()` 串行排队；连续 3 次重启失败进入 `failed` 终态停止自动重试，必须由用户显式触发 `restartSidecar()` 重置计数；设置了 `user`/`update`/`quit` 终态原因后退出不触发重启。
 - **Transport 异常不误杀 PTY**：`ptyManager.ensure()` 遇到网络超时或传输失败时保持 `unknown` 状态并保留原 PTY ID；仅收到明确 404 或观测到新 sidecar `generation` 变化后才清除旧 PTY 绑定并触发状态复位提示。
 - **桌面窗口关闭保护**：处于钉住（Pinned）状态的 Tab 禁止通过 `Cmd + W` 关闭。
-
-## Reference Documents
-
-| Document                                                             | Purpose                                                             |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的 Desktop 更新协调、崩溃恢复、打包加固与原生宿主适配候选提案 |

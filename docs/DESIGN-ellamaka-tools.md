@@ -176,9 +176,3 @@ enforcing backend 不可用时返回 sandbox-unavailable，不能把受限请求
 - **已采用后 Fail-Closed**：Tools profile 加载失败或被禁用时保持 Native Tools；一旦 `dsh.tools=ready` 且当前 Instance 的 `sandbox.enabled=true`，单次沙箱拒绝、审批拒绝、超时或执行错误必须原样返回，严禁回退 Native Tools 重试。
 - **配置覆盖与并发串行**：用户 `cordis.patch.yml` 采用整块 config 替换（不做深合并），缺失引用包时启动失败；`dsh-adapter` 对同会话非并发安全写操作（`edit`、`write`、`str_replace_editor` 非 `view` 命令、`bash`）串行排队，保持只读工具并发。
 - **单次提权不跨范围复用**：`sandbox_escalation` 审批答复与当前 Ellamaka Session 绑定，`escalation=never` 在询问前直接拒绝；禁止跨 Space、跨会话或跨调用复用提权决策。
-
-## Reference Documents
-
-| Document                                                                    | Purpose                                                               |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `./proposals/proposed/architecture/2026-11-25-mcp-runtime-modernization.md` | 未落地的原生 MCP v2 升级提案（明确外接 MCP 独立于本工具容器沙箱边界） |

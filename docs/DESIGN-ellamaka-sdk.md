@@ -287,8 +287,6 @@ Developer Reference 按 Runtime、WopalSpace、Official App 等用途分组，�
 
 `/local` 是 trusted-local transport。HTTP caller 获得 Server credential 后视为该 host 的受信管理者；各业务 operation 仍必须自己保证 path confinement、目标合法性和 secret redaction。
 
-后续 Browser 登录向 launch-token + signed-cookie 收敛的设计提案见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
-
 ## Errors and Streaming
 
 每个公开 endpoint 声明真实可能发生的稳定 domain error。generated client 的 error union 与 HTTP response 保持一致。
@@ -350,10 +348,3 @@ Ellamaka source
 8. Server composition 内部直接调用 private WopalSpace service，不通过 SDK/HTTP loopback；`/http` 远端请求不能替换 Server 锁定的 `WOPAL_HOME` 或 DSH closure。
 9. Product 安装/update 不进入 WopalSpace SDK surface，SDK 也不拥有 Desktop/Server/Wopal CLI 的产品生命周期。
 10. `PluginInput.client` 适配器保持旧调用边界且仅以实际公开 operation 转换参数；无当前 Runtime 对应的陈旧声明必须显式诊断或升级，禁止伪造成功。
-
-## Reference Documents
-
-| Document                                                            | Purpose                                                    |
-| ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md` | 未落地的 Phase 3 统一 Host Auth 与 DSH SSO Bridge 提案     |
-| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`  | 未落地的完整 Config Plane `/http` 与 `/local` 接口扩展提案 |

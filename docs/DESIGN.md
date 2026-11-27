@@ -248,7 +248,7 @@ HttpApiEndpoint.patch("configUpdate", "/config-v2", {
 - `PATCH /config-v2` 当前只接受 `target="global"` 的 `wopal.dsh.web.enabled` 布尔写入。writer 保留 JSONC 注释、未知字段与其他 Wopal 配置；不支持的 key 或 Space target 明确拒绝。成功写入只改变下次 Server/sidecar 启动的 Web profile 意图，因此返回 `restart-required`。
 - DSH Web Tab 的运行时显隐只认 `/global/health.dsh.web`，不直接把磁盘修改伪装成已生效 runtime 状态。Workbench Settings 可以在写入后提示并触发现有的 Local Server 重启入口。
 - General 与 Space 使用同一套沙箱采用判据：沙箱选择器只在 `dsh.tools=ready` 且当前 Instance 的 `effective.wopal.pluginConfig["dsh-adapter"].sandbox.enabled === true` 时提供 DSH 模式；默认模式取 `sandbox.mode`。Tools profile 加载失败时使用 Native Tools，单次 DSH 工具调用失败不改变 profile 状态或触发 Native 重试。
-- 更广泛的多 key、global/space mutation、来源标签、reset-key 与 DSH native 配置投影仍属未落地的 Config Plane 提案方向（见 [2026-09-17-config-plane-settings.md](./proposals/proposed/feature/2026-09-17-config-plane-settings.md)），不属于当前 `config-v2` 窄写面。
+- 更广泛的多 key、global/space mutation、来源标签、reset-key 与 DSH native 配置投影不属于当前 `config-v2` 窄写面。
 
 ### External Capability Directories
 
@@ -708,15 +708,9 @@ Workbench 的界面、视图模型、目录架构、能力适配规则以及与 
 
 ## Reference Documents
 
-| 文档                                                                                    | 引用目的                                               |
-| --------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `../../../docs/products/wopal-space/proposals/plan-orchestration-scheduler-proposal.md` | Phase 4 Plan 编排与调度方向提案（非正式设计）          |
-| `../../../projects/wopal-cli/docs/DESIGN.md`                                            | wopal-cli 如何消费 ellamaka release                    |
-| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`                      | 未落地的 Phase 3 Config Plane 与图形设置面板提案       |
-| `./proposals/proposed/feature/2026-10-14-dsh-customization.md`                          | 未落地的 DSH 空间皮肤、实验 profile 与插件插槽提案     |
-| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md`                     | 未落地的 Phase 3 统一 Host Auth 与 DSH SSO Bridge 提案 |
-| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md`                    | 未落地的 Desktop 加固与 DSH 能力选配提案               |
-| `./proposals/proposed/architecture/2026-11-25-mcp-runtime-modernization.md`             | 未落地的原生 MCP v2 运行时升级提案                     |
-| `./proposals/proposed/architecture/2026-11-25-prompt-cache-stability.md`                | 未落地的 Prompt Cache 前缀稳定性治理提案               |
-| `packages/opencode/AGENTS.md`                                                           | engine package 内部规则                                |
-| `packages/ellamaka-app/AGENTS.md`                                                       | ellamaka 官方 web UI 包级开发规则                      |
+| 文档                                                                                    | 引用目的                                      |
+| --------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `../../../docs/products/wopal-space/proposals/plan-orchestration-scheduler-proposal.md` | Phase 4 Plan 编排与调度方向提案（非正式设计） |
+| `../../../projects/wopal-cli/docs/DESIGN.md`                                            | wopal-cli 如何消费 ellamaka release           |
+| `packages/opencode/AGENTS.md`                                                           | engine package 内部规则                       |
+| `packages/ellamaka-app/AGENTS.md`                                                       | ellamaka 官方 web UI 包级开发规则             |

@@ -64,8 +64,7 @@ TUI 插件走同一契约的另一条装载链：TUI 配置链与 Server 使用�
 
 ## Reference Documents
 
-| Document                                                           | Purpose                                                               |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md` | 未落地的 Phase 3 完整 Config Plane、多键写入与 Workbench 设置面板提案 |
-| `references/ellamaka-config-mechanism.md`                          | 引擎配置加载与合并的现状机制（代码级参考）                            |
-| `./DESIGN-ellamaka-sdk.md`                                         | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律                    |
+| Document                                  | Purpose                                            |
+| ----------------------------------------- | -------------------------------------------------- |
+| `references/ellamaka-config-mechanism.md` | 引擎配置加载与合并的现状机制（代码级参考）         |
+| `./DESIGN-ellamaka-sdk.md`                | Runtime API 的 schema、OpenAPI 与远程 SDK 生成纪律 |

@@ -477,7 +477,7 @@ Official App BFF 可以直接调用 private WopalSpace query service 与 Runtime
 
 当前阶段不建设 WopalSpace 细粒度 operation/resource IAM。WopalSpace API 使用 Ellamaka Server 统一认证边界；持有有效 Server credential 的调用方视为该 host 的受信管理者。
 
-所有 path-bearing operation 仍必须执行自身业务边界检查，例如 Space root confinement、Git target validation 和 secret redaction。后续统一 Host Auth 演进方向见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
+所有 path-bearing operation 仍必须执行自身业务边界检查，例如 Space root confinement、Git target validation 和 secret redaction。
 
 ## State Ownership
 
@@ -505,10 +505,3 @@ Official App BFF 可以直接调用 private WopalSpace query service 与 Runtime
 7. 当前阶段不引入细粒度远程授权体系；所有 path-bearing operation 必须执行 `realpath` 越界防护与 Git target 校验，secret 不得写入 plan、持久状态、事件或错误详情。
 8. 只读 inspect/list/scan/preview 不得触发网络 fetch 或本地写入；写操作提交前重验 facts，跨仓库提交部分失败时如实报告各自提交状态。
 9. Ontology fork sync 成功后，`upstream/main` 必须进入 `local main` ancestry，`origin/main` 必须与 `local main` 指向同一 commit；只在 ancestry 需要闭合时生成稳定 subject 的 merge/reconciliation commit。
-
-## Reference Documents
-
-| Document                                                            | Purpose                                  |
-| ------------------------------------------------------------------- | ---------------------------------------- |
-| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md` | 未落地的 Phase 3 统一 Host Auth 方向提案 |
-| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`  | 未落地的完整 Config Plane 扩展提案       |

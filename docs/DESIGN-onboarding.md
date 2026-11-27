@@ -86,7 +86,7 @@ wopal setup [host/port/password options]
 
 复用 Server 前核验管理身份、可连接的 endpoint、认证和用户显式指定的启动参数。参数不匹配时报告冲突，不静默忽略、不修改或终止已有 Server。无图形环境时输出可访问的 `/onboarding` URL；监听地址与浏览器地址分开，wildcard host 不能直接作为本机浏览器地址。
 
-`wopal setup` 传递的 host/port/password 只配置它启动的 Server。浏览器通过现有 Server credential 连接，launcher 打开的 URL 不携带真实密码或其可逆编码；当前认证行为遵循现有 Server auth 基线，后续统一 Host Auth 演进见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
+`wopal setup` 传递的 host/port/password 只配置它启动的 Server。浏览器通过现有 Server credential 连接，launcher 打开的 URL 不携带真实密码或其可逆编码；当前认证行为遵循现有 Server auth 基线。
 
 ## Home Selection and Lifecycle
 
@@ -266,8 +266,6 @@ GUI 页面负责展示进度、收集输入和导航，不负责定义哪些底�
 
 Onboarding API 不维护独立认证实现。它与 Workbench、Runtime、WopalSpace API 共用 Ellamaka Server 认证。
 
-当前阶段保持现有 Server auth 机制；后续统一 Host Auth 演进方向见 [2026-10-14-unified-host-auth.md](./proposals/proposed/architecture/2026-10-14-unified-host-auth.md)。
-
 ## Business Rules and Failure Boundaries
 
 1. Onboarding 是唯一 Setup 用户形态；不存在 Terminal Setup 向导。
@@ -279,9 +277,3 @@ Onboarding API 不维护独立认证实现。它与 Workbench、Runtime、WopalS
 7. Home 未确认锁定前禁止创建 `$WOPAL_HOME`、Runtime 私有目录或 Setup 状态；正常模式环境持久化失败保持未锁定并失败关闭。
 8. Space plugin dependencies 在 `.wopal` 物化后准备，不提前猜测；失败保留已物化 Space 并交由首次激活 fallback 补齐。
 9. DSH Home 版本检查与备份不属于 Setup，所有入口都必须遵守 Runtime 保护。
-
-## Reference Documents
-
-| Document                                                            | Purpose                                                |
-| ------------------------------------------------------------------- | ------------------------------------------------------ |
-| `./proposals/proposed/architecture/2026-10-14-unified-host-auth.md` | 未落地的 Phase 3 统一 Host Auth 与 DSH SSO Bridge 提案 |

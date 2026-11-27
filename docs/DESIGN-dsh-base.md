@@ -261,7 +261,7 @@ Stable Desktop、Beta Desktop、external CLI 可以来自不同 release；真正
 
 ## Persistent Data
 
-当前 DSH native 配置落在 `$WOPAL_HOME/dsh/home/profiles/<profile>/cordis.patch.yml`；Settings/ConfigEditor/HMR/Loader 拥有字段校验、revision 与 native apply lifecycle（未来将受控配置提升至统一 `settings.jsonc` 投影的方向见参考提案 [2026-09-17-config-plane-settings.md](./proposals/proposed/feature/2026-09-17-config-plane-settings.md)）。closure-change backup 只保存恢复副本和最小元数据，不成为配置读写来源。
+当前 DSH native 配置落在 `$WOPAL_HOME/dsh/home/profiles/<profile>/cordis.patch.yml`；Settings/ConfigEditor/HMR/Loader 拥有字段校验、revision 与 native apply lifecycle。closure-change backup 只保存恢复副本和最小元数据，不成为配置读写来源。
 
 用户 preset 采用目标 DSH 的标准 bundle 声明与官方 YAML 方言；来源的生成文件和实际配置都保留。用户插件使用 profile 的固定依赖声明；官方解析层按当前 closure 重建，第三方兼容性按实际包声明和 Loader 诊断检查。不兼容实体不能通过沿用 revision/source 链接继续执行。closure-change backup 不冻结用户自行修改的外部插件源码或外部服务；内部 adapter 的匹配由产品制品保证。
 
@@ -277,8 +277,6 @@ Active Home 与 closure-change backup 按原敏感级别保存；失败信息只
 
 ## Reference Documents
 
-| 资料                                                                 | 用途                              |
-| -------------------------------------------------------------------- | --------------------------------- |
-| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 机制研究                      |
-| `./proposals/proposed/feature/2026-09-17-config-plane-settings.md`   | 未落地的 DSH 配置投影提案         |
-| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的 DSH 版本升级能力门禁提案 |
+| 资料                                                                 | 用途         |
+| -------------------------------------------------------------------- | ------------ |
+| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 机制研究 |

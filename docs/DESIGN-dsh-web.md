@@ -199,7 +199,6 @@ DSH iframe 在 [Workbench](./DESIGN-workbench.md) 中拥有独立的固定 DSH T
 - iframe 只在当前 sidecar generation 的 `dsh.web=ready` 后请求受控入口并设置有效 `src`。新 generation 未 ready 前不请求新的入口，也不通过 `/dsh/` fallback 抢跑。
 - iframe 首次成功加载后保持 keep-alive；Tab 切换不重载 DSH 会话。sidecar generation 变化后，等新 generation `ready` 再更新入口。
 - iframe 覆盖内容区，DSH 自带侧栏。
-- 实验 profile、空间皮肤与跨框架插件定制归参考提案 [2026-10-14-dsh-customization.md](./proposals/proposed/feature/2026-10-14-dsh-customization.md)。
 
 ### Iframe Origin Derivation
 
@@ -215,8 +214,6 @@ iframe 的来源地址优先取认证入口，回落 `<server url>/dsh/` 派生�
 
 ## Reference Documents
 
-| 文档                                                                 | 引用目的                                           |
-| -------------------------------------------------------------------- | -------------------------------------------------- |
-| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 全景调研                                       |
-| `./proposals/proposed/feature/2026-10-14-dsh-customization.md`       | 未落地的 DSH 空间皮肤、实验 profile 与插件插槽提案 |
-| `./proposals/proposed/feature/2026-10-31-dsh-desktop-integration.md` | 未落地的官方 Web 能力选配提案                      |
+| 文档                                                                 | 引用目的     |
+| -------------------------------------------------------------------- | ------------ |
+| `research/deepseek-harness-architecture-and-integration-research.md` | DSH 全景调研 |
