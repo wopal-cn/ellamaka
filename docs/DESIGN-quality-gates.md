@@ -1,7 +1,7 @@
 # DESIGN — Static Quality Gates
 
 > **Status**: Active
-> **Updated**: 2026-11-25
+> **Updated**: 2026-11-28
 > **Parent**: `./DESIGN.md`
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
@@ -100,6 +100,7 @@ bun run format:check               # 对同一范围执行 prettier --check
 | `packages/opencode`、`packages/ui` 整个 package（含 `src/wopal/`、`src/workbench/`） | 不检查   | 格式化会重写整文件，在上游文件上做无关格式化直接制造合并冲突；根 `AGENTS.md` 明确禁止 |
 | 生成代码、构建产物（`out/`、`dist/`、`release/` 下的生成清单）                       | 不检查   | 非手写内容，重写无意义                                                                |
 | 测试代码                                                                             | 检查     | 与 lint 一致，测试也是本仓维护的代码                                                  |
+| Markdown 文档（`*.md`） | 不检查 | 保留作者编排的文档格式，提交与 CI 共用此排除规则；密钥扫描仍覆盖暂存的文档 |
 
 **`src/wopal/` 与 `src/workbench/` 只纳入 lint，不纳入格式化。** 代价是这两个目录不享受格式化门禁，换取的是不与上游
 产生整文件格式冲突。这是明确权衡，不是遗漏。

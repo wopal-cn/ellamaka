@@ -1,7 +1,7 @@
 # Ellamaka
 
 > **Status**: Active
-> **Updated**: 2026-11-25
+> **Updated**: 2026-11-28
 > **Parent Architecture**: `../../../docs/products/wopal-space/DESIGN.md`
 > **Parent Product**: `../../../docs/products/wopal-space/PRD.md`
 
@@ -112,7 +112,7 @@ ellamaka 继承上游 OpenCode 全部 agent runtime、TUI/Web、session、tool�
 | Instruction Loading           | 会话基线规范、目录级 `AGENTS.md` 挂载、修改前拦截与压缩后恢复                 | `packages/opencode/src/session/instruction.ts`, `packages/opencode/src/session/tools.ts`, `packages/opencode/src/session/prompt.ts`                                                                                          | [DESIGN-instruction-loading.md](./DESIGN-instruction-loading.md)           |
 | Logging Architecture          | 角色分域日志路由、保留修剪、`TRACE` 类别注册与脱敏边界                        | `packages/ellamaka-core/src/util/log.ts`, `packages/ellamaka-core/src/effect/logger.ts`, `packages/ellamaka-cordis/src/log-bridge.ts`, `packages/opencode/src/cli/log-level.ts`                                              | [DESIGN-logging.md](./DESIGN-logging.md)                                   |
 | Onboarding & Setup            | `/onboarding` 初始化流程、`wopal setup` 启动器与 Home 绑定生命周期            | `packages/wopalspace/src/setup/`, `packages/ellamaka-app/src/pages/onboarding/`                                                                                                                                              | [DESIGN-onboarding.md](./DESIGN-onboarding.md)                             |
-| Static Quality Gates          | `oxlint` 收缩基线、Prettier 格式化范围与 CSS 检查门禁                         | `packages/opencode/script/lint-gate/`, `.oxlintrc.json`, `.husky/pre-commit`, `.github/workflows/ci.yml`                                                                                                                     | [DESIGN-quality-gates.md](./DESIGN-quality-gates.md)                       |
+| Static Quality Gates          | `oxlint` 收缩基线、Prettier 格式化范围与 CSS 检查门禁                         | `packages/opencode/script/lint-gate/`, `packages/opencode/script/format/`, `.oxlintrc.json`, `.prettierignore`, `.husky/pre-commit`, `.github/workflows/ci.yml` | [DESIGN-quality-gates.md](./DESIGN-quality-gates.md)                       |
 | Test Isolation Gates          | 进程隔离模型、包级 Home 基座契约、TISO 静态/运行时门禁与收缩基线              | `packages/opencode/script/test-isolation/`, `.ci/test-isolation-baseline.json`, `packages/opencode/test/preload.ts`, `packages/opencode/test/lib/temp-root.ts`, `packages/ellamaka-app/script/check-test-order-isolation.ts` | [DESIGN-testing-isolation.md](./DESIGN-testing-isolation.md)               |
 | WopalSpace Application Domain | private `@wopal/wopalspace` 的 Setup、Ontology 与 Space 业务实现              | `packages/wopalspace/src/`                                                                                                                                                                                                   | [DESIGN-wopalspace.md](./DESIGN-wopalspace.md)                             |
 | Ontology Synchronization      | Ontology source-chain 状态模型、同步事务与 history reconciliation             | `packages/wopalspace/src/ontology/sync.ts`                                                                                                                                                                                   | [DESIGN-wopalspace-ontology-sync.md](./DESIGN-wopalspace-ontology-sync.md) |

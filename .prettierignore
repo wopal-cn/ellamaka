@@ -4,6 +4,9 @@
 # format` and `bun run format:check` derive their file list from `git ls-files`
 # plus this file, so every exclusion lives in exactly one place.
 
+# Markdown documents keep their author-defined layout. MDX remains in scope.
+*.md
+
 # Upstream-inherited packages: formatting rewrites whole files and would create a
 # merge conflict on every future upstream sync. This also covers
 # `src/wopal/` and `src/workbench/`, which are lint-only by design.
